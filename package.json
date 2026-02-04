@@ -17,8 +17,10 @@
     "appId": "com.engelsiz.videoeditor",
     "productName": "Engelsiz Video Düzenleyicisi",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "afterPack": "build-hooks/afterPack.js",
     "files": [
       "src/**/*",
+      "build-hooks/**/*",
       "Start_icon.png",
       "Geçiş Sesleri/**/*",
       "Animation Sounds/**/*",
@@ -60,7 +62,7 @@
       "category": "public.app-category.video",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "identity": "-",
+      "identity": null,
       "type": "development"
     }
   },
