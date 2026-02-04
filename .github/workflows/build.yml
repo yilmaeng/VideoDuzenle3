@@ -10,15 +10,12 @@ permissions:
   contents: write
 
 jobs:
-  # ==================== WINDOWS BUILD ====================
   build-windows:
     runs-on: windows-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
@@ -36,21 +33,17 @@ jobs:
           path: dist/win-unpacked/
           retention-days: 30
 
-  # ==================== MAC BUILD ====================
   build-mac:
     runs-on: macos-14
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
-      - name: Setup Python (native modules)
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -73,14 +66,12 @@ jobs:
           echo "=== DMGs ==="
           ls -lah dist/*.dmg 2>/dev/null || echo "No DMG found"
 
-      # DMG'leri mount edip içindeki .app'i doğrula + arch'a göre yeniden adlandır
       - name: Verify & Normalize DMGs
         run: |
           set -euo pipefail
-
           mkdir -p release_files
-
           shopt -s nullglob
+
           DMGS=(dist/*.dmg)
           if [ ${#DMGS[@]} -eq 0 ]; then
             echo "::error::No DMG produced in dist/. Check electron-builder output."
@@ -94,18 +85,23 @@ jobs:
             echo ""
             echo "=== Checking DMG: $DMG ==="
 
-            # Mount read-only
+            # Mount
             hdiutil attach "$DMG" -nobrowse -readonly -quiet
 
-            # DMG içinde .app'i bul (volume adına bağlı kalma)
-            APP=$(find /Volumes -maxdepth 2 -name "Engelsiz Video Düzenleyicisi.app" -print -quit || true)
-            if [ -z "${APP}" ]; then
+            # Son mount edilen volume'u al
+            VOL=$(ls -t /Volumes | head -n 1)
+            VOLROOT="/Volumes/$VOL"
+            echo "Mounted volume: $VOLROOT"
+
+            # Volume içinde herhangi bir .app bul
+            APP=$(find "$VOLROOT" -maxdepth 2 -name "*.app" -print -quit || true)
+            if [ -z "$APP" ]; then
               echo "Volumes listing:"
               ls -lah /Volumes
-              echo "::error::App not found after mounting DMG."
-              # En son mount edilen volume'u sökme denemesi
-              LASTVOL=$(ls -t /Volumes | head -n 1 || true)
-              [ -n "${LASTVOL}" ] && hdiutil detach "/Volumes/${LASTVOL}" -quiet || true
+              echo "Volume listing:"
+              ls -lah "$VOLROOT" || true
+              echo "::error::No .app found inside mounted DMG."
+              hdiutil detach "$VOLROOT" -quiet || true
               exit 1
             fi
 
@@ -115,20 +111,20 @@ jobs:
             if [ ! -f "$APP/Contents/Info.plist" ]; then
               echo "::error::Info.plist missing at $APP/Contents/Info.plist"
               ls -lah "$APP/Contents" || true
-              VOLROOT=$(dirname "$(dirname "$APP")")
               hdiutil detach "$VOLROOT" -quiet || true
               exit 1
             fi
 
-            BIN="$APP/Contents/MacOS/Engelsiz Video Düzenleyicisi"
-            if [ ! -f "$BIN" ]; then
-              echo "::error::Main binary not found: $BIN"
+            # Contents/MacOS altında binary'yi otomatik bul
+            BIN=$(find "$APP/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit || true)
+            if [ -z "$BIN" ]; then
+              echo "::error::No executable found in $APP/Contents/MacOS"
               ls -lah "$APP/Contents/MacOS" || true
-              VOLROOT=$(dirname "$(dirname "$APP")")
               hdiutil detach "$VOLROOT" -quiet || true
               exit 1
             fi
 
+            echo "Binary: $BIN"
             echo "Binary arch:"
             file "$BIN" || true
 
@@ -150,8 +146,7 @@ jobs:
             echo "Copying DMG as: release_files/$TARGET_NAME"
             cp "$DMG" "release_files/$TARGET_NAME"
 
-            # Unmount volume root
-            VOLROOT=$(dirname "$(dirname "$APP")")
+            # Unmount
             hdiutil detach "$VOLROOT" -quiet || true
           done
 
@@ -166,12 +161,10 @@ jobs:
           path: release_files/*.dmg
           retention-days: 30
 
-  # ==================== RELEASE (Tag) ====================
   create-release:
     needs: [build-windows, build-mac]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -183,12 +176,10 @@ jobs:
           set -e
           mkdir -p release_files
 
-          # Windows: klasör olarak indiği için zip'le
           if [ -d "artifacts/windows-build" ]; then
             (cd artifacts && zip -r ../release_files/EngelsizVideoDuzenleyici-Windows.zip windows-build/)
           fi
 
-          # macOS: doğrudan DMG'ler (zip yok)
           if [ -d "artifacts/mac-release-files" ]; then
             cp artifacts/mac-release-files/*.dmg release_files/ 2>/dev/null || true
           fi
