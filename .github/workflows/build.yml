@@ -57,13 +57,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Native modüller için kritik adım:
       - name: Rebuild native deps for Electron
         run: npx electron-builder install-app-deps
 
       - name: Build macOS (per package.json)
         run: |
           set -e
+          export CSC_IDENTITY_AUTO_DISCOVERY=false
           npm run build:mac 2>&1 | tee build_output.log
 
       - name: List dist contents
@@ -94,41 +94,50 @@ jobs:
             echo ""
             echo "=== Checking DMG: $DMG ==="
 
-            # Mount
-            MOUNT_OUT=$(hdiutil attach "$DMG" -nobrowse -readonly -quiet)
-            # Volume adını /Volumes altından bulalım (en son mount edilen)
-            VOL=$(ls -t /Volumes | head -n 1)
-            APP="/Volumes/$VOL/Engelsiz Video Düzenleyicisi.app"
+            # Mount read-only
+            hdiutil attach "$DMG" -nobrowse -readonly -quiet
 
-            if [ ! -d "$APP" ]; then
+            # DMG içinde .app'i bul (volume adına bağlı kalma)
+            APP=$(find /Volumes -maxdepth 2 -name "Engelsiz Video Düzenleyicisi.app" -print -quit || true)
+            if [ -z "${APP}" ]; then
               echo "Volumes listing:"
               ls -lah /Volumes
-              echo "::error::Expected app not found in mounted DMG: $APP"
-              hdiutil detach "/Volumes/$VOL" -quiet || true
+              echo "::error::App not found after mounting DMG."
+              # En son mount edilen volume'u sökme denemesi
+              LASTVOL=$(ls -t /Volumes | head -n 1 || true)
+              [ -n "${LASTVOL}" ] && hdiutil detach "/Volumes/${LASTVOL}" -quiet || true
               exit 1
             fi
 
             echo "App found: $APP"
 
+            # Info.plist var mı?
+            if [ ! -f "$APP/Contents/Info.plist" ]; then
+              echo "::error::Info.plist missing at $APP/Contents/Info.plist"
+              ls -lah "$APP/Contents" || true
+              VOLROOT=$(dirname "$(dirname "$APP")")
+              hdiutil detach "$VOLROOT" -quiet || true
+              exit 1
+            fi
+
             BIN="$APP/Contents/MacOS/Engelsiz Video Düzenleyicisi"
             if [ ! -f "$BIN" ]; then
               echo "::error::Main binary not found: $BIN"
-              hdiutil detach "/Volumes/$VOL" -quiet || true
+              ls -lah "$APP/Contents/MacOS" || true
+              VOLROOT=$(dirname "$(dirname "$APP")")
+              hdiutil detach "$VOLROOT" -quiet || true
               exit 1
             fi
 
             echo "Binary arch:"
             file "$BIN" || true
 
-            # En kritik test: Bundle bütünlüğü (SİZİN “damaged / resources” hatasını burada yakalar)
             echo "codesign verify:"
             codesign --verify --deep --strict --verbose=4 "$APP"
 
-            # Arch'a göre hedef dosya adı seç
             ARCH_LINE=$(file "$BIN")
             TARGET_NAME="EngelsizVideoDuzenleyici-Mac-Unknown.dmg"
             if echo "$ARCH_LINE" | grep -q "arm64"; then
-              # Eğer universal ise ayrıca x86_64 de yazar, ama arm64 içeriyorsa AppleSilicon diye ayırıyoruz
               if echo "$ARCH_LINE" | grep -q "x86_64"; then
                 TARGET_NAME="EngelsizVideoDuzenleyici-Mac-Universal.dmg"
               else
@@ -141,8 +150,9 @@ jobs:
             echo "Copying DMG as: release_files/$TARGET_NAME"
             cp "$DMG" "release_files/$TARGET_NAME"
 
-            # Unmount
-            hdiutil detach "/Volumes/$VOL" -quiet || true
+            # Unmount volume root
+            VOLROOT=$(dirname "$(dirname "$APP")")
+            hdiutil detach "$VOLROOT" -quiet || true
           done
 
           echo ""
