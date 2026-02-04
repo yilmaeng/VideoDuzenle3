@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dikey Video Oluşturucu</title>
+    <!-- CSS -->
+    <link rel="stylesheet" href="../styles/main.css">
+    <link rel="stylesheet" href="../styles/wizard.css">
+    <style>
+        /* Özelleştirilmiş stiller */
+        .ai-recommendation {
+            background: linear-gradient(135deg, rgba(233, 69, 96, 0.1) 0%, rgba(22, 33, 62, 0.4) 100%);
+            border: 1px solid var(--accent-primary);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: none;
+            /* Başlangıçta gizli */
+        }
+
+        .ai-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .ai-header h3 {
+            margin: 0;
+            color: var(--accent-primary);
+            font-size: 1.1em;
+        }
+
+        .confidence-badge {
+            background-color: var(--accent-secondary);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .rationale-list {
+            margin: 10px 0;
+            padding-left: 20px;
+            color: var(--text-primary);
+            font-size: 0.9em;
+        }
+
+        .rationale-list li {
+            margin-bottom: 4px;
+        }
+
+        .ai-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .preview-container {
+            margin-top: 15px;
+            height: 200px;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .preview-video {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        .method-settings {
+            display: none;
+            /* JS ile açılacak */
+            margin-top: 10px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 10px;
+        }
+
+        .method-settings.active {
+            display: block;
+        }
+
+        .range-with-val {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .range-value {
+            min-width: 40px;
+            text-align: right;
+            font-family: monospace;
+        }
+
+        /* Screen Reader Only Class */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+    </style>
+</head>
+
+<body class="theme-dark">
+    <div class="container wizard-dialog">
+        <!-- Wizard Header -->
+        <h2 id="wizard-title" tabindex="-1">Dikey Video Oluşturucu</h2>
+
+        <div class="wizard-steps" role="list">
+            <span class="step active" id="step-ind-1" role="listitem">1. Kaynak</span>
+            <span class="separator" aria-hidden="true">›</span>
+            <span class="step" id="step-ind-2" role="listitem">2. Format</span>
+            <span class="separator" aria-hidden="true">›</span>
+            <span class="step" id="step-ind-3" role="listitem">3. Yöntem</span>
+            <span class="separator" aria-hidden="true">›</span>
+            <span class="step" id="step-ind-4" role="listitem">4. Ayarlar</span>
+            <span class="separator" aria-hidden="true">›</span>
+            <span class="step" id="step-ind-5" role="listitem">5. Çıktı</span>
+            <span class="separator" aria-hidden="true">›</span>
+            <span class="step" id="step-ind-6" role="listitem">6. İşlem</span>
+        </div>
+
+        <!-- STEP 1: Kaynak Seçimi -->
+        <div id="step-1" class="wizard-step" aria-labelledby="step-ind-1">
+            <div class="form-group">
+                <label for="btn-select-file">Kaynak Video</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="source-path" class="form-control" readonly
+                        placeholder="Bir video dosyası seçin..." style="flex:1;" aria-label="Seçilen Kaynak Video Yolu">
+                    <!-- Added type="button" and action-button class -->
+                    <button type="button" class="btn btn-secondary action-button" id="btn-select-file">Dosya
+                        Seç</button>
+                </div>
+            </div>
+
+            <div id="file-info" class="source-detail" style="display:none;" aria-live="polite">
+                <div class="two-col">
+                    <div>
+                        <p><strong>Süre:</strong> <span id="info-duration">-</span></p>
+                        <p><strong>Çözünürlük:</strong> <span id="info-resolution">-</span></p>
+                    </div>
+                    <div>
+                        <p><strong>FPS:</strong> <span id="info-fps">-</span></p>
+                        <p><strong>Ses:</strong> <span id="info-audio">-</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 2: Format Seçimi -->
+        <div id="step-2" class="wizard-step" style="display:none;" aria-labelledby="step-ind-2">
+            <fieldset class="radio-group-vertical">
+                <legend>Çıktı Formatı</legend>
+
+                <label class="radio-option">
+                    <input type="radio" name="format" value="9:16" checked aria-describedby="desc-916">
+                    <div class="option-content">
+                        <strong>9:16 - YouTube Shorts / TikTok</strong>
+                        <span id="desc-916" class="description">1080x1920 (Dikey Tam Ekran)</span>
+                    </div>
+                </label>
+
+                <label class="radio-option">
+                    <input type="radio" name="format" value="4:5" aria-describedby="desc-45">
+                    <div class="option-content">
+                        <strong>4:5 - Instagram Feed</strong>
+                        <span id="desc-45" class="description">1080x1350 (Dikey Akış)</span>
+                    </div>
+                </label>
+
+                <label class="radio-option">
+                    <input type="radio" name="format" value="1:1" aria-describedby="desc-11">
+                    <div class="option-content">
+                        <strong>1:1 - Kare</strong>
+                        <span id="desc-11" class="description">1080x1080 (Facebook / Instagram)</span>
+                    </div>
+                </label>
+            </fieldset>
+        </div>
+
+        <!-- STEP 3: Yöntem Seçimi -->
+        <div id="step-3" class="wizard-step" style="display:none;" aria-labelledby="step-ind-3">
+            <!-- AI Bölümü -->
+            <div class="ai-recommendation" id="ai-panel" aria-live="polite">
+                <div class="ai-header">
+                    <span class="icon" aria-hidden="true">✨</span>
+                    <h3>Yapay Zeka Önerisi</h3>
+                    <span class="confidence-badge" id="ai-confidence" aria-label="Güven Oranı">%0</span>
+                </div>
+                <p id="ai-suggestion-text" role="status">Analiz ediliyor...</p>
+                <ul class="rationale-list" id="ai-rationale"></ul>
+
+                <div class="ai-actions">
+                    <button class="btn btn-primary small-btn" id="btn-ai-apply">Önerilen Ayarları Uygula</button>
+                    <button class="btn btn-secondary small-btn" id="btn-ai-ignore">Yoksay</button>
+                </div>
+            </div>
+
+            <div style="text-align: right; margin-bottom: 10px;">
+                <button class="btn btn-secondary pulse-animation" id="btn-ask-ai" style="font-size: 0.9em;">
+                    ✨ Yapay Zekaya Sor
+                </button>
+            </div>
+
+            <fieldset class="radio-group-vertical">
+                <legend>Dönüştürme Yöntemi</legend>
+
+                <label class="radio-option">
+                    <input type="radio" name="method" value="blur" checked aria-describedby="desc-blur">
+                    <div class="option-content">
+                        <strong>A) Arka Planı Bulanıklaştır (Önerilen)</strong>
+                        <span id="desc-blur" class="description">Video ortada kalır, boşluklar videonun bulanık haliyle
+                            doldurulur.
+                            İçerik kaybı olmaz.</span>
+                    </div>
+                </label>
+
+                <label class="radio-option">
+                    <input type="radio" name="method" value="crop" aria-describedby="desc-crop">
+                    <div class="option-content">
+                        <strong>B) Ortadan Kırp (Crop)</strong>
+                        <span id="desc-crop" class="description">Video ekranı dolduracak şekilde yaklaştırılır.
+                            Kenarlardan veri kaybı
+                            olur.</span>
+                    </div>
+                </label>
+
+                <label class="radio-option">
+                    <input type="radio" name="method" value="letterbox" aria-describedby="desc-letter">
+                    <div class="option-content">
+                        <strong>C) Siyah Kenarlık Ekle (Letterbox)</strong>
+                        <span id="desc-letter" class="description">Video değişmez, boşluklar siyah veya renkli
+                            kalır.</span>
+                    </div>
+                </label>
+            </fieldset>
+        </div>
+
+        <!-- STEP 4: Yöntem Ayarları -->
+        <div id="step-4" class="wizard-step" style="display:none;" aria-labelledby="step-ind-4">
+            <!-- Blur Ayarları -->
+            <div id="settings-blur" class="method-settings active">
+                <h4>Blur Ayarları</h4>
+                <div class="form-group">
+                    <label for="blur-sigma">Bulanıklık Şiddeti</label>
+                    <div class="range-with-val">
+                        <input type="range" id="blur-sigma" min="0" max="40" value="18" aria-valuemin="0"
+                            aria-valuemax="40" aria-valuenow="18">
+                        <span class="range-value" id="val-blur-sigma" aria-hidden="true">18</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="blur-brightness">Arka Plan Parlaklığı (%)</label>
+                    <div class="range-with-val">
+                        <input type="range" id="blur-brightness" min="50" max="150" value="100" aria-valuemin="50"
+                            aria-valuemax="150" aria-valuenow="100">
+                        <span class="range-value" id="val-blur-brightness" aria-hidden="true">100</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="blur-center-scale">Orta Video Ölçeği (%)</label>
+                    <div class="range-with-val">
+                        <input type="range" id="blur-center-scale" min="80" max="100" value="100" aria-valuemin="80"
+                            aria-valuemax="100" aria-valuenow="100">
+                        <span class="range-value" id="val-blur-center-scale" aria-hidden="true">100</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Crop Ayarları -->
+            <div id="settings-crop" class="method-settings">
+                <h4>Kırpma Ayarları</h4>
+                <div class="form-group">
+                    <fieldset>
+                        <legend style="font-size: 0.9em; margin-bottom: 5px;">Odak Noktası</legend>
+                        <div style="display: flex; gap: 10px;">
+                            <label><input type="radio" name="crop-focus" value="center" checked> Orta</label>
+                            <label><input type="radio" name="crop-focus" value="left"> Sol</label>
+                            <label><input type="radio" name="crop-focus" value="right"> Sağ</label>
+                        </div>
+                    </fieldset>
+                </div>
+                <div class="form-group">
+                    <label for="crop-x">X Kaydırma (%)</label>
+                    <div class="range-with-val">
+                        <input type="range" id="crop-x" min="-50" max="50" value="0" aria-valuemin="-50"
+                            aria-valuemax="50" aria-valuenow="0">
+                        <span class="range-value" id="val-crop-x" aria-hidden="true">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Letterbox Ayarları -->
+            <div id="settings-letterbox" class="method-settings">
+                <h4>Kenarlık Ayarları</h4>
+                <div class="form-group">
+                    <label for="letterbox-color">Arka Plan Rengi</label>
+                    <select id="letterbox-color" class="form-control">
+                        <option value="black">Siyah</option>
+                        <option value="darkgray">Koyu Gri</option>
+                        <option value="white">Beyaz</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 20px;">
+                <button class="btn btn-secondary w-100 action-button" id="btn-preview-method">Önizleme (5sn)</button>
+            </div>
+
+            <div id="preview-area" class="preview-container" style="display:none;" aria-live="polite">
+                <p style="color: #aaa;">Önizleme Hazırlanıyor...</p>
+            </div>
+        </div>
+
+        <!-- STEP 5: Çıktı Ayarları -->
+        <div id="step-5" class="wizard-step" style="display:none;" aria-labelledby="step-ind-5">
+            <div class="form-group">
+                <label for="output-filename">Dosya Adı</label>
+                <input type="text" id="output-filename" class="form-control">
+            </div>
+
+            <div class="form-group">
+                <label for="btn-select-folder">Hedef Klasör</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="output-folder" class="form-control" readonly
+                        aria-label="Seçili Hedef Klasör">
+                    <button class="btn btn-secondary action-button" id="btn-select-folder">Seç</button>
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="form-group">
+                    <label for="video-codec">Video Codec</label>
+                    <select id="video-codec" class="form-control">
+                        <option value="libx264">H.264 (Varsayılan)</option>
+                        <option value="libx265">H.265 (HEVC)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="video-quality">Kalite</label>
+                    <select id="video-quality" class="form-control">
+                        <option value="fast">Hızlı (Düşük Boyut)</option>
+                        <option value="balanced" selected>Dengeli</option>
+                        <option value="high">Yüksek Kalite</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label><input type="checkbox" id="add-to-project"> İşlem bitince projeye ekle</label>
+            </div>
+        </div>
+
+        <!-- STEP 6: İşlem -->
+        <div id="step-6" class="wizard-step" style="display:none; text-align: center; padding-top: 40px;"
+            aria-labelledby="step-ind-6">
+            <h3 id="process-status" aria-live="assertive">İşleniyor...</h3>
+
+            <div class="progress-container" style="margin: 20px 0;">
+                <div class="progress-bar" id="progress-bar" style="width: 0%" role="progressbar" aria-valuenow="0"
+                    aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <p id="progress-text" aria-live="polite">%0</p>
+
+            <div id="process-actions" style="margin-top: 30px; display: none;">
+                <button class="btn btn-success action-button" id="btn-open-file">Dosyayı Aç</button>
+                <button class="btn btn-secondary action-button" id="btn-open-folder">Klasörü Aç</button>
+            </div>
+
+            <div id="process-log-container" style="margin-top:20px; text-align: left;">
+                <details>
+                    <summary>Detaylar (Log)</summary>
+                    <pre id="process-log"
+                        style="background:#111; color:#0f0; padding:10px; height:100px; overflow:auto; font-size: 0.8em;"
+                        aria-live="off"></pre>
+                </details>
+            </div>
+        </div>
+
+        <!-- Live Region for Announcements -->
+        <div id="live-region" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+        <!-- Footer Buttons -->
+        <div class="action-buttons-group footer-buttons">
+            <button class="action-button" id="btn-back" style="display:none;">‹ Geri</button>
+            <div style="flex:1;"></div>
+            <button class="action-button" id="btn-cancel">İptal</button>
+            <button class="action-button primary-action" id="btn-next" disabled>Devam ›</button>
+            <button class="action-button primary-action" id="btn-start" style="display:none;">Başlat</button>
+            <button class="action-button primary-action" id="btn-finish" style="display:none;">Kapat</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="../scripts/vertical-wizard.js"></script>
+</body>
+
+</html>
