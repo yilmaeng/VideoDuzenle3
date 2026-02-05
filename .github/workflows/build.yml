@@ -1,4 +1,4 @@
-name: Build All Platforms
+name: Build & Release
 
 on:
   workflow_dispatch:
@@ -9,6 +9,7 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,16 +23,18 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Build Windows
-        run: npm run build:win
+      - name: Build Windows (no publish)
+        run: npx electron-builder --win --publish=never
 
       - name: List dist
+        if: always()
         shell: bash
         run: |
           echo "=== dist ==="
           ls -la dist/ || true
 
-      - name: Upload Windows outputs
+      - name: Upload Windows dist
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: windows-dist
@@ -40,6 +43,7 @@ jobs:
 
   build-mac:
     runs-on: macos-14
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,11 +62,12 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Build mac (capture log)
+      - name: Build mac (capture log, no publish)
         shell: bash
         run: |
           set -euo pipefail
-          npm run build:mac -- --publish=never 2>&1 | tee build_output.log
+          npx electron-builder --mac --publish=never 2>&1 | tee build_output_mac.log
+          exit ${PIPESTATUS[0]}
 
       - name: Show dist tree
         if: always()
@@ -75,34 +80,27 @@ jobs:
           echo "=== find zip ==="
           find dist -maxdepth 2 -name "*.zip" -type f -print || true
 
-      - name: Upload build log
+      - name: Upload mac build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mac-build-log
-          path: build_output.log
+          path: build_output_mac.log
           retention-days: 30
 
-      - name: Upload ALL Mac DMGs (no name filtering)
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-dmgs
-          path: dist/**/*.dmg
-          retention-days: 30
-          if-no-files-found: warn
-
-      - name: Upload Mac dist (for debugging)
+      - name: Upload Mac dist
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mac-dist
           path: dist/**
-          retention-days: 7
+          retention-days: 30
 
   create-release:
     needs: [build-windows, build-mac]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -116,47 +114,43 @@ jobs:
           mkdir -p release_files
 
           echo "=== Artifacts tree ==="
-          find artifacts -maxdepth 3 -type f -print || true
+          find artifacts -maxdepth 4 -type f -print || true
 
-          # Windows: dist'i zipleyelim (NSIS .exe vs her şeyi taşır)
+          # Windows: tüm dist'i zipleyelim
           if [ -d "artifacts/windows-dist" ]; then
             (cd artifacts && zip -r ../release_files/EngelsizVideoDuzenleyici-Windows.zip windows-dist >/dev/null)
           fi
 
-          # Mac: tüm dmgleri bul
-          echo "=== Mac DMGs found ==="
-          find artifacts -name "*.dmg" -type f -print || true
-
-          # Apple Silicon (arm64) ve Intel (x64) ayrımı: dosya adına bak, yoksa ikisini de kopyala
+          # Mac: tüm DMG'leri bul ve adlandır
           ARM_DMG=$(find artifacts -name "*.dmg" -type f | grep -i "arm64" | head -n 1 || true)
           X64_DMG=$(find artifacts -name "*.dmg" -type f | grep -Ei "(x64|intel)" | head -n 1 || true)
 
-          # Eğer isimlerde arch yoksa, en azından ilk iki dmg'yi alalım
+          # Eğer isimlerde arch yoksa ilk iki dmg'yi al
           if [ -z "$ARM_DMG" ] || [ -z "$X64_DMG" ]; then
-            echo "Arch tag not found in DMG names. Taking first two DMGs if available..."
             DMGS=($(find artifacts -name "*.dmg" -type f | head -n 2))
             [ -z "$ARM_DMG" ] && [ "${#DMGS[@]}" -ge 1 ] && ARM_DMG="${DMGS[0]}"
             [ -z "$X64_DMG" ] && [ "${#DMGS[@]}" -ge 2 ] && X64_DMG="${DMGS[1]}"
           fi
 
-          if [ -n "$X64_DMG" ]; then
-            cp "$X64_DMG" release_files/EngelsizVideoDuzenleyici-Mac-Intel.dmg
-          fi
           if [ -n "$ARM_DMG" ]; then
             cp "$ARM_DMG" release_files/EngelsizVideoDuzenleyici-Mac-AppleSilicon.dmg
+          fi
+
+          if [ -n "$X64_DMG" ]; then
+            cp "$X64_DMG" release_files/EngelsizVideoDuzenleyici-Mac-Intel.dmg
           fi
 
           echo "=== Release files ==="
           ls -la release_files || true
 
-      - name: Create Release
+      - name: Create GitHub Release (draft)
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            release_files/EngelsizVideoDuzenleyici-Windows.zip
-            release_files/EngelsizVideoDuzenleyici-Mac-Intel.dmg
-            release_files/EngelsizVideoDuzenleyici-Mac-AppleSilicon.dmg
           draft: true
           generate_release_notes: true
+          files: |
+            release_files/EngelsizVideoDuzenleyici-Windows.zip
+            release_files/EngelsizVideoDuzenleyici-Mac-AppleSilicon.dmg
+            release_files/EngelsizVideoDuzenleyici-Mac-Intel.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
