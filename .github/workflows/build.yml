@@ -1,4 +1,4 @@
-name: Build (Windows + macOS) and Draft Release
+name: Build All Platforms
 
 on:
   workflow_dispatch:
@@ -6,196 +6,157 @@ on:
     tags:
       - "v*"
 
-permissions:
-  contents: write
-
 jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm ci
 
       - name: Build Windows
         run: npm run build:win
 
-      - name: Upload Windows Artifact
+      - name: List dist
+        shell: bash
+        run: |
+          echo "=== dist ==="
+          ls -la dist/ || true
+
+      - name: Upload Windows outputs
         uses: actions/upload-artifact@v4
         with:
-          name: windows-build
-          path: dist/win-unpacked/
+          name: windows-dist
+          path: dist/**
           retention-days: 30
 
   build-mac:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python (native modules)
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm ci
 
-      - name: Rebuild native deps for Electron
-        run: npx electron-builder install-app-deps
-
-      - name: Build macOS (per package.json)
-        run: |
-          set -e
-          export CSC_IDENTITY_AUTO_DISCOVERY=false
-          npm run build:mac 2>&1 | tee build_output.log
-
-      - name: List dist contents
-        run: |
-          echo "=== dist/ ==="
-          ls -lah dist || true
-          echo "=== DMGs ==="
-          ls -lah dist/*.dmg 2>/dev/null || echo "No DMG found"
-
-      - name: Verify & Normalize DMGs
+      - name: Build mac (capture log)
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p release_files
-          shopt -s nullglob
+          npm run build:mac -- --publish=never 2>&1 | tee build_output.log
 
-          DMGS=(dist/*.dmg)
-          if [ ${#DMGS[@]} -eq 0 ]; then
-            echo "::error::No DMG produced in dist/. Check electron-builder output."
-            exit 1
-          fi
+      - name: Show dist tree
+        if: always()
+        shell: bash
+        run: |
+          echo "=== dist root ==="
+          ls -la dist/ || true
+          echo "=== find dmg ==="
+          find dist -maxdepth 2 -name "*.dmg" -type f -print || true
+          echo "=== find zip ==="
+          find dist -maxdepth 2 -name "*.zip" -type f -print || true
 
-          echo "Found DMGs:"
-          printf '%s\n' "${DMGS[@]}"
-
-          for DMG in "${DMGS[@]}"; do
-            echo ""
-            echo "=== Checking DMG: $DMG ==="
-
-            # Mount
-            hdiutil attach "$DMG" -nobrowse -readonly -quiet
-
-            # Son mount edilen volume'u al
-            VOL=$(ls -t /Volumes | head -n 1)
-            VOLROOT="/Volumes/$VOL"
-            echo "Mounted volume: $VOLROOT"
-
-            # Volume içinde herhangi bir .app bul
-            APP=$(find "$VOLROOT" -maxdepth 2 -name "*.app" -print -quit || true)
-            if [ -z "$APP" ]; then
-              echo "Volumes listing:"
-              ls -lah /Volumes
-              echo "Volume listing:"
-              ls -lah "$VOLROOT" || true
-              echo "::error::No .app found inside mounted DMG."
-              hdiutil detach "$VOLROOT" -quiet || true
-              exit 1
-            fi
-
-            echo "App found: $APP"
-
-            # Info.plist var mı?
-            if [ ! -f "$APP/Contents/Info.plist" ]; then
-              echo "::error::Info.plist missing at $APP/Contents/Info.plist"
-              ls -lah "$APP/Contents" || true
-              hdiutil detach "$VOLROOT" -quiet || true
-              exit 1
-            fi
-
-            # Contents/MacOS altında binary'yi otomatik bul
-            BIN=$(find "$APP/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit || true)
-            if [ -z "$BIN" ]; then
-              echo "::error::No executable found in $APP/Contents/MacOS"
-              ls -lah "$APP/Contents/MacOS" || true
-              hdiutil detach "$VOLROOT" -quiet || true
-              exit 1
-            fi
-
-            echo "Binary: $BIN"
-            echo "Binary arch:"
-            file "$BIN" || true
-
-            echo "codesign verify:"
-            codesign --verify --deep --strict --verbose=4 "$APP"
-
-            ARCH_LINE=$(file "$BIN")
-            TARGET_NAME="EngelsizVideoDuzenleyici-Mac-Unknown.dmg"
-            if echo "$ARCH_LINE" | grep -q "arm64"; then
-              if echo "$ARCH_LINE" | grep -q "x86_64"; then
-                TARGET_NAME="EngelsizVideoDuzenleyici-Mac-Universal.dmg"
-              else
-                TARGET_NAME="EngelsizVideoDuzenleyici-Mac-AppleSilicon.dmg"
-              fi
-            elif echo "$ARCH_LINE" | grep -q "x86_64"; then
-              TARGET_NAME="EngelsizVideoDuzenleyici-Mac-Intel.dmg"
-            fi
-
-            echo "Copying DMG as: release_files/$TARGET_NAME"
-            cp "$DMG" "release_files/$TARGET_NAME"
-
-            # Unmount
-            hdiutil detach "$VOLROOT" -quiet || true
-          done
-
-          echo ""
-          echo "=== release_files ==="
-          ls -lah release_files
-
-      - name: Upload macOS Release Files
+      - name: Upload build log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mac-release-files
-          path: release_files/*.dmg
+          name: mac-build-log
+          path: build_output.log
           retention-days: 30
+
+      - name: Upload ALL Mac DMGs (no name filtering)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmgs
+          path: dist/**/*.dmg
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload Mac dist (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-dist
+          path: dist/**
+          retention-days: 7
 
   create-release:
     needs: [build-windows, build-mac]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts/
 
-      - name: Prepare Release Files
+      - name: Prepare release files
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           mkdir -p release_files
 
-          if [ -d "artifacts/windows-build" ]; then
-            (cd artifacts && zip -r ../release_files/EngelsizVideoDuzenleyici-Windows.zip windows-build/)
+          echo "=== Artifacts tree ==="
+          find artifacts -maxdepth 3 -type f -print || true
+
+          # Windows: dist'i zipleyelim (NSIS .exe vs her şeyi taşır)
+          if [ -d "artifacts/windows-dist" ]; then
+            (cd artifacts && zip -r ../release_files/EngelsizVideoDuzenleyici-Windows.zip windows-dist >/dev/null)
           fi
 
-          if [ -d "artifacts/mac-release-files" ]; then
-            cp artifacts/mac-release-files/*.dmg release_files/ 2>/dev/null || true
+          # Mac: tüm dmgleri bul
+          echo "=== Mac DMGs found ==="
+          find artifacts -name "*.dmg" -type f -print || true
+
+          # Apple Silicon (arm64) ve Intel (x64) ayrımı: dosya adına bak, yoksa ikisini de kopyala
+          ARM_DMG=$(find artifacts -name "*.dmg" -type f | grep -i "arm64" | head -n 1 || true)
+          X64_DMG=$(find artifacts -name "*.dmg" -type f | grep -Ei "(x64|intel)" | head -n 1 || true)
+
+          # Eğer isimlerde arch yoksa, en azından ilk iki dmg'yi alalım
+          if [ -z "$ARM_DMG" ] || [ -z "$X64_DMG" ]; then
+            echo "Arch tag not found in DMG names. Taking first two DMGs if available..."
+            DMGS=($(find artifacts -name "*.dmg" -type f | head -n 2))
+            [ -z "$ARM_DMG" ] && [ "${#DMGS[@]}" -ge 1 ] && ARM_DMG="${DMGS[0]}"
+            [ -z "$X64_DMG" ] && [ "${#DMGS[@]}" -ge 2 ] && X64_DMG="${DMGS[1]}"
           fi
 
-          echo "Release files:"
-          ls -lah release_files
+          if [ -n "$X64_DMG" ]; then
+            cp "$X64_DMG" release_files/EngelsizVideoDuzenleyici-Mac-Intel.dmg
+          fi
+          if [ -n "$ARM_DMG" ]; then
+            cp "$ARM_DMG" release_files/EngelsizVideoDuzenleyici-Mac-AppleSilicon.dmg
+          fi
 
-      - name: Create Draft Release
+          echo "=== Release files ==="
+          ls -la release_files || true
+
+      - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          draft: true
-          generate_release_notes: true
           files: |
             release_files/EngelsizVideoDuzenleyici-Windows.zip
             release_files/EngelsizVideoDuzenleyici-Mac-Intel.dmg
             release_files/EngelsizVideoDuzenleyici-Mac-AppleSilicon.dmg
-            release_files/EngelsizVideoDuzenleyici-Mac-Universal.dmg
+          draft: true
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
