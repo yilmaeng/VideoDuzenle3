@@ -37,7 +37,7 @@ jobs:
       # Build DMGs (x64 and arm64)
       # package.json is configured to build 'dmg' now
       - run: npx electron-builder install-app-deps
-      - run: npm run build:mac
+      - run: npm run build:mac -- --arm64
 
       - uses: actions/upload-artifact@v4
         with:
