@@ -9,7 +9,7 @@
     "dev": "electron . --enable-logging",
     "build": "electron-builder",
     "build:win": "electron-builder --win --x64",
-    "build:mac": "electron-builder --mac",
+    "build:mac": "electron-builder --mac --x64 --arm64",
     "build:linux": "electron-builder --linux",
     "build:all": "electron-builder --win --mac --linux",
     "test": "echo \"Test komutları henüz eklenmedi\" && exit 0"
