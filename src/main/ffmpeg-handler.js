@@ -389,7 +389,75 @@ async function _previewAudio(input, output, start, duration) {
     } catch (e) { try { fs.unlinkSync(tA) } catch (x) { }; throw e; }
 }
 
+async function _extractAudio(inputPath, outputPath, onProgress) {
+    const sIn = _getSafePath(inputPath);
+    return new Promise((resolve, reject) => {
+        ffmpeg(sIn)
+            .noVideo()
+            .output(outputPath)
+            .on('progress', (progress) => {
+                if (onProgress) onProgress(progress.percent);
+            })
+            .on('end', () => resolve(outputPath))
+            .on('error', reject)
+            .run();
+    });
+}
+
+async function _extractVideo(inputPath, outputPath, onProgress) {
+    const sIn = _getSafePath(inputPath);
+    return new Promise((resolve, reject) => {
+        ffmpeg(sIn)
+            .noAudio()
+            .output(outputPath)
+            .on('progress', (progress) => {
+                if (onProgress) onProgress(progress.percent);
+            })
+            .on('end', () => resolve(outputPath))
+            .on('error', reject)
+            .run();
+    });
+}
+
+async function _detectSilence(inputPath, minDuration = 0.5, threshold = -30) {
+    const sIn = _getSafePath(inputPath);
+    return new Promise((resolve, reject) => {
+        const silences = [];
+        let currentSilence = null;
+
+        ffmpeg(sIn)
+            .audioFilters(`silencedetect=n=${threshold}dB:d=${minDuration}`)
+            .format('null')
+            .output('-')
+            .on('stderr', (line) => {
+                const startMatch = line.match(/silence_start: ([\d.]+)/);
+                const endMatch = line.match(/silence_end: ([\d.]+)/);
+
+                if (startMatch) {
+                    currentSilence = { start: parseFloat(startMatch[1]) };
+                } else if (endMatch && currentSilence) {
+                    currentSilence.end = parseFloat(endMatch[1]);
+                    currentSilence.duration = currentSilence.end - currentSilence.start;
+                    silences.push(currentSilence);
+                    currentSilence = null;
+                }
+            })
+            .on('end', () => {
+                console.log(`${silences.length} adet sessiz alan tespit edildi`);
+                resolve(silences);
+            })
+            .on('error', (err) => {
+                console.error('Sessizlik tespiti hatası:', err);
+                reject(err);
+            })
+            .run();
+    });
+}
+
 module.exports = {
+    extractAudio: async function () { const args = cleanArgs(arguments); return _extractAudio(args[0], args[1], args[2]); },
+    extractVideo: async function () { const args = cleanArgs(arguments); return _extractVideo(args[0], args[1], args[2]); },
+    detectSilence: async function () { const args = cleanArgs(arguments); return _detectSilence(args[0], args[1], args[2]); },
     getFFmpegPaths: setupFFmpeg,
     formatTime: formatTime,
 
@@ -514,7 +582,7 @@ module.exports = {
         } catch (e) { throw e; }
     },
     createVerticalVideo: async function () {
-        const [i, o] = cleanArgs(arguments);
+        const [i, o, opt, onP] = cleanArgs(arguments);
         return new Promise((resolve, reject) => {
             const sIn = _getSafePath(i);
             ffmpeg(sIn)
@@ -525,6 +593,7 @@ module.exports = {
                 ])
                 .outputOptions(['-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac'])
                 .output(o)
+                .on('progress', (p) => { if (onP) onP(p.percent); })
                 .on('end', () => resolve({ success: true, outputPath: o }))
                 .on('error', reject)
                 .run();
