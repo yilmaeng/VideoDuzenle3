@@ -67,7 +67,7 @@ jobs:
           }
 
           function parseFeed(xmlText) {
-            const entryBlocks = xmlText.match(/<entry>[\\s\\S]*?<\\/entry>/gi) || [];
+            const entryBlocks = xmlText.match(/<entry>[\s\S]*?<\/entry>/gi) || [];
             const items = entryBlocks.map((entry) => {
               const videoId = findTag(entry, 'yt:videoId');
               const title = findTag(entry, 'title');
