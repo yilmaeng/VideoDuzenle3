@@ -57,9 +57,26 @@ function parseFeed(xmlText) {
     };
 }
 
-function fetchText(url) {
+function fetchText(url, redirectCount = 0) {
     return new Promise((resolve, reject) => {
-        https.get(url, (response) => {
+        const request = https.get(url, {
+            headers: {
+                'user-agent': 'EVD-Tutorial-Fetcher/1.0 (+https://evd.drenginyilmaz.net/)',
+                accept: 'application/xml,text/xml;q=0.9,*/*;q=0.8'
+            }
+        }, (response) => {
+            if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                if (redirectCount >= 5) {
+                    reject(new Error(`Too many redirects while fetching ${url}`));
+                    response.resume();
+                    return;
+                }
+                const nextUrl = new URL(response.headers.location, url).toString();
+                response.resume();
+                resolve(fetchText(nextUrl, redirectCount + 1));
+                return;
+            }
+
             if (response.statusCode !== 200) {
                 reject(new Error(`HTTP ${response.statusCode}`));
                 response.resume();
@@ -72,12 +89,37 @@ function fetchText(url) {
                 data += chunk;
             });
             response.on('end', () => resolve(data));
-        }).on('error', reject);
+        });
+
+        request.setTimeout(15000, () => {
+            request.destroy(new Error(`Request timed out while fetching ${url}`));
+        });
+
+        request.on('error', reject);
     });
 }
 
 async function main() {
-    const xmlText = await fetchText(FEED_URL);
+    let lastError = null;
+    let xmlText = '';
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+            xmlText = await fetchText(FEED_URL);
+            break;
+        } catch (error) {
+            lastError = error;
+            console.warn(`Tutorial feed fetch failed on attempt ${attempt}:`, error.message);
+            if (attempt < 3) {
+                await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+            }
+        }
+    }
+
+    if (!xmlText) {
+        throw lastError || new Error('Could not fetch tutorial feed.');
+    }
+
     const payload = parseFeed(xmlText);
     fs.writeFileSync(OUTPUT_PATH, JSON.stringify(payload, null, 2), 'utf8');
     console.log(`Tutorial feed JSON written to ${OUTPUT_PATH}`);
