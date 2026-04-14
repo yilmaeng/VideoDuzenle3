@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Éditeur Vidéo Accessible (EVD) - Accueil</title>
+    <meta name="description"
+        content="Page officielle de l'Éditeur Vidéo Accessible (EVD) avec liens de téléchargement, politique de confidentialité et conditions d'utilisation.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://evd.drenginyilmaz.net/fr/">
+    <link rel="alternate" hreflang="x-default" href="https://evd.drenginyilmaz.net/">
+    <link rel="alternate" hreflang="tr" href="https://evd.drenginyilmaz.net/tr/">
+    <link rel="alternate" hreflang="en" href="https://evd.drenginyilmaz.net/en/">
+    <link rel="alternate" hreflang="de" href="https://evd.drenginyilmaz.net/de/">
+    <link rel="alternate" hreflang="es" href="https://evd.drenginyilmaz.net/es/">
+    <link rel="alternate" hreflang="fr" href="https://evd.drenginyilmaz.net/fr/">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/site.css">
+</head>
+
+<body>
+    <main class="page">
+        <div class="topbar">
+            <div class="topbar-home">Langue officielle du site EVD : Français</div>
+            <nav class="language-switcher" aria-label="Choix de la langue">
+                <a class="language-link" href="/tr/" data-lang-code="tr">Türkçe</a>
+                <a class="language-link" href="/en/" data-lang-code="en">English</a>
+                <a class="language-link" href="/de/" data-lang-code="de">Deutsch</a>
+                <a class="language-link" href="/es/" data-lang-code="es">Español</a>
+                <a class="language-link current" href="/fr/" data-lang-code="fr">Français</a>
+            </nav>
+        </div>
+
+        <section class="hero">
+            <span class="eyebrow">Éditeur Vidéo Accessible (EVD)</span>
+            <h1>EVD : un voyage vers l'accessibilité</h1>
+            <p class="lead">
+                L'Éditeur Vidéo Accessible est une application de production vidéo conçue pour les utilisateurs
+                aveugles, malvoyants et orientés clavier. Avec EVD, le montage vidéo, les transitions, les couches
+                audio, image et texte, les sous-titres, les couches vidéo, les slideshows, la synchronisation audio,
+                l'enregistrement accessible et la diffusion en direct deviennent beaucoup plus accessibles.
+            </p>
+            <div class="actions">
+                <a class="btn btn-primary" href="story.html">L'histoire d'EVD</a>
+                <a class="btn btn-secondary" href="https://www.drenginyilmaz.net/">Visiter le site officiel</a>
+            </div>
+        </section>
+
+        <section class="grid" aria-label="Cartes d'information">
+            <article class="card">
+                <h2>À propos de l'application</h2>
+                <p>
+                    Grâce à l'intégration OBS et au soutien de l'intelligence artificielle, même un utilisateur
+                    totalement aveugle peut créer des montages vidéo puissants et créatifs. EVD garde l'accessibilité
+                    au centre et cherche à toucher davantage de personnes grâce au support multilingue et à une
+                    expérience utilisateur en constante évolution.
+                </p>
+                <ul class="list">
+                    <li>Flux de travail orienté clavier</li>
+                    <li>Assistant d'enregistrement accessible</li>
+                    <li>Intégration YouTube et préparation de diffusion</li>
+                </ul>
+            </article>
+
+            <article class="card">
+                <h2>Documents officiels</h2>
+                <p>Les documents officiels pour la vérification des plateformes et l'information publique se trouvent ci-dessous.</p>
+                <div class="doc-links">
+                    <a class="doc-link" href="/fr/privacy-policy.html">
+                        <strong>Politique de confidentialité</strong>
+                        Informations sur le traitement des données utilisateur, le stockage local et les connexions tierces.
+                    </a>
+                    <a class="doc-link" href="/fr/terms-of-service.html">
+                        <strong>Conditions d'utilisation</strong>
+                        Consultez les responsabilités, les droits et les conditions principales d'utilisation de l'application.
+                    </a>
+                </div>
+            </article>
+
+            <article class="card">
+                <h2>Téléchargements disponibles</h2>
+                <p>Les dernières versions Windows et portables sont listées ci-dessous.</p>
+                <div id="release-list" class="release-list" aria-live="polite">
+                    <p class="release-empty">Chargement des versions...</p>
+                </div>
+            </article>
+        </section>
+
+        <section class="card tutorials-section" aria-labelledby="tutorials-title">
+            <h2 id="tutorials-title">Tutoriels</h2>
+            <p>Les 5 derniers tutoriels publics d'EVD s'affichent ici. Lorsqu'une nouvelle vidéo est ajoutée à la playlist, cette section se met aussi à jour.</p>
+            <div id="tutorial-list" class="tutorial-list" aria-live="polite">
+                <p class="release-empty">Chargement des tutoriels...</p>
+            </div>
+            <div class="tutorial-actions">
+                <a class="btn btn-secondary" href="https://www.youtube.com/playlist?list=PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ" target="_blank" rel="noopener noreferrer">Ouvrir toute la playlist</a>
+            </div>
+        </section>
+
+        <footer class="footer">
+            Nom de l'application : Éditeur Vidéo Accessible (EVD)<br>
+            Éditeur : Engin Yılmaz<br>
+            Contact : <a href="mailto:engin_yilmaz@yahoo.com">engin_yilmaz@yahoo.com</a><br>
+            Domaine : <a href="https://www.drenginyilmaz.net/">https://www.drenginyilmaz.net/</a>
+        </footer>
+    </main>
+
+    <script>
+        window.__EVD_SITE_TEXT = {
+            noReleases: 'Aucune version publiée n’est disponible pour le moment.',
+            setupLabel: 'Windows Setup',
+            portableLabel: 'Portable',
+            notesLabel: 'Notes de version',
+            versionLabel: 'Version',
+            dateLabel: 'Date',
+            releaseFallback: 'Aucune description n’a encore été ajoutée pour cette version.',
+            releaseError: 'Les versions n’ont pas pu être chargées. Veuillez réessayer plus tard.',
+            noTutorials: 'Aucun tutoriel public n’est encore disponible.',
+            tutorialError: 'Les tutoriels n’ont pas pu être chargés pour le moment. Utilisez le lien de playlist ci-dessous.',
+            tutorialWatchLabel: 'Ouvrir la vidéo',
+            tutorialListLabel: 'Ouvrir toute la playlist',
+            tutorialDateLabel: 'Publié le'
+        };
+    </script>
+    <script src="/site.js"></script>
+</body>
+
+</html>

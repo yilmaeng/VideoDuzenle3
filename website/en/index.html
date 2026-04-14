@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accessible Video Editor (EVD) - Home</title>
+    <meta name="description"
+        content="Official home page for Accessible Video Editor (EVD), including download links, privacy policy, and terms of service.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://evd.drenginyilmaz.net/en/">
+    <link rel="alternate" hreflang="x-default" href="https://evd.drenginyilmaz.net/">
+    <link rel="alternate" hreflang="tr" href="https://evd.drenginyilmaz.net/tr/">
+    <link rel="alternate" hreflang="en" href="https://evd.drenginyilmaz.net/en/">
+    <link rel="alternate" hreflang="de" href="https://evd.drenginyilmaz.net/de/">
+    <link rel="alternate" hreflang="es" href="https://evd.drenginyilmaz.net/es/">
+    <link rel="alternate" hreflang="fr" href="https://evd.drenginyilmaz.net/fr/">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/site.css">
+</head>
+
+<body>
+    <main class="page">
+        <div class="topbar">
+            <div class="topbar-home">Official EVD site language: English</div>
+            <nav class="language-switcher" aria-label="Language switcher">
+                <a class="language-link" href="/tr/" data-lang-code="tr">Türkçe</a>
+                <a class="language-link current" href="/en/" data-lang-code="en">English</a>
+                <a class="language-link" href="/de/" data-lang-code="de">Deutsch</a>
+                <a class="language-link" href="/es/" data-lang-code="es">Español</a>
+                <a class="language-link" href="/fr/" data-lang-code="fr">Français</a>
+            </nav>
+        </div>
+
+        <section class="hero">
+            <span class="eyebrow">Accessible Video Editor (EVD)</span>
+            <h1>EVD: A Journey in Accessibility</h1>
+            <p class="lead">
+                Accessible Video Editor is an accessible video production application created for blind, low-vision,
+                and keyboard-first users. With EVD, video editing, transitions, audio, image and text overlays,
+                subtitles, video layers, slideshows, audio synchronization, accessible recording, and live streaming
+                workflows become far more reachable.
+            </p>
+            <div class="actions">
+                <a class="btn btn-primary" href="story.html">The Story of EVD</a>
+                <a class="btn btn-secondary" href="https://www.drenginyilmaz.net/">Visit Official Website</a>
+            </div>
+        </section>
+
+        <section class="grid" aria-label="Information cards">
+            <article class="card">
+                <h2>About the App</h2>
+                <p>
+                    With OBS integration and AI assistance, even a totally blind user can create strong and creative
+                    video edits. EVD keeps accessibility at its core while reaching more people through multilingual
+                    support and an improving user experience.
+                </p>
+                <ul class="list">
+                    <li>Keyboard-first workflow</li>
+                    <li>Accessible recording wizard</li>
+                    <li>YouTube integration and broadcast preparation</li>
+                </ul>
+            </article>
+
+            <article class="card">
+                <h2>Official Documents</h2>
+                <p>Official policy links for platform verification and public reference are listed below.</p>
+                <div class="doc-links">
+                    <a class="doc-link" href="/en/privacy-policy.html">
+                        <strong>Privacy Policy</strong>
+                        Learn how user data, local storage, diagnostics, and third-party connections are handled.
+                    </a>
+                    <a class="doc-link" href="/en/terms-of-service.html">
+                        <strong>Terms of Service</strong>
+                        Review the core usage rules, responsibilities, and service conditions of the application.
+                    </a>
+                </div>
+            </article>
+
+            <article class="card">
+                <h2>Available Downloads</h2>
+                <p>The latest Windows installer and portable builds are listed below.</p>
+                <div id="release-list" class="release-list" aria-live="polite">
+                    <p class="release-empty">Loading releases...</p>
+                </div>
+            </article>
+        </section>
+
+        <section class="card tutorials-section" aria-labelledby="tutorials-title">
+            <h2 id="tutorials-title">Tutorials</h2>
+            <p>The latest 5 public tutorial videos for EVD are shown here. When a new video is added to the playlist, this section updates as well.</p>
+            <div id="tutorial-list" class="tutorial-list" aria-live="polite">
+                <p class="release-empty">Loading tutorials...</p>
+            </div>
+            <div class="tutorial-actions">
+                <a class="btn btn-secondary" href="https://www.youtube.com/playlist?list=PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ" target="_blank" rel="noopener noreferrer">Open the full playlist</a>
+            </div>
+        </section>
+
+        <footer class="footer">
+            App Name: Accessible Video Editor (EVD)<br>
+            Publisher: Engin Yilmaz<br>
+            Contact: <a href="mailto:engin_yilmaz@yahoo.com">engin_yilmaz@yahoo.com</a><br>
+            Domain: <a href="https://www.drenginyilmaz.net/">https://www.drenginyilmaz.net/</a>
+        </footer>
+    </main>
+
+    <script>
+        window.__EVD_SITE_TEXT = {
+            noReleases: 'No published releases are available yet.',
+            setupLabel: 'Windows Setup',
+            portableLabel: 'Portable',
+            notesLabel: 'Release Notes',
+            versionLabel: 'Version',
+            dateLabel: 'Date',
+            releaseFallback: 'No description was added for this release yet.',
+            releaseError: 'Releases could not be loaded. Please try again later.',
+            noTutorials: 'No public tutorials are available yet.',
+            tutorialError: 'Tutorials could not be loaded right now. Please use the playlist link below.',
+            tutorialWatchLabel: 'Open video',
+            tutorialListLabel: 'Open the full playlist',
+            tutorialDateLabel: 'Published'
+        };
+    </script>
+    <script src="/site.js"></script>
+</body>
+
+</html>
