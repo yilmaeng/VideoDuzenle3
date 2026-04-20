@@ -1,8 +1,16 @@
 {
   "playlistId": "PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ",
   "playlistUrl": "https://www.youtube.com/playlist?list=PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ",
-  "updatedAt": "2026-04-20T08:11:36.025Z",
+  "updatedAt": "2026-04-20T19:08:51.721Z",
   "items": [
+    {
+      "videoId": "7Se1Ujx9u6c",
+      "title": "EVD İle Temel Dolaşım ve düzenleme işlemleri",
+      "published": "2026-04-20T11:58:48+00:00",
+      "description": "Merhabalar. Bu videoda EVD’yi en temelden inceliyoruz. Video dosyası nasıl açılır? İçinde kolay ve pratik biçimde nasıl gezinilir? Temel seçme, yer işareti koyma, silme ve düzenleme komutlarını ele alıyoruz. Bununla da yetinmiyor. Ses düzeyi ayarlarını değiştirme, gürültü temizleme, boşlukları silme, seçili bir bölümü hızlandırma gibi noktalara da bakış atıyoruz. EVD’yi ilk kez kullanacaksanız bu video sizin için iyi bir başlangıç olacak.",
+      "thumbnail": "https://i.ytimg.com/vi/7Se1Ujx9u6c/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=7Se1Ujx9u6c"
+    },
     {
       "videoId": "aCy0-7SKi9A",
       "title": "EVD ile Nesne İşlemleri ve Nesne Gizleme süreçleri",
@@ -34,14 +42,6 @@
       "description": "3.5 sürümümüzdeki bir başka yenilik ise Slide show projelerinde resim ve sesleri eşleme. Şu ana dek resimlere yazılar ekleyip eşleyebiliyorduk. Ama birden fazla sesle farklı resimleri eşlemek ancak süreleri düzenleyerek olabiliyordu. Artık bu durum çok daha erişilebilir ve pratik.",
       "thumbnail": "https://i.ytimg.com/vi/CCTQ2fI8FWU/hqdefault.jpg",
       "url": "https://www.youtube.com/watch?v=CCTQ2fI8FWU"
-    },
-    {
-      "videoId": "Yrbia2y5H0E",
-      "title": "Engelsiz Video Düzenleyicisi Erişilebilir Kayıt sihirbazı",
-      "published": "2026-02-25T01:18:21+00:00",
-      "description": "Merhabalar. Engelsiz Video Düzenleyicisi 3.5 sürümüne heyecan verici bir özellik ekledik. OBS ile erişilebilir kayıt sihirbazı. Açık Kaynak kodlu OBS’nin kayıt özellikleriyle erişilebilirliğin gücünü birleştirdik. Böylece artık ekranda kendi kameranızın ve pencerenin konumumu erişilebilir biçimde yerleştirip kayıt yapmanız mümkün hale geldi. Bu video olayınn nasılını anlatıyor. Engelsiz Video Düzenleyicisi güncel sürümlerini aşağıdaki bağlantıdan indirebilirsiniz:\nhttps://www.drenginyilmaz.net/engelsiz-video-duzenleyicisi/",
-      "thumbnail": "https://i.ytimg.com/vi/Yrbia2y5H0E/hqdefault.jpg",
-      "url": "https://www.youtube.com/watch?v=Yrbia2y5H0E"
     }
   ]
 }
