@@ -1,8 +1,16 @@
 {
   "playlistId": "PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ",
   "playlistUrl": "https://www.youtube.com/playlist?list=PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ",
-  "updatedAt": "2026-04-20T19:08:51.721Z",
+  "updatedAt": "2026-04-21T07:54:48.141Z",
   "items": [
+    {
+      "videoId": "Og5uODVEvts",
+      "title": "Harici Sesi Videoyla Senkronlama",
+      "published": "2026-04-21T06:47:17+00:00",
+      "description": "Selamlar Bu videomuzda EVD’nin pek bilinmeyen ama meraklıları için çok kullanışlı olabilecek bir özelliğini ele alıyoruz: Harici sesle videoyu eş zamanlama. Ne gerek var diyenlere kısa bir bilgi. Elinizde temiz stüdyo ortamında profesyonel bir ses kaydınız var. ama bunu mevcut görüntünüzle eşlemek istiyorsunuz. Ya da mevcut bir dış çekim var buna dublaj yapmak istediniz. Veya popüler biçimde play back yapmak istiyorsunuz. İşte Harici ses senkronlama bunları tam ve erişilebilir biçimde yapmanızı ince ayarlarla video ve harici sesi tam olarak senkronlamanızı sağlıyor. Nasılı videomuzda.\nNot: çekim sırasındaki sağ solla oynatımdaki sağ sol karışmış olabilir idare edin 😊",
+      "thumbnail": "https://i.ytimg.com/vi/Og5uODVEvts/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=Og5uODVEvts"
+    },
     {
       "videoId": "7Se1Ujx9u6c",
       "title": "EVD İle Temel Dolaşım ve düzenleme işlemleri",
@@ -34,14 +42,6 @@
       "description": "Merhabalar. elinizdeki videonun bir noktasını daha hızlı çekimde göstermek istediğinizi var sayın. örneğin, bir yemek tarifi videosundaki yemeğin pişme süresini atmak istemiyorsunuz, ama 10 dakika yerine 1 dakikada geçsin istiyorsunuz. İşte bu videoda engelsiz video düzenleyicisi kullanarak seçili bir alanın hızını nasıl arttırıp sonra dışa aktarım yapabileceğinizi göreceksiniz. Ayrıca dilerseniz, fon ekle yaparak hızlanmış bölümdeki sesi tamamen atıp orada başka bir fon çalmasını da sağlayabiliyorsunuz. İyi kullanımlar..",
       "thumbnail": "https://i.ytimg.com/vi/2vuKouiif0s/hqdefault.jpg",
       "url": "https://www.youtube.com/watch?v=2vuKouiif0s"
-    },
-    {
-      "videoId": "CCTQ2fI8FWU",
-      "title": "Engelsiz Video Düzenleyicisi Slide Show projelerinde resim ve ses eşleme",
-      "published": "2026-02-25T01:26:49+00:00",
-      "description": "3.5 sürümümüzdeki bir başka yenilik ise Slide show projelerinde resim ve sesleri eşleme. Şu ana dek resimlere yazılar ekleyip eşleyebiliyorduk. Ama birden fazla sesle farklı resimleri eşlemek ancak süreleri düzenleyerek olabiliyordu. Artık bu durum çok daha erişilebilir ve pratik.",
-      "thumbnail": "https://i.ytimg.com/vi/CCTQ2fI8FWU/hqdefault.jpg",
-      "url": "https://www.youtube.com/watch?v=CCTQ2fI8FWU"
     }
   ]
 }
