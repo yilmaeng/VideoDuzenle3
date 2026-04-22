@@ -1,8 +1,16 @@
 {
   "playlistId": "PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ",
   "playlistUrl": "https://www.youtube.com/playlist?list=PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ",
-  "updatedAt": "2026-04-21T19:15:41.202Z",
+  "updatedAt": "2026-04-22T07:50:59.806Z",
   "items": [
+    {
+      "videoId": "a6DcThVt4b8",
+      "title": "EVD ile çoklu seçim işlemleri",
+      "published": "2026-04-21T21:03:47+00:00",
+      "description": "EVD ile yatay bir dosyayı dikey bir Youtube videosu haline getirebiliyoruz. Peki 4.0 ile bunu mevcut bir dosya içinden de yapabileceğinizi söylesem? Üstelik aynı anda çoklu bölgeleri. Şöyle düşünün: elinizde 1 saatlik bir video var ve içinden 5 ayrı kısa video çıkarmak istediniz. Tek yapmanız gereken bu videoyu açmak ve kısa video yapacağınız alanları seçerek seçim listesine eklemek. Sonrası videomuzda.\nBununla da kalmıyor. Sizce bir futbol maçının 3 dakikalık özetini nasıl hazırlıyorlardır? Siz de elinizdeki videonun sadece belirli bölümlerini seçerek yeni bir klipte birleştirip kendi özetinizi hazırlayabilirsiniz.\nVeya videonuzdaki seçtiğiniz farklı bölümleri ayrı klipler olarak kaydedebilirsiniz. Tıpkı bir albümün 1, 3 ve 5 numaralı parçalarını kaydetmek gibi. Tüm bunların detaylarını merak edenleri bekliyorum.",
+      "thumbnail": "https://i.ytimg.com/vi/a6DcThVt4b8/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=a6DcThVt4b8"
+    },
     {
       "videoId": "Og5uODVEvts",
       "title": "Harici Sesi Videoyla Senkronlama",
@@ -34,14 +42,6 @@
       "description": "Selamlar. Engelsiz Video Düzenleyicisi anlatım serisinin bu bölümünde bir videoya nasıl metin, görsel ve ses eklenir, bunlar eklenirken boyut ve konum için yapay zekadan nasıl yararlanılır konularını ele aldım. Siz de izlerken benim gibi heyecan ve hayranlık duyarsınız umarım.",
       "thumbnail": "https://i.ytimg.com/vi/rZVhbbrbA0Q/hqdefault.jpg",
       "url": "https://www.youtube.com/watch?v=rZVhbbrbA0Q"
-    },
-    {
-      "videoId": "2vuKouiif0s",
-      "title": "Bir videonun seçili kısmını\"Engelsiz video düzenleyicisi 3.6 ile hızlandırma",
-      "published": "2026-02-28T12:37:29+00:00",
-      "description": "Merhabalar. elinizdeki videonun bir noktasını daha hızlı çekimde göstermek istediğinizi var sayın. örneğin, bir yemek tarifi videosundaki yemeğin pişme süresini atmak istemiyorsunuz, ama 10 dakika yerine 1 dakikada geçsin istiyorsunuz. İşte bu videoda engelsiz video düzenleyicisi kullanarak seçili bir alanın hızını nasıl arttırıp sonra dışa aktarım yapabileceğinizi göreceksiniz. Ayrıca dilerseniz, fon ekle yaparak hızlanmış bölümdeki sesi tamamen atıp orada başka bir fon çalmasını da sağlayabiliyorsunuz. İyi kullanımlar..",
-      "thumbnail": "https://i.ytimg.com/vi/2vuKouiif0s/hqdefault.jpg",
-      "url": "https://www.youtube.com/watch?v=2vuKouiif0s"
     }
   ]
 }
