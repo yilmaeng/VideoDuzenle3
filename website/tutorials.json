@@ -1,8 +1,16 @@
 {
   "playlistId": "PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ",
   "playlistUrl": "https://www.youtube.com/playlist?list=PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ",
-  "updatedAt": "2026-04-24T18:55:37.727Z",
+  "updatedAt": "2026-04-25T07:20:31.862Z",
   "items": [
+    {
+      "videoId": "o2aDut8cWOA",
+      "title": "Efekt Katmanı",
+      "published": "2026-04-24T20:04:46+00:00",
+      "description": "EVD yalnızca bir video düzenleme programı değil artık. Aynı zamanda içerik üretebileceğiniz çok boyutlu bir yapı. Erişilebilir kayıt menüsüyle ister çevrim dışı, ister canlı olarak yayınlar yapabilir, bu yayınlara efektler ekleyebilirsiniz. Şöyle düşünün: diyelim bir haber bülteni ya da program hazırladınız. Siz bunu sunarken araya videolar, müzikler yani VTR’ler de eklersiniz öyle değil mi? İşte efekt katmanı bu ayarları önceden yapmanızı sağlıyor. Sizler yayınızda kullanacağınız içerikleri seçiyorsunuz ve yayın sırasında hızlıca ve erişilebilir biçimde yeri geldiğinde bunları oynatıyorsunuz.",
+      "thumbnail": "https://i.ytimg.com/vi/o2aDut8cWOA/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=o2aDut8cWOA"
+    },
     {
       "videoId": "a6DcThVt4b8",
       "title": "EVD ile çoklu seçim işlemleri",
@@ -34,14 +42,6 @@
       "description": "Selamlar bu videoda EVD ile mevcut bir videodaki nesneler nasıl gizlenebilir konusunu ele aldık. ekran okuyucu sesi bir tık boğuk çıkmış. kusura bakmayın. iyi kullanımlar",
       "thumbnail": "https://i.ytimg.com/vi/aCy0-7SKi9A/hqdefault.jpg",
       "url": "https://www.youtube.com/watch?v=aCy0-7SKi9A"
-    },
-    {
-      "videoId": "rZVhbbrbA0Q",
-      "title": "EVD İle Videomuza Metin, Görsel ve Ses Ekleme",
-      "published": "2026-03-02T10:18:29+00:00",
-      "description": "Selamlar. Engelsiz Video Düzenleyicisi anlatım serisinin bu bölümünde bir videoya nasıl metin, görsel ve ses eklenir, bunlar eklenirken boyut ve konum için yapay zekadan nasıl yararlanılır konularını ele aldım. Siz de izlerken benim gibi heyecan ve hayranlık duyarsınız umarım.",
-      "thumbnail": "https://i.ytimg.com/vi/rZVhbbrbA0Q/hqdefault.jpg",
-      "url": "https://www.youtube.com/watch?v=rZVhbbrbA0Q"
     }
   ]
 }
