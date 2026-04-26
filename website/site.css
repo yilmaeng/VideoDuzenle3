@@ -249,6 +249,13 @@ p {
     font-size: 0.92rem;
 }
 
+.tutorial-description {
+    margin-bottom: 0;
+    color: var(--text);
+    font-size: 0.96rem;
+    line-height: 1.6;
+}
+
 .tutorial-actions {
     display: flex;
     flex-wrap: wrap;

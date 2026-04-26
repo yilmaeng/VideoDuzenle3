@@ -3,7 +3,7 @@
     const preferredKey = 'evd-site-language';
     const tutorialPlaylistId = 'PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ';
     const tutorialPlaylistUrl = `https://www.youtube.com/playlist?list=${tutorialPlaylistId}`;
-    const assetVersion = '3.9992.0-tutorials1';
+    const assetVersion = '4.0.0-tutorials2';
     const tutorialJsonUrl = `/tutorials.json?v=${assetVersion}`;
 
     function safeText(key, fallback) {
@@ -126,6 +126,13 @@
         });
     }
 
+    function summarizeTutorialDescription(value) {
+        const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!normalized) return '';
+        if (normalized.length <= 220) return normalized;
+        return `${normalized.slice(0, 217).trimEnd()}...`;
+    }
+
     async function loadTutorials() {
         const tutorialList = document.getElementById('tutorial-list');
         if (!tutorialList) return;
@@ -150,6 +157,7 @@
                 const published = entry.published || '';
                 const videoUrl = entry.url || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : (data.playlistUrl || tutorialPlaylistUrl));
                 const thumbUrl = entry.thumbnail || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
+                const description = summarizeTutorialDescription(entry.description);
 
                 return `
                     <article class="tutorial-card">
@@ -157,6 +165,7 @@
                         <div class="tutorial-body">
                             <h3>${escapeHtml(title)}</h3>
                             <div class="tutorial-meta">${safeText('tutorialDateLabel', 'Published')}: ${escapeHtml(formatTutorialDate(published) || '-')}</div>
+                            ${description ? `<p class="tutorial-description">${escapeHtml(description)}</p>` : ''}
                             <div class="release-actions">
                                 <a class="btn btn-primary" href="${videoUrl}" target="_blank" rel="noopener noreferrer">${safeText('tutorialWatchLabel', 'Open video')}</a>
                             </div>
