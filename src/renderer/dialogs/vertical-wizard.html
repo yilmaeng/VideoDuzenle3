@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dikey Video Oluşturucu</title>
+    <title data-i18n="dialog.vertical_wizard.window_title">Vertical Video Creator</title>
     <!-- CSS -->
     <link rel="stylesheet" href="../styles/main.css">
     <link rel="stylesheet" href="../styles/wizard.css">
@@ -100,6 +100,28 @@
             font-family: monospace;
         }
 
+        .clip-queue-panel {
+            margin-top: 16px;
+            padding: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .clip-queue-panel h4,
+        .clip-queue-panel p {
+            margin-top: 0;
+        }
+
+        .clip-queue-list {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .clip-queue-list li {
+            margin-bottom: 6px;
+        }
+
         /* Screen Reader Only Class */
         .sr-only {
             position: absolute;
@@ -118,31 +140,31 @@
 <body class="theme-dark">
     <div class="container wizard-dialog">
         <!-- Wizard Header -->
-        <h2 id="wizard-title" tabindex="-1">Dikey Video Oluşturucu</h2>
+        <h2 id="wizard-title" tabindex="-1" data-i18n="dialog.vertical_wizard.title">Dikey Video Oluşturucu</h2>
 
         <div class="wizard-steps" role="list">
-            <span class="step active" id="step-ind-1" role="listitem">1. Kaynak</span>
+            <span class="step active" id="step-ind-1" role="listitem" data-i18n="dialog.vertical_wizard.steps.source">1. Kaynak</span>
             <span class="separator" aria-hidden="true">›</span>
-            <span class="step" id="step-ind-2" role="listitem">2. Format</span>
+            <span class="step" id="step-ind-2" role="listitem" data-i18n="dialog.vertical_wizard.steps.format">2. Format</span>
             <span class="separator" aria-hidden="true">›</span>
-            <span class="step" id="step-ind-3" role="listitem">3. Yöntem</span>
+            <span class="step" id="step-ind-3" role="listitem" data-i18n="dialog.vertical_wizard.steps.method">3. Yöntem</span>
             <span class="separator" aria-hidden="true">›</span>
-            <span class="step" id="step-ind-4" role="listitem">4. Ayarlar</span>
+            <span class="step" id="step-ind-4" role="listitem" data-i18n="dialog.vertical_wizard.steps.settings">4. Ayarlar</span>
             <span class="separator" aria-hidden="true">›</span>
-            <span class="step" id="step-ind-5" role="listitem">5. Çıktı</span>
+            <span class="step" id="step-ind-5" role="listitem" data-i18n="dialog.vertical_wizard.steps.output">5. Çıktı</span>
             <span class="separator" aria-hidden="true">›</span>
-            <span class="step" id="step-ind-6" role="listitem">6. İşlem</span>
+            <span class="step" id="step-ind-6" role="listitem" data-i18n="dialog.vertical_wizard.steps.process">6. İşlem</span>
         </div>
 
         <!-- STEP 1: Kaynak Seçimi -->
         <div id="step-1" class="wizard-step" aria-labelledby="step-ind-1">
             <div class="form-group">
-                <label for="btn-select-file">Kaynak Video</label>
+                <label for="btn-select-file" data-i18n="dialog.vertical_wizard.source_video">Kaynak Video</label>
                 <div style="display: flex; gap: 10px;">
                     <input type="text" id="source-path" class="form-control" readonly
-                        placeholder="Bir video dosyası seçin..." style="flex:1;" aria-label="Seçilen Kaynak Video Yolu">
+                        placeholder="Bir video dosyası seçin..." style="flex:1;" aria-label="Seçilen Kaynak Video Yolu" data-i18n-placeholder="dialog.vertical_wizard.source_placeholder" data-i18n-aria="dialog.vertical_wizard.source_path_aria">
                     <!-- Added type="button" and action-button class -->
-                    <button type="button" class="btn btn-secondary action-button" id="btn-select-file">Dosya
+                    <button type="button" class="btn btn-secondary action-button" id="btn-select-file" data-i18n="dialog.vertical_wizard.select_file">Dosya
                         Seç</button>
                 </div>
             </div>
@@ -150,43 +172,49 @@
             <div id="file-info" class="source-detail" style="display:none;" aria-live="polite">
                 <div class="two-col">
                     <div>
-                        <p><strong>Süre:</strong> <span id="info-duration">-</span></p>
-                        <p><strong>Çözünürlük:</strong> <span id="info-resolution">-</span></p>
+                        <p><strong data-i18n="dialog.vertical_wizard.info_duration">Süre:</strong> <span id="info-duration">-</span></p>
+                        <p><strong data-i18n="dialog.vertical_wizard.info_resolution">Çözünürlük:</strong> <span id="info-resolution">-</span></p>
                     </div>
                     <div>
-                        <p><strong>FPS:</strong> <span id="info-fps">-</span></p>
-                        <p><strong>Ses:</strong> <span id="info-audio">-</span></p>
+                        <p><strong data-i18n="dialog.vertical_wizard.info_fps">FPS:</strong> <span id="info-fps">-</span></p>
+                        <p><strong data-i18n="dialog.vertical_wizard.info_audio">Ses:</strong> <span id="info-audio">-</span></p>
                     </div>
                 </div>
+            </div>
+
+            <div id="clip-queue-panel" class="clip-queue-panel" style="display:none;" aria-live="polite">
+                <h4 data-i18n="dialog.vertical_wizard.clip_queue_title">İşlenecek Kısa Video Klipleri</h4>
+                <p id="clip-queue-summary" data-i18n="dialog.vertical_wizard.clip_queue_summary_empty">Henüz seçim eklenmedi.</p>
+                <ol id="clip-queue-list" class="clip-queue-list" aria-label="İşlenecek kısa video klipleri" data-i18n-aria="dialog.vertical_wizard.clip_queue_list_aria"></ol>
             </div>
         </div>
 
         <!-- STEP 2: Format Seçimi -->
         <div id="step-2" class="wizard-step" style="display:none;" aria-labelledby="step-ind-2">
             <fieldset class="radio-group-vertical">
-                <legend>Çıktı Formatı</legend>
+                <legend data-i18n="dialog.vertical_wizard.output_format">Çıktı Formatı</legend>
 
                 <label class="radio-option">
                     <input type="radio" name="format" value="9:16" checked aria-describedby="desc-916">
                     <div class="option-content">
-                        <strong>9:16 - YouTube Shorts / TikTok</strong>
-                        <span id="desc-916" class="description">1080x1920 (Dikey Tam Ekran)</span>
+                        <strong data-i18n="dialog.vertical_wizard.format_9_16">9:16 - YouTube Shorts / TikTok</strong>
+                        <span id="desc-916" class="description" data-i18n="dialog.vertical_wizard.format_9_16_desc">1080x1920 (Dikey Tam Ekran)</span>
                     </div>
                 </label>
 
                 <label class="radio-option">
                     <input type="radio" name="format" value="4:5" aria-describedby="desc-45">
                     <div class="option-content">
-                        <strong>4:5 - Instagram Feed</strong>
-                        <span id="desc-45" class="description">1080x1350 (Dikey Akış)</span>
+                        <strong data-i18n="dialog.vertical_wizard.format_4_5">4:5 - Instagram Feed</strong>
+                        <span id="desc-45" class="description" data-i18n="dialog.vertical_wizard.format_4_5_desc">1080x1350 (Dikey Akış)</span>
                     </div>
                 </label>
 
                 <label class="radio-option">
                     <input type="radio" name="format" value="1:1" aria-describedby="desc-11">
                     <div class="option-content">
-                        <strong>1:1 - Kare</strong>
-                        <span id="desc-11" class="description">1080x1080 (Facebook / Instagram)</span>
+                        <strong data-i18n="dialog.vertical_wizard.format_1_1">1:1 - Kare</strong>
+                        <span id="desc-11" class="description" data-i18n="dialog.vertical_wizard.format_1_1_desc">1080x1080 (Facebook / Instagram)</span>
                     </div>
                 </label>
             </fieldset>
@@ -198,32 +226,32 @@
             <div class="ai-recommendation" id="ai-panel" aria-live="polite">
                 <div class="ai-header">
                     <span class="icon" aria-hidden="true">✨</span>
-                    <h3>Yapay Zeka Önerisi</h3>
-                    <span class="confidence-badge" id="ai-confidence" aria-label="Güven Oranı">%0</span>
+                    <h3 data-i18n="dialog.vertical_wizard.ai_title">Yapay Zeka Önerisi</h3>
+                    <span class="confidence-badge" id="ai-confidence" aria-label="Güven Oranı" data-i18n-aria="dialog.vertical_wizard.ai_confidence_aria">%0</span>
                 </div>
-                <p id="ai-suggestion-text" role="status">Analiz ediliyor...</p>
+                <p id="ai-suggestion-text" role="status" data-i18n="dialog.vertical_wizard.ai_analyzing">Analiz ediliyor...</p>
                 <ul class="rationale-list" id="ai-rationale"></ul>
 
                 <div class="ai-actions">
-                    <button class="btn btn-primary small-btn" id="btn-ai-apply">Önerilen Ayarları Uygula</button>
-                    <button class="btn btn-secondary small-btn" id="btn-ai-ignore">Yoksay</button>
+                    <button class="btn btn-primary small-btn" id="btn-ai-apply" data-i18n="dialog.vertical_wizard.ai_apply">Önerilen Ayarları Uygula</button>
+                    <button class="btn btn-secondary small-btn" id="btn-ai-ignore" data-i18n="dialog.vertical_wizard.ai_ignore">Yoksay</button>
                 </div>
             </div>
 
             <div style="text-align: right; margin-bottom: 10px;">
-                <button class="btn btn-secondary pulse-animation" id="btn-ask-ai" style="font-size: 0.9em;">
+                <button class="btn btn-secondary pulse-animation" id="btn-ask-ai" style="font-size: 0.9em;" data-i18n="dialog.vertical_wizard.ask_ai">
                     ✨ Yapay Zekaya Sor
                 </button>
             </div>
 
             <fieldset class="radio-group-vertical">
-                <legend>Dönüştürme Yöntemi</legend>
+                <legend data-i18n="dialog.vertical_wizard.conversion_method">Dönüştürme Yöntemi</legend>
 
                 <label class="radio-option">
                     <input type="radio" name="method" value="blur" checked aria-describedby="desc-blur">
                     <div class="option-content">
-                        <strong>A) Arka Planı Bulanıklaştır (Önerilen)</strong>
-                        <span id="desc-blur" class="description">Video ortada kalır, boşluklar videonun bulanık haliyle
+                        <strong data-i18n="dialog.vertical_wizard.method_blur">A) Arka Planı Bulanıklaştır (Önerilen)</strong>
+                        <span id="desc-blur" class="description" data-i18n="dialog.vertical_wizard.method_blur_desc">Video ortada kalır, boşluklar videonun bulanık haliyle
                             doldurulur.
                             İçerik kaybı olmaz.</span>
                     </div>
@@ -232,8 +260,8 @@
                 <label class="radio-option">
                     <input type="radio" name="method" value="crop" aria-describedby="desc-crop">
                     <div class="option-content">
-                        <strong>B) Ortadan Kırp (Crop)</strong>
-                        <span id="desc-crop" class="description">Video ekranı dolduracak şekilde yaklaştırılır.
+                        <strong data-i18n="dialog.vertical_wizard.method_crop">B) Ortadan Kırp (Crop)</strong>
+                        <span id="desc-crop" class="description" data-i18n="dialog.vertical_wizard.method_crop_desc">Video ekranı dolduracak şekilde yaklaştırılır.
                             Kenarlardan veri kaybı
                             olur.</span>
                     </div>
@@ -242,8 +270,8 @@
                 <label class="radio-option">
                     <input type="radio" name="method" value="letterbox" aria-describedby="desc-letter">
                     <div class="option-content">
-                        <strong>C) Siyah Kenarlık Ekle (Letterbox)</strong>
-                        <span id="desc-letter" class="description">Video değişmez, boşluklar siyah veya renkli
+                        <strong data-i18n="dialog.vertical_wizard.method_letterbox">C) Siyah Kenarlık Ekle (Letterbox)</strong>
+                        <span id="desc-letter" class="description" data-i18n="dialog.vertical_wizard.method_letterbox_desc">Video değişmez, boşluklar siyah veya renkli
                             kalır.</span>
                     </div>
                 </label>
@@ -254,9 +282,9 @@
         <div id="step-4" class="wizard-step" style="display:none;" aria-labelledby="step-ind-4">
             <!-- Blur Ayarları -->
             <div id="settings-blur" class="method-settings active">
-                <h4>Blur Ayarları</h4>
+                <h4 data-i18n="dialog.vertical_wizard.blur_settings">Blur Ayarları</h4>
                 <div class="form-group">
-                    <label for="blur-sigma">Bulanıklık Şiddeti</label>
+                    <label for="blur-sigma" data-i18n="dialog.vertical_wizard.blur_sigma">Bulanıklık Şiddeti</label>
                     <div class="range-with-val">
                         <input type="range" id="blur-sigma" min="0" max="40" value="18" aria-valuemin="0"
                             aria-valuemax="40" aria-valuenow="18">
@@ -264,7 +292,7 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="blur-brightness">Arka Plan Parlaklığı (%)</label>
+                    <label for="blur-brightness" data-i18n="dialog.vertical_wizard.blur_brightness">Arka Plan Parlaklığı (%)</label>
                     <div class="range-with-val">
                         <input type="range" id="blur-brightness" min="50" max="150" value="100" aria-valuemin="50"
                             aria-valuemax="150" aria-valuenow="100">
@@ -272,7 +300,7 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="blur-center-scale">Orta Video Ölçeği (%)</label>
+                    <label for="blur-center-scale" data-i18n="dialog.vertical_wizard.blur_scale">Orta Video Ölçeği (%)</label>
                     <div class="range-with-val">
                         <input type="range" id="blur-center-scale" min="80" max="100" value="100" aria-valuemin="80"
                             aria-valuemax="100" aria-valuenow="100">
@@ -283,19 +311,19 @@
 
             <!-- Crop Ayarları -->
             <div id="settings-crop" class="method-settings">
-                <h4>Kırpma Ayarları</h4>
+                <h4 data-i18n="dialog.vertical_wizard.crop_settings">Kırpma Ayarları</h4>
                 <div class="form-group">
                     <fieldset>
-                        <legend style="font-size: 0.9em; margin-bottom: 5px;">Odak Noktası</legend>
+                        <legend style="font-size: 0.9em; margin-bottom: 5px;" data-i18n="dialog.vertical_wizard.crop_focus">Odak Noktası</legend>
                         <div style="display: flex; gap: 10px;">
-                            <label><input type="radio" name="crop-focus" value="center" checked> Orta</label>
-                            <label><input type="radio" name="crop-focus" value="left"> Sol</label>
-                            <label><input type="radio" name="crop-focus" value="right"> Sağ</label>
+                            <label><input type="radio" name="crop-focus" value="center" checked> <span data-i18n="dialog.vertical_wizard.center">Orta</span></label>
+                            <label><input type="radio" name="crop-focus" value="left"> <span data-i18n="dialog.vertical_wizard.left">Sol</span></label>
+                            <label><input type="radio" name="crop-focus" value="right"> <span data-i18n="dialog.vertical_wizard.right">Sağ</span></label>
                         </div>
                     </fieldset>
                 </div>
                 <div class="form-group">
-                    <label for="crop-x">X Kaydırma (%)</label>
+                    <label for="crop-x" data-i18n="dialog.vertical_wizard.crop_x">X Kaydırma (%)</label>
                     <div class="range-with-val">
                         <input type="range" id="crop-x" min="-50" max="50" value="0" aria-valuemin="-50"
                             aria-valuemax="50" aria-valuenow="0">
@@ -306,69 +334,74 @@
 
             <!-- Letterbox Ayarları -->
             <div id="settings-letterbox" class="method-settings">
-                <h4>Kenarlık Ayarları</h4>
+                <h4 data-i18n="dialog.vertical_wizard.letterbox_settings">Kenarlık Ayarları</h4>
                 <div class="form-group">
-                    <label for="letterbox-color">Arka Plan Rengi</label>
+                    <label for="letterbox-color" data-i18n="dialog.vertical_wizard.letterbox_color">Arka Plan Rengi</label>
                     <select id="letterbox-color" class="form-control">
-                        <option value="black">Siyah</option>
-                        <option value="darkgray">Koyu Gri</option>
-                        <option value="white">Beyaz</option>
+                        <option value="black" data-i18n="dialog.vertical_wizard.color_black">Siyah</option>
+                        <option value="darkgray" data-i18n="dialog.vertical_wizard.color_darkgray">Koyu Gri</option>
+                        <option value="white" data-i18n="dialog.vertical_wizard.color_white">Beyaz</option>
                     </select>
                 </div>
             </div>
 
             <div class="form-group" style="margin-top: 20px;">
-                <button class="btn btn-secondary w-100 action-button" id="btn-preview-method">Önizleme (5sn)</button>
+                <button class="btn btn-secondary w-100 action-button" id="btn-preview-method" data-i18n="dialog.vertical_wizard.preview_5s">Önizleme (5sn)</button>
             </div>
 
             <div id="preview-area" class="preview-container" style="display:none;" aria-live="polite">
-                <p style="color: #aaa;">Önizleme Hazırlanıyor...</p>
+                <p style="color: #aaa;" data-i18n="dialog.vertical_wizard.preview_preparing">Önizleme Hazırlanıyor...</p>
             </div>
         </div>
 
         <!-- STEP 5: Çıktı Ayarları -->
         <div id="step-5" class="wizard-step" style="display:none;" aria-labelledby="step-ind-5">
-            <div class="form-group">
-                <label for="output-filename">Dosya Adı</label>
-                <input type="text" id="output-filename" class="form-control">
+            <div id="batch-output-note" class="clip-queue-panel" style="display:none;" aria-live="polite">
+                <p id="batch-output-note-text" data-i18n="dialog.vertical_wizard.batch_output_note">Listede birden fazla klip var. Her klip ayrı dosya olarak kaydedilecek.</p>
             </div>
 
             <div class="form-group">
-                <label for="btn-select-folder">Hedef Klasör</label>
+                <label for="output-filename" data-i18n="dialog.vertical_wizard.output_filename">Dosya Adı</label>
+                <input type="text" id="output-filename" class="form-control" aria-describedby="output-filename-help">
+                <small id="output-filename-help" style="display:block; margin-top:6px;" data-i18n="dialog.vertical_wizard.output_filename_help">Tek klipte bu dosya adı kullanılır. Birden çok klipte bu alan dosya adı ön eki olarak kullanılır.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="btn-select-folder" data-i18n="dialog.vertical_wizard.output_folder">Hedef Klasör</label>
                 <div style="display: flex; gap: 10px;">
                     <input type="text" id="output-folder" class="form-control" readonly
-                        aria-label="Seçili Hedef Klasör">
-                    <button class="btn btn-secondary action-button" id="btn-select-folder">Seç</button>
+                        aria-label="Seçili Hedef Klasör" data-i18n-aria="dialog.vertical_wizard.output_folder_aria">
+                    <button class="btn btn-secondary action-button" id="btn-select-folder" data-i18n="dialog.vertical_wizard.select">Seç</button>
                 </div>
             </div>
 
             <div class="two-col">
                 <div class="form-group">
-                    <label for="video-codec">Video Codec</label>
+                    <label for="video-codec" data-i18n="dialog.vertical_wizard.video_codec">Video Codec</label>
                     <select id="video-codec" class="form-control">
-                        <option value="libx264">H.264 (Varsayılan)</option>
+                        <option value="libx264" data-i18n="dialog.vertical_wizard.codec_h264">H.264 (Varsayılan)</option>
                         <option value="libx265">H.265 (HEVC)</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="video-quality">Kalite</label>
+                    <label for="video-quality" data-i18n="dialog.vertical_wizard.quality">Kalite</label>
                     <select id="video-quality" class="form-control">
-                        <option value="fast">Hızlı (Düşük Boyut)</option>
-                        <option value="balanced" selected>Dengeli</option>
-                        <option value="high">Yüksek Kalite</option>
+                        <option value="fast" data-i18n="dialog.vertical_wizard.quality_fast">Hızlı (Düşük Boyut)</option>
+                        <option value="balanced" selected data-i18n="dialog.vertical_wizard.quality_balanced">Dengeli</option>
+                        <option value="high" data-i18n="dialog.vertical_wizard.quality_high">Yüksek Kalite</option>
                     </select>
                 </div>
             </div>
 
             <div class="form-group">
-                <label><input type="checkbox" id="add-to-project"> İşlem bitince projeye ekle</label>
+                <label><input type="checkbox" id="add-to-project"> <span data-i18n="dialog.vertical_wizard.add_to_project">İşlem bitince projeye ekle</span></label>
             </div>
         </div>
 
         <!-- STEP 6: İşlem -->
         <div id="step-6" class="wizard-step" style="display:none; text-align: center; padding-top: 40px;"
             aria-labelledby="step-ind-6">
-            <h3 id="process-status" aria-live="assertive">İşleniyor...</h3>
+            <h3 id="process-status" aria-live="assertive" data-i18n="dialog.vertical_wizard.processing">İşleniyor...</h3>
 
             <div class="progress-container" style="margin: 20px 0;">
                 <div class="progress-bar" id="progress-bar" style="width: 0%" role="progressbar" aria-valuenow="0"
@@ -377,13 +410,13 @@
             <p id="progress-text" aria-live="polite">%0</p>
 
             <div id="process-actions" style="margin-top: 30px; display: none;">
-                <button class="btn btn-success action-button" id="btn-open-file">Dosyayı Aç</button>
-                <button class="btn btn-secondary action-button" id="btn-open-folder">Klasörü Aç</button>
+                <button class="btn btn-success action-button" id="btn-open-file" data-i18n="dialog.vertical_wizard.open_file">Dosyayı Aç</button>
+                <button class="btn btn-secondary action-button" id="btn-open-folder" data-i18n="dialog.vertical_wizard.open_folder">Klasörü Aç</button>
             </div>
 
             <div id="process-log-container" style="margin-top:20px; text-align: left;">
                 <details>
-                    <summary>Detaylar (Log)</summary>
+                    <summary data-i18n="dialog.vertical_wizard.details_log">Detaylar (Log)</summary>
                     <pre id="process-log"
                         style="background:#111; color:#0f0; padding:10px; height:100px; overflow:auto; font-size: 0.8em;"
                         aria-live="off"></pre>
@@ -396,12 +429,12 @@
 
         <!-- Footer Buttons -->
         <div class="action-buttons-group footer-buttons">
-            <button class="action-button" id="btn-back" style="display:none;">‹ Geri</button>
+            <button class="action-button" id="btn-back" style="display:none;" data-i18n="dialog.vertical_wizard.back">‹ Geri</button>
             <div style="flex:1;"></div>
-            <button class="action-button" id="btn-cancel">İptal</button>
-            <button class="action-button primary-action" id="btn-next" disabled>Devam ›</button>
-            <button class="action-button primary-action" id="btn-start" style="display:none;">Başlat</button>
-            <button class="action-button primary-action" id="btn-finish" style="display:none;">Kapat</button>
+            <button class="action-button primary-action" id="btn-next" disabled data-i18n="dialog.common.continue">Devam ›</button>
+            <button class="action-button primary-action" id="btn-start" style="display:none;" data-i18n="dialog.vertical_wizard.start">Başlat</button>
+            <button class="action-button primary-action" id="btn-finish" style="display:none;" data-i18n="dialog.common.close">Kapat</button>
+            <button class="action-button" id="btn-cancel" data-i18n="dialog.cancel">İptal</button>
         </div>
     </div>
 

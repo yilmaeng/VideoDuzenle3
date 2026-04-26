@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engelsiz Video Duzenleyicisi (EVD)</title>
+    <meta name="description"
+        content="Official EVD landing page. The site can open in Turkish, English, German, Spanish, or French according to the visitor's browser language.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://evd.drenginyilmaz.net/">
+    <link rel="alternate" hreflang="x-default" href="https://evd.drenginyilmaz.net/">
+    <link rel="alternate" hreflang="tr" href="https://evd.drenginyilmaz.net/tr/">
+    <link rel="alternate" hreflang="en" href="https://evd.drenginyilmaz.net/en/">
+    <link rel="alternate" hreflang="de" href="https://evd.drenginyilmaz.net/de/">
+    <link rel="alternate" hreflang="es" href="https://evd.drenginyilmaz.net/es/">
+    <link rel="alternate" hreflang="fr" href="https://evd.drenginyilmaz.net/fr/">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="site.css?v=3.9992.0-tutorials1">
+</head>
+
+<body>
+    <main class="page">
+        <section class="hero redirect-card">
+            <span class="eyebrow">Engelsiz Video Duzenleyicisi (EVD)</span>
+            <h1>Select Your Language</h1>
+            <p class="lead">
+                You are being directed to the most suitable language version of the EVD website. If the redirect does
+                not happen automatically, choose your preferred language below.
+            </p>
+            <div class="language-switcher" style="justify-content: center; margin-top: 24px;">
+                <a class="language-link" href="/tr/" data-lang-code="tr">Türkçe</a>
+                <a class="language-link" href="/en/" data-lang-code="en">English</a>
+                <a class="language-link" href="/de/" data-lang-code="de">Deutsch</a>
+                <a class="language-link" href="/es/" data-lang-code="es">Español</a>
+                <a class="language-link" href="/fr/" data-lang-code="fr">Français</a>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        (function () {
+            const supported = ['tr', 'en', 'de', 'es', 'fr'];
+            const defaultLanguage = 'tr';
+            const preferredKey = 'evd-site-language';
+
+            function normalizeLanguage(value) {
+                if (!value || typeof value !== 'string') return null;
+                const short = value.toLowerCase().split('-')[0];
+                return supported.includes(short) ? short : null;
+            }
+
+            let target = null;
+
+            try {
+                target = normalizeLanguage(localStorage.getItem(preferredKey));
+            } catch (error) {
+                console.warn('Preferred language could not be read.', error);
+            }
+
+            if (!target) {
+                const browserLanguages = Array.isArray(navigator.languages) ? navigator.languages : [navigator.language];
+                for (const item of browserLanguages) {
+                    const normalized = normalizeLanguage(item);
+                    if (normalized) {
+                        target = normalized;
+                        break;
+                    }
+                }
+            }
+
+            if (!target) {
+                target = defaultLanguage;
+            }
+
+            const destination = `/${target}/`;
+            setTimeout(() => {
+                window.location.replace(destination);
+            }, 120);
+        })();
+    </script>
+    <script src="site.js?v=3.9992.0-tutorials1"></script>
+</body>
+</html>

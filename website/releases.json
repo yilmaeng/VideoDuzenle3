@@ -1,0 +1,15 @@
+{
+  "latestVersion": "4.0.0",
+  "releases": [
+    {
+      "version": "4.0.0",
+      "channel": "Kararlı",
+      "date": "2026-04-26",
+      "title": "EVD 4.0",
+      "notes": "EVD 4.0 ile düzenleme deneyimi daha pratik, daha güçlü ve daha anlaşılır hâle geldi. Artık videonuzda birden fazla bölgeyi seçip bunları seçim listesine ekleyebilir, isterseniz ayrı ayrı kaydedebilir, isterseniz tek bir klipte birleştirebilirsiniz. Seçtiğiniz tek bir alanı ya da birden fazla alanı doğrudan dikey videoya dönüştürerek Shorts ve Reels için çok daha hızlı içerik hazırlayabilirsiniz. Efekt katmanı daha hızlı yönetilebilir hâle geldi; slotları klavyeyle daha pratik kontrol edebilir, seslere görsel bağlayabilir ve video oynarken ekranı tamamen o videoya devredebilirsiniz. Ayrıca altyazı, ses ayarları, dışa aktarma, slideshow, YouTube sohbeti, erişilebilir kayıt ve genel arayüz tarafında çok sayıda iyileştirme yapıldı.",
+      "setupUrl": "downloads/EVD-Setup-v4.0.0.exe",
+      "portableUrl": "downloads/EVD-Portable-v4.0.0.zip",
+      "notesUrl": ""
+    }
+  ]
+}

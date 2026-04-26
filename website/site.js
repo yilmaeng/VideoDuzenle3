@@ -3,10 +3,39 @@
     const preferredKey = 'evd-site-language';
     const tutorialPlaylistId = 'PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ';
     const tutorialPlaylistUrl = `https://www.youtube.com/playlist?list=${tutorialPlaylistId}`;
-    const tutorialJsonUrl = '/tutorials.json';
+    const assetVersion = '3.9992.0-tutorials1';
+    const tutorialJsonUrl = `/tutorials.json?v=${assetVersion}`;
 
     function safeText(key, fallback) {
         return Object.prototype.hasOwnProperty.call(siteText, key) ? siteText[key] : fallback;
+    }
+
+    function parseStableDate(value) {
+        if (!value || typeof value !== 'string') return null;
+        const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) {
+            const fallback = new Date(value);
+            return Number.isNaN(fallback.getTime()) ? null : fallback;
+        }
+
+        const year = Number(match[1]);
+        const month = Number(match[2]) - 1;
+        const day = Number(match[3]);
+        return new Date(Date.UTC(year, month, day, 12, 0, 0));
+    }
+
+    function formatReleaseDate(value) {
+        if (!value) return '-';
+        const date = parseStableDate(value);
+        if (!date) return value;
+
+        return date.toLocaleDateString(document.documentElement.lang || 'en', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            timeZone: 'UTC'
+        });
     }
 
     function rememberLanguage() {
@@ -41,7 +70,7 @@
             }
 
             releaseList.innerHTML = releases.map((release) => {
-                const releaseDate = release.date || '-';
+                const releaseDate = formatReleaseDate(release.date);
                 const channel = release.channel ? `<span class="release-badge">${release.channel}</span>` : '';
                 const setupButton = release.setupUrl
                     ? `<a class="btn btn-primary" href="/${release.setupUrl}">${safeText('setupLabel', 'Windows Setup')}</a>`
@@ -87,12 +116,13 @@
 
     function formatTutorialDate(value) {
         if (!value) return '';
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return value;
+        const date = parseStableDate(value);
+        if (!date) return value;
         return date.toLocaleDateString(document.documentElement.lang || 'en', {
             year: 'numeric',
             month: 'long',
-            day: 'numeric'
+            day: 'numeric',
+            timeZone: 'UTC'
         });
     }
 

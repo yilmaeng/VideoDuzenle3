@@ -7,6 +7,16 @@
  */
 
 const Transitions = {
+    t(key, fallback, params = {}) {
+        if (!window.i18nHelper) return fallback;
+        const value = window.i18nHelper.t(key, params);
+        return value && !value.startsWith('[') ? value : fallback;
+    },
+
+    clone(value) {
+        return JSON.parse(JSON.stringify(value));
+    },
+
     // ==========================================
     // Geçiş Türleri Kütüphanesi
     // ==========================================
@@ -31,7 +41,7 @@ const Transitions = {
             defaultDuration: 0.5,
             ffmpegType: 'fade',
             extendsDuration: false,
-            defaultSfx: 'whoosh_soft.mp3'
+            defaultSfx: 'cross_dissolve.wav'
         },
         /* GEÇİCİ OLARAK DEVRE DIŞI
         'fadeIn': {
@@ -65,7 +75,7 @@ const Transitions = {
             defaultDuration: 0.6,
             ffmpegType: 'dip_black',
             extendsDuration: false,
-            defaultSfx: 'dip.mp3'
+            defaultSfx: 'dip_to_black.wav'
         },
         'dipToWhite': {
             id: 'dipToWhite',
@@ -75,10 +85,11 @@ const Transitions = {
             defaultDuration: 0.6,
             ffmpegType: 'dip_white',
             extendsDuration: false,
-            defaultSfx: 'dip.mp3'
+            defaultSfx: 'dip_to_black.wav'
         },
 
         // Wipe Geçişler
+        /* GEÇİCİ OLARAK DEVRE DIŞI - Cross Dissolve olarak çalışıyor
         'wipeLeft': {
             id: 'wipeLeft',
             name: 'Sola Kaydırma (Wipe Left)',
@@ -87,7 +98,7 @@ const Transitions = {
             defaultDuration: 0.5,
             ffmpegType: 'wipeleft',
             extendsDuration: false,
-            defaultSfx: 'whoosh.mp3'
+            defaultSfx: 'cross_dissolve.wav'
         },
         'wipeRight': {
             id: 'wipeRight',
@@ -97,8 +108,9 @@ const Transitions = {
             defaultDuration: 0.5,
             ffmpegType: 'wiperight',
             extendsDuration: false,
-            defaultSfx: 'whoosh.mp3'
+            defaultSfx: 'cross_dissolve.wav'
         },
+        */
 
         // Bölüm Ayırıcılar
         'chapterBreak': {
@@ -109,7 +121,7 @@ const Transitions = {
             defaultDuration: 1.0,
             ffmpegType: 'chapter_break',
             extendsDuration: true, // DİKKAT: Video süresini uzatır!
-            defaultSfx: 'chapter_break.mp3'
+            defaultSfx: 'chapter_break.wav'
         }
     },
 
@@ -117,9 +129,12 @@ const Transitions = {
     categories: {
         'temel': 'Temel Geçişler',
         'dip': 'Dip-to (Düşüş)',
-        'wipe': 'Wipe / Kaydırma',
+        // 'wipe': 'Wipe / Kaydırma',
         'separator': 'Bölüm Ayırıcılar'
     },
+
+    baseTransitionTypes: null,
+    baseCategories: null,
 
     // ==========================================
     // Aktif Geçiş State
@@ -155,9 +170,54 @@ const Transitions = {
     // ==========================================
 
     init() {
+        this.baseTransitionTypes = this.clone(this.transitionTypes);
+        this.baseCategories = this.clone(this.categories);
+        this.localizeTransitionDefinitions();
+
+        window.addEventListener('language-changed', () => {
+            this.localizeTransitionDefinitions();
+        });
+
         // Varsayılan aktif geçişi ayarla
         this.setActiveTransition('crossDissolve');
         console.log('Transitions modülü başlatıldı');
+    },
+
+    localizeTransitionDefinitions() {
+        if (this.baseTransitionTypes) {
+            this.transitionTypes = this.clone(this.baseTransitionTypes);
+        }
+        if (this.baseCategories) {
+            this.categories = this.clone(this.baseCategories);
+        }
+
+        const transitionKeyMap = {
+            cut: 'cut',
+            crossDissolve: 'cross_dissolve',
+            dipToBlack: 'dip_to_black',
+            dipToWhite: 'dip_to_white',
+            chapterBreak: 'chapter_break'
+        };
+        const categoryKeyMap = {
+            temel: 'basic',
+            dip: 'dip',
+            separator: 'separator'
+        };
+
+        Object.entries(this.transitionTypes).forEach(([id, transition]) => {
+            const key = transitionKeyMap[id];
+            if (!key) return;
+            transition.name = this.t(`runtime.transition.types.${key}.name`, transition.name);
+            transition.description = this.t(`runtime.transition.types.${key}.description`, transition.description);
+        });
+
+        Object.entries(categoryKeyMap).forEach(([categoryId, localeKey]) => {
+            this.categories[categoryId] = this.t(`runtime.transition.categories.${localeKey}`, this.categories[categoryId]);
+        });
+
+        if (this.activeSettings?.transitionId) {
+            this.activeTransition = this.transitionTypes[this.activeSettings.transitionId] || null;
+        }
     },
 
     // ==========================================
@@ -268,6 +328,7 @@ const Transitions = {
             duration: this.activeSettings.duration,
             useSfx: this.activeSettings.useSfx,
             customSfxPath: this.activeSettings.customSfxPath,
+            defaultSfx: this.activeTransition.defaultSfx, // V103: Varsayılan SFX dosyası
             ffmpegType: this.activeTransition.ffmpegType,
             extendsDuration: this.activeTransition.extendsDuration
         };
@@ -287,9 +348,18 @@ const Transitions = {
             });
         }
 
+        // InsertionQueue'ya ekle
+        if (window.InsertionQueue) {
+            window.InsertionQueue.addItem('transition', transition);
+            if (window.App) window.App.hasChanges = true;
+        }
+
         // Erişilebilirlik duyurusu
         Accessibility.announce(
-            `${Utils.formatTime(time)} noktasına '${this.activeTransition.name}' geçişi eklendi.`
+            this.t('runtime.transition.added_at_time', '{time}: transition "{name}" added.', {
+                time: Utils.formatTime(time),
+                name: this.activeTransition.name
+            })
         );
 
         if (this.onTransitionApplied) {
@@ -372,6 +442,7 @@ const Transitions = {
                 duration: this.activeSettings.duration,
                 useSfx: this.activeSettings.useSfx,
                 customSfxPath: this.activeSettings.customSfxPath,
+                defaultSfx: this.activeTransition.defaultSfx, // V103: Varsayılan SFX dosyası
                 ffmpegType: this.activeTransition.ffmpegType,
                 extendsDuration: this.activeTransition.extendsDuration
             };
@@ -391,6 +462,12 @@ const Transitions = {
                         useSfx: this.activeSettings.useSfx,
                         customSfxPath: this.activeSettings.customSfxPath
                     });
+                }
+
+                // InsertionQueue'ya ekle
+                if (window.InsertionQueue) {
+                    window.InsertionQueue.addItem('transition', transition);
+                    if (window.App) window.App.hasChanges = true;
                 }
 
                 appliedCount++;
@@ -423,6 +500,15 @@ const Transitions = {
         const transition = this.appliedTransitions[index];
         this.appliedTransitions.splice(index, 1);
 
+        // InsertionQueue'dan da sil
+        if (window.InsertionQueue) {
+            const queueItems = window.InsertionQueue.getItems().filter(i => i.type === 'transition' && i.options.id === id);
+            queueItems.forEach(qi => window.InsertionQueue.removeItem(qi.id));
+            if (window.Dialogs && window.Dialogs.updateInsertionQueueList) {
+                window.Dialogs.updateInsertionQueueList();
+            }
+        }
+
         Accessibility.announce(`${Utils.formatTime(transition.time)} konumundaki geçiş silindi`);
 
         if (this.onTransitionRemoved) {
@@ -442,6 +528,15 @@ const Transitions = {
         const count = this.appliedTransitions.length;
         this.appliedTransitions = [];
 
+        // InsertionQueue'dan toplu silme
+        if (window.InsertionQueue) {
+            const queueItems = window.InsertionQueue.getItems().filter(i => i.type === 'transition');
+            queueItems.forEach(qi => window.InsertionQueue.removeItem(qi.id));
+            if (window.Dialogs && window.Dialogs.updateInsertionQueueList) {
+                window.Dialogs.updateInsertionQueueList();
+            }
+        }
+
         Accessibility.announce(`${count} geçiş silindi`);
 
         if (this.onTransitionsListChanged) {
@@ -457,6 +552,7 @@ const Transitions = {
         if (!Array.isArray(list)) return;
         this.appliedTransitions = list;
         this.sortTransitions();
+
         if (this.onTransitionsListChanged) {
             this.onTransitionsListChanged(this.appliedTransitions);
         }
@@ -534,6 +630,7 @@ const Transitions = {
      * @returns {Array}
      */
     getAllTransitionTypes() {
+        this.localizeTransitionDefinitions();
         return Object.values(this.transitionTypes);
     },
 
@@ -543,6 +640,7 @@ const Transitions = {
      * @returns {Array}
      */
     getTransitionsByCategory(category) {
+        this.localizeTransitionDefinitions();
         return Object.values(this.transitionTypes).filter(t => t.category === category);
     },
 
@@ -551,6 +649,7 @@ const Transitions = {
      * @returns {Object}
      */
     getAllCategories() {
+        this.localizeTransitionDefinitions();
         return { ...this.categories };
     },
 
@@ -560,6 +659,7 @@ const Transitions = {
      * @returns {Object|null}
      */
     getTransitionType(id) {
+        this.localizeTransitionDefinitions();
         return this.transitionTypes[id] || null;
     },
 

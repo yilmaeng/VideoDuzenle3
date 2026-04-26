@@ -6,6 +6,11 @@
 const Accessibility = {
     announcer: null,
     alerter: null,
+    t(key, fallback, params = {}) {
+        if (!window.i18nHelper) return fallback;
+        const value = window.i18nHelper.t(key, params);
+        return value && !value.startsWith('[') ? value : fallback;
+    },
 
     /**
      * Modülü başlat
@@ -137,7 +142,10 @@ const Accessibility = {
     announceTime(currentTime, duration) {
         const current = this.formatTimeForSpeech(currentTime);
         const total = this.formatTimeForSpeech(duration);
-        this.announce(`Konum: ${current}, Toplam: ${total}`);
+        this.announce(this.t('runtime.accessibility.time_position', 'Position: {current}, Total: {total}', {
+            current,
+            total
+        }));
     },
 
     /**
@@ -145,7 +153,9 @@ const Accessibility = {
      * @param {boolean} isPlaying - Oynatılıyor mu?
      */
     announcePlayState(isPlaying) {
-        this.announce(isPlaying ? 'Oynatılıyor' : 'Duraklatıldı');
+        this.announce(isPlaying
+            ? this.t('runtime.accessibility.playing', 'Playing')
+            : this.t('runtime.accessibility.paused', 'Paused'));
     },
 
     /**
@@ -155,7 +165,7 @@ const Accessibility = {
      */
     announceSelection(start, end) {
         if (start === null || end === null) {
-            this.announce('Seçim temizlendi');
+            this.announce(this.t('runtime.accessibility.selection_cleared', 'Selection cleared'));
             return;
         }
 
@@ -163,7 +173,11 @@ const Accessibility = {
         const endStr = this.formatTimeForSpeech(end);
         const duration = this.formatTimeForSpeech(end - start);
 
-        this.announce(`Seçim: ${startStr} ile ${endStr} arası, ${duration} uzunluğunda`);
+        this.announce(this.t('runtime.accessibility.selection_range', 'Selection: from {start} to {end}, duration {duration}', {
+            start: startStr,
+            end: endStr,
+            duration
+        }));
     },
 
     /**
@@ -176,9 +190,15 @@ const Accessibility = {
         const timeStr = this.formatTimeForSpeech(time);
 
         if (action === 'added') {
-            this.announce(`İşaretçi eklendi: ${timeStr}. Toplam ${totalMarkers} işaretçi.`);
+            this.announce(this.t('runtime.accessibility.marker_added', 'Marker added: {time}. Total {count} markers.', {
+                time: timeStr,
+                count: totalMarkers
+            }));
         } else if (action === 'removed') {
-            this.announce(`İşaretçi silindi: ${timeStr}. Toplam ${totalMarkers} işaretçi.`);
+            this.announce(this.t('runtime.accessibility.marker_removed', 'Marker removed: {time}. Total {count} markers.', {
+                time: timeStr,
+                count: totalMarkers
+            }));
         }
     },
 
@@ -189,7 +209,10 @@ const Accessibility = {
      */
     announceFileLoaded(filename, duration) {
         const durationStr = this.formatTimeForSpeech(duration);
-        this.announce(`Dosya yüklendi: ${filename}. Süre: ${durationStr}`);
+        this.announce(this.t('runtime.accessibility.file_loaded', 'File loaded: {filename}. Duration: {duration}', {
+            filename,
+            duration: durationStr
+        }));
     },
 
     /**
@@ -197,7 +220,7 @@ const Accessibility = {
      * @param {string} message - Hata mesajı
      */
     announceError(message) {
-        this.alert(`Hata: ${message}`);
+        this.alert(this.t('runtime.accessibility.error', 'Error: {message}', { message }));
     },
 
     /**
@@ -208,7 +231,10 @@ const Accessibility = {
     announceProgress(operation, percent) {
         // Her %25'te bir duyur
         if (percent % 25 === 0) {
-            this.announce(`${operation}: Yüzde ${Math.round(percent)} tamamlandı`);
+            this.announce(this.t('runtime.accessibility.progress', '{operation}: {percent}% completed', {
+                operation,
+                percent: Math.round(percent)
+            }));
         }
     },
 
@@ -217,7 +243,7 @@ const Accessibility = {
      * @param {string} operation - Tamamlanan işlem
      */
     announceComplete(operation) {
-        this.announce(`${operation} tamamlandı`);
+        this.announce(this.t('runtime.accessibility.complete', '{operation} completed', { operation }));
     },
 
     /**
@@ -227,7 +253,10 @@ const Accessibility = {
      */
     announceNavigation(destination, time) {
         const timeStr = this.formatTimeForSpeech(time);
-        this.announce(`${destination}: ${timeStr}`);
+        this.announce(this.t('runtime.accessibility.navigation', '{destination}: {time}', {
+            destination,
+            time: timeStr
+        }));
     },
 
     /**
@@ -236,7 +265,7 @@ const Accessibility = {
      * @returns {string} Okunabilir format
      */
     formatTimeForSpeech(seconds) {
-        if (isNaN(seconds) || seconds < 0) return '0 saniye';
+        if (isNaN(seconds) || seconds < 0) return this.t('runtime.accessibility.zero_seconds', '0 seconds');
 
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
@@ -245,13 +274,13 @@ const Accessibility = {
         const parts = [];
 
         if (hours > 0) {
-            parts.push(`${hours} saat`);
+            parts.push(this.t('runtime.accessibility.hours', '{count} hours', { count: hours }));
         }
         if (minutes > 0) {
-            parts.push(`${minutes} dakika`);
+            parts.push(this.t('runtime.accessibility.minutes', '{count} minutes', { count: minutes }));
         }
         if (secs > 0 || parts.length === 0) {
-            parts.push(`${secs} saniye`);
+            parts.push(this.t('runtime.accessibility.seconds', '{count} seconds', { count: secs }));
         }
 
         return parts.join(' ');

@@ -78,6 +78,7 @@ const Utils = {
      * @returns {string} Okunabilir boyut
      */
     formatFileSize(bytes) {
+        if (!bytes || isNaN(bytes)) return '-';
         if (bytes === 0) return '0 Byte';
 
         const k = 1024;
@@ -237,6 +238,116 @@ const Utils = {
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
             .replace(/\n/g, '<br>');
+    },
+
+    /**
+     * Ses çal (Sistem sesi veya sentezlenmiş)
+     * @param {string} type - Ses türü ('success', 'error', 'start')
+     */
+    playSound(type = 'success') {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+
+            const ctx = new AudioContext();
+            const gain = ctx.createGain();
+            gain.connect(ctx.destination);
+
+            if (type === 'success') {
+                // BAŞARI: Do Majör Arpej (C5 - E5 - G5 - C6)
+                // Parlak ve tatmin edici bir bitiş sesi
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                const startTimes = [0, 0.1, 0.2, 0.3];
+                const durations = [0.4, 0.4, 0.4, 0.8];
+
+                notes.forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    osc.type = i === 3 ? 'triangle' : 'sine'; // Son nota daha parlak
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + startTimes[i]);
+
+                    const noteGain = ctx.createGain();
+                    noteGain.connect(gain);
+                    noteGain.gain.setValueAtTime(0, ctx.currentTime + startTimes[i]);
+                    noteGain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + startTimes[i] + 0.05); // V116: Volume increased (was 0.3)
+                    noteGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + startTimes[i] + durations[i]);
+
+                    osc.connect(noteGain);
+                    osc.start(ctx.currentTime + startTimes[i]);
+                    osc.stop(ctx.currentTime + startTimes[i] + durations[i] + 0.1);
+                });
+
+            } else if (type === 'error') {
+                // HATA: Dissonant (Buzzer)
+                const osc = ctx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.3);
+
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+
+                osc.connect(gain);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.3);
+
+            } else if (type === 'start') {
+                // BAŞLANGIÇ: Kısa, ince bip
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
+
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+
+                osc.connect(gain);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.1);
+            }
+        } catch (e) {
+            console.warn('Ses çalınamadı:', e);
+        }
+    },
+
+    /**
+     * İlerleme sesi çal (Yükselen notalar)
+     * @param {number} percent - Yüzde (0-100)
+     */
+    playProgressTone(percent) {
+        try {
+            if (percent <= 0 || percent >= 100) return; // 0 ve 100 için çalma (başlangıç/bitiş sesleri var)
+
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+
+            // Her yüzde için yeni context oluşturmak yerine performans için global context kullanılabilir
+            // ancak şimdilik basit tutuyoruz.
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            // Frekans hesapla: 200Hz (başlangıç) -> 800Hz (bitiş)
+            // Logaritmik artış daha doğal duyulur ama lineer de iş görür.
+            const minFreq = 200;
+            const maxFreq = 1000;
+            const frequency = minFreq + ((maxFreq - minFreq) * (percent / 100));
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(frequency, ctx.currentTime);
+
+            // Çok kısa, hafif bir "bip" (Click track gibi)
+            // V116: Volume increased for audibility over fan noise (was 0.05)
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1); // Slightly longer decay
+
+            osc.start();
+            osc.stop(ctx.currentTime + 0.1);
+
+        } catch (e) {
+            // Sessiz kal
+        }
     }
 };
 

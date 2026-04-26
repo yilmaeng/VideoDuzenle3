@@ -9,7 +9,11 @@ const Settings = {
         // İnce ayar - navigasyon atlama süresi (saniye cinsinden)
         navigationStepSeconds: 1,
         // Ses çalma süresi (ms) - audio scrubbing için
-        audioScrubDuration: 500
+        audioScrubDuration: 500,
+        // Açılış karşılama ekranı gösterilsin mi
+        showStartupWelcome: true,
+        // Açılışta güncelleme kontrolü yapılsın mı
+        checkForUpdatesOnStartup: true
     },
 
     /**

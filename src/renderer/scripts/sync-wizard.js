@@ -1,6 +1,81 @@
 const { ipcRenderer, remote } = require('electron');
 const path = require('path');
 
+let i18nState = { lang: 'tr', cache: {} };
+
+function getValue(obj, key) {
+    return key.split('.').reduce((acc, part) => (acc && acc[part] !== undefined ? acc[part] : null), obj);
+}
+
+function t(key, fallback = key, params = {}) {
+    const template = getValue(i18nState.cache, key) ?? fallback;
+    return Object.entries(params).reduce((text, [name, value]) => (
+        String(text).replace(new RegExp(`{${name}}`, 'g'), value)
+    ), template);
+}
+
+function translateDOM(root = document) {
+    const scope = root && root.querySelectorAll ? root : document;
+
+    const textEls = [];
+    if (root !== document && root?.hasAttribute?.('data-i18n')) textEls.push(root);
+    textEls.push(...scope.querySelectorAll('[data-i18n]'));
+    textEls.forEach((el) => {
+        const value = t(el.getAttribute('data-i18n'), null);
+        if (value) el.textContent = value;
+    });
+
+    const placeholderEls = [];
+    if (root !== document && root?.hasAttribute?.('data-i18n-placeholder')) placeholderEls.push(root);
+    placeholderEls.push(...scope.querySelectorAll('[data-i18n-placeholder]'));
+    placeholderEls.forEach((el) => {
+        const value = t(el.getAttribute('data-i18n-placeholder'), null);
+        if (value) el.setAttribute('placeholder', value);
+    });
+
+    const ariaEls = [];
+    if (root !== document && root?.hasAttribute?.('data-i18n-aria')) ariaEls.push(root);
+    ariaEls.push(...scope.querySelectorAll('[data-i18n-aria]'));
+    ariaEls.forEach((el) => {
+        const value = t(el.getAttribute('data-i18n-aria'), null);
+        if (value) el.setAttribute('aria-label', value);
+    });
+
+    const titleEl = document.querySelector('title[data-i18n]');
+    if (titleEl) {
+        const value = t(titleEl.getAttribute('data-i18n'), null);
+        if (value) document.title = value;
+    }
+
+    document.documentElement.lang = i18nState.lang;
+}
+
+async function initI18n() {
+    try {
+        i18nState.lang = await ipcRenderer.invoke('i18n-get-language');
+        i18nState.cache = await ipcRenderer.invoke('i18n-get-all');
+        translateDOM();
+        ipcRenderer.on('language-changed', async (_event, lang) => {
+            i18nState.lang = lang;
+            i18nState.cache = await ipcRenderer.invoke('i18n-get-all');
+            translateDOM();
+            refreshDynamicLabels();
+            updateUI();
+        });
+    } catch (error) {
+        console.warn('Sync wizard i18n init failed:', error);
+    }
+}
+
+function refreshDynamicLabels() {
+    const wizardTitle = document.getElementById('wizard-title');
+    if (wizardTitle) {
+        wizardTitle.innerText = currentMode === 'A'
+            ? t('dialog.sync_wizard.mode_a_title', 'Sync External Audio with Video')
+            : t('dialog.sync_wizard.mode_b_title', 'Record Video with Reference Audio');
+    }
+}
+
 // State
 let currentMode = 'A'; // 'A' (Replace) or 'B' (Playback)
 let state = {
@@ -98,11 +173,10 @@ ipcRenderer.on('init-wizard', (event, mode) => {
     state.stepIndex = 0;
 
     // Title Update
-    document.getElementById('wizard-title').innerText =
-        (mode === 'A') ? 'Harici Sesi Videoyla Senkronla' : 'Referans Sesle Video Kaydet';
+    refreshDynamicLabels();
 
     updateUI();
-    announce('Sihirbaz açıldı. Başlamak için dosyaları seçin.');
+    announce(t('runtime.sync_wizard.opened', 'Wizard opened. Select the files to begin.'));
 });
 
 // --- NAVIGATION ---
@@ -130,14 +204,18 @@ function updateUI() {
     if (currentStepId === 'step-SyncEngine') initSyncEngine();
     if (currentStepId === 'step-B2') initCameraSetup();
     if (currentStepId === 'step-B3') {
-        announce('Kayıt Stüdyosu. Kaydı başlatmak için R tuşuna veya ekrandaki düğmeye basın.');
+        announce(t('runtime.sync_wizard.recording_studio_opened', 'Recording studio. Press R or the on-screen button to start recording.'));
     }
 
     // Step Announcement
     const stepNumber = state.stepIndex + 1;
     const totalSteps = currentSteps.length;
     const stepTitle = document.querySelector(`#${currentStepId} h3`)?.innerText || '';
-    announce(`Adım ${stepNumber} / ${totalSteps}: ${stepTitle}`);
+    announce(t('runtime.sync_wizard.step_announce', 'Step {step} / {total}: {title}', {
+        step: stepNumber,
+        total: totalSteps,
+        title: stepTitle
+    }));
 }
 
 els.btnNext.addEventListener('click', async () => {
@@ -179,7 +257,9 @@ els.btnNext.addEventListener('click', async () => {
         updateUI();
     } catch (error) {
         console.error('Next Button Error:', error);
-        alert('İleri giderken bir hata oluştu: ' + error.message);
+        alert(t('runtime.sync_wizard.next_error', 'An error occurred while moving to the next step: {error}', {
+            error: error.message
+        }));
     }
 });
 
@@ -203,7 +283,7 @@ function validateCurrentStep() {
 
     if (step === 'step-A1') {
         if (!state.videoPath || !state.cleanAudioPath) {
-            alert('Lütfen her iki dosyayı da seçin.');
+            alert(t('runtime.sync_wizard.select_both_files', 'Please select both files.'));
             return false;
         }
         // Load for analysis - ensure clean state
@@ -219,7 +299,7 @@ function validateCurrentStep() {
 
     if (step === 'step-B1') {
         if (!state.refAudioPath) {
-            alert('Referans ses dosyası seçilmedi.');
+            alert(t('runtime.sync_wizard.reference_audio_missing', 'Reference audio file was not selected.'));
             return false;
         }
         els.refPlaybackAudio.src = state.refAudioPath;
@@ -227,7 +307,7 @@ function validateCurrentStep() {
 
     if (step === 'step-B3') {
         if (!state.recordVideoPath) {
-            alert('Henüz kayıt yapmadınız.');
+            alert(t('runtime.sync_wizard.no_recording_yet', 'You have not recorded anything yet.'));
             return false;
         }
     }
@@ -243,7 +323,10 @@ async function selectFile(type, extensions, displayEl, stateKey) {
         const p = result.filePaths[0];
         state[stateKey] = p;
         displayEl.innerText = path.basename(p);
-        announce(`${type} seçildi: ${path.basename(p)}`);
+        announce(t('runtime.sync_wizard.file_selected', '{type} selected: {name}', {
+            type,
+            name: path.basename(p)
+        }));
 
         if (type === 'WAV/MP3') {
             document.querySelector('#post-record-external-file').style.display = 'block';
@@ -276,11 +359,13 @@ function simulateAutoSync() {
         // Random suggestion
         const suggested = 0; // default
         document.getElementById('suggested-offset').innerText = `+${suggested} ms`;
-        document.getElementById('confidence-level').innerText = 'Orta (Simülasyon)';
+        document.getElementById('confidence-level').innerText = t('dialog.sync_wizard.analysis_confidence_medium', 'Medium (Simulation)');
         state.offsetMs = suggested;
 
         // Auto announce and focus
-        const msg = `Otomatik Senkron Analizi Tamamlandı. Önerilen Offset: ${suggested} milisaniye. Güven Seviyesi: Orta. Nasıl devam etmek istersiniz?`;
+        const msg = t('runtime.sync_wizard.analysis_complete', 'Automatic sync analysis completed. Suggested offset: {offset} milliseconds. Confidence level: medium. How would you like to continue?', {
+            offset: suggested
+        });
         announce(msg);
         // Focus first option
         const firstOption = document.querySelector('input[name="sync-choice"]');
@@ -292,7 +377,7 @@ function simulateAutoSync() {
 
 // --- SYNC ENGINE LOGIC ---
 function initSyncEngine() {
-    announce('Senkron ekranı yükleniyor...');
+    announce(t('runtime.sync_wizard.sync_screen_loading', 'Sync screen is loading...'));
     els.offsetDisplay.value = `${state.offsetMs} ms`;
 
     // DEBUG: Verify video element and source
@@ -338,7 +423,7 @@ function initSyncEngine() {
         updateListeningMode();
         updateChannelRouting(); // Apply default (center)
 
-        announce('Senkron ekranı. Oynatmak için Space, Senkron için Alt+Yön tuşlarını kullanın.');
+        announce(t('runtime.sync_wizard.sync_screen_ready', 'Sync screen. Press Space to play. Use Alt plus arrow keys for synchronization.'));
 
         // Focus play button for accessibility
         document.getElementById('btn-sync-play').focus();
@@ -347,13 +432,15 @@ function initSyncEngine() {
     // Error handler for unsupported video formats
     els.refVideo.addEventListener('error', (e) => {
         console.error('Video Error:', e);
-        const errorMsg = els.refVideo.error ? els.refVideo.error.message : 'Bilinmeyen hata';
-        announce(`Video yüklenemedi: ${errorMsg}. MOV veya desteklenmeyen format olabilir. MP4 formatı önerilir.`);
+        const errorMsg = els.refVideo.error ? els.refVideo.error.message : t('runtime.sync_wizard.unknown_error_short', 'Unknown error');
+        announce(t('runtime.sync_wizard.video_load_failed', 'Video could not be loaded: {error}. It may be a MOV or an unsupported format. MP4 is recommended.', {
+            error: errorMsg
+        }));
     });
 
     // Accessibility Hint on Focus
     document.getElementById('btn-sync-play').onfocus = () => {
-        announce('Oynat. İpucu: İnce ayar için: 10ms Alt+Ok, 100ms Alt+Shift+Ok, 1ms Win+Ctrl+Ok.');
+        announce(t('runtime.sync_wizard.play_button_hint', 'Play. Tip: for fine adjustment use Alt plus arrows for 10 ms, Alt plus Shift plus arrows for 100 ms, and Win plus Ctrl plus arrows for 1 ms.'));
     };
 }
 
@@ -428,7 +515,7 @@ function updateChannelRouting() {
         els.refVideo.muted = false;
         if (els.videoAudio) els.videoAudio.pause();
 
-        announce('Ayrık - Basit: Temiz ses solda, Video sesi merkezde.');
+        announce(t('runtime.sync_wizard.channel_split_announce', 'Split basic mode: clean audio on the left, video audio in the center.'));
 
     } else if (mode === 'split-extract') {
         // Full split: Extract video audio, pan left and right
@@ -439,10 +526,10 @@ function updateChannelRouting() {
             // Mute video element, audio comes from extracted file
             els.refVideo.muted = true;
 
-            announce('Ayrık - Tam: Temiz ses solda, Video sesi sağda.');
+            announce(t('runtime.sync_wizard.channel_split_extract_announce', 'Split full mode: clean audio on the left, video audio on the right.'));
         }).catch(err => {
             console.error('Video audio extraction failed:', err);
-            announce('Video sesi çıkarılamadı. Basit moda dönülüyor.');
+            announce(t('runtime.sync_wizard.video_audio_extract_failed', 'Video audio could not be extracted. Returning to basic mode.'));
             document.getElementById('channel-mode').value = 'split';
             updateChannelRouting();
         });
@@ -456,7 +543,7 @@ function updateChannelRouting() {
         els.refVideo.muted = false;
         if (els.videoAudio) els.videoAudio.pause();
 
-        announce('Merkezi mod: Her iki ses de merkezde.');
+        announce(t('runtime.sync_wizard.channel_center_announce', 'Centered mode: both audio sources are centered.'));
     }
 }
 
@@ -472,7 +559,7 @@ async function extractAndSetupVideoAudio() {
         throw new Error('No video path');
     }
 
-    announce('Video sesi çıkarılıyor, lütfen bekleyin...');
+    announce(t('runtime.sync_wizard.extracting_video_audio', 'Extracting video audio, please wait...'));
 
     // Extract audio using existing IPC handler
     const tempPath = await ipcRenderer.invoke('get-temp-path', 'sync_video_audio.wav');
@@ -514,7 +601,7 @@ async function extractAndSetupVideoAudio() {
         }
     }
 
-    announce('Video sesi hazır.');
+    announce(t('runtime.sync_wizard.video_audio_ready', 'Video audio is ready.'));
 }
 
 function initSyncAudioNodes() {
@@ -568,7 +655,7 @@ async function togglePlay() {
                 els.refVideo.load();
                 els.cleanAudio.currentTime = 0;
                 if (els.videoAudio) els.videoAudio.currentTime = 0;
-                announce('Video başa alındı.');
+                announce(t('runtime.sync_wizard.video_reset_to_start', 'Video reset to the beginning.'));
                 // Wait for video to be ready after reload
                 await new Promise((resolve) => {
                     els.refVideo.addEventListener('canplay', () => resolve(), { once: true });
@@ -577,7 +664,7 @@ async function togglePlay() {
 
             // Check if video is ready to play
             if (els.refVideo.readyState < 3) {
-                announce('Video yükleniyor, lütfen bekleyin...');
+                announce(t('runtime.sync_wizard.video_loading_wait', 'Video is loading, please wait...'));
                 // Wait for video to be ready
                 await new Promise((resolve) => {
                     els.refVideo.addEventListener('canplay', () => resolve(), { once: true });
@@ -586,17 +673,17 @@ async function togglePlay() {
 
             // Start playback
             await els.refVideo.play();
-            announce('Oynatılıyor');
+            announce(t('runtime.accessibility.playing', 'Playing'));
         } else {
             els.refVideo.pause();
             // Pause audio immediately when video pauses
             els.cleanAudio.pause();
             if (els.videoAudio) els.videoAudio.pause();
-            announce('Duraklatıldı');
+            announce(t('runtime.accessibility.paused', 'Paused'));
         }
     } catch (e) {
         console.error('Playback Error:', e);
-        announce('Oynatma hatası.');
+        announce(t('runtime.sync_wizard.playback_error', 'Playback error.'));
     }
 }
 
@@ -697,7 +784,7 @@ els.refVideo.addEventListener('timeupdate', () => {
 });
 
 els.refVideo.addEventListener('playing', () => {
-    document.getElementById('btn-sync-play').innerText = 'Duraklat (Space)';
+    document.getElementById('btn-sync-play').innerText = t('runtime.sync_wizard.pause_button', 'Pause (Space)');
     if (syncNodesInitialized && syncCtx.state === 'suspended') syncCtx.resume();
     // Force immediate sync when video actually starts playing frames
     syncAudio(true);
@@ -709,7 +796,7 @@ els.refVideo.addEventListener('waiting', () => {
 });
 
 els.refVideo.addEventListener('pause', () => {
-    document.getElementById('btn-sync-play').innerText = 'Oynat (Space)';
+    document.getElementById('btn-sync-play').innerText = t('dialog.sync_wizard.play_button', 'Play (Space)');
     els.cleanAudio.pause();
 });
 
@@ -729,7 +816,8 @@ els.refVideo.addEventListener('ended', () => {
     els.cleanAudio.currentTime = 0;
     els.cleanAudio.pause();
     document.getElementById('btn-sync-play').innerText = 'Oynat (Space)';
-    announce('Video bitti. Tekrar oynatmak için Space tuşuna basın.');
+    document.getElementById('btn-sync-play').innerText = t('dialog.sync_wizard.play_button', 'Play (Space)');
+    announce(t('runtime.sync_wizard.video_ended', 'Video ended. Press Space to play again.'));
 });
 
 // Loop Button
@@ -739,13 +827,13 @@ document.getElementById('btn-toggle-loop').onclick = () => {
 
     if (state.loopEnabled) {
         state.loopStart = els.refVideo.currentTime;
-        btn.innerText = 'Loop: AÇIK (2sn)';
+        btn.innerText = t('runtime.sync_wizard.loop_on', 'Loop: On (2 sec)');
         btn.style.background = '#0078d4';
-        announce('Loop aktif. Şu anki konumdan itibaren 2 saniye dönecek.');
+        announce(t('runtime.sync_wizard.loop_enabled', 'Loop enabled. It will repeat 2 seconds from the current position.'));
     } else {
-        btn.innerText = 'Loop: Kapalı (O)';
+        btn.innerText = t('dialog.sync_wizard.loop_off', 'Loop: Off (O)');
         btn.style.background = '#444';
-        announce('Loop kapatıldı.');
+        announce(t('runtime.sync_wizard.loop_disabled', 'Loop disabled.'));
     }
 };
 
@@ -758,7 +846,9 @@ document.getElementById('btn-sync-play').onclick = () => {
 function adjustOffset(deltaMs) {
     state.offsetMs += deltaMs;
     els.offsetDisplay.value = `${state.offsetMs} ms`;
-    announce(`Offset ${state.offsetMs} milisaniye`);
+    announce(t('runtime.sync_wizard.offset_announce', 'Offset {value} milliseconds', {
+        value: state.offsetMs
+    }));
 
     // If playing, adjust on the fly
     if (!els.refVideo.paused) {
@@ -797,14 +887,14 @@ document.getElementById('btn-test-devices').addEventListener('click', async () =
     const msg = document.getElementById('test-result-msg');
 
     if (state.isRecording) {
-        alert('Zaten bir kayıt yapılıyor.');
+        alert(t('runtime.sync_wizard.recording_already_running', 'A recording is already in progress.'));
         return;
     }
 
     btn.disabled = true;
-    msg.innerText = 'Test kaydı yapılıyor (5 sn)... Konuşun!';
+    msg.innerText = t('runtime.sync_wizard.test_recording_running', 'Test recording in progress (5 sec)... Speak now!');
     msg.style.color = 'yellow';
-    announce('Test kaydı başladı.');
+    announce(t('runtime.sync_wizard.test_recording_started', 'Test recording started.'));
 
     const videoSource = document.getElementById('camera-select').value;
     const audioSource = document.getElementById('mic-select').value;
@@ -845,9 +935,9 @@ document.getElementById('btn-test-devices').addEventListener('click', async () =
             document.body.appendChild(testVideo);
             await testVideo.play();
 
-            msg.innerText = 'Test kaydı oynatılıyor. Dinleyin... (Video dışına tıklayarak kapatın)';
+            msg.innerText = t('runtime.sync_wizard.test_recording_playing', 'Playing the test recording. Listen... Click outside the video to close it.');
             msg.style.color = 'lime';
-            announce('Test kaydı tamamlandı, oynatılıyor.');
+            announce(t('runtime.sync_wizard.test_recording_completed', 'Test recording completed and is now playing.'));
 
             // Cleanup on click
             const closeHandler = () => {
@@ -855,7 +945,7 @@ document.getElementById('btn-test-devices').addEventListener('click', async () =
                 testVideo.remove();
                 URL.revokeObjectURL(url);
                 btn.disabled = false;
-                msg.innerText = 'Test tamamlandı.';
+                msg.innerText = t('runtime.sync_wizard.test_completed', 'Test completed.');
                 document.removeEventListener('click', closeHandler);
             };
             setTimeout(() => document.addEventListener('click', closeHandler), 1000);
@@ -865,9 +955,9 @@ document.getElementById('btn-test-devices').addEventListener('click', async () =
         setTimeout(() => recorder.stop(), 5000); // 5 sec test
 
     } catch (e) {
-        alert('Test hatası: ' + e.message);
+        alert(t('runtime.sync_wizard.test_error', 'Test error: {error}', { error: e.message }));
         btn.disabled = false;
-        msg.innerText = 'Hata oluştu.';
+        msg.innerText = t('runtime.sync_wizard.error_occurred_short', 'An error occurred.');
     }
 });
 
@@ -904,7 +994,7 @@ function startRecordingCountIn() {
     const countTime = parseInt(document.getElementById('count-in-select').value);
 
     if (countTime > 0) {
-        announce(`Geri sayım başlıyor: ${countTime} saniye`);
+        announce(t('runtime.sync_wizard.countdown_started', 'Countdown started: {seconds} seconds', { seconds: countTime }));
         let count = countTime;
         els.countdownDisplay.style.display = 'block';
         els.countdownDisplay.innerText = count;
@@ -930,9 +1020,9 @@ function startRecordingCountIn() {
 async function startRecordingImmediate() {
     state.isRecording = true;
     els.recordingIndicator.style.display = 'block';
-    document.getElementById('record-status-text').innerText = 'KAYIT YAPILIYOR (Durdurmak için R)';
+    document.getElementById('record-status-text').innerText = t('runtime.sync_wizard.recording_in_progress', 'RECORDING IN PROGRESS (Press R to stop)');
     document.getElementById('record-status-text').style.color = 'red';
-    announce('Kayıt başladı!');
+    announce(t('runtime.sync_wizard.recording_started', 'Recording started!'));
 
     // Start playback of ref audio
     els.refPlaybackAudio.currentTime = 0;
@@ -966,15 +1056,15 @@ async function startRecordingImmediate() {
         mediaRecorder.start();
 
         // Update Button UI
-        document.getElementById('btn-toggle-record').innerText = '⏹ KAYDI BİTİR (R)';
+        document.getElementById('btn-toggle-record').innerText = t('runtime.sync_wizard.stop_recording_button', 'Stop Recording (R)');
         document.getElementById('btn-toggle-record').style.background = 'darkred';
 
     } catch (e) {
         console.error('Recording error', e);
-        alert('Kayıt başlatılamadı: ' + e.message);
+        alert(t('runtime.sync_wizard.recording_start_failed', 'Recording could not be started: {error}', { error: e.message }));
         state.isRecording = false;
         els.recordingIndicator.style.display = 'none';
-        document.getElementById('record-status-text').innerText = 'Kayıt Başlatılamadı.';
+        document.getElementById('record-status-text').innerText = t('runtime.sync_wizard.recording_start_failed_short', 'Recording could not be started.');
         document.getElementById('record-status-text').style.color = 'red';
     }
 }
@@ -984,13 +1074,13 @@ function stopRecording() {
 
     state.isRecording = false;
     els.recordingIndicator.style.display = 'none';
-    document.getElementById('record-status-text').innerText = 'Kayıt Bitti. İleri diyerek devam edin.';
+    document.getElementById('record-status-text').innerText = t('runtime.sync_wizard.recording_finished', 'Recording finished. Press Continue to proceed.');
     document.getElementById('record-status-text').style.color = 'lime';
-    announce('Kayıt durduruldu.');
+    announce(t('runtime.sync_wizard.recording_stopped', 'Recording stopped.'));
     playBeep(440, 0.3); // Off beep
 
     // Update Button UI
-    document.getElementById('btn-toggle-record').innerText = '⚫ YENİ KAYIT (R)';
+    document.getElementById('btn-toggle-record').innerText = t('runtime.sync_wizard.new_recording_button', 'New Recording (R)');
     document.getElementById('btn-toggle-record').style.background = 'red';
 
     els.refPlaybackAudio.pause();
@@ -1005,7 +1095,7 @@ async function saveRecording() {
     const blob = new Blob(recordedChunks, { type: 'video/webm' });
     const buffer = Buffer.from(await blob.arrayBuffer());
 
-    document.getElementById('record-status-text').innerText = 'Dosya kaydediliyor...';
+    document.getElementById('record-status-text').innerText = t('runtime.sync_wizard.saving_file', 'Saving file...');
 
     // Request Main to save temp file
     try {
@@ -1013,14 +1103,14 @@ async function saveRecording() {
         if (result.success) {
             state.recordVideoPath = result.videoPath;
             state.recordAudioPath = result.audioPath; // Extracted audio if needed
-            announce('Geçici kayıt dosyası oluşturuldu.');
-            document.getElementById('record-status-text').innerText = 'Kayıt Başarıyla Kaydedildi. (✔)';
+            announce(t('runtime.sync_wizard.temp_recording_created', 'Temporary recording file created.'));
+            document.getElementById('record-status-text').innerText = t('runtime.sync_wizard.recording_saved', 'Recording saved successfully. (OK)');
         } else {
-            alert('Kayıt kaydedilemedi.');
-            document.getElementById('record-status-text').innerText = 'Kayıt Hatası!';
+            alert(t('runtime.sync_wizard.recording_save_failed', 'Recording could not be saved.'));
+            document.getElementById('record-status-text').innerText = t('runtime.sync_wizard.recording_error', 'Recording Error!');
         }
     } catch (e) {
-        alert('Kaydetme hatası: ' + e.message);
+        alert(t('runtime.sync_wizard.save_error', 'Save error: {error}', { error: e.message }));
     }
 }
 
@@ -1030,6 +1120,12 @@ async function saveRecording() {
 // --- GLOBAL SHORTCUTS ---
 // We attach to window keydown
 window.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && document.activeElement?.tagName === 'BUTTON') {
+        e.preventDefault();
+        e.stopPropagation();
+        document.activeElement.click();
+        return;
+    }
 
     // Prevent default handling if necessary
 
@@ -1116,10 +1212,10 @@ window.addEventListener('keydown', (e) => {
             if (mediaRecorder && state.isRecording) {
                 if (mediaRecorder.state === 'recording') {
                     mediaRecorder.pause();
-                    announce('Kayıt Duraklatıldı');
+                    announce(t('runtime.sync_wizard.recording_paused', 'Recording paused.'));
                 } else if (mediaRecorder.state === 'paused') {
                     mediaRecorder.resume();
-                    announce('Kayıt Devam Ediyor');
+                    announce(t('runtime.sync_wizard.recording_resumed', 'Recording resumed.'));
                 }
             }
         }
@@ -1143,25 +1239,35 @@ if (document.getElementById('btn-toggle-record')) {
     document.getElementById('btn-toggle-record').onclick = toggleRecording;
 }
 
+window.addEventListener('DOMContentLoaded', () => {
+    initI18n();
+});
+
 
 // --- RENDER ---
 // --- RENDER ---
 async function startRender() {
     // 1. Ask where to save
     const saveResult = await ipcRenderer.invoke('show-save-dialog', {
-        defaultPath: 'senkron_video.mp4'
+        defaultPath: 'synced_video.mp4',
+        filters: [
+            { name: 'MP4 Video', extensions: ['mp4'] }
+        ]
     });
 
     if (saveResult.canceled) {
         return; // User cancelled
     }
 
-    const targetOutputPath = saveResult.filePath;
+    let targetOutputPath = saveResult.filePath;
+    if (targetOutputPath && !path.extname(targetOutputPath)) {
+        targetOutputPath += '.mp4';
+    }
 
     document.getElementById('render-progress-area').style.display = 'block';
     els.btnFinish.disabled = true;
-    els.btnFinish.innerText = 'İşleniyor...';
-    announce('Video oluşturuluyor, lütfen bekleyin.');
+    els.btnFinish.innerText = t('dialog.sync_wizard.processing', 'Processing...');
+    announce(t('runtime.sync_wizard.render_started', 'Creating video, please wait.'));
 
     // Gather logic
     const payload = {
@@ -1175,22 +1281,24 @@ async function startRender() {
     try {
         const result = await ipcRenderer.invoke('render-sync-video', payload);
         if (result.success) {
-            announce('Video başarıyla oluşturuldu.');
-            alert('Video başarıyla oluşturuldu!\nDosya: ' + result.outputPath);
+            announce(t('runtime.sync_wizard.render_success', 'Video was created successfully.'));
+            alert(t('runtime.sync_wizard.render_success_with_path', 'Video was created successfully.\nFile: {path}', {
+                path: result.outputPath
+            }));
             // Open folder?
             // remote.shell.showItemInFolder(result.outputPath);
             window.close();
         } else {
-            announce('Video oluşturulurken hata oluştu.');
-            alert('Hata: ' + result.error);
+            announce(t('runtime.sync_wizard.render_failed', 'An error occurred while creating the video.'));
+            alert(t('runtime.common.error', 'Error: {error}', { error: result.error }));
             els.btnFinish.disabled = false;
-            els.btnFinish.innerText = 'Oluştur (Render)';
+            els.btnFinish.innerText = t('dialog.sync_wizard.finish_render', 'Create (Render)');
         }
     } catch (e) {
-        announce('İletişim hatası.');
-        alert('İletişim hatası: ' + e.message);
+        announce(t('runtime.sync_wizard.communication_error_short', 'Communication error.'));
+        alert(t('runtime.sync_wizard.communication_error', 'Communication error: {error}', { error: e.message }));
         els.btnFinish.disabled = false;
-        els.btnFinish.innerText = 'Oluştur (Render)';
+        els.btnFinish.innerText = t('dialog.sync_wizard.finish_render', 'Create (Render)');
     }
 }
 
@@ -1198,6 +1306,19 @@ async function startRender() {
 function announce(msg) {
     els.liveRegion.innerText = msg;
 }
+
+function announceDialogForAccessibility(payload = {}) {
+    const message = [payload.title, payload.message, payload.detail]
+        .map((part) => String(part || '').trim())
+        .filter(Boolean)
+        .join('. ');
+    if (!message) return;
+    announce(message);
+}
+
+window.addEventListener('evd-accessibility-dialog-announce', (event) => {
+    announceDialogForAccessibility(event.detail);
+});
 
 // --- KEYBOARD SHORTCUTS (Sync Engine Step) ---
 
@@ -1220,12 +1341,12 @@ function stopAndReset() {
     state.loopEnabled = false;
     const loopBtn = document.getElementById('btn-toggle-loop');
     if (loopBtn) {
-        loopBtn.innerText = 'Loop: Kapalı (O)';
+        loopBtn.innerText = t('dialog.sync_wizard.loop_off', 'Loop: Off (O)');
         loopBtn.style.background = '#444';
     }
 
-    document.getElementById('btn-sync-play').innerText = 'Oynat (Space)';
-    announce('Durduruldu ve başa alındı.');
+    document.getElementById('btn-sync-play').innerText = t('dialog.sync_wizard.play_button', 'Play (Space)');
+    announce(t('runtime.sync_wizard.stopped_and_reset', 'Stopped and reset to the beginning.'));
 }
 
 /**
@@ -1239,8 +1360,13 @@ function seekSync(seconds) {
     // Ses de senkronize et
     syncAudio(true);
 
-    const direction = seconds > 0 ? 'İleri' : 'Geri';
-    announce(`${direction} ${Math.abs(seconds)} saniye.`);
+    const direction = seconds > 0
+        ? t('runtime.sync_wizard.seek_forward', 'Forward')
+        : t('runtime.sync_wizard.seek_backward', 'Backward');
+    announce(t('runtime.sync_wizard.seek_announce', '{direction} {seconds} seconds.', {
+        direction,
+        seconds: Math.abs(seconds)
+    }));
 }
 
 /**
@@ -1252,6 +1378,13 @@ function isOnSyncEngineStep() {
 
 // Global kısayol dinleyicisi
 document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && document.activeElement?.tagName === 'BUTTON') {
+        e.preventDefault();
+        e.stopPropagation();
+        document.activeElement.click();
+        return;
+    }
+
     // Sadece Sync Engine adımında çalış
     if (!isOnSyncEngineStep()) return;
 

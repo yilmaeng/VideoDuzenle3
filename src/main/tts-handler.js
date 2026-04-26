@@ -33,15 +33,18 @@ function getVoices() {
                 }
             });
         } else {
-            // Windows (PowerShell)
+            // Windows: SAPI ses aciklamalarini kullan
+            // Boylese listede gorunen deger ile secim sirasinda eslesen deger ayni olur.
             const psScript = `
-Add-Type -AssemblyName System.Speech
 try {
-    $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
-    $voices = $synth.GetInstalledVoices()
+    $synth = New-Object -ComObject SAPI.SpVoice
+    $seen = @{}
+    $voices = $synth.GetVoices()
     foreach ($v in $voices) {
-        if ($v.Enabled) {
-            Write-Output $v.VoiceInfo.Name
+        $desc = $v.GetDescription()
+        if (-not [string]::IsNullOrWhiteSpace($desc) -and -not $seen.ContainsKey($desc)) {
+            $seen[$desc] = $true
+            Write-Output $desc
         }
     }
 } catch {
@@ -131,6 +134,7 @@ function textToWav(text, voice, speed, outputPath, volume = 100) {
             const rate = Math.round((speed - 1) * 10);
             const clampedRate = Math.max(-10, Math.min(10, rate));
             const clampedVolume = Math.max(0, Math.min(100, volume));
+            const safeVoice = (voice || '').replace(/'/g, "''");
 
             let psScript = `
 $ErrorActionPreference = "Stop"
@@ -142,9 +146,15 @@ try {
 `;
             if (voice && voice !== 'Varsayılan') {
                 psScript += `
+    $targetVoice = '${safeVoice}'
     $voices = $synth.GetVoices()
     foreach ($v in $voices) {
-        if ($v.Description -eq "${voice}") {
+        $description = $v.GetDescription()
+        $matches = $description -eq $targetVoice -or
+            $description -like "$targetVoice*" -or
+            $targetVoice -like "$description*" -or
+            $v.Id -like "*$targetVoice*"
+        if ($matches) {
             $synth.Voice = $v
             break
         }
@@ -203,6 +213,7 @@ function speak(text, voice, speed) {
             // Windows
             const rate = Math.round((speed - 1) * 10);
             const clampedRate = Math.max(-10, Math.min(10, rate));
+            const safeVoice = (voice || '').replace(/'/g, "''");
 
             let psScript = `
 $ErrorActionPreference = "Stop"
@@ -214,9 +225,15 @@ try {
 `;
             if (voice && voice !== 'Varsayılan') {
                 psScript += `
+    $targetVoice = '${safeVoice}'
     $voices = $synth.GetVoices()
     foreach ($v in $voices) {
-        if ($v.Description -eq "${voice}") {
+        $description = $v.GetDescription()
+        $matches = $description -eq $targetVoice -or
+            $description -like "$targetVoice*" -or
+            $targetVoice -like "$description*" -or
+            $v.Id -like "*$targetVoice*"
+        if ($matches) {
             $synth.Voice = $v
             break
         }

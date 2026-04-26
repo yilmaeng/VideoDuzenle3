@@ -1,6 +1,6 @@
 {
     "name": "korcul-video-editor",
-    "version": "3.0.0-RC",
+    "version": "3.9991.0",
     "description": "Bir video oynatıcıyı klavyeyle kontrol eden el ve kulak - Görme engelli kullanıcılar için erişilebilir video düzenleme",
     "main": "src/main/index.js",
     "scripts": {

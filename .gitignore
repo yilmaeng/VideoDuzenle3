@@ -39,4 +39,7 @@ EngelsizVideoDuzenleyici_Mac_Test.zip
 .agent/
 
 # Config (contains API keys)
-.korcul-video-editor/
+.evd/
+
+# Local OBS runtime files (too large for GitHub, keep local only)
+src/resources/obs-studio/

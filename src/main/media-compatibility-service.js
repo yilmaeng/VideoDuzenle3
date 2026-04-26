@@ -209,6 +209,26 @@ async function analyzeCompatibility(filePath) {
     const videoCodecOk = probe.video ? isCodecSupported(probe.video.codec) : true;
     const audioCodecOk = probe.audio ? isAudioCodecSupported(probe.audio.codec) : true;
 
+    // AUDIO ONLY Check
+    const isAudioFile = !probe.video && probe.audio;
+    const commonAudioExtensions = ['mp3', 'wav', 'aac', 'flac', 'ogg', 'wma', 'm4a'];
+    const ext = path.extname(filePath).toLowerCase().replace('.', '');
+
+    if (isAudioFile || commonAudioExtensions.includes(ext)) {
+        return {
+            strategy: 'AUDIO_TO_VIDEO',
+            reason: 'Ses dosyası görselleştirilecek',
+            estimatedTime: Math.max(2, Math.ceil(probe.duration * 0.1)), // Very fast
+            probe,
+            details: {
+                fromContainer: probe.container,
+                toContainer: 'mp4',
+                targetVideoCodec: 'h264 (black)',
+                targetAudioCodec: 'aac'
+            }
+        };
+    }
+
     // Tüm koşullar uygunsa doğrudan oynat
     if (containerOk && videoCodecOk && audioCodecOk) {
         return {
@@ -289,12 +309,20 @@ function quickRemux(inputPath, onProgress) {
 
         ffmpeg(inputPath)
             .outputOptions([
+                '-map 0:v',          // Sadece video stream'ini al
+                '-map 0:a?',         // Sadece audio stream'ini al (varsa)
                 '-c:v', 'copy',      // Video codec kopyala
                 '-c:a', 'copy',      // Audio codec kopyala
                 '-movflags', '+faststart'  // Web için optimize
             ])
             .output(outputPath)
             .on('start', (cmd) => console.log('Remux komutu:', cmd))
+            .on('stderr', (stderrLine) => {
+                // Hata ayıklama için stderr çıktısını logla (sadece hata durumunda veya verbose modda)
+                if (stderrLine.includes('Error') || stderrLine.includes('fail')) {
+                    console.error('FFmpeg Stderr:', stderrLine);
+                }
+            })
             .on('progress', (progress) => {
                 if (onProgress) onProgress({
                     percent: progress.percent || 0,
@@ -309,8 +337,9 @@ function quickRemux(inputPath, onProgress) {
                     cached: false
                 });
             })
-            .on('error', (err) => {
+            .on('error', (err, stdout, stderr) => {
                 console.error('Remux hatası:', err);
+                console.error('FFmpeg Stderr Dump:', stderr); // Tüm stderr çıktısını logla
                 // Remux başarısız olursa transcode'a fallback
                 reject(err);
             })
@@ -487,22 +516,36 @@ async function smartOpen(filePath, onProgress, onStatusChange) {
                     estimatedTime: analysis.estimatedTime
                 });
 
-                const remuxResult = await quickRemux(filePath, onProgress);
+                let playbackResult;
+                let finalStrategy = 'QUICK_REMUX';
 
-                notify('ready', 'Hızlı dönüşüm tamamlandı', {
-                    strategy: 'QUICK_REMUX',
-                    playbackPath: remuxResult.outputPath,
+                try {
+                    playbackResult = await quickRemux(filePath, onProgress);
+                } catch (remuxError) {
+                    console.warn('Quick remux failed, falling back to transcode:', remuxError);
+                    notify('transcoding', 'Hızlı dönüşüm başarısız, tam dönüşüm yapılıyor...', {
+                        estimatedTime: Math.max(5, Math.ceil(analysis.probe.duration * 0.5))
+                    });
+
+                    // Fallback to transcode
+                    playbackResult = await transcode(filePath, {}, onProgress);
+                    finalStrategy = 'TRANSCODE';
+                }
+
+                notify('ready', finalStrategy === 'QUICK_REMUX' ? 'Hızlı dönüşüm tamamlandı' : 'Dönüştürme tamamlandı', {
+                    strategy: finalStrategy,
+                    playbackPath: playbackResult.outputPath,
                     originalPath: filePath,
-                    cached: remuxResult.cached,
+                    cached: playbackResult.cached,
                     probe: analysis.probe
                 });
 
                 return {
                     success: true,
-                    strategy: 'QUICK_REMUX',
-                    playbackPath: remuxResult.outputPath,
+                    strategy: finalStrategy,
+                    playbackPath: playbackResult.outputPath,
                     originalPath: filePath,
-                    cached: remuxResult.cached,
+                    cached: playbackResult.cached,
                     probe: analysis.probe
                 };
 
@@ -532,6 +575,30 @@ async function smartOpen(filePath, onProgress, onStatusChange) {
                     probe: analysis.probe
                 };
 
+            case 'AUDIO_TO_VIDEO':
+                notify('transcoding', 'Ses dosyası video formatına dönüştürülüyor...', {
+                    estimatedTime: analysis.estimatedTime
+                });
+
+                const audioResult = await convertAudioToVideo(filePath, onProgress);
+
+                notify('ready', 'Ses dosyası hazır', {
+                    strategy: 'AUDIO_TO_VIDEO',
+                    playbackPath: audioResult.outputPath,
+                    originalPath: filePath,
+                    cached: audioResult.cached,
+                    probe: analysis.probe
+                });
+
+                return {
+                    success: true,
+                    strategy: 'AUDIO_TO_VIDEO',
+                    playbackPath: audioResult.outputPath,
+                    originalPath: filePath,
+                    cached: audioResult.cached,
+                    probe: analysis.probe
+                };
+
             default:
                 throw new Error('Bilinmeyen strateji: ' + analysis.strategy);
         }
@@ -542,6 +609,61 @@ async function smartOpen(filePath, onProgress, onStatusChange) {
             error: error.message
         };
     }
+}
+
+/**
+ * Ses dosyasını siyah ekranlı videoya çevir
+ */
+function convertAudioToVideo(inputPath, onProgress) {
+    return new Promise((resolve, reject) => {
+        const fileHash = getFileHash(inputPath);
+        const outputPath = path.join(TRANSCODE_DIR, `${fileHash}_audio_viz.mp4`);
+
+        // Cache hit
+        if (fs.existsSync(outputPath)) {
+            console.log('AudioViz cache hit:', outputPath);
+            return resolve({
+                success: true,
+                outputPath,
+                cached: true
+            });
+        }
+
+        console.log('Audio->Video conversion starting:', inputPath);
+
+        ffmpeg(inputPath)
+            .input('color=c=black:s=1280x720')
+            .inputFormat('lavfi')
+            .outputOptions([
+                '-c:v', 'libx264',
+                '-tune', 'stillimage',
+                '-pix_fmt', 'yuv420p',
+                '-shortest',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-movflags', '+faststart'
+            ])
+            .output(outputPath)
+            .on('progress', (progress) => {
+                if (onProgress) onProgress({
+                    percent: progress.percent || 0,
+                    stage: 'audio_convert'
+                });
+            })
+            .on('end', () => {
+                console.log('Audio conversion complete:', outputPath);
+                resolve({
+                    success: true,
+                    outputPath,
+                    cached: false
+                });
+            })
+            .on('error', (err) => {
+                console.error('Audio conversion error:', err);
+                reject(err);
+            })
+            .run();
+    });
 }
 
 /**

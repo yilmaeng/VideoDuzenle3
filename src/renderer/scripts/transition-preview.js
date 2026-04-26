@@ -25,7 +25,6 @@ const TransitionPreview = {
         this.mainVideo = document.getElementById('video-player');
 
         if (!this.mainVideo) {
-            console.warn('TransitionPreview: video-player elementi henüz yok, 500ms sonra tekrar denenecek');
             setTimeout(() => this.init(), 500);
             return;
         }
@@ -51,7 +50,7 @@ const TransitionPreview = {
         // Video container'ı bul
         const videoContainer = document.querySelector('.video-container');
         if (!videoContainer) {
-            console.warn('Video container bulunamadı, overlay oluşturulamadı');
+            setTimeout(() => this.createOverlayElement(), 500);
             return;
         }
 

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="live_effects_panel.window_title">Canli Efekt Paneli</title>
+    <link rel="stylesheet" href="../styles/main.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: "Segoe UI", sans-serif;
+            background: #161616;
+            color: #ececec;
+        }
+
+        .page {
+            max-width: 1080px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .card {
+            background: #202020;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 18px;
+        }
+
+        .toolbar,
+        .profile-row,
+        .slot-row,
+        .slot-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .profile-row > * {
+            flex: 1 1 180px;
+        }
+
+        .slot-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .slot-card {
+            border: 1px solid #3a3a3a;
+            border-radius: 10px;
+            padding: 14px;
+            background: #252525;
+        }
+
+        .slot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        input,
+        select,
+        textarea,
+        button {
+            font: inherit;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #4a4a4a;
+            background: #111;
+            color: #f1f1f1;
+        }
+
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        button {
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid #4a4a4a;
+            background: #2e5cff;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: #2b2b2b;
+        }
+
+        .slot-actions-grow {
+            flex: 1 1 auto;
+        }
+
+        button.danger {
+            background: #8c2f39;
+        }
+
+        .hint,
+        .status-line {
+            color: #bcbcbc;
+        }
+
+        .status-line {
+            min-height: 24px;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="page">
+        <section class="card">
+            <h1 data-i18n="live_effects_panel.title">Canli Efekt Paneli</h1>
+            <p class="hint" data-i18n="live_effects_panel.description">Kayit veya yayin oncesinde efekt bankanizi hazirlayin. Ses ve video slotlarini oturumunuza baglayabilirsiniz.</p>
+            <div id="status-line" class="status-line" aria-live="polite"></div>
+        </section>
+
+        <section class="card">
+            <h2 data-i18n="live_effects_panel.profile_section">Profil</h2>
+            <div class="profile-row">
+                <div>
+                    <label for="profile-select" data-i18n="live_effects_panel.profile_select">Profil Sec</label>
+                    <select id="profile-select" data-i18n-aria="live_effects_panel.profile_select"></select>
+                </div>
+                <div>
+                    <label for="profile-name" data-i18n="live_effects_panel.profile_name">Profil Adi</label>
+                    <input id="profile-name" type="text" data-i18n-aria="live_effects_panel.profile_name">
+                </div>
+                <div>
+                    <label for="profile-description" data-i18n="live_effects_panel.profile_description">Aciklama</label>
+                    <input id="profile-description" type="text" data-i18n-aria="live_effects_panel.profile_description">
+                </div>
+            </div>
+            <div class="profile-row" style="margin-top: 12px;">
+                <div>
+                    <label for="intro-slot-select" data-i18n="live_effects_panel.intro_select">Baslangic Efekti</label>
+                    <select id="intro-slot-select" data-i18n-aria="live_effects_panel.intro_select"></select>
+                </div>
+                <div>
+                    <label for="outro-slot-select" data-i18n="live_effects_panel.outro_select">Bitis Efekti</label>
+                    <select id="outro-slot-select" data-i18n-aria="live_effects_panel.outro_select"></select>
+                </div>
+            </div>
+            <div class="toolbar" style="margin-top: 12px;">
+                <button id="btn-new-profile" type="button" data-i18n="live_effects_panel.new_profile" data-i18n-aria="live_effects_panel.new_profile">Yeni Profil</button>
+                <button id="btn-save-profile" type="button" data-i18n="live_effects_panel.save_profile" data-i18n-aria="live_effects_panel.save_profile">Profili Kaydet (Alt+K)</button>
+                <button id="btn-bulk-import" type="button" class="secondary" data-i18n="live_effects_panel.bulk_import" data-i18n-aria="live_effects_panel.bulk_import">Toplu Medya Ekle</button>
+                <button id="btn-delete-profile" type="button" class="danger" data-i18n="live_effects_panel.delete_profile" data-i18n-aria="live_effects_panel.delete_profile">Profili Sil</button>
+                <button id="btn-close-panel" type="button" class="secondary" data-i18n="live_effects_panel.close_panel" data-i18n-aria="live_effects_panel.close_panel">Paneli Kapat</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 data-i18n="live_effects_panel.slot_section">Efekt Slotlari</h2>
+            <p class="hint" data-i18n="live_effects_panel.slot_hint">Her slot bir ses veya video dosyasi tasiyabilir. Toplu eklemede dosyalar bos slotlara sirayla yerlestirilir.</p>
+            <div id="slot-list" class="slot-list"></div>
+        </section>
+    </main>
+
+    <script src="../scripts/live-effects-panel.js"></script>
+</body>
+
+</html>

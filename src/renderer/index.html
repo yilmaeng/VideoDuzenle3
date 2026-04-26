@@ -5,12 +5,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
-  <title>Engelsiz Video Düzenleyicisi</title>
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://evd.drenginyilmaz.net">
+  <title data-i18n="messages.app_window_title">EVD</title>
   <link rel="stylesheet" href="styles/main.css">
   <link rel="stylesheet" href="styles/wizard.css">
   <link rel="stylesheet" href="styles/cta-library.css">
   <link rel="stylesheet" href="styles/status-bar.css">
+  <script src="scripts/i18n.js"></script>
 </head>
 
 <body>
@@ -20,26 +21,165 @@
   <!-- Erişilebilirlik: Acil duyurular için -->
   <div id="screen-reader-alert" aria-live="assertive" class="sr-only"></div>
 
-  <main id="app-main" aria-label="Video düzenleme alanı">
+  <dialog id="startup-welcome-dialog" aria-labelledby="startup-welcome-title"
+    aria-describedby="startup-welcome-description">
+    <form method="dialog" class="startup-welcome-shell">
+      <section class="startup-welcome-hero">
+        <div class="startup-welcome-copy">
+          <span class="startup-welcome-eyebrow" data-i18n="startup_welcome.eyebrow">EVD 4.0 Baslangic Deneyimi</span>
+          <h2 id="startup-welcome-title" data-i18n="startup_welcome.title">EVD'ye Hos Geldiniz</h2>
+          <p id="startup-welcome-description" data-i18n="startup_welcome.description">
+            Lutfen yapmak istediginiz islemi secin. Ekrani kapatip uygulama ana penceresine gitmek icin Escape basin.
+          </p>
+        </div>
+        <div class="startup-welcome-highlights" aria-hidden="true">
+          <div class="startup-highlight-card">
+            <strong data-i18n="startup_welcome.highlight_keyboard_title">Klavye once gelir</strong>
+            <span data-i18n="startup_welcome.highlight_keyboard_desc">Tum temel duzenleme akisi ayni sekilde calismaya devam eder.</span>
+          </div>
+          <div class="startup-highlight-card">
+            <strong data-i18n="startup_welcome.highlight_access_title">Erisilebilir ve gorsel</strong>
+            <span data-i18n="startup_welcome.highlight_access_desc">Ekran okuyucu odakli is akisi korunurken ilk gorunum guclendirildi.</span>
+          </div>
+          <div class="startup-highlight-card">
+            <strong data-i18n="startup_welcome.highlight_start_title">Hemen baslayin</strong>
+            <span data-i18n="startup_welcome.highlight_start_desc">Video acin, proje yukleyin ya da kayit sihirbazini baslatin.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="startup-welcome-grid">
+        <div class="form-group startup-welcome-list-group">
+          <label for="startup-welcome-actions" data-i18n="startup_welcome.actions_label">Yapilacak islemler</label>
+          <ul id="startup-welcome-actions" role="listbox"
+            aria-label="Yapilacak islemler" data-i18n-aria="startup_welcome.actions_aria" tabindex="0">
+            <li id="startup-action-open-video" role="option" tabindex="0" data-action="open-video"
+              aria-labelledby="startup-action-open-video-title startup-action-open-video-desc">
+              <div id="startup-action-open-video-title" class="startup-welcome-action-title"
+                data-i18n="startup_welcome.actions.open_video">Video dosyasi ac</div>
+              <div id="startup-action-open-video-desc" class="startup-welcome-action-description"
+                data-i18n="startup_welcome.action_descriptions.open_video">Elinizde duzenlemek istediginiz hazir bir video varsa buradan baslayin.</div>
+            </li>
+            <li id="startup-action-open-project" role="option" tabindex="-1" data-action="open-project"
+              aria-labelledby="startup-action-open-project-title startup-action-open-project-desc">
+              <div id="startup-action-open-project-title" class="startup-welcome-action-title"
+                data-i18n="startup_welcome.actions.open_project">Proje ac</div>
+              <div id="startup-action-open-project-desc" class="startup-welcome-action-description"
+                data-i18n="startup_welcome.action_descriptions.open_project">Daha once kaydettiginiz bir projeye kaldiginiz yerden devam etmek icin bunu secin.</div>
+            </li>
+            <li id="startup-action-new-slideshow" role="option" tabindex="-1" data-action="new-slideshow"
+              aria-labelledby="startup-action-new-slideshow-title startup-action-new-slideshow-desc">
+              <div id="startup-action-new-slideshow-title" class="startup-welcome-action-title"
+                data-i18n="startup_welcome.actions.new_slideshow">Yeni slide projesi</div>
+              <div id="startup-action-new-slideshow-desc" class="startup-welcome-action-description"
+                data-i18n="startup_welcome.action_descriptions.new_slideshow">Elinizdeki resim, metin ve seslerden yeni bir video uretmek icin bunu kullanin.</div>
+            </li>
+            <li id="startup-action-sync-audio" role="option" tabindex="-1" data-action="sync-audio"
+              aria-labelledby="startup-action-sync-audio-title startup-action-sync-audio-desc">
+              <div id="startup-action-sync-audio-title" class="startup-welcome-action-title"
+                data-i18n="startup_welcome.actions.sync_audio">Harici sesi videoyla senkronla</div>
+              <div id="startup-action-sync-audio-desc" class="startup-welcome-action-description"
+                data-i18n="startup_welcome.action_descriptions.sync_audio">Ayri kaydedilmis bir sesi mevcut videonuzla eslestirmek istiyorsaniz bu secenek yardimci olur.</div>
+            </li>
+            <li id="startup-action-vertical-video" role="option" tabindex="-1" data-action="vertical-video"
+              aria-labelledby="startup-action-vertical-video-title startup-action-vertical-video-desc">
+              <div id="startup-action-vertical-video-title" class="startup-welcome-action-title"
+                data-i18n="startup_welcome.actions.vertical_video">Dikey Video (Shorts/Reels) Olustur</div>
+              <div id="startup-action-vertical-video-desc" class="startup-welcome-action-description"
+                data-i18n="startup_welcome.action_descriptions.vertical_video">Videolarinizi Shorts, Reels ve benzeri dikey formatlara uyarlamak icin bunu secin.</div>
+            </li>
+            <li id="startup-action-recording-wizard" role="option" tabindex="-1" data-action="recording-wizard"
+              aria-labelledby="startup-action-recording-wizard-title startup-action-recording-wizard-desc">
+              <div id="startup-action-recording-wizard-title" class="startup-welcome-action-title"
+                data-i18n="startup_welcome.actions.recording_wizard">Erisilebilir Video kayit sihirbazi</div>
+              <div id="startup-action-recording-wizard-desc" class="startup-welcome-action-description"
+                data-i18n="startup_welcome.action_descriptions.recording_wizard">Ekran, pencere, mikrofon ve kamera ile yeni bir kayit hazirlamak icin bu sihirbazi kullanin.</div>
+            </li>
+            <li id="startup-action-api-key" role="option" tabindex="-1" data-action="api-key"
+              aria-labelledby="startup-action-api-key-title startup-action-api-key-desc">
+              <div id="startup-action-api-key-title" class="startup-welcome-action-title"
+                data-i18n="startup_welcome.actions.api_key">API anahtarini gir</div>
+              <div id="startup-action-api-key-desc" class="startup-welcome-action-description"
+                data-i18n="startup_welcome.action_descriptions.api_key">Yapay zeka destekli aciklama ve akilli oneriler icin API anahtarinizi burada tanimlayin.</div>
+            </li>
+            <li id="startup-action-quick-start" role="option" tabindex="-1" data-action="quick-start"
+              aria-labelledby="startup-action-quick-start-title startup-action-quick-start-desc">
+              <div id="startup-action-quick-start-title" class="startup-welcome-action-title"
+                data-i18n="startup_welcome.actions.quick_start">Hizli Baslangic kilavuzunu goruntule</div>
+              <div id="startup-action-quick-start-desc" class="startup-welcome-action-description"
+                data-i18n="startup_welcome.action_descriptions.quick_start">Programi ilk kez kullaniyorsaniz temel adimlari ve onemli kisayollari buradan ogrenebilirsiniz.</div>
+            </li>
+          </ul>
+        </div>
+
+        <aside class="startup-welcome-side" aria-label="Baslangic ozeti" data-i18n-aria="startup_welcome.side_aria">
+          <section class="startup-side-card">
+            <h3 data-i18n="startup_welcome.side_primary_title">Ilk 10 saniyede ne yapabilirim?</h3>
+            <p data-i18n="startup_welcome.side_primary_desc">En hizli baslangic icin bir video acin ya da daha once kaydettiginiz projeyi yukleyin. Uretim odakli yeni bir is icin slideshow veya kayit sihirbazi daha uygundur.</p>
+          </section>
+          <section class="startup-side-card">
+            <h3 data-i18n="startup_welcome.side_shortcuts_title">Hizli yardim</h3>
+            <ul class="startup-side-shortcuts">
+              <li data-i18n="startup_welcome.side_shortcut_open">Ctrl+O ile video acin</li>
+              <li data-i18n="startup_welcome.side_shortcut_help">F1 ile temel kisayollari gorun</li>
+              <li data-i18n="startup_welcome.side_shortcut_feedback">F3 ile geri bildirim taslagi olusturun</li>
+            </ul>
+          </section>
+        </aside>
+      </section>
+
+      <div class="startup-welcome-options">
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="startup-welcome-hide">
+          <label for="startup-welcome-hide" data-i18n="startup_welcome.hide_again">Bu ekrani bir daha gosterme</label>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="startup-welcome-check-updates">
+          <label for="startup-welcome-check-updates" data-i18n="startup_welcome.check_updates">Baslangicta guncellemeleri kontrol et</label>
+        </div>
+      </div>
+
+      <div class="dialog-buttons">
+        <button type="button" id="startup-welcome-close" data-i18n="startup_welcome.close">Baslangic ekranini kapat</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="startup-quick-start-dialog" aria-labelledby="startup-quick-start-title">
+    <form method="dialog">
+      <h2 id="startup-quick-start-title" data-i18n="startup_welcome.quick_start_dialog.title">Hizli Baslangic</h2>
+      <div id="startup-quick-start-content" data-i18n-html="startup_welcome.quick_start_dialog.content">
+        <p>EVD'ye hos geldiniz.</p>
+      </div>
+      <div class="dialog-buttons">
+        <button type="button" id="startup-quick-start-more" data-i18n="startup_welcome.quick_start_dialog.more_info">Daha fazla bilgi</button>
+        <button type="button" id="startup-quick-start-close" data-i18n="startup_welcome.quick_start_dialog.close">Kapat</button>
+      </div>
+    </form>
+  </dialog>
+
+  <main id="app-main" aria-label="Video düzenleme alanı" data-i18n-aria="player.video_area_aria">
 
     <!-- Sekme Çubuğu -->
     <nav id="tab-bar" role="tablist" aria-label="Açık dosyalar" style="display: none;"></nav>
 
     <!-- Durum Paneli -->
-    <header id="status-panel" role="region" aria-label="Durum Paneli">
-      <div id="file-info" aria-label="Dosya bilgisi">
-        <span id="file-name">Dosya açılmadı</span>
+    <header id="status-panel" role="region" aria-label="Durum Paneli" data-i18n-aria="player.status_panel_aria">
+      <div id="file-info" class="status-cluster" aria-label="Dosya bilgisi" data-i18n-aria="player.file_info_aria">
+        <span id="file-name" data-i18n="player.no_file">Dosya açılmadı</span>
       </div>
-      <div id="time-display" aria-label="Zaman bilgisi">
-        <span id="current-time" aria-label="Geçerli konum">00:00:00.000</span>
+      <div id="time-display" class="status-cluster status-cluster-primary" aria-label="Zaman bilgisi" data-i18n-aria="player.time_info_aria">
+        <span id="current-time" aria-label="Geçerli konum" data-i18n-aria="player.current_pos_aria">00:00:00.000</span>
         <span class="separator">/</span>
-        <span id="total-duration" aria-label="Toplam süre">00:00:00.000</span>
+        <span id="total-duration" aria-label="Toplam süre"
+          data-i18n-aria="player.total_duration_aria">00:00:00.000</span>
       </div>
-      <div id="playback-status" aria-label="Oynatma durumu">
-        <span id="play-state">Durduruldu</span>
+      <div id="playback-status" class="status-cluster" aria-label="Oynatma durumu" data-i18n-aria="player.playback_status_aria">
+        <span id="play-state" data-i18n="player.stopped">Durduruldu</span>
       </div>
-      <div id="selection-info" aria-hidden="true">
-        <span id="selection-status">Seçim yok</span>
+      <div id="selection-info" class="status-cluster" aria-hidden="true">
+        <span id="selection-status" data-i18n="player.no_selection">Seçim yok</span>
       </div>
     </header>
 
@@ -47,59 +187,97 @@
     <div id="main-content">
 
       <!-- Video Alanı -->
-      <section id="video-section" role="region" aria-label="Video">
+      <section id="video-section" role="region" aria-label="Video" data-i18n-aria="player.video_area_aria">
         <div id="video-container">
-          <video id="video-player" tabindex="-1" aria-label="Video oynatıcı" preload="metadata">
-            Tarayıcınız video etiketini desteklemiyor.
+          <video id="video-player" tabindex="-1" aria-label="Video oynatıcı" data-i18n-aria="player.video_player_aria"
+            preload="metadata">
+            <span data-i18n="player.no_video_support">Tarayıcınız video etiketini desteklemiyor.</span>
           </video>
           <!-- CTA Overlay Preview (Real-time) -->
           <div id="cta-overlay-preview" class="cta-overlay-hidden" aria-hidden="true">
             <video id="cta-overlay-video" muted loop></video>
           </div>
           <div id="video-placeholder" aria-hidden="true">
-            <p>Video yüklemek için Ctrl+O tuşlarına basın</p>
+            <div class="empty-launch-surface">
+              <div class="empty-launch-copy">
+                <span class="empty-launch-badge" data-i18n="player.empty_badge">EVD 4.0 Faz A</span>
+                <h2 data-i18n="player.empty_title">Ilk videonuzu acarak ya da bir projeye geri donerek baslayin</h2>
+                <p data-i18n="player.empty_description">EVD klavye ve ekran okuyucu odakli kurgu mantigini korur. Simdi ayni akisin ustune daha net bir gorsel baslangic yuzeyi ekleniyor.</p>
+              </div>
+              <div class="empty-launch-actions">
+                <button type="button" class="empty-launch-action primary" data-launch-action="open-video" data-i18n="player.empty_action_open_video">Video Ac</button>
+                <button type="button" class="empty-launch-action" data-launch-action="open-project" data-i18n="player.empty_action_open_project">Proje Ac</button>
+                <button type="button" class="empty-launch-action" data-launch-action="new-slideshow" data-i18n="player.empty_action_slideshow">Slideshow Baslat</button>
+                <button type="button" class="empty-launch-action" data-launch-action="recording-wizard" data-i18n="player.empty_action_record">Kayit Sihirbazi</button>
+              </div>
+              <div class="empty-launch-info-grid">
+                <section class="empty-info-card">
+                  <h3 data-i18n="player.empty_card_guided_title">Yonlendirilmis baslangic</h3>
+                  <p data-i18n="player.empty_card_guided_desc">Hazir bir videonuz varsa acin. Uretim odakli yeni bir icerik icin slideshow veya kayit sihirbazi ile ilerleyin.</p>
+                </section>
+                <section class="empty-info-card">
+                  <h3 data-i18n="player.empty_card_help_title">Hizli yardim bloklari</h3>
+                  <p data-i18n="player.empty_card_help_desc">F1 kisayollar, F2 yardim ve F3 geri bildirim akislariyla programdan cikmadan hizlica yon bulabilirsiniz.</p>
+                </section>
+                <section class="empty-info-card">
+                  <h3 data-i18n="player.empty_card_focus_title">Ayni erisilebilir cekirdek</h3>
+                  <p data-i18n="player.empty_card_focus_desc">Marker, secim, oynatma ve anlatim akislari ayni mantikla calismaya devam eder.</p>
+                </section>
+              </div>
+              <p class="empty-launch-footer" data-i18n="player.placeholder_text">Video yüklemek için Ctrl+O tuşlarına basın</p>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- Bilgi Paneli -->
-      <aside id="info-panel" role="complementary" aria-label="Video Bilgileri">
-        <h2>Video Bilgileri</h2>
-        <dl id="video-metadata">
-          <dt>Çözünürlük:</dt>
-          <dd id="meta-resolution">-</dd>
-          <dt>Kare hızı:</dt>
-          <dd id="meta-framerate">-</dd>
-          <dt>Codec:</dt>
-          <dd id="meta-codec">-</dd>
-          <dt>Dosya boyutu:</dt>
-          <dd id="meta-size">-</dd>
-        </dl>
+      <aside id="info-panel" role="complementary" aria-label="Video Bilgileri" data-i18n-aria="player.video_info_aria">
+        <section class="info-card">
+          <h2 data-i18n="player.video_info_title">Video Bilgileri</h2>
+          <dl id="video-metadata">
+            <dt data-i18n="player.resolution">Çözünürlük:</dt>
+            <dd id="meta-resolution">-</dd>
+            <dt data-i18n="player.framerate">Kare hızı:</dt>
+            <dd id="meta-framerate">-</dd>
+            <dt data-i18n="player.codec">Codec:</dt>
+            <dd id="meta-codec">-</dd>
+            <dt data-i18n="player.file_size">Dosya boyutu:</dt>
+            <dd id="meta-size">-</dd>
+            <dt data-i18n="player.orientation">Yön:</dt>
+            <dd id="meta-orientation">-</dd>
+          </dl>
+        </section>
 
-        <h2>İşaretçiler</h2>
-        <ul id="marker-list" role="listbox" aria-label="İşaretçi listesi" tabindex="0">
-          <li class="empty-message">Henüz işaretçi yok</li>
-        </ul>
+        <section class="info-card">
+          <h2 data-i18n="player.markers_title">İşaretçiler</h2>
+          <ul id="marker-list" role="listbox" aria-label="İşaretçi listesi" data-i18n-aria="player.marker_list_aria"
+            tabindex="0">
+            <li class="empty-message" data-i18n="player.no_markers">Henüz işaretçi yok</li>
+          </ul>
+        </section>
       </aside>
 
     </div>
 
     <!-- Zaman Çizelgesi -->
-    <section id="timeline-section" role="region" aria-label="Zaman Çizelgesi">
+    <section id="timeline-section" role="region" aria-label="Zaman Çizelgesi" data-i18n-aria="player.timeline_aria">
       <div id="timeline-info">
-        <span id="cursor-position">İmleç: 00:00:00.000</span>
-        <span id="marker-count">İşaretçi: 0</span>
+        <span id="cursor-position" class="timeline-chip">İmleç: 00:00:00.000</span>
+        <span id="marker-count" class="timeline-chip">İşaretçi: 0</span>
       </div>
       <div id="timeline-visual" aria-hidden="true">
+        <div id="timeline-segment-layer" class="timeline-layer"></div>
+        <div id="timeline-marker-layer" class="timeline-layer"></div>
         <div id="timeline-cursor"></div>
         <div id="timeline-selection"></div>
       </div>
     </section>
 
     <!-- İlerleme Çubuğu -->
-    <div id="progress-overlay" class="hidden" role="dialog" aria-label="İşlem durumu" aria-modal="true">
+    <div id="progress-overlay" class="hidden" role="dialog" aria-label="İşlem durumu"
+      data-i18n-aria="player.processing_aria" aria-modal="true">
       <div id="progress-content">
-        <p id="progress-message">İşleniyor...</p>
+        <p id="progress-message" data-i18n="player.processing_text">İşleniyor...</p>
         <progress id="progress-bar" max="100" value="0"></progress>
         <p id="progress-percent">%0</p>
       </div>
@@ -110,7 +288,7 @@
   <!-- Durum Çubuğu (Status Bar) -->
   <footer id="app-status-bar" role="status" aria-live="polite" aria-atomic="true">
     <div class="status-left">
-      <span id="status-bar-text">Hazır</span>
+      <span id="status-bar-text" data-i18n="player.status_ready">Hazır</span>
       <span id="status-bar-percent"></span>
     </div>
     <div class="status-right">
@@ -118,82 +296,69 @@
     </div>
   </footer>
 
-  <!-- Klavye Yöneticisi Diyaloğu -->
-  <dialog id="keyboard-manager-dialog" aria-labelledby="keyboard-manager-title"
-    style="width: 800px; max-width: 95vw; height: 80vh;">
-    <form method="dialog" style="height: 100%; display: flex; flex-direction: column;">
-      <h2 id="keyboard-manager-title">Klavye Yöneticisi</h2>
-      <p class="dialog-description">Kısayolları özelleştirmek için bir kategori seçin ve sağdaki listeden işlem yapın.
-      </p>
-
-      <div class="keyboard-manager-container"
-        style="flex: 1; display: flex; gap: 20px; overflow: hidden; margin-bottom: 20px;">
-        <!-- Kenar Çubuğu (Kategoriler) -->
-        <aside class="keyboard-sidebar"
-          style="width: 200px; border-right: 1px solid #444; padding-right: 10px; overflow-y: auto;">
-          <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--accent-color);">Kategoriler</h3>
-          <ul id="keyboard-categories-list" role="listbox" aria-label="Kısayol kategorileri" tabindex="0"
-            style="list-style: none; padding: 0; margin: 0;">
-            <!-- JS ile doldurulacak -->
-          </ul>
-        </aside>
-
-        <!-- İçerik Alanı (Kısayol Listesi) -->
-        <main class="keyboard-content" id="keyboard-shortcuts-area" tabindex="0" role="region"
-          aria-label="Kısayol listesi" style="flex: 1; overflow-y: auto; padding-right: 10px;">
-          <div id="keyboard-shortcuts-list-container">
-            <ul id="keyboard-shortcuts-list" aria-label="Kısayollar" style="list-style: none; padding: 0; margin: 0;">
-              <!-- JS ile doldurulacak -->
-            </ul>
-          </div>
-        </main>
+  <!-- Zaman Koduna Git Diyaloğu -->
+  <dialog id="goto-dialog" aria-labelledby="goto-dialog-title">
+    <form method="dialog">
+      <h2 id="goto-dialog-title" data-i18n="dialog.goto.title">Zaman Koduna Git</h2>
+      <div class="form-group">
+        <label for="goto-time-input" data-i18n="dialog.goto.label">Zaman kodu (SS:DD:SN veya saniye):</label>
+        <input type="text" id="goto-time-input" placeholder="00:00:00 veya 120" data-i18n-placeholder="dialog.goto.placeholder" autofocus>
       </div>
-
-      <div class="dialog-buttons" style="display: flex; justify-content: space-between; align-items: center;">
-        <div class="left-buttons" style="display: flex; gap: 10px;">
-          <button type="button" id="keyboard-manager-export">Dışa Aktar</button>
-          <button type="button" id="keyboard-manager-import">İçe Aktar</button>
-          <button type="button" id="keyboard-manager-reset-all">Tümünü Sıfırla</button>
-        </div>
-        <div class="right-buttons" style="display: flex; gap: 10px;">
-          <button type="button" id="keyboard-manager-save">Kaydet ve Kapat</button>
-          <button type="button" id="keyboard-manager-cancel">İptal</button>
-        </div>
+      <div class="dialog-buttons">
+        <button type="submit" id="goto-confirm" data-i18n="dialog.goto.confirm">Git</button>
+        <button type="button" id="goto-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
 
-
-  <!-- Zaman Koduna Git Diyaloğu -->
-  <dialog id="goto-dialog" aria-labelledby="goto-dialog-title">
-    <form method="dialog">
-      <h2 id="goto-dialog-title">Zaman Koduna Git</h2>
+  <!-- Hız Değiştirme Diyaloğu -->
+  <dialog id="speed-dialog" aria-labelledby="speed-dialog-title">
+    <div class="dialog-content-wrapper">
+      <h2 id="speed-dialog-title" data-i18n="dialog.speed.title">Seçili Alanın Hızını Değiştir</h2>
+      <p data-i18n="dialog.speed.description">Lütfen seçili alan için yeni oynatma hızını belirleyin.</p>
       <div class="form-group">
-        <label for="goto-time-input">Zaman kodu (SS:DD:SN veya saniye):</label>
-        <input type="text" id="goto-time-input" placeholder="00:00:00 veya 120" autofocus>
+        <label for="speed-multiplier" data-i18n="dialog.speed.multiplier">Hız Çarpanı (0.1 - 10.0):</label>
+        <input type="number" id="speed-multiplier" min="0.1" max="10.0" step="0.1" value="1.0">
+        <p class="hint" data-i18n="dialog.speed.hint">1.0 normal hız, 0.5 yarı hız (yavaşlatılmış), 2.0 iki kat hızdır.</p>
+      </div>
+      <div id="speed-distortion-warning" class="form-group warning-group hidden" role="alert">
+        <p><strong data-i18n="dialog.speed.warning_label">Uyarı:</strong> <span data-i18n="dialog.speed.warning_text">2x üzerindeki hızlarda ses aşırı bozulabilir.</span></p>
+      </div>
+      <div class="form-group checkbox-group">
+        <input type="checkbox" id="speed-mute-audio">
+        <label for="speed-mute-audio" data-i18n="dialog.speed.mute_audio">Sesi Kapat (Hızlı çekimler için önerilir)</label>
+      </div>
+      <div class="form-group checkbox-group">
+        <input type="checkbox" id="speed-add-bg-audio">
+        <label for="speed-add-bg-audio" data-i18n="dialog.speed.add_bg_audio">Sessiz Alana Fon Sesi Ekle</label>
+      </div>
+      <div id="speed-bg-audio-container" class="form-group hidden">
+        <button type="button" id="speed-browse-bg-audio" data-i18n="dialog.speed.browse_bg_audio">Fon Sesi Seç</button>
+        <span id="speed-bg-audio-path" style="margin-left: 10px;" data-i18n="dialog.speed.no_bg_audio">Dosya seçilmedi</span>
+        <p class="hint" data-i18n="dialog.speed.bg_audio_hint">Seçilen ses dosyası süre boyunca tekrarlanacaktır.</p>
       </div>
       <div class="dialog-buttons">
-        <button type="submit" id="goto-confirm">Git</button>
-        <button type="button" id="goto-cancel">İptal</button>
+        <button type="button" id="speed-confirm" data-i18n="dialog.speed.apply">Uygula</button>
+        <button type="button" id="speed-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
-    </form>
+    </div>
   </dialog>
 
   <!-- Aralık Seç Diyaloğu -->
   <dialog id="range-dialog" aria-labelledby="range-dialog-title">
     <form method="dialog">
-      <h2 id="range-dialog-title">Aralık Seç</h2>
+      <h2 id="range-dialog-title" data-i18n="dialog.range.title">Aralık Seç</h2>
       <div class="form-group">
-        <label for="range-start-input">Başlangıç zamanı:</label>
-        <input type="text" id="range-start-input" placeholder="00:00:00">
+        <label for="range-start-input" data-i18n="dialog.range.start">Başlangıç zamanı:</label>
+        <input type="text" id="range-start-input" placeholder="00:00:00" data-i18n-placeholder="dialog.range.time_placeholder">
       </div>
       <div class="form-group">
-        <label for="range-end-input">Bitiş zamanı:</label>
-        <input type="text" id="range-end-input" placeholder="00:00:00">
+        <label for="range-end-input" data-i18n="dialog.range.end">Bitiş zamanı:</label>
+        <input type="text" id="range-end-input" placeholder="00:00:00" data-i18n-placeholder="dialog.range.time_placeholder">
       </div>
       <div class="dialog-buttons">
-        <button type="submit" id="range-confirm">Seç</button>
-        <button type="button" id="range-cancel">İptal</button>
+        <button type="submit" id="range-confirm" data-i18n="dialog.range.confirm">Seç</button>
+        <button type="button" id="range-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -201,34 +366,34 @@
   <!-- Metin Ekle Diyaloğu -->
   <dialog id="text-dialog" aria-labelledby="text-dialog-title">
     <form method="dialog">
-      <h2 id="text-dialog-title">Metin Ekle</h2>
+      <h2 id="text-dialog-title" data-i18n="dialog.simple_text.title">Metin Ekle</h2>
       <div class="form-group">
-        <label for="text-content-input">Metin:</label>
-        <textarea id="text-content-input" rows="3" placeholder="Eklenecek metni yazın..."></textarea>
+        <label for="text-content-input" data-i18n="dialog.simple_text.content">Metin:</label>
+        <textarea id="text-content-input" rows="3" placeholder="Eklenecek metni yazın..." data-i18n-placeholder="dialog.simple_text.content_placeholder"></textarea>
       </div>
       <div class="form-group">
-        <label for="text-font-size">Yazı boyutu:</label>
+        <label for="text-font-size" data-i18n="dialog.simple_text.font_size">Yazı boyutu:</label>
         <input type="number" id="text-font-size" value="24" min="8" max="200">
       </div>
       <div class="form-group">
-        <label for="text-position">Konum:</label>
+        <label for="text-position" data-i18n="dialog.simple_text.position">Konum:</label>
         <select id="text-position">
-          <option value="top">Üst</option>
-          <option value="bottom" selected>Alt</option>
+          <option value="top" data-i18n="dialog.simple_text.position_top">Üst</option>
+          <option value="bottom" selected data-i18n="dialog.simple_text.position_bottom">Alt</option>
         </select>
       </div>
       <div class="form-group">
-        <label for="text-color">Renk:</label>
+        <label for="text-color" data-i18n="dialog.simple_text.color">Renk:</label>
         <select id="text-color">
-          <option value="white" selected>Beyaz</option>
-          <option value="black">Siyah</option>
-          <option value="yellow">Sarı</option>
-          <option value="red">Kırmızı</option>
+          <option value="white" selected data-i18n="dialog.simple_text.color_white">Beyaz</option>
+          <option value="black" data-i18n="dialog.simple_text.color_black">Siyah</option>
+          <option value="yellow" data-i18n="dialog.simple_text.color_yellow">Sarı</option>
+          <option value="red" data-i18n="dialog.simple_text.color_red">Kırmızı</option>
         </select>
       </div>
       <div class="dialog-buttons">
-        <button type="submit" id="text-confirm">Ekle</button>
-        <button type="button" id="text-cancel">İptal</button>
+        <button type="submit" id="text-confirm" data-i18n="dialog.simple_text.confirm">Ekle</button>
+        <button type="button" id="text-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -236,52 +401,52 @@
   <!-- Gelişmiş Ses Ekleme Diyaloğu -->
   <dialog id="audio-add-dialog" aria-labelledby="audio-add-dialog-title">
     <form method="dialog">
-      <h2 id="audio-add-dialog-title">Ses Ekle</h2>
+      <h2 id="audio-add-dialog-title" data-i18n="dialog.audio_add.title">Ses Ekle</h2>
 
       <!-- Ses bilgisi -->
       <div class="form-group info-group">
-        <p><strong>Seçilen Ses:</strong> <span id="audio-add-filename">-</span></p>
-        <p><strong>Ses Süresi:</strong> <span id="audio-add-duration">-</span></p>
-        <p><strong>Video Süresi:</strong> <span id="video-remaining-duration">-</span></p>
+        <p><strong data-i18n="dialog.audio_add.selected_audio">Seçilen Ses:</strong> <span id="audio-add-filename">-</span></p>
+        <p><strong data-i18n="dialog.audio_add.audio_duration">Ses Süresi:</strong> <span id="audio-add-duration">-</span></p>
+        <p><strong data-i18n="dialog.audio_add.video_duration">Video Süresi:</strong> <span id="video-remaining-duration">-</span></p>
       </div>
 
       <!-- Uyarı alanı -->
       <div id="audio-duration-warning" class="form-group warning-group hidden" role="alert">
-        <p><strong>Uyarı:</strong> Eklediğiniz ses içeriği videonuzdan daha uzun. İçerik video bittiği noktadan itibaren
-          kesilecek.</p>
+        <p><strong data-i18n="dialog.audio_add.warning_label">Uyarı:</strong> <span data-i18n="dialog.audio_add.warning_text">Eklediğiniz ses içeriği videonuzdan daha uzun. İçerik video bittiği noktadan itibaren
+          kesilecek.</span></p>
       </div>
 
       <!-- Hedef (eklenen) ses seviyesi -->
       <div class="form-group">
-        <label for="target-audio-volume">Eklenen Ses Seviyesi:</label>
+        <label for="target-audio-volume" data-i18n="dialog.audio_add.target_volume">Eklenen Ses Seviyesi:</label>
         <input type="range" id="target-audio-volume" min="0" max="200" value="100"
           aria-describedby="target-volume-hint">
         <span id="target-audio-volume-value">%100</span>
-        <p id="target-volume-hint" class="hint">Ok tuşları: ±1, Page Up/Down: ±10</p>
+        <p id="target-volume-hint" class="hint" data-i18n="dialog.audio_add.volume_hint">Ok tuşları: ±1, Page Up/Down: ±10</p>
       </div>
 
       <!-- Kaynak (video) ses seviyesi -->
       <div class="form-group">
-        <label for="source-audio-volume">Orijinal Video Ses Seviyesi:</label>
+        <label for="source-audio-volume" data-i18n="dialog.audio_add.source_volume">Orijinal Video Ses Seviyesi:</label>
         <input type="range" id="source-audio-volume" min="0" max="200" value="100"
           aria-describedby="source-volume-hint">
         <span id="source-audio-volume-value">%100</span>
-        <p id="source-volume-hint" class="hint">Ok tuşları: ±1, Page Up/Down: ±10</p>
+        <p id="source-volume-hint" class="hint" data-i18n="dialog.audio_add.volume_hint">Ok tuşları: ±1, Page Up/Down: ±10</p>
       </div>
 
       <!-- Fon olarak ayarla -->
       <div class="form-group checkbox-group">
         <input type="checkbox" id="audio-as-background">
-        <label for="audio-as-background">Fon müziği olarak ayarla (ses bittiğinde tekrar başlar)</label>
+        <label for="audio-as-background" data-i18n="dialog.audio_add.background">Fon müziği olarak ayarla (ses bittiğinde tekrar başlar)</label>
       </div>
 
       <!-- Düğmeler -->
       <div class="dialog-buttons">
-        <button type="button" id="audio-add-edit">Sesi Düzenle...</button>
-        <button type="button" id="audio-add-preview">Ön İzle (Alt+P)</button>
-        <button type="button" id="audio-add-apply">Videoya Ekle</button>
-        <button type="button" id="audio-add-to-list">Listeye Ekle</button>
-        <button type="button" id="audio-add-close">Kapat</button>
+        <button type="button" id="audio-add-edit" data-i18n="dialog.audio_add.edit">Sesi Düzenle...</button>
+        <button type="button" id="audio-add-preview" data-i18n="dialog.audio_add.preview">Ön İzle (Alt+P)</button>
+        <button type="button" id="audio-add-apply" data-i18n="dialog.audio_add.apply">Videoya Ekle</button>
+        <button type="button" id="audio-add-to-list" data-i18n="dialog.audio_add.add_to_list">Listeye Ekle</button>
+        <button type="button" id="audio-add-close" data-i18n="dialog.audio_add.close">Kapat</button>
       </div>
     </form>
   </dialog>
@@ -289,37 +454,37 @@
   <!-- Ses Düzenleme Diyaloğu -->
   <dialog id="audio-editor-dialog" aria-labelledby="audio-editor-title">
     <form method="dialog">
-      <h2 id="audio-editor-title">Ses Düzenle</h2>
+      <h2 id="audio-editor-title" data-i18n="dialog.audio_editor.title">Ses Düzenle</h2>
 
       <div class="form-group info-group">
-        <p><strong>Dosya:</strong> <span id="audio-editor-filename">-</span></p>
-        <p><strong>Toplam Süre:</strong> <span id="audio-editor-total-duration">-</span></p>
-        <p><strong>Seçili Süre:</strong> <span id="audio-editor-selected-duration">-</span></p>
+        <p><strong data-i18n="dialog.audio_editor.file">Dosya:</strong> <span id="audio-editor-filename">-</span></p>
+        <p><strong data-i18n="dialog.audio_editor.total_duration">Toplam Süre:</strong> <span id="audio-editor-total-duration">-</span></p>
+        <p><strong data-i18n="dialog.audio_editor.selected_duration">Seçili Süre:</strong> <span id="audio-editor-selected-duration">-</span></p>
       </div>
 
       <!-- Audio player -->
       <div class="form-group">
         <audio id="audio-editor-player" style="width: 100%"></audio>
-        <p id="audio-editor-position">Konum: 00:00:00.000</p>
+        <p id="audio-editor-position" data-i18n="dialog.audio_editor.position_default">Konum: 00:00:00.000</p>
       </div>
 
       <!-- Kesme kontrolleri -->
       <div class="form-group">
-        <label for="audio-trim-start">Başlangıç Noktası:</label>
-        <input type="text" id="audio-trim-start" placeholder="00:00:00" value="00:00:00">
-        <button type="button" id="audio-editor-set-start">Başlangıç Ayarla ([)</button>
+        <label for="audio-trim-start" data-i18n="dialog.audio_editor.start_point">Başlangıç Noktası:</label>
+        <input type="text" id="audio-trim-start" placeholder="00:00:00" data-i18n-placeholder="dialog.range.time_placeholder" value="00:00:00">
+        <button type="button" id="audio-editor-set-start" data-i18n="dialog.audio_editor.set_start">Başlangıç Ayarla ([)</button>
       </div>
 
       <div class="form-group">
-        <label for="audio-trim-end">Bitiş Noktası:</label>
-        <input type="text" id="audio-trim-end" placeholder="00:00:00">
-        <button type="button" id="audio-editor-set-end">Bitiş Ayarla (])</button>
+        <label for="audio-trim-end" data-i18n="dialog.audio_editor.end_point">Bitiş Noktası:</label>
+        <input type="text" id="audio-trim-end" placeholder="00:00:00" data-i18n-placeholder="dialog.range.time_placeholder">
+        <button type="button" id="audio-editor-set-end" data-i18n="dialog.audio_editor.set_end">Bitiş Ayarla (])</button>
       </div>
 
       <div class="dialog-buttons">
-        <button type="button" id="audio-editor-play">Oynat/Duraklat (Space)</button>
-        <button type="submit" id="audio-editor-confirm">Tamam</button>
-        <button type="button" id="audio-editor-cancel">İptal</button>
+        <button type="button" id="audio-editor-play" data-i18n="dialog.audio_editor.play">Oynat/Duraklat (Space)</button>
+        <button type="submit" id="audio-editor-confirm" data-i18n="dialog.audio_editor.confirm">Tamam</button>
+        <button type="button" id="audio-editor-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -328,22 +493,22 @@
   <!-- Görsel Ekleme Diyaloğu -->
   <dialog id="images-dialog" aria-labelledby="images-dialog-title">
     <form method="dialog">
-      <h2 id="images-dialog-title">Görsel(ler) Ekle</h2>
-      <p id="images-count">0 görsel seçildi</p>
+      <h2 id="images-dialog-title" data-i18n="dialog.images.title">Görsel(ler) Ekle</h2>
+      <p id="images-count" data-i18n="dialog.images.count_default">0 görsel seçildi</p>
       <div class="form-group">
-        <label for="images-duration-type">Süre belirleme:</label>
+        <label for="images-duration-type" data-i18n="dialog.images.duration_type">Süre belirleme:</label>
         <select id="images-duration-type">
-          <option value="manual">Manuel</option>
-          <option value="auto">Otomatik (kalan süreye göre)</option>
+          <option value="manual" data-i18n="dialog.images.manual">Manuel</option>
+          <option value="auto" data-i18n="dialog.images.auto">Otomatik (kalan süreye göre)</option>
         </select>
       </div>
       <div class="form-group" id="manual-duration-group">
-        <label for="images-duration">Her görsel için süre (saniye):</label>
+        <label for="images-duration" data-i18n="dialog.images.each_duration">Her görsel için süre (saniye):</label>
         <input type="number" id="images-duration" value="5" min="1" max="60">
       </div>
       <div class="dialog-buttons">
-        <button type="submit" id="images-confirm">Ekle</button>
-        <button type="button" id="images-cancel">İptal</button>
+        <button type="submit" id="images-confirm" data-i18n="dialog.images.confirm">Ekle</button>
+        <button type="button" id="images-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -351,17 +516,17 @@
   <!-- Yazı Ekleme Diyaloğu -->
   <dialog id="text-overlay-dialog" aria-labelledby="text-overlay-title">
     <form method="dialog">
-      <h2 id="text-overlay-title">Yazı Ekle</h2>
+      <h2 id="text-overlay-title" data-i18n="dialog.text_overlay.title">Yazı Ekle</h2>
 
       <!-- Metin alanı -->
       <div class="form-group">
-        <label for="text-overlay-content">Metin (Enter ile yeni satır):</label>
-        <textarea id="text-overlay-content" rows="4" placeholder="Buraya yazınızı girin..."></textarea>
+        <label for="text-overlay-content" data-i18n="dialog.text_overlay.content">Metin (Enter ile yeni satır):</label>
+        <textarea id="text-overlay-content" rows="4" data-i18n-placeholder="dialog.text_overlay.content_placeholder" placeholder="Buraya yazınızı girin..."></textarea>
       </div>
 
       <!-- Yazı tipi -->
       <div class="form-group">
-        <label for="text-overlay-font">Yazı Tipi:</label>
+        <label for="text-overlay-font" data-i18n="dialog.text_overlay.font">Yazı Tipi:</label>
         <select id="text-overlay-font">
           <option value="arial">Arial</option>
           <option value="times">Times New Roman</option>
@@ -373,106 +538,106 @@
 
       <!-- Yazı boyutu -->
       <div class="form-group">
-        <label for="text-overlay-size">Yazı Boyutu:</label>
+        <label for="text-overlay-size" data-i18n="dialog.text_overlay.size">Yazı Boyutu:</label>
         <select id="text-overlay-size">
-          <option value="24">Küçük (24px)</option>
-          <option value="32">Orta (32px)</option>
-          <option value="48" selected>Büyük (48px)</option>
-          <option value="64">Çok Büyük (64px)</option>
-          <option value="96">Dev (96px)</option>
+          <option value="24" data-i18n="dialog.text_overlay.size_small">Küçük (24px)</option>
+          <option value="32" data-i18n="dialog.text_overlay.size_medium">Orta (32px)</option>
+          <option value="48" selected data-i18n="dialog.text_overlay.size_large">Büyük (48px)</option>
+          <option value="64" data-i18n="dialog.text_overlay.size_xlarge">Çok Büyük (64px)</option>
+          <option value="96" data-i18n="dialog.text_overlay.size_huge">Dev (96px)</option>
         </select>
       </div>
 
       <!-- Yazı rengi -->
       <div class="form-group">
-        <label for="text-overlay-color">Yazı Rengi:</label>
+        <label for="text-overlay-color" data-i18n="dialog.text_overlay.color">Yazı Rengi:</label>
         <select id="text-overlay-color">
-          <option value="white">Beyaz</option>
-          <option value="black">Siyah</option>
-          <option value="yellow">Sarı</option>
-          <option value="red">Kırmızı</option>
-          <option value="green">Yeşil</option>
-          <option value="blue">Mavi</option>
+          <option value="white" data-i18n="dialog.text_overlay.color_white">Beyaz</option>
+          <option value="black" data-i18n="dialog.text_overlay.color_black">Siyah</option>
+          <option value="yellow" data-i18n="dialog.text_overlay.color_yellow">Sarı</option>
+          <option value="red" data-i18n="dialog.text_overlay.color_red">Kırmızı</option>
+          <option value="green" data-i18n="dialog.text_overlay.color_green">Yeşil</option>
+          <option value="blue" data-i18n="dialog.text_overlay.color_blue">Mavi</option>
         </select>
       </div>
 
       <!-- Arka plan rengi -->
       <div class="form-group">
-        <label for="text-overlay-bg">Arka Plan:</label>
+        <label for="text-overlay-bg" data-i18n="dialog.text_overlay.background">Arka Plan:</label>
         <select id="text-overlay-bg">
-          <option value="none">Yok (Saydam)</option>
-          <option value="black">Siyah (yarı saydam)</option>
-          <option value="white">Beyaz (yarı saydam)</option>
-          <option value="gray">Gri (yarı saydam)</option>
+          <option value="none" data-i18n="dialog.text_overlay.bg_none">Yok (Saydam)</option>
+          <option value="black" data-i18n="dialog.text_overlay.bg_black">Siyah (yarı saydam)</option>
+          <option value="white" data-i18n="dialog.text_overlay.bg_white">Beyaz (yarı saydam)</option>
+          <option value="gray" data-i18n="dialog.text_overlay.bg_gray">Gri (yarı saydam)</option>
         </select>
       </div>
 
       <!-- Konum -->
       <div class="form-group">
-        <label for="text-overlay-position">Konum:</label>
+        <label for="text-overlay-position" data-i18n="dialog.text_overlay.position">Konum:</label>
         <select id="text-overlay-position">
-          <option value="top">Üst</option>
-          <option value="center">Orta</option>
-          <option value="bottom" selected>Alt</option>
+          <option value="top" data-i18n="dialog.text_overlay.position_top">Üst</option>
+          <option value="center" data-i18n="dialog.text_overlay.position_center">Orta</option>
+          <option value="bottom" selected data-i18n="dialog.text_overlay.position_bottom">Alt</option>
         </select>
       </div>
 
       <!-- Geçiş efekti -->
       <div class="form-group">
-        <label for="text-overlay-transition">Geçiş Efekti:</label>
+        <label for="text-overlay-transition" data-i18n="dialog.text_overlay.transition">Geçiş Efekti:</label>
         <select id="text-overlay-transition">
-          <option value="none">Anında (geçiş yok)</option>
-          <option value="fade">Yavaşça belir/kaybol</option>
+          <option value="none" data-i18n="dialog.text_overlay.transition_none">Anında (geçiş yok)</option>
+          <option value="fade" data-i18n="dialog.text_overlay.transition_fade">Yavaşça belir/kaybol</option>
         </select>
       </div>
 
       <!-- Süre -->
       <div class="form-group">
-        <label for="text-overlay-duration">Ekranda Kalma Süresi (saniye):</label>
+        <label for="text-overlay-duration" data-i18n="dialog.text_overlay.duration">Ekranda Kalma Süresi (saniye):</label>
         <input type="number" id="text-overlay-duration" value="5" min="1" max="300">
       </div>
 
       <!-- Tüm video boyunca -->
       <div class="form-group checkbox-group">
         <input type="checkbox" id="text-overlay-whole-video">
-        <label for="text-overlay-whole-video">Tüm video boyunca göster</label>
+        <label for="text-overlay-whole-video" data-i18n="dialog.text_overlay.whole_video">Tüm video boyunca göster</label>
       </div>
 
       <!-- Yazıyı seslendir (TTS) -->
       <div class="form-group checkbox-group">
         <input type="checkbox" id="text-overlay-tts-enable">
-        <label for="text-overlay-tts-enable">Yazıyı seslendir (TTS)</label>
+        <label for="text-overlay-tts-enable" data-i18n="dialog.text_overlay.tts_enable">Yazıyı seslendir (TTS)</label>
       </div>
 
       <!-- TTS Ayarları (checkbox işaretlenince görünür) -->
       <div id="tts-options" style="display: none;">
         <!-- TTS Sesi -->
         <div class="form-group">
-          <label for="text-overlay-tts-voice">Seslendirme Sesi:</label>
+          <label for="text-overlay-tts-voice" data-i18n="dialog.text_overlay.tts_voice">Seslendirme Sesi:</label>
           <select id="text-overlay-tts-voice">
-            <option value="">Varsayılan</option>
+            <option value="" data-i18n="dialog.text_overlay.default">Varsayılan</option>
           </select>
         </div>
 
         <!-- Konuşma Hızı -->
         <div class="form-group">
-          <label for="text-overlay-tts-speed">Konuşma Hızı:</label>
+          <label for="text-overlay-tts-speed" data-i18n="dialog.text_overlay.tts_speed">Konuşma Hızı:</label>
           <input type="range" id="text-overlay-tts-speed" min="50" max="200" value="100"
             aria-describedby="tts-speed-hint">
           <span id="text-overlay-tts-speed-value">%100</span>
-          <p id="tts-speed-hint" class="hint">50% = çok yavaş, 100% = normal, 200% = çok hızlı</p>
+          <p id="tts-speed-hint" class="hint" data-i18n="dialog.text_overlay.tts_speed_hint">50% = çok yavaş, 100% = normal, 200% = çok hızlı</p>
         </div>
 
         <!-- Seslendirme Ses Miktarı -->
         <div class="form-group">
-          <label for="text-overlay-tts-volume">Seslendirme Ses Miktarı:</label>
+          <label for="text-overlay-tts-volume" data-i18n="dialog.text_overlay.tts_volume">Seslendirme Ses Miktarı:</label>
           <input type="range" id="text-overlay-tts-volume" min="0" max="200" value="100">
           <span id="text-overlay-tts-volume-value">%100</span>
         </div>
 
         <!-- Video Ses Miktarı -->
         <div class="form-group">
-          <label for="text-overlay-video-volume">Video Ses Miktarı:</label>
+          <label for="text-overlay-video-volume" data-i18n="dialog.text_overlay.video_volume">Video Ses Miktarı:</label>
           <input type="range" id="text-overlay-video-volume" min="0" max="200" value="100">
           <span id="text-overlay-video-volume-value">%100</span>
         </div>
@@ -480,76 +645,215 @@
 
       <!-- Düğmeler -->
       <div class="dialog-buttons">
-        <button type="button" id="text-overlay-preview">Ön İzle (Alt+P)</button>
-        <button type="submit" id="text-overlay-confirm">Tamam</button>
-        <button type="button" id="text-overlay-cancel">İptal</button>
+        <button type="button" id="text-overlay-preview" data-i18n="dialog.text_overlay.preview">Ön İzle (Alt+P)</button>
+        <button type="submit" id="text-overlay-confirm" data-i18n="dialog.text_overlay.confirm">Tamam</button>
+        <button type="button" id="text-overlay-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
 
   <!-- Klavye Kısayolları Diyaloğu -->
   <dialog id="shortcuts-dialog" aria-labelledby="shortcuts-dialog-title">
-    <h2 id="shortcuts-dialog-title">Klavye Kısayolları</h2>
+    <h2 id="shortcuts-dialog-title" data-i18n="dialog.shortcuts.title">Klavye Kısayolları</h2>
     <div class="shortcuts-content">
       <section>
-        <h3>Navigasyon</h3>
+        <h3 data-i18n="dialog.shortcuts.file">Dosya ve Proje</h3>
+        <dl>
+          <dt>Ctrl + O</dt>
+          <dd data-i18n="dialog.shortcuts.file_open">Video aç</dd>
+          <dt>Ctrl + Shift + O</dt>
+          <dd data-i18n="dialog.shortcuts.file_open_project">Proje aç</dd>
+          <dt>Ctrl + S</dt>
+          <dd data-i18n="dialog.shortcuts.file_save_export">Videoyu kaydet / dışa aktar</dd>
+          <dt>Ctrl + Shift + S</dt>
+          <dd data-i18n="dialog.shortcuts.file_save_as">Videoyu farklı kaydet</dd>
+          <dt>Ctrl + Shift + P</dt>
+          <dd data-i18n="dialog.shortcuts.file_save_project">Projeyi kaydet (.kve)</dd>
+          <dt>Ctrl + Alt + S</dt>
+          <dd data-i18n="dialog.shortcuts.file_save_selection">Seçili alanı kaydet</dd>
+          <dt>Ctrl + Shift + N</dt>
+          <dd data-i18n="dialog.shortcuts.file_new_slideshow">Yeni slayt projesi oluştur</dd>
+          <dt>Ctrl + W</dt>
+          <dd data-i18n="dialog.shortcuts.file_close">Açık dosyayı kapat</dd>
+        </dl>
+      </section>
+      <section>
+        <h3 data-i18n="dialog.shortcuts.navigation">Navigasyon</h3>
         <dl>
           <dt>→ / ←</dt>
-          <dd>İnce ayar süresine göre ileri/geri (duruyorsa ses çalar)</dd>
+          <dd data-i18n="dialog.shortcuts.nav_fine_seek">İnce ayar süresine göre ileri/geri (duruyorsa ses çalar)</dd>
           <dt>Ctrl + → / ←</dt>
-          <dd>30 saniye ileri/geri</dd>
+          <dd data-i18n="dialog.shortcuts.nav_30s">30 saniye ileri/geri</dd>
           <dt>Ctrl + Alt + → / ←</dt>
-          <dd>5 dakika ileri/geri</dd>
+          <dd data-i18n="dialog.shortcuts.nav_5m">5 dakika ileri/geri</dd>
           <dt>Ctrl + G</dt>
-          <dd>Zaman koduna git</dd>
+          <dd data-i18n="dialog.shortcuts.nav_timecode">Zaman koduna git</dd>
           <dt>Ctrl + Home / End</dt>
-          <dd>Başa/sona git</dd>
+          <dd data-i18n="dialog.shortcuts.nav_home_end">Başa/sona git</dd>
           <dt>Shift + Backspace</dt>
-          <dd>Sondan 30 saniye önce</dd>
+          <dd data-i18n="dialog.shortcuts.nav_before_end">Sondan 30 saniye önce</dd>
           <dt>Ctrl + Shift + Backspace</dt>
-          <dd>Ortaya git</dd>
+          <dd data-i18n="dialog.shortcuts.nav_middle">Ortaya git</dd>
           <dt>Ctrl + Shift + F</dt>
-          <dd>İnce Ayar (atlama süresini değiştir)</dd>
+          <dd data-i18n="dialog.shortcuts.nav_fine_tune">İnce Ayar (atlama süresini değiştir)</dd>
+          <dt>Alt + ↑ / ↓</dt>
+          <dd data-i18n="dialog.shortcuts.nav_seek_step">İleri geri sarma adımını büyüt / küçült</dd>
+          <dt>Alt + → / ←</dt>
+          <dd data-i18n="dialog.shortcuts.nav_marker_jump">Sonraki / önceki işaretçiye git</dd>
+          <dt>Ctrl + J / L</dt>
+          <dd data-i18n="dialog.shortcuts.nav_selection_bounds">Seçimin başına / sonuna git</dd>
         </dl>
       </section>
       <section>
-        <h3>Oynatma</h3>
+        <h3 data-i18n="dialog.shortcuts.playback">Oynatma</h3>
         <dl>
           <dt>Space</dt>
-          <dd>Oynat (pozisyonu hatırla) / Duraklat ve başlangıç pozisyonuna dön</dd>
+          <dd data-i18n="dialog.shortcuts.play_space">Oynat (pozisyonu hatırla) / Duraklat ve başlangıç pozisyonuna dön</dd>
           <dt>Ctrl + Space</dt>
-          <dd>Mevcut pozisyonda duraklat (başlangıca dönmez)</dd>
+          <dd data-i18n="dialog.shortcuts.play_ctrl_space">Mevcut pozisyonda duraklat (başlangıca dönmez)</dd>
           <dt>Enter</dt>
-          <dd>Mevcut pozisyonda duraklat ve imleci konumla</dd>
+          <dd data-i18n="dialog.shortcuts.play_enter">Mevcut pozisyonda duraklat ve imleci konumla</dd>
           <dt>Shift + Space</dt>
-          <dd>Seçili alanı oynat</dd>
+          <dd data-i18n="dialog.shortcuts.play_selection_shortcut">Seçili alanı oynat</dd>
           <dt>Page Down / Page Up</dt>
-          <dd>Ses ile 1 saniye ileri/geri (basılı tutunca ses duyulur)</dd>
+          <dd data-i18n="dialog.shortcuts.play_page_seek">Ses ile 1 saniye ileri/geri (basılı tutunca ses duyulur)</dd>
+          <dt>Ctrl + Shift + Space</dt>
+          <dd data-i18n="dialog.shortcuts.play_cut_preview">Kesim önizleme oynat</dd>
+          <dt>Ctrl + Shift + J</dt>
+          <dd data-i18n="dialog.shortcuts.play_skip_silence">Sessizliği atla</dd>
         </dl>
       </section>
       <section>
-        <h3>İşaretçiler</h3>
+        <h3 data-i18n="dialog.shortcuts.markers">İşaretçiler</h3>
         <dl>
           <dt>M</dt>
-          <dd>İşaretçi ekle</dd>
+          <dd data-i18n="dialog.shortcuts.marker_add">İşaretçi ekle</dd>
+          <dt>Alt + → / ←</dt>
+          <dd data-i18n="dialog.shortcuts.marker_next_prev">Sonraki / önceki işaretçiye git</dd>
         </dl>
       </section>
       <section>
-        <h3>Seçim</h3>
+        <h3 data-i18n="dialog.shortcuts.selection">Seçim</h3>
         <dl>
           <dt>Shift + → / ←</dt>
-          <dd>1 saniyelik seçim</dd>
+          <dd data-i18n="dialog.shortcuts.selection_1s">1 saniyelik seçim</dd>
           <dt>Ctrl + Shift + → / ←</dt>
-          <dd>İşaretçiler arası seçim</dd>
+          <dd data-i18n="dialog.shortcuts.selection_between_markers">İşaretçiler arası seçim</dd>
           <dt>Shift + Home / End</dt>
-          <dd>İmlecten işaretçiye seçim</dd>
+          <dd data-i18n="dialog.shortcuts.selection_to_marker">İmlecten işaretçiye seçim</dd>
           <dt>Ctrl + Shift + Home / End</dt>
-          <dd>İmlecten başa/sona seçim</dd>
+          <dd data-i18n="dialog.shortcuts.selection_to_edge">İmlecten başa/sona seçim</dd>
+          <dt>Delete</dt>
+          <dd data-i18n="dialog.shortcuts.selection_delete">Seçili alanı sil</dd>
+        </dl>
+      </section>
+      <section>
+        <h3 data-i18n="dialog.shortcuts.insert">Ekle</h3>
+        <dl>
+          <dt>Ctrl + Shift + K</dt>
+          <dd data-i18n="dialog.shortcuts.insert_cta">CTA / Overlay kütüphanesini aç</dd>
+          <dt>Ctrl + Shift + V</dt>
+          <dd data-i18n="dialog.shortcuts.insert_video_layer">Video katmanı ekle</dd>
+          <dt>Ctrl + Shift + T</dt>
+          <dd data-i18n="dialog.shortcuts.insert_transition_library">Geçiş kütüphanesini aç</dd>
+          <dt>Ctrl + T</dt>
+          <dd data-i18n="dialog.shortcuts.insert_apply_all_transitions">Tüm geçişleri videoya uygula</dd>
+          <dt>Ş</dt>
+          <dd data-i18n="dialog.shortcuts.insert_apply_default_transition">Varsayılan geçişi ekle</dd>
+          <dt>Ctrl + Shift + L</dt>
+          <dd data-i18n="dialog.shortcuts.insert_queue">Ekleme listesini aç</dd>
+          <dt>Ctrl + Shift + A</dt>
+          <dd data-i18n="dialog.shortcuts.insert_object_analysis">Nesne analizi penceresini aç</dd>
+        </dl>
+      </section>
+      <section>
+        <h3 data-i18n="dialog.shortcuts.ai_tools">Yapay Zeka</h3>
+        <dl>
+          <dt>Ctrl + Alt + V</dt>
+          <dd data-i18n="dialog.shortcuts.ai_describe_position">Bulunduğun konumu betimle</dd>
+          <dt>Ctrl + Alt + D</dt>
+          <dd data-i18n="dialog.shortcuts.ai_describe_selection">Seçimi betimle</dd>
+          <dt>Ctrl + I</dt>
+          <dd data-i18n="dialog.shortcuts.ai_smart_selection">Akıllı seçim kontrolü</dd>
+        </dl>
+      </section>
+      <section>
+        <h3 data-i18n="dialog.shortcuts.tools">Araçlar ve Pencereler</h3>
+        <dl>
+          <dt>Alt + Shift + S</dt>
+          <dd data-i18n="dialog.shortcuts.tools_audio_settings">Ses ayarları penceresini aç</dd>
+          <dt>Ctrl + Shift + H</dt>
+          <dd data-i18n="dialog.shortcuts.tools_change_speed">Seçili alanın hızını değiştir</dd>
+          <dt>Ctrl + Shift + B</dt>
+          <dd data-i18n="dialog.shortcuts.tools_silence_list">Sessiz alanları listele</dd>
+          <dt>Ctrl + Shift + R</dt>
+          <dd data-i18n="dialog.shortcuts.tools_recording_wizard">Erişilebilir kayıt sihirbazını aç</dd>
+          <dt>F1 / F2</dt>
+          <dd data-i18n="dialog.shortcuts.tools_help">Kısayollar / kullanım kılavuzu</dd>
+          <dt>Ctrl + K</dt>
+          <dd data-i18n="dialog.shortcuts.tools_keyboard_manager">Klavye kısayol yöneticisini aç</dd>
+        </dl>
+      </section>
+      <section>
+        <h3 data-i18n="dialog.shortcuts.sync_wizard">Senkron Sihirbazı</h3>
+        <dl>
+          <dt>Space / K</dt>
+          <dd data-i18n="dialog.shortcuts.sync_playback">Oynat / duraklat</dd>
+          <dt>J / L</dt>
+          <dd data-i18n="dialog.shortcuts.sync_seek">5 saniye geri / ileri</dd>
+          <dt>O</dt>
+          <dd data-i18n="dialog.shortcuts.sync_loop">Loop aç / kapat</dd>
+          <dt>Alt + → / ←</dt>
+          <dd data-i18n="dialog.shortcuts.sync_offset_10">Offseti 10 ms artır / azalt</dd>
+          <dt>Alt + Shift + → / ←</dt>
+          <dd data-i18n="dialog.shortcuts.sync_offset_100">Offseti 100 ms artır / azalt</dd>
+          <dt>Win + Ctrl + → / ←</dt>
+          <dd data-i18n="dialog.shortcuts.sync_offset_1">Offseti 1 ms artır / azalt</dd>
+          <dt>1 / 2 / 3</dt>
+          <dd data-i18n="dialog.shortcuts.sync_listening_modes">Dinleme modları arasında geçiş yap</dd>
+        </dl>
+      </section>
+      <section>
+        <h3 data-i18n="dialog.shortcuts.recording_global">Kayıt Sihirbazı Global Kısayolları</h3>
+        <dl>
+          <dt>Alt + Ctrl + R</dt>
+          <dd data-i18n="dialog.shortcuts.record_global_record">Kaydı başlat / durdur</dd>
+          <dt>Alt + Ctrl + P</dt>
+          <dd data-i18n="dialog.shortcuts.record_global_pause">Kaydı duraklat / devam ettir</dd>
+          <dt>Alt + Ctrl + M</dt>
+          <dd data-i18n="dialog.shortcuts.record_global_mic">Mikrofonu aç / kapat</dd>
+          <dt>Alt + Ctrl + H</dt>
+          <dd data-i18n="dialog.shortcuts.record_global_system_audio">Sistem sesini aç / kapat</dd>
+          <dt>Alt + Ctrl + K</dt>
+          <dd data-i18n="dialog.shortcuts.record_global_camera">Kamerayı tam ekran yap</dd>
+          <dt>Alt + Ctrl + J</dt>
+          <dd data-i18n="dialog.shortcuts.record_global_restore_layout">Önceki düzene dön</dd>
+          <dt>Alt + Ctrl + L</dt>
+          <dd data-i18n="dialog.shortcuts.record_global_hide_screen">Ekranı gizle / geri getir</dd>
+        </dl>
+      </section>
+      <section>
+        <h3 data-i18n="dialog.shortcuts.video_layer">Video Katmanı ve İnce Ayar</h3>
+        <dl>
+          <dt>Space / K</dt>
+          <dd data-i18n="dialog.shortcuts.video_layer_playback">Senkron önizleme oynat / duraklat</dd>
+          <dt>J / L</dt>
+          <dd data-i18n="dialog.shortcuts.video_layer_seek">5 saniye geri / ileri</dd>
+          <dt>O</dt>
+          <dd data-i18n="dialog.shortcuts.video_layer_loop">Loop aç / kapat</dd>
+          <dt>Alt + → / ←</dt>
+          <dd data-i18n="dialog.shortcuts.video_layer_offset_10">Ofseti 10 ms artır / azalt</dd>
+          <dt>Alt + Shift + → / ←</dt>
+          <dd data-i18n="dialog.shortcuts.video_layer_offset_100">Ofseti 100 ms artır / azalt</dd>
+          <dt>Win + Ctrl + → / ←</dt>
+          <dd data-i18n="dialog.shortcuts.video_layer_offset_1">Ofseti 1 ms artır / azalt</dd>
+          <dt>M / Delete</dt>
+          <dd data-i18n="dialog.shortcuts.video_layer_cut_mode">Kesme modunda marker koy / seçiliyi sil</dd>
         </dl>
       </section>
     </div>
     <div class="dialog-buttons">
-      <button type="button" id="shortcuts-close">Kapat</button>
+      <button type="button" id="shortcuts-close" data-i18n="dialog.common.close">Kapat</button>
     </div>
   </dialog>
 
@@ -557,14 +861,14 @@
   <dialog id="help-dialog" aria-labelledby="help-dialog-title" class="large-dialog"
     style="width: 800px; max-width: 95vw; height: 80vh;">
     <form method="dialog" style="height: 100%; display: flex; flex-direction: column;">
-      <h2 id="help-dialog-title">Kullanım Kılavuzu</h2>
+      <h2 id="help-dialog-title" data-i18n="dialog.help.title">Kullanım Kılavuzu</h2>
 
       <div class="help-container" style="flex: 1; display: flex; gap: 20px; overflow: hidden; margin-bottom: 20px;">
         <!-- Kenar Çubuğu (Konular) -->
         <aside class="help-sidebar"
           style="width: 250px; border-right: 1px solid #444; padding-right: 10px; overflow-y: auto;">
-          <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--accent-color);">Konular</h3>
-          <ul id="help-topics-list" role="listbox" aria-label="Yardım konuları" tabindex="0"
+          <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--accent-color);" data-i18n="dialog.help.topics">Konular</h3>
+          <ul id="help-topics-list" role="listbox" aria-label="Yardım konuları" data-i18n-aria="dialog.help.topics_aria" tabindex="0"
             style="list-style: none; padding: 0; margin: 0;">
             <!-- JS ile doldurulacak -->
           </ul>
@@ -574,14 +878,14 @@
         <main class="help-content" id="help-content-area" tabindex="0" role="region" aria-live="polite"
           aria-label="Konu içeriği" style="flex: 1; overflow-y: auto; padding-right: 10px;">
           <div id="help-welcome">
-            <h3>Hoş Geldiniz</h3>
-            <p>Soldaki menüden (veya yukarı/aşağı ok tuşlarıyla) bir konu seçerek detaylı bilgi alabilirsiniz.</p>
+            <h3 data-i18n="dialog.help.welcome_title">Hoş Geldiniz</h3>
+            <p data-i18n="dialog.help.welcome_text">Soldaki menüden (veya yukarı/aşağı ok tuşlarıyla) bir konu seçerek detaylı bilgi alabilirsiniz.</p>
           </div>
         </main>
       </div>
 
       <div class="dialog-buttons">
-        <button type="button" id="help-close">Kapat</button>
+        <button type="button" id="help-close" data-i18n="dialog.common.close">Kapat</button>
       </div>
     </form>
   </dialog>
@@ -589,23 +893,23 @@
   <!-- Akıllı Seçim Diyaloğu -->
   <dialog id="ai-dialog" aria-labelledby="ai-dialog-title">
     <form method="dialog">
-      <h2 id="ai-dialog-title">Akıllı Seçim Kontrolü</h2>
+      <h2 id="ai-dialog-title" data-i18n="dialog.ai.title">Akıllı Seçim Kontrolü</h2>
       <div id="ai-analysis-status">
-        <p>Seçili alan analiz ediliyor...</p>
+        <p data-i18n="dialog.ai.analyzing">Seçili alan analiz ediliyor...</p>
       </div>
       <div id="ai-result" class="hidden">
-        <h3>AI Önerisi:</h3>
+        <h3 data-i18n="dialog.ai.suggestion_title">AI Önerisi:</h3>
         <p id="ai-suggestion"></p>
         <div class="form-group">
-          <label for="ai-question">Özel soru sorun (isteğe bağlı):</label>
-          <input type="text" id="ai-question" placeholder="Örn: Bu temiz bir sahne geçişi mi?">
-          <button type="button" id="ai-ask">Sor</button>
+          <label for="ai-question" data-i18n="dialog.ai.question_label">Özel soru sorun (isteğe bağlı):</label>
+          <input type="text" id="ai-question" placeholder="Örn: Bu temiz bir sahne geçişi mi?" data-i18n-placeholder="dialog.ai.question_placeholder">
+          <button type="button" id="ai-ask" data-i18n="dialog.ai.ask">Sor</button>
         </div>
         <p id="ai-answer" class="hidden"></p>
       </div>
       <div class="dialog-buttons">
-        <button type="button" id="ai-accept" class="hidden">Öneriyi Kabul Et</button>
-        <button type="button" id="ai-reject">Reddet / Kapat</button>
+        <button type="button" id="ai-accept" class="hidden" data-i18n="dialog.ai.accept">Öneriyi Kabul Et</button>
+        <button type="button" id="ai-reject" data-i18n="dialog.ai.reject">Reddet / Kapat</button>
       </div>
     </form>
   </dialog>
@@ -613,31 +917,31 @@
   <!-- Video Özellikleri Diyaloğu -->
   <dialog id="video-properties-dialog" aria-labelledby="video-props-title">
     <form method="dialog">
-      <h2 id="video-props-title">Video Özellikleri</h2>
+      <h2 id="video-props-title" data-i18n="dialog.video_properties.title">Video Özellikleri</h2>
 
       <div class="form-group">
-        <label for="prop-resolution">Çözünürlük:</label>
+        <label for="prop-resolution" data-i18n="dialog.video_properties.resolution">Çözünürlük:</label>
         <select id="prop-resolution">
-          <option value="original">Özgün</option>
+          <option value="original" data-i18n="dialog.video_properties.original">Özgün</option>
           <option value="1920x1080">1920 x 1080 (Full HD)</option>
           <option value="1280x720">1280 x 720 (HD)</option>
           <option value="854x480">854 x 480 (SD)</option>
           <option value="640x360">640 x 360</option>
-          <option value="custom">Özel...</option>
+          <option value="custom" data-i18n="dialog.video_properties.custom">Özel...</option>
         </select>
       </div>
 
       <div id="custom-resolution-group" class="form-group hidden">
-        <label for="prop-width">Genişlik:</label>
+        <label for="prop-width" data-i18n="dialog.video_properties.width">Genişlik:</label>
         <input type="number" id="prop-width" min="128" max="7680" step="2" placeholder="1920">
-        <label for="prop-height">Yükseklik:</label>
+        <label for="prop-height" data-i18n="dialog.video_properties.height">Yükseklik:</label>
         <input type="number" id="prop-height" min="96" max="4320" step="2" placeholder="1080">
       </div>
 
       <div class="form-group">
-        <label for="prop-fps">Kare Hızı (FPS):</label>
+        <label for="prop-fps" data-i18n="dialog.video_properties.fps">Kare Hızı (FPS):</label>
         <select id="prop-fps">
-          <option value="original">Özgün</option>
+          <option value="original" data-i18n="dialog.video_properties.original">Özgün</option>
           <option value="60">60 fps</option>
           <option value="30">30 fps</option>
           <option value="25">25 fps</option>
@@ -647,9 +951,9 @@
       </div>
 
       <div class="form-group">
-        <label for="prop-codec">Video Codec:</label>
+        <label for="prop-codec" data-i18n="dialog.video_properties.codec">Video Codec:</label>
         <select id="prop-codec">
-          <option value="original">Özgün</option>
+          <option value="original" data-i18n="dialog.video_properties.original">Özgün</option>
           <option value="h264">H.264 (Yaygın)</option>
           <option value="h265">H.265 / HEVC (Verimli)</option>
           <option value="vp9">VP9 (Web)</option>
@@ -659,34 +963,34 @@
       </div>
 
       <div class="form-group">
-        <label for="prop-quality">Kalite / Bit Hızı:</label>
+        <label for="prop-quality" data-i18n="dialog.video_properties.quality">Kalite / Bit Hızı:</label>
         <select id="prop-quality-preset">
-          <option value="low">Düşük (2 Mbps)</option>
-          <option value="medium" selected>Orta (5 Mbps)</option>
-          <option value="high">Yüksek (10 Mbps)</option>
-          <option value="veryhigh">Çok Yüksek (20 Mbps)</option>
-          <option value="custom">Özel...</option>
+          <option value="low" data-i18n="dialog.video_properties.low">Düşük (2 Mbps)</option>
+          <option value="medium" selected data-i18n="dialog.video_properties.medium">Orta (5 Mbps)</option>
+          <option value="high" data-i18n="dialog.video_properties.high">Yüksek (10 Mbps)</option>
+          <option value="veryhigh" data-i18n="dialog.video_properties.veryhigh">Çok Yüksek (20 Mbps)</option>
+          <option value="custom" data-i18n="dialog.video_properties.custom">Özel...</option>
         </select>
       </div>
 
       <div id="custom-bitrate-group" class="form-group hidden">
-        <label for="prop-bitrate">Bit Hızı (Mbps):</label>
+        <label for="prop-bitrate" data-i18n="dialog.video_properties.bitrate">Bit Hızı (Mbps):</label>
         <input type="number" id="prop-bitrate" min="0.5" max="100" step="0.5" value="5">
       </div>
 
       <div class="form-group info-group">
-        <p><strong>Özgün Özellikler:</strong></p>
-        <p id="prop-original-info">Yükleniyor...</p>
+        <p><strong data-i18n="dialog.video_properties.original_props">Özgün Özellikler:</strong></p>
+        <p id="prop-original-info" data-i18n="dialog.common.loading">Yükleniyor...</p>
       </div>
 
       <div class="form-group info-group">
-        <label for="prop-estimated-size"><strong>Tahmini Dosya Boyutu:</strong></label>
+        <label for="prop-estimated-size"><strong data-i18n="dialog.video_properties.estimated_size">Tahmini Dosya Boyutu:</strong></label>
         <input type="text" id="prop-estimated-size" readonly value="-" aria-readonly="true" class="readonly-field">
       </div>
 
       <div class="dialog-buttons">
-        <button type="button" id="video-props-save">Farklı Kaydet</button>
-        <button type="button" id="video-props-cancel">İptal</button>
+        <button type="button" id="video-props-save" data-i18n="dialog.video_properties.save_as">Farklı Kaydet</button>
+        <button type="button" id="video-props-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -694,25 +998,25 @@
   <!-- Video Uyuşmazlığı Diyaloğu -->
   <dialog id="video-mismatch-dialog" aria-labelledby="mismatch-title">
     <form method="dialog">
-      <h2 id="mismatch-title">Video Özellikleri Uyuşmuyor</h2>
-      <p>Eklemek istediğiniz videonun özellikleri mevcut projeden farklı.</p>
+      <h2 id="mismatch-title" data-i18n="dialog.video_mismatch.title">Video Özellikleri Uyuşmuyor</h2>
+      <p data-i18n="dialog.video_mismatch.description">Eklemek istediğiniz videonun özellikleri mevcut projeden farklı.</p>
 
       <div class="form-group info-group">
-        <p><strong>Mevcut Proje:</strong></p>
+        <p><strong data-i18n="dialog.video_mismatch.current_project">Mevcut Proje:</strong></p>
         <p id="mismatch-source-info">-</p>
       </div>
 
       <div class="form-group info-group">
-        <p><strong>Eklenecek Video:</strong></p>
+        <p><strong data-i18n="dialog.video_mismatch.insert_video">Eklenecek Video:</strong></p>
         <p id="mismatch-insert-info">-</p>
       </div>
 
-      <p>Eklenen videoyu projenin özelliklerine dönüştürmek ister misiniz?</p>
+      <p data-i18n="dialog.video_mismatch.question">Eklenen videoyu projenin özelliklerine dönüştürmek ister misiniz?</p>
 
       <div class="dialog-buttons">
-        <button type="button" id="mismatch-convert">Dönüştür ve Ekle</button>
-        <button type="button" id="mismatch-as-is">Olduğu Gibi Ekle</button>
-        <button type="button" id="mismatch-cancel">İptal</button>
+        <button type="button" id="mismatch-convert" data-i18n="dialog.video_mismatch.convert">Dönüştür ve Ekle</button>
+        <button type="button" id="mismatch-as-is" data-i18n="dialog.video_mismatch.as_is">Olduğu Gibi Ekle</button>
+        <button type="button" id="mismatch-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -720,10 +1024,10 @@
   <!-- Ekleme Listesi Diyaloğu -->
   <dialog id="insertion-queue-dialog" aria-labelledby="insertion-queue-title">
     <form method="dialog">
-      <h2 id="insertion-queue-title">Ekleme Listesi</h2>
+      <h2 id="insertion-queue-title" data-i18n="dialog.insertion_queue.title">Ekleme Listesi</h2>
 
       <div id="insertion-queue-empty" class="form-group">
-        <p>Ekleme listesi boş. Yazı veya ses ekleyerek listeye öğe ekleyebilirsiniz.</p>
+        <p data-i18n="dialog.insertion_queue.empty">Ekleme listesi boş. Yazı veya ses ekleyerek listeye öğe ekleyebilirsiniz.</p>
       </div>
 
       <ul id="insertion-queue-list" role="listbox" aria-label="Eklenecek öğeler">
@@ -731,9 +1035,50 @@
       </ul>
 
       <div class="dialog-buttons">
-        <button type="button" id="insertion-queue-apply-all" disabled>Tümünü Videoya Ekle</button>
-        <button type="button" id="insertion-queue-clear" disabled>Listeyi Temizle</button>
-        <button type="button" id="insertion-queue-close">Kapat</button>
+        <button type="button" id="insertion-queue-apply-all" disabled data-i18n="dialog.insertion_queue.apply_all">Tümünü Videoya Ekle</button>
+        <button type="button" id="insertion-queue-clear" disabled data-i18n="dialog.insertion_queue.clear">Listeyi Temizle</button>
+        <button type="button" id="insertion-queue-close" data-i18n="dialog.common.close">Kapat</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Seçim Listesi Diyaloğu -->
+  <dialog id="selection-queue-dialog" aria-labelledby="selection-queue-title">
+    <form method="dialog">
+      <h2 id="selection-queue-title" data-i18n="dialog.selection_queue.title">Seçim Listesi</h2>
+
+      <div id="selection-queue-empty" class="form-group">
+        <p data-i18n="dialog.selection_queue.empty">Seçim listesi boş. Videoda bir alan seçip ekle menüsünden seçim listesine ekleyebilirsiniz.</p>
+      </div>
+
+      <div id="selection-queue-content" class="form-group" hidden>
+        <label for="selection-queue-list" data-i18n="dialog.selection_queue.list_label">Listelenen seçimler</label>
+        <ul id="selection-queue-list" role="listbox" tabindex="0" aria-label="Seçim listesi öğeleri"
+          data-i18n-aria="dialog.selection_queue.list_aria">
+          <!-- Dinamik olarak doldurulacak -->
+        </ul>
+      </div>
+
+      <div class="dialog-buttons">
+        <button type="button" id="selection-queue-preview" disabled
+          data-i18n="dialog.selection_queue.preview">Seçili Öğeyi Dinle/Oynat</button>
+        <button type="button" id="selection-queue-remove" disabled
+          data-i18n="dialog.selection_queue.remove">Seçili Öğeyi Sil</button>
+        <button type="button" id="selection-queue-move-up" disabled
+          data-i18n="dialog.selection_queue.move_up">Yukarı Taşı</button>
+        <button type="button" id="selection-queue-move-down" disabled
+          data-i18n="dialog.selection_queue.move_down">Aşağı Taşı</button>
+      </div>
+
+      <div class="dialog-buttons">
+        <button type="button" id="selection-queue-merge" disabled
+          data-i18n="dialog.selection_queue.merge">Tümünü Yeni Bir Klipte Birleştir</button>
+        <button type="button" id="selection-queue-vertical" disabled
+          data-i18n="dialog.selection_queue.vertical">Seçim Listesini Dikey Videoya Dönüştür</button>
+        <button type="button" id="selection-queue-clear" disabled
+          data-i18n="dialog.selection_queue.clear">Listeyi Temizle</button>
+        <button type="button" id="selection-queue-close"
+          data-i18n="dialog.common.close">Kapat</button>
       </div>
     </form>
   </dialog>
@@ -741,21 +1086,21 @@
   <!-- Sessizlik Tespiti Parametre Diyaloğu -->
   <dialog id="silence-params-dialog" aria-labelledby="silence-params-title">
     <form method="dialog">
-      <h2 id="silence-params-title">Boşlukları Listele</h2>
+      <h2 id="silence-params-title" data-i18n="dialog.silence_params.title">Boşlukları Listele</h2>
       <div class="form-group">
-        <label for="silence-min-duration">Minimum Sessizlik Süresi (ms):</label>
+        <label for="silence-min-duration" data-i18n="dialog.silence_params.min_duration">Minimum Sessizlik Süresi (ms):</label>
         <input type="number" id="silence-min-duration" value="500" min="100" step="100">
-        <p class="hint">En az bu kadar süren sessizlikler listelenir.</p>
+        <p class="hint" data-i18n="dialog.silence_params.min_duration_hint">En az bu kadar süren sessizlikler listelenir.</p>
       </div>
       <div class="form-group">
-        <label for="silence-threshold">Sessizlik Eşiği (dB):</label>
+        <label for="silence-threshold" data-i18n="dialog.silence_params.threshold">Sessizlik Eşiği (dB):</label>
         <input type="number" id="silence-threshold" value="-30" max="0" step="1">
-        <p class="hint">Bu değerden daha düşük sesler sessizlik kabul edilir. Örn: -30 (daha hassas), -20 (daha az
+        <p class="hint" data-i18n="dialog.silence_params.threshold_hint">Bu değerden daha düşük sesler sessizlik kabul edilir. Örn: -30 (daha hassas), -20 (daha az
           hassas).</p>
       </div>
       <div class="dialog-buttons">
-        <button type="submit" id="silence-params-confirm">Listele</button>
-        <button type="button" id="silence-params-cancel">İptal</button>
+        <button type="submit" id="silence-params-confirm" data-i18n="dialog.silence_params.confirm">Listele</button>
+        <button type="button" id="silence-params-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -763,33 +1108,33 @@
   <!-- Sessiz Alanlar Listesi Diyaloğu -->
   <dialog id="silence-list-dialog" aria-labelledby="silence-list-title">
     <form method="dialog">
-      <h2 id="silence-list-title">Sessiz Alanlar</h2>
-      <p id="silence-list-count">Analiz yapılıyor...</p>
+      <h2 id="silence-list-title" data-i18n="dialog.silence_list.title">Sessiz Alanlar</h2>
+      <p id="silence-list-count" data-i18n="dialog.common.analyzing">Analiz yapılıyor...</p>
 
       <div class="form-group">
-        <ul id="silence-intervals-list" role="listbox" aria-label="Sessiz alanlar listesi" tabindex="0"
+        <ul id="silence-intervals-list" role="listbox" aria-label="Sessiz alanlar listesi" data-i18n-aria="dialog.silence_list.list_aria" tabindex="0"
           style="max-height: 300px; overflow-y: auto;">
           <!-- Dinamik olarak doldurulacak -->
         </ul>
       </div>
 
       <div class="dialog-info" id="silence-totals" style="margin-bottom: 15px;">
-        <p>Toplam: <span id="silence-total-count">0</span> alan, <span id="silence-total-duration">00:00:00</span> süre
+        <p><span data-i18n="dialog.silence_list.total_prefix">Toplam:</span> <span id="silence-total-count">0</span> <span data-i18n="dialog.silence_list.total_areas">alan,</span> <span id="silence-total-duration">00:00:00</span> <span data-i18n="dialog.silence_list.total_duration">süre</span>
         </p>
       </div>
 
       <div class="form-group">
-        <label for="silence-padding-input">Atlama Payı / Tampon (milisaniye):</label>
+        <label for="silence-padding-input" data-i18n="dialog.silence_list.padding">Atlama Payı / Tampon (milisaniye):</label>
         <input type="number" id="silence-padding-input" value="100" min="0" step="50">
-        <p class="hint">Silme işlemi sırasında, iki konuşma arasına eklenecek (korunacak) boşluk miktarı.</p>
+        <p class="hint" data-i18n="dialog.silence_list.padding_hint">Silme işlemi sırasında, iki konuşma arasına eklenecek (korunacak) boşluk miktarı.</p>
       </div>
 
       <div class="dialog-buttons">
-        <button type="button" id="silence-play-selected">Seçileni Dinle (Enter)</button>
-        <button type="button" id="silence-preview-cut">Kesim Önizle (Alt+P)</button>
-        <button type="button" id="silence-delete-selected">Seçileni Sil (Del)</button>
-        <button type="button" id="silence-delete-all">Tümünü Sil</button>
-        <button type="button" id="silence-list-close">Kapat</button>
+        <button type="button" id="silence-play-selected" data-i18n="dialog.silence_list.listen_selected">Seçileni Dinle (Enter)</button>
+        <button type="button" id="silence-preview-cut" data-i18n="dialog.silence_list.preview_cut">Kesim Önizle (Alt+P)</button>
+        <button type="button" id="silence-delete-selected" data-i18n="dialog.silence_list.delete_selected">Seçileni Sil (Del)</button>
+        <button type="button" id="silence-delete-all" data-i18n="dialog.silence_list.delete_all">Tümünü Sil</button>
+        <button type="button" id="silence-list-close" data-i18n="dialog.common.close">Kapat</button>
       </div>
     </form>
   </dialog>
@@ -797,26 +1142,26 @@
   <!-- Yapay Zeka Betimleme Diyaloğu -->
   <dialog id="ai-description-dialog" aria-labelledby="ai-description-title" style="width: 500px; max-width: 90vw;">
     <form method="dialog">
-      <h2 id="ai-description-title">Seçimi AI ile Betimle</h2>
+      <h2 id="ai-description-title" data-i18n="dialog.ai_description.title">Seçimi AI ile Betimle</h2>
 
       <div id="ai-description-content" class="form-group"
         style="max-height: 400px; overflow-y: auto; background: #1a1a1a; padding: 15px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #333;"
-        tabindex="0" role="region" aria-label="Yapay zeka yanıtları">
+        tabindex="0" role="region" aria-label="Yapay zeka yanıtları" data-i18n-aria="dialog.ai_description.response_region_aria">
         <div id="ai-description-chat" aria-live="assertive">
-          <p>Yapay zeka analiz ediyor, lütfen bekleyin...</p>
+          <p data-i18n="dialog.ai_description.waiting">Yapay zeka analiz ediyor, lütfen bekleyin...</p>
         </div>
       </div>
 
       <div class="form-group" id="ai-question-group" style="display: none;">
-        <label for="ai-question-input">AI'ya soru sor:</label>
+        <label for="ai-question-input" data-i18n="dialog.ai_description.ask_label">AI'ya soru sor:</label>
         <div style="display: flex; gap: 10px;">
-          <input type="text" id="ai-question-input" placeholder="Örn: Videoda kaç kişi var?" style="flex: 1;">
-          <button type="button" id="ai-question-send">Sor</button>
+          <input type="text" id="ai-question-input" placeholder="Örn: Videoda kaç kişi var?" data-i18n-placeholder="dialog.ai_description.ask_placeholder" style="flex: 1;">
+          <button type="button" id="ai-question-send" data-i18n="dialog.ai.ask">Sor</button>
         </div>
       </div>
 
       <div class="dialog-buttons">
-        <button type="button" id="ai-description-close">Kapat</button>
+        <button type="button" id="ai-description-close" data-i18n="dialog.common.close">Kapat</button>
       </div>
     </form>
   </dialog>
@@ -825,11 +1170,18 @@
   <dialog id="accessible-confirm-dialog" aria-labelledby="accessible-confirm-title"
     aria-describedby="accessible-confirm-message">
     <form method="dialog">
-      <h2 id="accessible-confirm-title">Onay</h2>
+      <h2 id="accessible-confirm-title" data-i18n="dialog.confirm.title">Onay</h2>
       <p id="accessible-confirm-message" style="margin: 20px 0; line-height: 1.6;"></p>
+      <div id="accessible-confirm-details-group" class="form-group" hidden>
+        <label id="accessible-confirm-details-label"
+          data-i18n="dialog.confirm.details_label">Ayrıntılar</label>
+        <div id="accessible-confirm-details" class="readonly-details-box" tabindex="0" role="document"
+          aria-labelledby="accessible-confirm-details-label"></div>
+      </div>
       <div class="dialog-buttons">
-        <button type="button" id="accessible-confirm-yes">Evet</button>
-        <button type="button" id="accessible-confirm-no">Hayır</button>
+        <button type="button" id="accessible-confirm-yes" data-i18n="dialog.confirm.yes">Evet</button>
+        <button type="button" id="accessible-confirm-no" data-i18n="dialog.confirm.no">Hayır</button>
+        <button type="button" id="accessible-confirm-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -837,28 +1189,32 @@
   <!-- Gemini API Anahtarı Diyaloğu -->
   <dialog id="gemini-api-key-dialog" aria-labelledby="gemini-api-key-title">
     <form method="dialog">
-      <h2 id="gemini-api-key-title">Gemini API Anahtarı</h2>
+      <h2 id="gemini-api-key-title" data-i18n="dialog.gemini_api.title">Gemini API Anahtarı</h2>
       <div class="form-group">
-        <label for="gemini-api-key-input">API Anahtarı:</label>
-        <input type="password" id="gemini-api-key-input" placeholder="AI anahtarınızı buraya yapıştırın"
+        <label for="gemini-api-key-input" data-i18n="dialog.gemini_api.api_key">API Anahtarı:</label>
+        <input type="password" id="gemini-api-key-input" data-i18n-placeholder="dialog.gemini_api.placeholder" placeholder="AI anahtarınızı buraya yapıştırın"
           style="width: 100%; margin-bottom: 10px;">
         <div class="checkbox-group" style="margin-bottom: 15px;">
           <input type="checkbox" id="gemini-api-key-show">
-          <label for="gemini-api-key-show">Anahtarı Göster</label>
+          <label for="gemini-api-key-show" data-i18n="dialog.gemini_api.show_key">Anahtarı Göster</label>
         </div>
       </div>
       <div class="form-group">
-        <label for="gemini-model-select">Model Seçin:</label>
+        <label for="gemini-model-select" data-i18n="dialog.gemini_api.model">Model Seçin:</label>
         <select id="gemini-model-select" style="width: 100%;">
-          <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Önerilen)</option>
-          <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-          <option value="gemini-1.5-flash">Gemini 1.5 Flash (Kota Dostu)</option>
+          <option value="gemini-3.0-pro">Gemini 3.0 Pro (En Yeni & Gelişmiş - Ücretli)</option>
+          <option value="gemini-3.0-flash">Gemini 3.0 Flash (En Yeni & Hızlı - Ücretsiz)</option>
+          <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretli)</option>
+          <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Önerilen - Ücretsiz)</option>
+          <option value="gemini-1.5-pro">Gemini 1.5 Pro (Ücretli)</option>
+          <option value="gemini-1.5-flash">Gemini 1.5 Flash (Kota Dostu - Ücretsiz)</option>
         </select>
-        <p class="hint">Ücretsiz API katmanındaysanız "Gemini 1.5 Flash" modeli önerilir.</p>
+        <p class="hint" data-i18n="dialog.gemini_api.hint">Ücretsiz API katmanındaysanız "Flash" modellerini seçmeniz önerilir. "Pro" modelleri çoğunlukla
+          ücretli abonelik veya kotalama gerektirir.</p>
       </div>
       <div class="dialog-buttons">
-        <button type="submit" id="gemini-api-key-confirm">Kaydet</button>
-        <button type="button" id="gemini-api-key-cancel">İptal</button>
+        <button type="submit" id="gemini-api-key-confirm" data-i18n="dialog.common.save">Kaydet</button>
+        <button type="button" id="gemini-api-key-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -866,30 +1222,30 @@
   <!-- İnce Ayar Diyaloğu -->
   <dialog id="fine-tune-dialog" aria-labelledby="fine-tune-dialog-title">
     <form method="dialog">
-      <h2 id="fine-tune-dialog-title">İnce Ayar</h2>
+      <h2 id="fine-tune-dialog-title" data-i18n="dialog.fine_tune.title">İnce Ayar</h2>
       <div class="form-group">
-        <label for="navigation-step-input">Navigasyon Atlama Süresi:</label>
-        <p class="hint">Sağ/Sol ok tuşlarıyla kaç saniye ileri/geri gidileceğini belirler.</p>
-        <select id="navigation-step-preset" aria-label="Hazır değerler">
-          <option value="1">1 saniye (Varsayılan)</option>
-          <option value="0.5">500 milisaniye</option>
-          <option value="0.25">250 milisaniye</option>
-          <option value="0.1">100 milisaniye</option>
-          <option value="0.05">50 milisaniye</option>
-          <option value="0.01">10 milisaniye (En ince)</option>
-          <option value="custom">Özel değer...</option>
+        <label for="navigation-step-input" data-i18n="dialog.fine_tune.navigation_step">Navigasyon Atlama Süresi:</label>
+        <p class="hint" data-i18n="dialog.fine_tune.hint">Sağ/Sol ok tuşlarıyla kaç saniye ileri/geri gidileceğini belirler.</p>
+        <select id="navigation-step-preset" data-i18n-aria="dialog.fine_tune.presets_aria" aria-label="Hazır değerler">
+          <option value="1" data-i18n="dialog.fine_tune.preset_1s">1 saniye (Varsayılan)</option>
+          <option value="0.5" data-i18n="dialog.fine_tune.preset_500ms">500 milisaniye</option>
+          <option value="0.25" data-i18n="dialog.fine_tune.preset_250ms">250 milisaniye</option>
+          <option value="0.1" data-i18n="dialog.fine_tune.preset_100ms">100 milisaniye</option>
+          <option value="0.05" data-i18n="dialog.fine_tune.preset_50ms">50 milisaniye</option>
+          <option value="0.01" data-i18n="dialog.fine_tune.preset_10ms">10 milisaniye (En ince)</option>
+          <option value="custom" data-i18n="dialog.fine_tune.custom">Özel değer...</option>
         </select>
       </div>
       <div id="custom-step-container" class="form-group" style="display: none;">
-        <label for="custom-step-input">Özel Değer (milisaniye):</label>
+        <label for="custom-step-input" data-i18n="dialog.fine_tune.custom_value">Özel Değer (milisaniye):</label>
         <input type="number" id="custom-step-input" min="10" max="10000" step="10" value="100">
       </div>
       <div class="current-value">
-        <strong>Mevcut Değer:</strong> <span id="current-step-display">1 saniye</span>
+        <strong data-i18n="dialog.fine_tune.current_value">Mevcut Değer:</strong> <span id="current-step-display">1 saniye</span>
       </div>
       <div class="dialog-buttons">
-        <button type="submit" id="fine-tune-confirm">Uygula</button>
-        <button type="button" id="fine-tune-cancel">İptal</button>
+        <button type="submit" id="fine-tune-confirm" data-i18n="dialog.fine_tune.apply">Uygula</button>
+        <button type="button" id="fine-tune-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -897,46 +1253,46 @@
   <!-- Görsel Ekleme Sihirbazı -->
   <dialog id="image-wizard-dialog" aria-labelledby="image-wizard-title" class="wizard-dialog">
     <form method="dialog">
-      <h2 id="image-wizard-title">Görsel Ekleme Sihirbazı</h2>
+      <h2 id="image-wizard-title" data-i18n="dialog.image_wizard.title">Görsel Ekleme Sihirbazı</h2>
 
       <!-- Adım Göstergesi -->
       <div class="wizard-steps" aria-hidden="true">
-        <span class="step active" id="step-indicator-1">1. Tür</span>
+        <span class="step active" id="step-indicator-1" data-i18n="dialog.image_wizard.step_1">1. Tür</span>
         <span class="separator">&gt;</span>
-        <span class="step" id="step-indicator-2">2. Kaynak</span>
+        <span class="step" id="step-indicator-2" data-i18n="dialog.image_wizard.step_2">2. Kaynak</span>
         <span class="separator">&gt;</span>
-        <span class="step" id="step-indicator-3">3. Ayarlar</span>
+        <span class="step" id="step-indicator-3" data-i18n="dialog.image_wizard.step_3">3. Ayarlar</span>
         <span class="separator">&gt;</span>
-        <span class="step" id="step-indicator-4">4. Zaman</span>
+        <span class="step" id="step-indicator-4" data-i18n="dialog.image_wizard.step_4">4. Zaman</span>
       </div>
 
       <!-- Adım 1: Tür Seçimi -->
       <div id="image-wizard-step-1" class="wizard-step" role="region" aria-labelledby="step-1-title">
-        <h3 id="step-1-title" class="sr-only">Adım 1: Görsel Türü Seçimi</h3>
+        <h3 id="step-1-title" class="sr-only" data-i18n="dialog.image_wizard.step_1_title">Adım 1: Görsel Türü Seçimi</h3>
         <fieldset class="radio-group-vertical">
-          <legend>Eklemek istediğiniz görsel türünü seçin:</legend>
+          <legend data-i18n="dialog.image_wizard.type_legend">Eklemek istediğiniz görsel türünü seçin:</legend>
 
           <label class="radio-option">
             <input type="radio" name="image-type" value="watermark" checked>
             <span class="option-content">
-              <strong>Filigran / Logo</strong>
-              <span class="description">Köşede duran, genellikle yarı saydam logo veya yazı.</span>
+              <strong data-i18n="dialog.image_wizard.type_watermark">Filigran / Logo</strong>
+              <span class="description" data-i18n="dialog.image_wizard.type_watermark_desc">Köşede duran, genellikle yarı saydam logo veya yazı.</span>
             </span>
           </label>
 
           <label class="radio-option">
             <input type="radio" name="image-type" value="overlay">
             <span class="option-content">
-              <strong>Serbest Görsel / Çıkartma</strong>
-              <span class="description">Ekranda istediğiniz yere koyabileceğiniz resim.</span>
+              <strong data-i18n="dialog.image_wizard.type_overlay">Serbest Görsel / Çıkartma</strong>
+              <span class="description" data-i18n="dialog.image_wizard.type_overlay_desc">Ekranda istediğiniz yere koyabileceğiniz resim.</span>
             </span>
           </label>
 
           <label class="radio-option">
             <input type="radio" name="image-type" value="background">
             <span class="option-content">
-              <strong>Arka Plan Görseli</strong>
-              <span class="description">Videonun arkasına (altına) yerleşir.</span>
+              <strong data-i18n="dialog.image_wizard.type_background">Arka Plan Görseli</strong>
+              <span class="description" data-i18n="dialog.image_wizard.type_background_desc">Videonun arkasına (altına) yerleşir.</span>
             </span>
           </label>
         </fieldset>
@@ -944,74 +1300,75 @@
 
       <!-- Adım 2: Kaynak Seçimi -->
       <div id="image-wizard-step-2" class="wizard-step hidden" role="region" aria-labelledby="step-2-title">
-        <h3 id="step-2-title" class="sr-only">Adım 2: Görsel Kaynağı</h3>
+        <h3 id="step-2-title" class="sr-only" data-i18n="dialog.image_wizard.step_2_title">Adım 2: Görsel Kaynağı</h3>
 
         <fieldset class="radio-group-vertical" id="source-type-selection">
-          <legend>Görsel kaynağını seçin:</legend>
+          <legend data-i18n="dialog.image_wizard.source_legend">Görsel kaynağını seçin:</legend>
 
           <label class="radio-option">
             <input type="radio" name="image-source-type" value="file" checked>
             <span class="option-content">
-              <strong>Bilgisayardan Dosya Seç</strong>
-              <span class="description">PNG, JPG, BMP formatları.</span>
+              <strong data-i18n="dialog.image_wizard.source_file">Bilgisayardan Dosya Seç</strong>
+              <span class="description" data-i18n="dialog.image_wizard.source_file_desc">PNG, JPG, BMP formatları.</span>
             </span>
           </label>
 
           <label class="radio-option" id="source-option-text">
             <input type="radio" name="image-source-type" value="text">
             <span class="option-content">
-              <strong>Yazıdan Oluştur</strong>
-              <span class="description">Yazdığınız metni görsele çevirir (Erişilebilir).</span>
+              <strong data-i18n="dialog.image_wizard.source_text">Yazıdan Oluştur</strong>
+              <span class="description" data-i18n="dialog.image_wizard.source_text_desc">Yazdığınız metni görsele çevirir (Erişilebilir).</span>
             </span>
           </label>
 
           <label class="radio-option hidden" id="source-option-library">
             <input type="radio" name="image-source-type" value="library">
             <span class="option-content">
-              <strong>Kütüphaneden Seç</strong>
-              <span class="description">Hazır arka planlar.</span>
+              <strong data-i18n="dialog.image_wizard.source_library">Kütüphaneden Seç</strong>
+              <span class="description" data-i18n="dialog.image_wizard.source_library_desc">Hazır arka planlar.</span>
             </span>
           </label>
         </fieldset>
 
         <!-- Dosya Seçimi Detayı -->
         <div id="source-detail-file" class="source-detail">
-          <button type="button" id="btn-select-image-file">Dosya Gözat...</button>
-          <span id="selected-image-filename" class="file-status">Dosya seçilmedi</span>
+          <button type="button" id="btn-select-image-file" data-i18n="dialog.image_wizard.browse_file">Dosya Gözat...</button>
+          <span id="selected-image-filename" class="file-status" data-i18n="dialog.image_wizard.no_file_selected">Dosya seçilmedi</span>
         </div>
 
         <!-- Yazı Oluşturma Detayı -->
         <div id="source-detail-text" class="source-detail hidden">
           <div class="form-group">
-            <label for="img-text-content">Metin:</label>
+            <label for="img-text-content" data-i18n="dialog.image_wizard.text_content">Metin:</label>
             <textarea id="img-text-content" rows="3"
+              data-i18n-placeholder="dialog.image_wizard.text_content_placeholder"
               placeholder="Eklenecek yazıyı girin (Enter ile alt satıra geçebilirsiniz)"></textarea>
           </div>
           <div class="form-group two-col">
             <div>
-              <label for="img-text-font">Yazı Tipi:</label>
+              <label for="img-text-font" data-i18n="dialog.image_wizard.text_font">Yazı Tipi:</label>
               <select id="img-text-font">
-                <option value="arial">Arial</option>
-                <option value="verdana">Verdana</option>
-                <option value="times">Times New Roman</option>
+                <option value="arial" data-i18n="dialog.image_wizard.font_arial">Arial</option>
+                <option value="verdana" data-i18n="dialog.image_wizard.font_verdana">Verdana</option>
+                <option value="times" data-i18n="dialog.image_wizard.font_times">Times New Roman</option>
               </select>
             </div>
             <div>
-              <label for="img-text-color">Renk:</label>
+              <label for="img-text-color" data-i18n="dialog.image_wizard.text_color">Renk:</label>
               <select id="img-text-color">
-                <option value="white">Beyaz</option>
-                <option value="black">Siyah</option>
-                <option value="yellow">Sarı</option>
-                <option value="red">Kırmızı</option>
+                <option value="white" data-i18n="dialog.text_overlay.color_white">Beyaz</option>
+                <option value="black" data-i18n="dialog.text_overlay.color_black">Siyah</option>
+                <option value="yellow" data-i18n="dialog.text_overlay.color_yellow">Sarı</option>
+                <option value="red" data-i18n="dialog.text_overlay.color_red">Kırmızı</option>
               </select>
             </div>
           </div>
           <div class="form-group">
-            <label for="img-text-bg-color">Arka Plan:</label>
+            <label for="img-text-bg-color" data-i18n="dialog.image_wizard.text_background">Arka Plan:</label>
             <select id="img-text-bg-color">
-              <option value="transparent">Saydam</option>
-              <option value="black">Siyah (Kutu)</option>
-              <option value="white">Beyaz (Kutu)</option>
+              <option value="transparent" data-i18n="dialog.image_wizard.bg_transparent">Saydam</option>
+              <option value="black" data-i18n="dialog.image_wizard.bg_black_box">Siyah (Kutu)</option>
+              <option value="white" data-i18n="dialog.image_wizard.bg_white_box">Beyaz (Kutu)</option>
             </select>
           </div>
         </div>
@@ -1019,47 +1376,46 @@
 
       <!-- Adım 3: Konum ve Ayarlar -->
       <div id="image-wizard-step-3" class="wizard-step hidden" role="region" aria-labelledby="step-3-title">
-        <h3 id="step-3-title" class="sr-only">Adım 3: Konum ve Boyut</h3>
+        <h3 id="step-3-title" class="sr-only" data-i18n="dialog.image_wizard.step_3_title">Adım 3: Konum ve Boyut</h3>
 
         <div class="form-group info-group">
-          <p><strong>İpucu:</strong> "Sesli Konumlandırma Modu"nu başlatarak ok tuşlarıyla görseli hareket
-            ettirebilirsiniz.</p>
+          <p><strong data-i18n="dialog.image_wizard.tip_label">İpucu:</strong> <span data-i18n="dialog.image_wizard.tip_text">"Sesli Konumlandırma Modu"nu başlatarak ok tuşlarıyla görseli hareket ettirebilirsiniz.</span></p>
         </div>
 
         <div class="form-group two-col">
           <div>
-            <label for="img-pos-x">X Konumu (px):</label>
+            <label for="img-pos-x" data-i18n="dialog.image_wizard.pos_x">X Konumu (px):</label>
             <input type="number" id="img-pos-x" value="10">
           </div>
           <div>
-            <label for="img-pos-y">Y Konumu (px):</label>
+            <label for="img-pos-y" data-i18n="dialog.image_wizard.pos_y">Y Konumu (px):</label>
             <input type="number" id="img-pos-y" value="10">
           </div>
         </div>
 
         <div class="form-group two-col">
           <div>
-            <label for="img-width">Genişlik (px, -1=oto):</label>
+            <label for="img-width" data-i18n="dialog.image_wizard.width">Genişlik (px, -1=oto):</label>
             <input type="number" id="img-width" value="-1">
           </div>
           <div>
-            <label for="img-height">Yükseklik (px, -1=oto):</label>
+            <label for="img-height" data-i18n="dialog.image_wizard.height">Yükseklik (px, -1=oto):</label>
             <input type="number" id="img-height" value="-1">
           </div>
         </div>
 
         <div class="form-group">
-          <label for="img-opacity">Görünürlük (Opaklık):</label>
+          <label for="img-opacity" data-i18n="dialog.image_wizard.opacity">Görünürlük (Opaklık):</label>
           <input type="range" id="img-opacity" min="0" max="1" step="0.1" value="1">
           <span id="img-opacity-val">%100</span>
         </div>
 
         <div class="action-buttons-group">
           <button type="button" id="btn-voice-positioning" class="action-button primary-action">
-            <span class="icon">🔊</span> Sesli Konumlandırma Modunu Başlat
+            <span class="icon">🔊</span> <span data-i18n="dialog.image_wizard.voice_positioning">Sesli Konumlandırma Modunu Başlat</span>
           </button>
           <button type="button" id="btn-ask-ai-pos" class="action-button">
-            Yapay Zekadan Görüş Al
+            <span data-i18n="dialog.image_wizard.ask_ai">Yapay Zekadan Görüş Al</span>
           </button>
         </div>
         <div id="ai-pos-feedback" class="feedback-box hidden" aria-live="polite"></div>
@@ -1067,18 +1423,18 @@
 
       <!-- Adım 4: Zamanlama -->
       <div id="image-wizard-step-4" class="wizard-step hidden" role="region" aria-labelledby="step-4-title">
-        <h3 id="step-4-title" class="sr-only">Adım 4: Zamanlama</h3>
+        <h3 id="step-4-title" class="sr-only" data-i18n="dialog.image_wizard.step_4_title">Adım 4: Zamanlama</h3>
 
         <div class="form-group">
           <fieldset class="radio-group-vertical">
-            <legend>Süre ayarı:</legend>
+            <legend data-i18n="dialog.image_wizard.duration_legend">Süre ayarı:</legend>
             <label class="radio-option">
               <input type="radio" name="img-duration-mode" value="whole" checked>
-              <span>Tüm Video Boyunca</span>
+              <span data-i18n="dialog.image_wizard.duration_whole">Tüm Video Boyunca</span>
             </label>
             <label class="radio-option">
               <input type="radio" name="img-duration-mode" value="manual">
-              <span>Belirli Bir Aralıkta</span>
+              <span data-i18n="dialog.image_wizard.duration_manual">Belirli Bir Aralıkta</span>
             </label>
           </fieldset>
         </div>
@@ -1086,14 +1442,14 @@
         <div id="img-timing-manual" class="hidden">
           <div class="form-group two-col">
             <div>
-              <label for="img-start-time">Başlangıç (sn):</label>
+              <label for="img-start-time" data-i18n="dialog.image_wizard.start_time">Başlangıç (sn):</label>
               <input type="number" id="img-start-time" step="0.1" min="0">
-              <button type="button" id="btn-img-start-current" class="small-btn">Şu an</button>
+              <button type="button" id="btn-img-start-current" class="small-btn" data-i18n="dialog.image_wizard.now">Şu an</button>
             </div>
             <div>
-              <label for="img-end-time">Bitiş (sn):</label>
+              <label for="img-end-time" data-i18n="dialog.image_wizard.end_time">Bitiş (sn):</label>
               <input type="number" id="img-end-time" step="0.1" min="0">
-              <button type="button" id="btn-img-end-current" class="small-btn">Şu an</button>
+              <button type="button" id="btn-img-end-current" class="small-btn" data-i18n="dialog.image_wizard.now">Şu an</button>
             </div>
           </div>
         </div>
@@ -1101,11 +1457,11 @@
 
       <!-- Navigasyon Butonları -->
       <div class="dialog-buttons wizard-buttons">
-        <button type="button" id="wizard-back" disabled>Geri</button>
-        <button type="button" id="wizard-next">İleri</button>
-        <button type="button" id="wizard-finish" class="hidden">Tamamla</button>
-        <button type="button" id="wizard-add-to-queue" class="hidden">Listeye Ekle</button>
-        <button type="button" id="wizard-cancel">İptal</button>
+        <button type="button" id="wizard-back" disabled data-i18n="dialog.image_wizard.back">Geri</button>
+        <button type="button" id="wizard-next" data-i18n="dialog.image_wizard.next">İleri</button>
+        <button type="button" id="wizard-finish" class="hidden" data-i18n="dialog.image_wizard.finish">Tamamla</button>
+        <button type="button" id="wizard-add-to-queue" class="hidden" data-i18n="dialog.image_wizard.add_to_queue">Listeye Ekle</button>
+        <button type="button" id="wizard-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
 
@@ -1114,38 +1470,38 @@
   <!-- Video Katmanı Sihirbazı (Picture-in-Picture) -->
   <dialog id="video-layer-wizard-dialog" aria-labelledby="video-layer-wizard-title" class="wizard-dialog">
     <form method="dialog">
-      <h2 id="video-layer-wizard-title">Video Katmanı Ekle (Picture-in-Picture)</h2>
+      <h2 id="video-layer-wizard-title" data-i18n="dialog.video_layer_wizard.title">Video Katmanı Ekle (Picture-in-Picture)</h2>
 
       <!-- Adım Göstergesi -->
       <div class="wizard-steps" aria-hidden="true">
-        <span class="step active" id="vl-step-indicator-1">1. Mod</span>
+        <span class="step active" id="vl-step-indicator-1" data-i18n="dialog.video_layer_wizard.step_indicator_1">1. Mod</span>
         <span class="separator">&gt;</span>
-        <span class="step" id="vl-step-indicator-2">2. Konum & Boyut</span>
+        <span class="step" id="vl-step-indicator-2" data-i18n="dialog.video_layer_wizard.step_indicator_2">2. Konum & Boyut</span>
         <span class="separator">&gt;</span>
-        <span class="step" id="vl-step-indicator-3">3. Ses</span>
+        <span class="step" id="vl-step-indicator-3" data-i18n="dialog.video_layer_wizard.step_indicator_3">3. Ses</span>
         <span class="separator">&gt;</span>
-        <span class="step" id="vl-step-indicator-4">4. Senkron</span>
+        <span class="step" id="vl-step-indicator-4" data-i18n="dialog.video_layer_wizard.step_indicator_4">4. Senkron</span>
         <span class="separator">&gt;</span>
-        <span class="step" id="vl-step-indicator-5">5. Zamanlama</span>
+        <span class="step" id="vl-step-indicator-5" data-i18n="dialog.video_layer_wizard.step_indicator_5">5. Zamanlama</span>
       </div>
 
       <!-- Adım 1: Mod Seçimi (Şablon) -->
       <div id="vl-wizard-step-1" class="wizard-step" role="region" aria-labelledby="vl-step-1-title">
-        <h3 id="vl-step-1-title" class="sr-only">Adım 1: Yerleşim Modu Seçimi</h3>
+        <h3 id="vl-step-1-title" class="sr-only" data-i18n="dialog.video_layer_wizard.step_1_title">Adım 1: Yerleşim Modu Seçimi</h3>
 
         <div class="form-group info-group">
-          <p><strong>Seçilen Video:</strong> <span id="vl-selected-filename">-</span></p>
-          <p><strong>Video Süresi:</strong> <span id="vl-layer-duration">-</span></p>
+          <p><strong data-i18n="dialog.video_layer_wizard.selected_video">Seçilen Video:</strong> <span id="vl-selected-filename">-</span></p>
+          <p><strong data-i18n="dialog.video_layer_wizard.video_duration">Video Süresi:</strong> <span id="vl-layer-duration">-</span></p>
         </div>
 
         <fieldset class="radio-group-vertical">
-          <legend>Hazır yerleşim modunu seçin:</legend>
+          <legend data-i18n="dialog.video_layer_wizard.mode_legend">Hazır yerleşim modunu seçin:</legend>
 
           <label class="radio-option">
             <input type="radio" name="vl-mode" value="sign-language" checked>
             <span class="option-content">
-              <strong>İşaret Dili (Türkiye Standardı)</strong>
-              <span class="description">Sağ alt köşe, %12.5 boyut (8'de bir), ses kapalı. İşaret dili tercümanı için
+              <strong data-i18n="dialog.video_layer_wizard.mode_sign_language">İşaret Dili (Türkiye Standardı)</strong>
+              <span class="description" data-i18n="dialog.video_layer_wizard.mode_sign_language_desc">Sağ alt köşe, %12.5 boyut (8'de bir), ses kapalı. İşaret dili tercümanı için
                 ideal.</span>
             </span>
           </label>
@@ -1153,24 +1509,24 @@
           <label class="radio-option">
             <input type="radio" name="vl-mode" value="split-screen">
             <span class="option-content">
-              <strong>Sunucu + İçerik (Split Screen)</strong>
-              <span class="description">Ekran %50/%50 bölünür. Sol: sunucu, sağ: ana video.</span>
+              <strong data-i18n="dialog.video_layer_wizard.mode_split_screen">Sunucu + İçerik (Split Screen)</strong>
+              <span class="description" data-i18n="dialog.video_layer_wizard.mode_split_screen_desc">Ekran %50/%50 bölünür. Sol: sunucu, sağ: ana video.</span>
             </span>
           </label>
 
           <label class="radio-option">
             <input type="radio" name="vl-mode" value="camera-corner">
             <span class="option-content">
-              <strong>Kamera Köşede</strong>
-              <span class="description">Sağ üst köşe, %15 boyut. Reaction veya anlatım videoları için.</span>
+              <strong data-i18n="dialog.video_layer_wizard.mode_camera_corner">Kamera Köşede</strong>
+              <span class="description" data-i18n="dialog.video_layer_wizard.mode_camera_corner_desc">Sağ üst köşe, %15 boyut. Reaction veya anlatım videoları için.</span>
             </span>
           </label>
 
           <label class="radio-option">
             <input type="radio" name="vl-mode" value="custom">
             <span class="option-content">
-              <strong>Serbest Yerleşim</strong>
-              <span class="description">Konum ve boyutu kendiniz belirleyin.</span>
+              <strong data-i18n="dialog.video_layer_wizard.mode_custom">Serbest Yerleşim</strong>
+              <span class="description" data-i18n="dialog.video_layer_wizard.mode_custom_desc">Konum ve boyutu kendiniz belirleyin.</span>
             </span>
           </label>
         </fieldset>
@@ -1178,22 +1534,22 @@
 
       <!-- Adım 2: Konum ve Boyut -->
       <div id="vl-wizard-step-2" class="wizard-step hidden" role="region" aria-labelledby="vl-step-2-title">
-        <h3 id="vl-step-2-title" class="sr-only">Adım 2: Konum ve Boyut Ayarları</h3>
+        <h3 id="vl-step-2-title" class="sr-only" data-i18n="dialog.video_layer_wizard.step_2_title">Adım 2: Konum ve Boyut Ayarları</h3>
 
         <!-- Konum Seçimi -->
         <div class="form-group">
-          <label for="vl-position-preset">Konum:</label>
+          <label for="vl-position-preset" data-i18n="dialog.video_layer_wizard.position">Konum:</label>
           <select id="vl-position-preset">
-            <option value="top-left">Sol Üst</option>
-            <option value="top-center">Üst Orta</option>
-            <option value="top-right">Sağ Üst</option>
-            <option value="center-left">Sol Orta</option>
-            <option value="center">Merkez</option>
-            <option value="center-right">Sağ Orta</option>
-            <option value="bottom-left">Sol Alt</option>
-            <option value="bottom-center">Alt Orta</option>
-            <option value="bottom-right" selected>Sağ Alt</option>
-            <option value="custom">Özel (Manuel)</option>
+            <option value="top-left" data-i18n="dialog.video_layer_wizard.position_top_left">Sol Üst</option>
+            <option value="top-center" data-i18n="dialog.video_layer_wizard.position_top_center">Üst Orta</option>
+            <option value="top-right" data-i18n="dialog.video_layer_wizard.position_top_right">Sağ Üst</option>
+            <option value="center-left" data-i18n="dialog.video_layer_wizard.position_center_left">Sol Orta</option>
+            <option value="center" data-i18n="dialog.video_layer_wizard.position_center">Merkez</option>
+            <option value="center-right" data-i18n="dialog.video_layer_wizard.position_center_right">Sağ Orta</option>
+            <option value="bottom-left" data-i18n="dialog.video_layer_wizard.position_bottom_left">Sol Alt</option>
+            <option value="bottom-center" data-i18n="dialog.video_layer_wizard.position_bottom_center">Alt Orta</option>
+            <option value="bottom-right" selected data-i18n="dialog.video_layer_wizard.position_bottom_right">Sağ Alt</option>
+            <option value="custom" data-i18n="dialog.video_layer_wizard.position_custom">Özel (Manuel)</option>
           </select>
         </div>
 
@@ -1204,11 +1560,11 @@
         <div id="vl-manual-position" class="hidden">
           <div class="form-group two-col">
             <div>
-              <label for="vl-pos-x">X Konumu (piksel):</label>
+              <label for="vl-pos-x" data-i18n="dialog.video_layer_wizard.position_x">X Konumu (piksel):</label>
               <input type="number" id="vl-pos-x" value="0" min="0">
             </div>
             <div>
-              <label for="vl-pos-y">Y Konumu (piksel):</label>
+              <label for="vl-pos-y" data-i18n="dialog.video_layer_wizard.position_y">Y Konumu (piksel):</label>
               <input type="number" id="vl-pos-y" value="0" min="0">
             </div>
           </div>
@@ -1217,23 +1573,23 @@
         <!-- Boyut Ayarları -->
         <div class="form-group two-col">
           <div>
-            <label for="vl-width">Genişlik (piksel):</label>
+            <label for="vl-width" data-i18n="dialog.video_layer_wizard.width">Genişlik (piksel):</label>
             <input type="number" id="vl-width" value="480" min="50">
           </div>
           <div>
-            <label for="vl-height">Yükseklik (piksel):</label>
+            <label for="vl-height" data-i18n="dialog.video_layer_wizard.height">Yükseklik (piksel):</label>
             <input type="number" id="vl-height" value="270" min="50">
           </div>
         </div>
 
         <div class="form-group checkbox-group">
           <input type="checkbox" id="vl-keep-aspect" checked>
-          <label for="vl-keep-aspect">Oranı koru (en-boy oranı sabit kalsın)</label>
+          <label for="vl-keep-aspect" data-i18n="dialog.video_layer_wizard.keep_aspect">Oranı koru (en-boy oranı sabit kalsın)</label>
         </div>
 
         <!-- Boyut Yüzdesi -->
         <div class="form-group">
-          <label for="vl-size-percent">Boyut Yüzdesi:</label>
+          <label for="vl-size-percent" data-i18n="dialog.video_layer_wizard.size_percent">Boyut Yüzdesi:</label>
           <input type="range" id="vl-size-percent" min="5" max="100" value="12.5" step="0.5">
           <span id="vl-size-percent-value">%12.5</span>
         </div>
@@ -1241,7 +1597,7 @@
         <!-- AI Öneri -->
         <div class="action-buttons-group">
           <button type="button" id="btn-vl-ai-suggest" class="action-button">
-            <span class="icon">🤖</span> AI ile Konum Öner
+            <span class="icon">🤖</span> <span data-i18n="dialog.video_layer_wizard.ai_suggest">AI ile Konum Öner</span>
           </button>
         </div>
         <div id="vl-ai-feedback" class="feedback-box hidden" aria-live="polite"></div>
@@ -1249,46 +1605,47 @@
 
       <!-- Adım 3: Ses Kontrol -->
       <div id="vl-wizard-step-3" class="wizard-step hidden" role="region" aria-labelledby="vl-step-3-title">
-        <h3 id="vl-step-3-title" class="sr-only">Adım 3: Ses Kontrolü</h3>
+        <h3 id="vl-step-3-title" class="sr-only" data-i18n="dialog.video_layer_wizard.step_3_title">Adım 3: Ses Kontrolü</h3>
 
         <div class="form-group info-group">
-          <p><strong>İpucu:</strong> Her video katmanı için ayrı ses yönetimi yapabilirsiniz. Önizleme için Alt+P tuşuna
+          <p><strong data-i18n="dialog.video_layer_wizard.tip">İpucu:</strong> <span data-i18n="dialog.video_layer_wizard.audio_tip">Her video katmanı için ayrı ses yönetimi yapabilirsiniz. Önizleme için Alt+P tuşuna
             basın.</p>
+          </span>
         </div>
 
         <!-- Katman Videosu Ses Durumu -->
         <div class="form-group">
-          <label for="vl-layer-mute">Katman Videosu Sesi:</label>
+          <label for="vl-layer-mute" data-i18n="dialog.video_layer_wizard.layer_audio">Katman Videosu Sesi:</label>
           <select id="vl-layer-mute">
-            <option value="mute" selected>Sesi Kapat</option>
-            <option value="unmute">Sesi Aç</option>
+            <option value="mute" selected data-i18n="dialog.video_layer_wizard.audio_off">Sesi Kapat</option>
+            <option value="unmute" data-i18n="dialog.video_layer_wizard.audio_on">Sesi Aç</option>
           </select>
         </div>
 
         <!-- Katman Ses Seviyesi -->
         <div class="form-group" id="vl-layer-volume-group">
-          <label for="vl-layer-volume">Katman Videosu Ses Seviyesi:</label>
+          <label for="vl-layer-volume" data-i18n="dialog.video_layer_wizard.layer_volume">Katman Videosu Ses Seviyesi:</label>
           <input type="range" id="vl-layer-volume" min="0" max="200" value="100"
             aria-describedby="vl-layer-volume-hint">
           <span id="vl-layer-volume-value">%100</span>
-          <p id="vl-layer-volume-hint" class="hint">Ok tuşları: ±1, Page Up/Down: ±10</p>
+          <p id="vl-layer-volume-hint" class="hint" data-i18n="dialog.video_layer_wizard.volume_hint">Ok tuşları: ±1, Page Up/Down: ±10</p>
         </div>
 
         <!-- Ana Video Ses Seviyesi -->
         <div class="form-group">
-          <label for="vl-main-volume">Ana Video Ses Seviyesi:</label>
+          <label for="vl-main-volume" data-i18n="dialog.video_layer_wizard.main_volume">Ana Video Ses Seviyesi:</label>
           <input type="range" id="vl-main-volume" min="0" max="200" value="100" aria-describedby="vl-main-volume-hint">
           <span id="vl-main-volume-value">%100</span>
-          <p id="vl-main-volume-hint" class="hint">Ok tuşları: ±1, Page Up/Down: ±10</p>
+          <p id="vl-main-volume-hint" class="hint" data-i18n="dialog.video_layer_wizard.volume_hint">Ok tuşları: ±1, Page Up/Down: ±10</p>
         </div>
 
         <!-- Önizleme -->
         <div class="action-buttons-group">
           <button type="button" id="btn-vl-audio-preview" class="action-button primary-action">
-            <span class="icon">🔊</span> Ses Önizleme (Alt+P)
+            <span class="icon">🔊</span> <span data-i18n="dialog.video_layer_wizard.audio_preview">Ses Önizleme (Alt+P)</span>
           </button>
           <button type="button" id="btn-vl-preview" class="action-button">
-            <span class="icon">👁</span> Konum Bilgisi
+            <span class="icon">👁</span> <span data-i18n="dialog.video_layer_wizard.position_preview">Konum Bilgisi</span>
           </button>
         </div>
         <div id="vl-audio-preview-status" class="feedback-box hidden" aria-live="polite"></div>
@@ -1296,12 +1653,12 @@
 
       <!-- Adım 4: Senkronizasyon (İnce Ayar) -->
       <div id="vl-wizard-step-4" class="wizard-step hidden" role="region" aria-labelledby="vl-step-4-title">
-        <h3 id="vl-step-4-title" class="sr-only">Adım 4: Senkronizasyon İnce Ayarı</h3>
+        <h3 id="vl-step-4-title" class="sr-only" data-i18n="dialog.video_layer_wizard.step_4_title">Adım 4: Senkronizasyon İnce Ayarı</h3>
 
         <div class="form-group info-group">
-          <p><strong>İnce Ayar Motoru:</strong> İşaret dili videosu ile ana videonun dudak hareketlerini senkronize
-            edin.</p>
-          <p class="hint">Ana video sesi sol kulaklıktan, katman video sesi sağ kulaklıktan gelir. Offset değerini
+          <p><strong data-i18n="dialog.video_layer_wizard.sync_engine">İnce Ayar Motoru:</strong> <span data-i18n="dialog.video_layer_wizard.sync_engine_desc">İşaret dili videosu ile ana videonun dudak hareketlerini senkronize
+            edin.</span></p>
+          <p class="hint" data-i18n="dialog.video_layer_wizard.sync_hint">Ana video sesi sol kulaklıktan, katman video sesi sağ kulaklıktan gelir. Offset değerini
             değiştirerek tam senkronu yakalayın.</p>
         </div>
 
@@ -1321,117 +1678,117 @@
         <!-- Oynatma Kontrolleri -->
         <div class="action-buttons-group">
           <button type="button" id="btn-vl-sync-play" class="action-button primary-action">
-            <span class="icon">▶</span> Oynat (Space/K)
+            <span class="icon">▶</span> <span data-i18n="dialog.video_layer_wizard.sync_play">Oynat (Space/K)</span>
           </button>
           <button type="button" id="btn-vl-sync-loop" class="action-button">
-            Loop: Kapalı (O)
+            <span data-i18n="dialog.video_layer_wizard.loop_off">Loop: Kapalı (O)</span>
           </button>
         </div>
 
         <!-- Dinleme Modu -->
         <div class="form-group">
-          <label for="vl-sync-listen-mode">Dinleme Modu:</label>
+          <label for="vl-sync-listen-mode" data-i18n="dialog.video_layer_wizard.listen_mode">Dinleme Modu:</label>
           <select id="vl-sync-listen-mode">
-            <option value="mix">Her İkisi (Karışık)</option>
-            <option value="main">Sadece Ana Video</option>
-            <option value="layer">Sadece Katman Video</option>
+            <option value="mix" data-i18n="dialog.video_layer_wizard.listen_mix">Her İkisi (Karışık)</option>
+            <option value="main" data-i18n="dialog.video_layer_wizard.listen_main">Sadece Ana Video</option>
+            <option value="layer" data-i18n="dialog.video_layer_wizard.listen_layer">Sadece Katman Video</option>
           </select>
         </div>
 
         <!-- Kanal Yönlendirme -->
         <div class="form-group">
-          <label for="vl-sync-channel-mode">Kanal Yönlendirme:</label>
+          <label for="vl-sync-channel-mode" data-i18n="dialog.video_layer_wizard.channel_mode">Kanal Yönlendirme:</label>
           <select id="vl-sync-channel-mode">
-            <option value="center">Merkezi (Her ikisi ortada)</option>
-            <option value="split">Ayrık (Ana: Sol, Katman: Sağ)</option>
+            <option value="center" data-i18n="dialog.video_layer_wizard.channel_center">Merkezi (Her ikisi ortada)</option>
+            <option value="split" data-i18n="dialog.video_layer_wizard.channel_split">Ayrık (Ana: Sol, Katman: Sağ)</option>
           </select>
-          <p class="hint">Ayrık modda kulaklık kullanın: sol kulağınız ana video, sağ kulağınız katman video.</p>
+          <p class="hint" data-i18n="dialog.video_layer_wizard.channel_hint">Ayrık modda kulaklık kullanın: sol kulağınız ana video, sağ kulağınız katman video.</p>
         </div>
 
         <!-- Offset Kontrolü -->
         <div class="form-group">
-          <label for="vl-sync-offset">Offset (Gecikme):</label>
+          <label for="vl-sync-offset" data-i18n="dialog.video_layer_wizard.sync_offset">Offset (Gecikme):</label>
           <div style="display: flex; gap: 8px; align-items: center;">
             <button type="button" id="btn-vl-offset-dec" class="small-btn">-10ms</button>
             <input type="text" id="vl-sync-offset" value="0 ms" readonly style="width: 100px; text-align: center;"
-              aria-label="Offset değeri milisaniye cinsinden">
+              aria-label="Offset değeri milisaniye cinsinden" data-i18n-aria="dialog.video_layer_wizard.sync_offset_aria">
             <button type="button" id="btn-vl-offset-inc" class="small-btn">+10ms</button>
           </div>
           <p class="hint">
-            <strong>Offset:</strong> Alt+Sağ/Sol: ±10ms | Alt+Shift+Sağ/Sol: ±100ms | Win+Ctrl+Sağ/Sol: ±1ms<br>
-            <strong>Oynatma:</strong> Space/K: Oynat/Duraklat | J: 5sn Geri | L: 5sn İleri | S: Durdur+Başa | O: Loop
+            <strong data-i18n="dialog.video_layer_wizard.offset_shortcuts_title">Offset:</strong> <span data-i18n="dialog.video_layer_wizard.offset_shortcuts">Alt+Sağ/Sol: ±10ms | Alt+Shift+Sağ/Sol: ±100ms | Win+Ctrl+Sağ/Sol: ±1ms</span><br>
+            <strong data-i18n="dialog.video_layer_wizard.playback_shortcuts_title">Oynatma:</strong> <span data-i18n="dialog.video_layer_wizard.playback_shortcuts">Space/K: Oynat/Duraklat | J: 5sn Geri | L: 5sn İleri | S: Durdur+Başa | O: Loop</span>
           </p>
         </div>
 
         <!-- Kesme Modu (Boşlukları Silme) -->
         <fieldset id="vl-cut-mode-section"
           style="border: 1px solid #444; padding: 10px; margin-top: 15px; border-radius: 6px;">
-          <legend><strong>🎬 Kesme Modu (Boşlukları Sil)</strong></legend>
+          <legend><strong data-i18n="dialog.video_layer_wizard.cut_mode_title">🎬 Kesme Modu (Boşlukları Sil)</strong></legend>
 
-          <p class="hint" style="margin-bottom: 10px;">
+          <p class="hint" style="margin-bottom: 10px;" data-i18n="dialog.video_layer_wizard.cut_mode_hint">
             Katman videodaki hareketsiz/boş kısımları işaretleyip silebilirsiniz.
             Her bölge için başlangıç ve bitiş marker'ı koyun.
           </p>
 
           <div class="action-buttons-group" style="margin-bottom: 10px;">
             <button type="button" id="btn-vl-add-cut-marker" class="action-button">
-              <span class="icon">📍</span> Marker Koy (M)
+              <span class="icon">📍</span> <span data-i18n="dialog.video_layer_wizard.add_marker">Marker Koy (M)</span>
             </button>
             <button type="button" id="btn-vl-delete-cut-marker" class="action-button" disabled>
-              <span class="icon">🗑️</span> Seçiliyi Sil (Delete)
+              <span class="icon">🗑️</span> <span data-i18n="dialog.video_layer_wizard.delete_selected">Seçiliyi Sil (Delete)</span>
             </button>
           </div>
 
           <!-- Marker Listesi -->
           <div class="form-group">
-            <label for="vl-cut-marker-list">Kesme Bölgeleri:</label>
+            <label for="vl-cut-marker-list" data-i18n="dialog.video_layer_wizard.cut_regions">Kesme Bölgeleri:</label>
             <select id="vl-cut-marker-list" size="4" style="width: 100%; font-family: monospace;"
-              aria-label="Kesilecek bölgelerin listesi">
-              <option disabled>Henüz marker eklenmedi</option>
+              aria-label="Kesilecek bölgelerin listesi" data-i18n-aria="dialog.video_layer_wizard.cut_regions_aria">
+              <option disabled data-i18n="dialog.video_layer_wizard.no_markers_yet">Henüz marker eklenmedi</option>
             </select>
           </div>
 
           <!-- Marker Taşıma -->
           <div class="action-buttons-group" style="margin-bottom: 10px;">
             <button type="button" id="btn-vl-marker-left" class="small-btn" disabled
-              aria-label="Seçili marker'ı 1 saniye geriye taşı">◀ 1sn Geri</button>
+              aria-label="Seçili marker'ı 1 saniye geriye taşı" data-i18n-aria="dialog.video_layer_wizard.marker_left_aria" data-i18n="dialog.video_layer_wizard.marker_left">◀ 1sn Geri</button>
             <button type="button" id="btn-vl-marker-right" class="small-btn" disabled
-              aria-label="Seçili marker'ı 1 saniye ileriye taşı">1sn İleri ▶</button>
+              aria-label="Seçili marker'ı 1 saniye ileriye taşı" data-i18n-aria="dialog.video_layer_wizard.marker_right_aria" data-i18n="dialog.video_layer_wizard.marker_right">1sn İleri ▶</button>
           </div>
 
           <p class="hint">
-            <strong>Kesme:</strong> M: Marker Koy | Delete: Sil<br>
-            <strong>Düzenleme:</strong> Shift+G/H: İşaretçi Seç | G: 1sn Geri | H: 1sn İleri
+            <strong data-i18n="dialog.video_layer_wizard.cut_shortcuts_title">Kesme:</strong> <span data-i18n="dialog.video_layer_wizard.cut_shortcuts">M: Marker Koy | Delete: Sil</span><br>
+            <strong data-i18n="dialog.video_layer_wizard.edit_shortcuts_title">Düzenleme:</strong> <span data-i18n="dialog.video_layer_wizard.edit_shortcuts">Shift+G/H: İşaretçi Seç | G: 1sn Geri | H: 1sn İleri</span>
           </p>
 
           <div id="vl-cut-status" class="feedback-box" aria-live="polite" style="margin-top: 10px;">
-            Toplam 0 bölge işaretlendi.
+            <span data-i18n="dialog.video_layer_wizard.cut_status_empty">Toplam 0 bölge işaretlendi.</span>
           </div>
         </fieldset>
 
         <div id="vl-sync-status" class="feedback-box" aria-live="polite">
-          Senkronizasyon için oynatın ve offset değerini ayarlayın.
+          <span data-i18n="dialog.video_layer_wizard.sync_status_default">Senkronizasyon için oynatın ve offset değerini ayarlayın.</span>
         </div>
       </div>
 
       <!-- Adım 5: Zamanlama -->
       <div id="vl-wizard-step-5" class="wizard-step hidden" role="region" aria-labelledby="vl-step-5-title">
-        <h3 id="vl-step-5-title" class="sr-only">Adım 5: Zamanlama</h3>
+        <h3 id="vl-step-5-title" class="sr-only" data-i18n="dialog.video_layer_wizard.step_5_title">Adım 5: Zamanlama</h3>
 
         <div class="form-group">
           <fieldset class="radio-group-vertical">
-            <legend>Video katmanı ne zaman görünsün:</legend>
+            <legend data-i18n="dialog.video_layer_wizard.timing_legend">Video katmanı ne zaman görünsün:</legend>
             <label class="radio-option">
               <input type="radio" name="vl-timing-mode" value="whole" checked>
-              <span>Tüm Video Boyunca</span>
+              <span data-i18n="dialog.video_layer_wizard.timing_whole">Tüm Video Boyunca</span>
             </label>
             <label class="radio-option">
               <input type="radio" name="vl-timing-mode" value="from-current">
-              <span>Şu anki konumdan itibaren</span>
+              <span data-i18n="dialog.video_layer_wizard.timing_from_current">Şu anki konumdan itibaren</span>
             </label>
             <label class="radio-option">
               <input type="radio" name="vl-timing-mode" value="manual">
-              <span>Belirli Bir Aralıkta</span>
+              <span data-i18n="dialog.video_layer_wizard.timing_manual">Belirli Bir Aralıkta</span>
             </label>
           </fieldset>
         </div>
@@ -1439,59 +1796,59 @@
         <div id="vl-timing-manual" class="hidden">
           <div class="form-group two-col">
             <div>
-              <label for="vl-start-time">Başlangıç (saniye):</label>
+              <label for="vl-start-time" data-i18n="dialog.video_layer_wizard.start_time">Başlangıç (saniye):</label>
               <input type="number" id="vl-start-time" step="0.1" min="0" value="0">
-              <button type="button" id="btn-vl-start-current" class="small-btn">Şu an</button>
+              <button type="button" id="btn-vl-start-current" class="small-btn" data-i18n="dialog.video_layer_wizard.current_time">Şu an</button>
             </div>
             <div>
-              <label for="vl-end-time">Bitiş (saniye):</label>
+              <label for="vl-end-time" data-i18n="dialog.video_layer_wizard.end_time">Bitiş (saniye):</label>
               <input type="number" id="vl-end-time" step="0.1" min="0">
-              <button type="button" id="btn-vl-end-current" class="small-btn">Şu an</button>
+              <button type="button" id="btn-vl-end-current" class="small-btn" data-i18n="dialog.video_layer_wizard.current_time">Şu an</button>
             </div>
           </div>
         </div>
 
         <!-- Özet -->
         <div class="form-group info-group" id="vl-summary">
-          <h4>Özet:</h4>
+          <h4 data-i18n="dialog.video_layer_wizard.summary">Özet:</h4>
           <p id="vl-summary-text">İşaret dili modu. Sağ alt, %25, ses kapalı.</p>
         </div>
       </div>
 
       <!-- Navigasyon Butonları -->
       <div class="dialog-buttons wizard-buttons">
-        <button type="button" id="vl-wizard-back" disabled>Geri</button>
-        <button type="button" id="vl-wizard-next">İleri</button>
-        <button type="button" id="vl-wizard-finish" class="hidden">Tamamla</button>
-        <button type="button" id="vl-wizard-cancel">İptal</button>
+        <button type="button" id="vl-wizard-back" disabled data-i18n="dialog.common.back">Geri</button>
+        <button type="button" id="vl-wizard-next" data-i18n="dialog.common.next">İleri</button>
+        <button type="button" id="vl-wizard-finish" class="hidden" data-i18n="dialog.video_layer_wizard.finish">Tamamla</button>
+        <button type="button" id="vl-wizard-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
 
   <!-- Geçiş Kütüphanesi Dialog -->
   <dialog id="transition-library-dialog" class="modal-dialog" aria-labelledby="transition-lib-title" aria-modal="true">
-    <h2 id="transition-lib-title">Geçiş Kütüphanesi</h2>
-    <p id="transition-lib-desc" class="dialog-description">Bir geçiş türü seçerek aktif geçiş olarak ayarlayın. Ş tuşu
+    <h2 id="transition-lib-title" data-i18n="dialog.transition_library.title">Geçiş Kütüphanesi</h2>
+    <p id="transition-lib-desc" class="dialog-description" data-i18n="dialog.transition_library.description">Bir geçiş türü seçerek aktif geçiş olarak ayarlayın. Ş tuşu
       ile uygulanır.</p>
 
     <div class="form-group">
-      <label for="transition-search">Ara:</label>
-      <input type="text" id="transition-search" placeholder="Geçiş adı ara..." autocomplete="off">
+      <label for="transition-search" data-i18n="dialog.transition_library.search">Ara:</label>
+      <input type="text" id="transition-search" placeholder="Geçiş adı ara..." autocomplete="off" data-i18n-placeholder="dialog.transition_library.search_placeholder">
     </div>
 
     <div class="form-group">
-      <label for="transition-category-filter">Kategori:</label>
+      <label for="transition-category-filter" data-i18n="dialog.transition_library.category">Kategori:</label>
       <select id="transition-category-filter">
-        <option value="all">Tümü</option>
-        <option value="temel">Temel Geçişler</option>
-        <option value="dip">Dip-to (Düşüş)</option>
-        <option value="wipe">Wipe / Kaydırma</option>
-        <option value="separator">Bölüm Ayırıcılar</option>
+        <option value="all" data-i18n="dialog.transition_library.category_all">Tümü</option>
+        <option value="temel" data-i18n="dialog.transition_library.category_basic">Temel Geçişler</option>
+        <option value="dip" data-i18n="dialog.transition_library.category_dip">Dip-to (Düşüş)</option>
+        <option value="wipe" data-i18n="dialog.transition_library.category_wipe">Wipe / Kaydırma</option>
+        <option value="separator" data-i18n="dialog.transition_library.category_separator">Bölüm Ayırıcılar</option>
       </select>
     </div>
 
     <div class="form-group">
-      <label id="transition-list-label">Geçişler:</label>
+      <label id="transition-list-label" data-i18n="dialog.transition_library.list_label">Geçişler:</label>
       <ul id="transition-type-list" class="accessible-list" role="listbox" aria-labelledby="transition-list-label"
         tabindex="0">
         <!-- Dinamik olarak doldurulur -->
@@ -1499,121 +1856,183 @@
     </div>
 
     <fieldset class="form-group">
-      <legend>Aktif Geçiş Ayarları</legend>
+      <legend data-i18n="dialog.transition_library.active_settings">Aktif Geçiş Ayarları</legend>
       <div class="form-group two-col">
         <div>
-          <label for="transition-duration">Süre (saniye):</label>
+          <label for="transition-duration" data-i18n="dialog.transition_library.duration">Süre (saniye):</label>
           <input type="number" id="transition-duration" value="0.5" min="0.1" max="5" step="0.1">
         </div>
         <div>
           <label>
             <input type="checkbox" id="transition-use-sfx" checked>
-            Varsayılan ses efektini kullan
+            <span data-i18n="dialog.transition_library.use_default_sfx">Varsayılan ses efektini kullan</span>
           </label>
         </div>
       </div>
       <div class="form-group" id="transition-custom-sfx-group" style="display:none;">
-        <label for="transition-custom-sfx">Özel ses dosyası:</label>
-        <input type="text" id="transition-custom-sfx" readonly placeholder="Dosya seçilmedi">
-        <button type="button" id="btn-select-transition-sfx">Dosya Seç</button>
+        <label for="transition-custom-sfx" data-i18n="dialog.transition_library.custom_sfx">Özel ses dosyası:</label>
+        <input type="text" id="transition-custom-sfx" readonly placeholder="Dosya seçilmedi" data-i18n-placeholder="dialog.transition_library.no_file">
+        <button type="button" id="btn-select-transition-sfx" data-i18n="dialog.transition_library.select_file">Dosya Seç</button>
       </div>
     </fieldset>
 
     <div class="dialog-info" id="transition-info-box" aria-live="polite">
-      <p id="transition-active-info">Aktif geçiş: Çapraz Geçiş (Cross Dissolve)</p>
+      <p id="transition-active-info" data-i18n="dialog.transition_library.active_info_default">Aktif geçiş: Çapraz Geçiş (Cross Dissolve)</p>
     </div>
 
     <div class="dialog-buttons">
-      <button type="button" id="btn-transition-preview">Önizle (Alt+P)</button>
-      <button type="button" id="btn-transition-set-active">Aktif Olarak Ayarla</button>
-      <button type="button" id="btn-transition-cancel">Kapat</button>
+      <button type="button" id="btn-transition-preview" data-i18n="dialog.transition_library.preview">Önizle (Alt+P)</button>
+      <button type="button" id="btn-transition-set-active" data-i18n="dialog.transition_library.set_active">Aktif Olarak Ayarla</button>
+      <button type="button" id="btn-transition-cancel" data-i18n="dialog.common.close">Kapat</button>
     </div>
   </dialog>
 
   <!-- Geçiş Listesi Dialog -->
   <dialog id="transition-list-dialog" class="modal-dialog" aria-labelledby="transition-list-title" aria-modal="true">
-    <h2 id="transition-list-title">Uygulanmış Geçişler</h2>
-    <p id="transition-list-desc" class="dialog-description">Videoya eklenen geçişlerin listesi.</p>
+    <h2 id="transition-list-title" data-i18n="dialog.transition_list.title">Uygulanmış Geçişler</h2>
+    <p id="transition-list-desc" class="dialog-description" data-i18n="dialog.transition_list.description">Videoya eklenen geçişlerin listesi.</p>
 
     <div id="transition-list-empty" style="display:none;">
-      <p>Henüz geçiş eklenmedi. Ş tuşu ile aktif geçişi uygulayabilirsiniz.</p>
+      <p data-i18n="dialog.transition_list.empty">Henüz geçiş eklenmedi. Ş tuşu ile aktif geçişi uygulayabilirsiniz.</p>
     </div>
 
-    <ul id="applied-transition-list" class="accessible-list" role="listbox" aria-label="Uygulanmış geçişler"
+    <ul id="applied-transition-list" class="accessible-list" role="listbox" aria-label="Uygulanmış geçişler" data-i18n-aria="dialog.transition_list.aria_label"
       tabindex="0">
       <!-- Dinamik olarak doldurulur -->
     </ul>
 
     <div class="dialog-buttons">
-      <button type="button" id="btn-transition-goto">Geçişe Git</button>
-      <button type="button" id="btn-transition-edit">Düzenle</button>
-      <button type="button" id="btn-transition-delete">Sil</button>
-      <button type="button" id="btn-transition-clear-all">Tümünü Sil</button>
-      <button type="button" id="btn-transition-list-close">Kapat</button>
+      <button type="button" id="btn-transition-goto" data-i18n="dialog.transition_list.goto">Geçişe Git</button>
+      <button type="button" id="btn-transition-edit" data-i18n="dialog.common.edit">Düzenle</button>
+      <button type="button" id="btn-transition-delete" data-i18n="dialog.common.delete">Sil</button>
+      <button type="button" id="btn-transition-clear-all" data-i18n="dialog.transition_list.clear_all">Tümünü Sil</button>
+      <button type="button" id="btn-transition-list-close" data-i18n="dialog.common.close">Kapat</button>
     </div>
   </dialog>
 
   <!-- Altyazı İşlem Seçimi Diyaloğu -->
   <dialog id="subtitle-action-dialog" aria-labelledby="sub-action-title">
     <form method="dialog">
-      <h2 id="sub-action-title">Altyazı İşlemi</h2>
-      <p>Yüklenen altyazı dosyasıyla ne yapmak istersiniz?</p>
+      <h2 id="sub-action-title" data-i18n="dialog.subtitle_action.title">Altyazı İşlemi</h2>
+      <p data-i18n="dialog.subtitle_action.description">Yüklenen altyazı dosyasıyla ne yapmak istersiniz?</p>
 
-      <div class="form-group" style="display: flex; flex-direction: column; gap: 15px;">
-        <label class="radio-option" style="padding: 10px; border: 1px solid #444; border-radius: 4px; cursor: pointer;">
-          <input type="radio" name="sub-action" value="burn">
-          <strong>A) Altyazıyı Videoya Göm</strong>
-          <div style="font-size: 0.9em; opacity: 0.8; margin-top: 5px;">Sadece alt yazı eklenir, seslendirme yapılmaz.
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 15px;">
+          <label class="radio-option" style="padding: 10px; border: 1px solid #444; border-radius: 4px; cursor: pointer;">
+            <input type="radio" name="sub-action" value="burn">
+          <strong data-i18n="dialog.subtitle_action.burn_title">A) Altyazıyı Videoya Göm</strong>
+          <div style="font-size: 0.9em; opacity: 0.8; margin-top: 5px;" data-i18n="dialog.subtitle_action.burn_description">Sadece alt yazı eklenir, seslendirme yapılmaz.
           </div>
         </label>
 
         <label class="radio-option" style="padding: 10px; border: 1px solid #444; border-radius: 4px; cursor: pointer;">
           <input type="radio" name="sub-action" value="tts-only" checked>
-          <strong>B) Sadece Seslendir (TTS)</strong>
-          <div style="font-size: 0.9em; opacity: 0.8; margin-top: 5px;">Altyazı ses dosyasını dönüştürülüp videoya
+          <strong data-i18n="dialog.subtitle_action.tts_title">B) Sadece Seslendir (TTS)</strong>
+          <div style="font-size: 0.9em; opacity: 0.8; margin-top: 5px;" data-i18n="dialog.subtitle_action.tts_description">Altyazı ses dosyasını dönüştürülüp videoya
             eklenir. Yazı videoda görünmez.</div>
         </label>
 
         <label class="radio-option" style="padding: 10px; border: 1px solid #444; border-radius: 4px; cursor: pointer;">
           <input type="radio" name="sub-action" value="tts-burn">
-          <strong>C) Hem Seslendir Hem Göm</strong>
-          <div style="font-size: 0.9em; opacity: 0.8; margin-top: 5px;">Altyazı hem okunur hem de videoda yazılı olarak
-            görünür.</div>
-        </label>
-      </div>
+          <strong data-i18n="dialog.subtitle_action.tts_burn_title">C) Hem Seslendir Hem Göm</strong>
+            <div style="font-size: 0.9em; opacity: 0.8; margin-top: 5px;" data-i18n="dialog.subtitle_action.tts_burn_description">Altyazı hem okunur hem de videoda yazılı olarak
+              görünür.</div>
+          </label>
+        </div>
 
-      <div class="dialog-buttons">
-        <button type="button" id="sub-action-confirm">Devam Et</button>
-        <button type="button" id="sub-action-cancel">İptal</button>
-      </div>
+        <div class="dialog-buttons">
+          <button type="button" id="sub-action-confirm" data-i18n="dialog.common.continue">Devam Et</button>
+          <button type="button" id="sub-action-cancel" data-i18n="dialog.cancel">İptal</button>
+        </div>
     </form>
-  </dialog>
+    </dialog>
 
-  <!-- Altyazı Seslendirme Seçenekleri (Güncellenmiş) -->
+    <dialog id="subtitle-style-dialog" aria-labelledby="subtitle-style-title">
+      <form method="dialog">
+        <h2 id="subtitle-style-title" data-i18n="dialog.subtitle_style.title">Altyazı Görünümü</h2>
+        <p data-i18n="dialog.subtitle_style.description">Gömülen altyazıların görünümünü buradan ayarlayabilirsiniz.</p>
+
+        <div class="form-group">
+          <label for="subtitle-style-text-color-select" data-i18n="dialog.subtitle_style.text_color">Yazı Rengi</label>
+          <select id="subtitle-style-text-color-select">
+            <option value="#FFFFFF" data-i18n="dialog.subtitle_style.color_white">Beyaz</option>
+            <option value="#FFFF00" data-i18n="dialog.subtitle_style.color_yellow">Sarı</option>
+            <option value="#00FFFF" data-i18n="dialog.subtitle_style.color_cyan">Camgöbeği</option>
+            <option value="#00FF00" data-i18n="dialog.subtitle_style.color_green">Yeşil</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="subtitle-style-background-mode" data-i18n="dialog.subtitle_style.background_mode">Arka Plan Biçimi</label>
+          <select id="subtitle-style-background-mode">
+            <option value="box" data-i18n="dialog.subtitle_style.background_mode_box">Hafif Siyah Kutu</option>
+            <option value="shadow-only" data-i18n="dialog.subtitle_style.background_mode_shadow_only">Yalnızca Hafif Gölge</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="subtitle-style-bg-color-group">
+          <label for="subtitle-style-bg-color-select" data-i18n="dialog.subtitle_style.background_color">Arka Plan Rengi</label>
+          <select id="subtitle-style-bg-color-select">
+            <option value="#000000" data-i18n="dialog.subtitle_style.color_black">Siyah</option>
+            <option value="#1F1F1F" data-i18n="dialog.subtitle_style.color_dark_gray">Koyu Gri</option>
+            <option value="#002B36" data-i18n="dialog.subtitle_style.color_dark_blue">Koyu Mavi</option>
+            <option value="#4A0E0E" data-i18n="dialog.subtitle_style.color_dark_red">Koyu Kırmızı</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="subtitle-style-bg-opacity-group">
+          <label for="subtitle-style-bg-opacity" data-i18n="dialog.subtitle_style.background_opacity">Arka Plan Opaklığı</label>
+          <input type="range" id="subtitle-style-bg-opacity" min="0" max="100" value="5" aria-describedby="subtitle-style-bg-opacity-val">
+          <span id="subtitle-style-bg-opacity-val">%5</span>
+        </div>
+
+        <div class="form-group">
+          <label for="subtitle-style-size-scale" data-i18n="dialog.subtitle_style.size_scale">Yazı Boyutu (%)</label>
+          <input type="range" id="subtitle-style-size-scale" min="10" max="140" value="50" aria-describedby="subtitle-style-size-scale-val">
+          <span id="subtitle-style-size-scale-val">%50</span>
+          <p class="hint" data-i18n="dialog.subtitle_style.size_scale_hint">100 değeri varsayılan boyuttur. Daha küçük değerler yazıyı küçültür, daha büyük değerler büyütür.</p>
+        </div>
+
+        <div class="dialog-buttons">
+          <button type="button" id="subtitle-style-ai-review" data-i18n="dialog.subtitle_style.ai_review">Yapay Zekadan Görüş Al</button>
+        </div>
+
+        <div class="form-group">
+          <label for="subtitle-style-ai-feedback" data-i18n="dialog.subtitle_style.ai_feedback">Yapay Zeka Yorumu</label>
+          <textarea id="subtitle-style-ai-feedback" rows="4" readonly tabindex="0" aria-live="polite" data-i18n-aria="dialog.subtitle_style.ai_feedback_aria"></textarea>
+        </div>
+
+        <div class="dialog-buttons">
+          <button type="button" id="subtitle-style-confirm" data-i18n="dialog.common.continue">Devam Et</button>
+          <button type="button" id="subtitle-style-cancel" data-i18n="dialog.cancel">İptal</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Altyazı Seslendirme Seçenekleri (Güncellenmiş) -->
   <dialog id="subtitle-tts-options-dialog" aria-labelledby="subtitle-tts-title">
     <form method="dialog">
-      <h2 id="subtitle-tts-title">Seslendirme Ayarları</h2>
+      <h2 id="subtitle-tts-title" data-i18n="dialog.subtitle_tts.title">Seslendirme Ayarları</h2>
       <p id="subtitle-preview-text"
         style="font-style: italic; color: #aaa; margin: 10px 0; border-left: 2px solid #555; padding-left: 10px;"></p>
-      <p>Seslendirme için kullanılacak ses ve hız ayarlarını yapın.</p>
+      <p data-i18n="dialog.subtitle_tts.description">Seslendirme için kullanılacak ses ve hız ayarlarını yapın.</p>
 
       <div class="form-group">
-        <label for="subtitle-tts-voice">Seslendirme Sesi:</label>
+        <label for="subtitle-tts-voice" data-i18n="dialog.subtitle_tts.voice">Seslendirme Sesi:</label>
         <select id="subtitle-tts-voice">
-          <option value="">Varsayılan</option>
+          <option value="" data-i18n="dialog.subtitle_tts.default_voice">Varsayılan</option>
           <!-- Dinamik doldurulacak -->
         </select>
       </div>
 
       <div class="form-group">
-        <label for="subtitle-tts-speed">Konuşma Hızı:</label>
+        <label for="subtitle-tts-speed" data-i18n="dialog.subtitle_tts.speed">Konuşma Hızı:</label>
         <input type="range" id="subtitle-tts-speed" min="50" max="200" value="100"
           aria-describedby="subtitle-tts-speed-val">
         <span id="subtitle-tts-speed-val">%100</span>
       </div>
 
       <div class="form-group">
-        <label for="subtitle-tts-volume">TTS Ses Seviyesi:</label>
+        <label for="subtitle-tts-volume" data-i18n="dialog.subtitle_tts.tts_volume">TTS Ses Seviyesi:</label>
         <input type="range" id="subtitle-tts-volume" min="0" max="100" value="100"
           aria-describedby="subtitle-tts-volume-val">
         <span id="subtitle-tts-volume-val">%100</span>
@@ -1621,17 +2040,17 @@
 
       <!-- YENİ: Video Ses Seviyesi -->
       <div class="form-group" style="margin-top: 20px; border-top: 1px solid #444; padding-top: 20px;">
-        <label for="subtitle-original-volume">Orijinal Film Sesi (%):</label>
+        <label for="subtitle-original-volume" data-i18n="dialog.subtitle_tts.original_volume">Orijinal Film Sesi (%):</label>
         <input type="range" id="subtitle-original-volume" min="0" max="100" value="80"
           aria-describedby="subtitle-original-volume-val">
         <span id="subtitle-original-volume-val">%80</span>
-        <p class="hint">Filmin arka plan sesinin ne kadar duyulacağını belirler. (0 = Sessiz, 100 = Tam Ses)</p>
+        <p class="hint" data-i18n="dialog.subtitle_tts.original_volume_hint">Filmin arka plan sesinin ne kadar duyulacağını belirler. (0 = Sessiz, 100 = Tam Ses)</p>
       </div>
 
       <div class="dialog-buttons">
-        <button type="button" id="subtitle-tts-preview-btn">Dinle (Test Et)</button>
-        <button type="button" id="subtitle-tts-confirm">Seçilen Ayarlarla Başlat</button>
-        <button type="button" id="subtitle-tts-cancel">İptal</button>
+        <button type="button" id="subtitle-tts-preview-btn" data-i18n="dialog.subtitle_tts.preview">Dinle (Test Et)</button>
+        <button type="button" id="subtitle-tts-confirm" data-i18n="dialog.subtitle_tts.start">Seçilen Ayarlarla Başlat</button>
+        <button type="button" id="subtitle-tts-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -1639,83 +2058,84 @@
   <!-- Nesne Analiz ve Uygulama Diyaloğu -->
   <dialog id="object-analysis-dialog" aria-labelledby="object-analysis-title" style="width: 700px; max-width: 95vw;">
     <form method="dialog" style="display: flex; flex-direction: column; height: 80vh;">
-      <h2 id="object-analysis-title">Sahneyi Analiz Et ve Nesneye Uygula</h2>
+      <h2 id="object-analysis-title" data-i18n="dialog.object_analysis.title">Sahneyi Analiz Et ve Nesneye Uygula</h2>
 
       <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
         <!-- Analiz Ayarları -->
         <div class="form-group" style="padding-bottom: 10px; border-bottom: 1px solid #444;">
-          <label for="analysis-duration">Analiz Süresi (İmleç Etrafı):</label>
+          <label for="analysis-duration" data-i18n="dialog.object_analysis.duration">Analiz Süresi (İmleç Etrafı):</label>
           <div style="display: flex; gap: 10px; align-items: center;">
             <select id="analysis-duration" style="flex: 1;">
-              <option value="3">3 Saniye</option>
-              <option value="5" selected>5 Saniye (Varsayılan)</option>
-              <option value="10">10 Saniye</option>
+              <option value="3" data-i18n="dialog.object_analysis.duration_3">3 Saniye</option>
+              <option value="5" selected data-i18n="dialog.object_analysis.duration_5">5 Saniye (Varsayılan)</option>
+              <option value="10" data-i18n="dialog.object_analysis.duration_10">10 Saniye</option>
             </select>
-            <button type="button" id="start-analysis-btn">Analizi Başlat</button>
+            <button type="button" id="start-analysis-btn" data-i18n="dialog.object_analysis.start">Analizi Başlat</button>
           </div>
-          <p style="margin-top: 5px;"><span id="analysis-status-text" aria-live="polite">Analiz bekleniyor...</span></p>
+          <p style="margin-top: 5px;"><span id="analysis-status-text" aria-live="polite" data-i18n="dialog.object_analysis.waiting">Analiz bekleniyor...</span></p>
         </div>
 
         <!-- Sonuçlar Listesi -->
-        <h3 style="margin: 10px 0 5px 0;">Tespit Edilen Nesneler <small>(Oklar: gezin, S: seç/kaldır, A: tümünü
+        <h3 style="margin: 10px 0 5px 0;" data-i18n-html="dialog.object_analysis.detected_objects">Tespit Edilen Nesneler <small>(Oklar: gezin, S: seç/kaldır, A: tümünü
             seç)</small></h3>
         <div class="list-container"
           style="flex: 1; border: 1px solid #555; overflow-y: auto; margin-bottom: 15px; background: #000;">
-          <ul id="object-list" role="listbox" aria-label="Nesne Listesi" aria-multiselectable="true" tabindex="0">
-            <li class="empty-message" style="padding: 10px; color: #888;">Henüz analiz yapılmadı.</li>
+          <ul id="object-list" role="listbox" aria-label="Nesne Listesi" data-i18n-aria="dialog.object_analysis.object_list_aria" aria-multiselectable="true" tabindex="0">
+            <li class="empty-message" style="padding: 10px; color: #888;" data-i18n="dialog.object_analysis.not_analyzed">Henüz analiz yapılmadı.</li>
           </ul>
         </div>
 
         <!-- Nesne Detayları ve Etiketleme -->
         <div id="object-details-panel" class="form-group" style="background: #222; padding: 10px; border-radius: 4px;"
           aria-live="polite">
-          <p><strong>Seçili Nesne:</strong> <span id="obj-detail-label">-</span></p>
-          <p><strong>Konum:</strong> <span id="obj-detail-pos">-</span></p>
-          <p><strong>Süre:</strong> <span id="obj-detail-time">-</span></p>
+          <p><strong data-i18n="dialog.object_analysis.selected_object">Seçili Nesne:</strong> <span id="obj-detail-label">-</span></p>
+          <p><strong data-i18n="dialog.object_analysis.position">Konum:</strong> <span id="obj-detail-pos">-</span></p>
+          <p><strong data-i18n="dialog.object_analysis.duration_label">Süre:</strong> <span id="obj-detail-time">-</span></p>
           <div style="margin-top: 10px;">
-            <button type="button" id="ai-label-btn" disabled>Yapay Zeka ile Etiketle (Gemini)</button>
+            <button type="button" id="ai-label-btn" disabled data-i18n="dialog.object_analysis.ai_label">Yapay Zeka ile Etiketle (Gemini)</button>
           </div>
         </div>
 
         <!-- İşlemler -->
-        <h3 style="margin: 10px 0 5px 0;">Uygulanacak İşlem</h3>
+        <h3 style="margin: 10px 0 5px 0;" data-i18n="dialog.object_analysis.action_title">Uygulanacak İşlem</h3>
         <div class="form-group">
-          <label for="object-action-type">İşlem Türü:</label>
+          <label for="object-action-type" data-i18n="dialog.object_analysis.action_type">İşlem Türü:</label>
           <select id="object-action-type">
-            <option value="hide">Gizle (Siyah Kutu)</option>
-            <option value="box">Kutu İçine Al (Kırmızı Çerçeve)</option>
-            <option value="mosaic">Bulanıklaştır (Gri Mozaik Maske)</option>
-            <option value="blur">Yarı Şeffaf (Blur Simülasyonu)</option>
-            <option value="greenscreen">Yeşil Perde (Chroma Key)</option>
+            <option value="hide" data-i18n="dialog.object_analysis.action_hide">Gizle (Siyah Kutu)</option>
+            <option value="box" data-i18n="dialog.object_analysis.action_box">Kutu İçine Al (Kırmızı Çerçeve)</option>
+            <option value="mosaic" data-i18n="dialog.object_analysis.action_mosaic">Bulanıklaştır (Gri Mozaik Maske)</option>
+            <option value="blur" data-i18n="dialog.object_analysis.action_blur">Yarı Şeffaf (Blur Simülasyonu)</option>
+            <option value="greenscreen" data-i18n="dialog.object_analysis.action_greenscreen">Yeşil Perde (Chroma Key)</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label for="object-action-scope">Uygulama Aralığı:</label>
+          <label for="object-action-scope" data-i18n="dialog.object_analysis.scope">Uygulama Aralığı:</label>
           <select id="object-action-scope">
-            <option value="track">Nesne Göründüğü Sürece (Analiz Aralığında)</option>
-            <option value="full">Tüm Klip Boyunca</option>
-            <option value="custom">Manuel Zaman Aralığı</option>
+            <option value="track" data-i18n="dialog.object_analysis.scope_track">Nesne Göründüğü Sürece (Analiz Aralığında)</option>
+            <option value="full" data-i18n="dialog.object_analysis.scope_full">Tüm Klip Boyunca</option>
+            <option value="custom" data-i18n="dialog.object_analysis.scope_custom">Manuel Zaman Aralığı</option>
           </select>
         </div>
 
         <div id="custom-time-range" class="form-group" style="display: none;">
-          <label>Zaman Aralığı (saniye):</label>
+          <label data-i18n="dialog.object_analysis.custom_range">Zaman Aralığı (saniye):</label>
           <div style="display: flex; gap: 10px; align-items: center;">
             <input type="number" id="custom-start-time" min="0" step="0.1" value="0" style="width: 80px;"
-              aria-label="Başlangıç">
+              aria-label="Başlangıç" data-i18n-aria="dialog.object_analysis.start_aria">
             <span>-</span>
             <input type="number" id="custom-end-time" min="0" step="0.1" value="10" style="width: 80px;"
-              aria-label="Bitiş">
-            <span>saniye</span>
+              aria-label="Bitiş" data-i18n-aria="dialog.object_analysis.end_aria">
+            <span data-i18n="dialog.object_analysis.seconds">saniye</span>
           </div>
         </div>
       </div>
 
       <div class="dialog-buttons" style="margin-top: 15px;">
-        <button type="button" id="object-preview-btn" disabled>Önizle (Alt+P)</button>
-        <button type="button" id="object-apply-btn" disabled>Videoya Uygula</button>
-        <button type="button" id="object-close-btn">Kapat</button>
+        <button type="button" id="object-preview-btn" disabled data-i18n="dialog.object_analysis.preview">Önizle (Alt+P)</button>
+        <button type="button" id="object-queue-btn" disabled data-i18n="dialog.object_analysis.add_to_queue">Listeye Ekle</button>
+        <button type="button" id="object-apply-btn" disabled data-i18n="dialog.object_analysis.apply_to_video">Videoya Uygula</button>
+        <button type="button" id="object-close-btn" data-i18n="dialog.common.close">Kapat</button>
       </div>
     </form>
   </dialog>
@@ -1724,15 +2144,15 @@
   <dialog id="keyboard-manager-dialog" aria-labelledby="keyboard-manager-title"
     style="width: 800px; max-width: 90vw; height: 80vh;">
     <form method="dialog" style="display: flex; flex-direction: column; height: 100%;">
-      <h2 id="keyboard-manager-title">Klavye Kısayol Yöneticisi</h2>
-      <p class="dialog-description">Kısayolları düzenlemek için bir kategori ve ardından bir işlem seçin. Seçtiğiniz
+      <h2 id="keyboard-manager-title" data-i18n="dialog.keyboard_manager.title">Klavye Kısayol Yöneticisi</h2>
+      <p class="dialog-description" data-i18n="dialog.keyboard_manager.description">Kısayolları düzenlemek için bir kategori ve ardından bir işlem seçin. Seçtiğiniz
         kısayolu düzenlemek için sağ tıklayın veya sağ ok tuşuna basın.</p>
 
       <div class="manager-layout" style="display: flex; flex: 1; gap: 20px; overflow: hidden; margin-bottom: 20px;">
         <!-- Sol Panel: Kategoriler -->
         <div class="manager-sidebar"
           style="width: 250px; border-right: 1px solid #444; padding-right: 10px; display: flex; flex-direction: column;">
-          <h3 style="margin-top: 0;">Kategoriler</h3>
+          <h3 style="margin-top: 0;" data-i18n="dialog.keyboard_manager.categories">Kategoriler</h3>
           <ul id="keyboard-categories-list" role="listbox" aria-label="Kategoriler" tabindex="0"
             style="list-style: none; padding: 0; margin: 0; overflow-y: auto; flex: 1;">
             <!-- Dinamik -->
@@ -1741,7 +2161,7 @@
 
         <!-- Sağ Panel: Kısayollar -->
         <div class="manager-content" style="flex: 1; display: flex; flex-direction: column;">
-          <h3 style="margin-top: 0;">Kısayollar</h3>
+          <h3 style="margin-top: 0;" data-i18n="dialog.keyboard_manager.shortcuts">Kısayollar</h3>
           <ul id="keyboard-shortcuts-list" role="listbox" aria-label="Kısayol Listesi" tabindex="0"
             style="list-style: none; padding: 0; margin: 0; overflow-y: auto; flex: 1;">
             <!-- Dinamik -->
@@ -1752,13 +2172,13 @@
       <div class="dialog-footer"
         style="display: flex; justify-content: space-between; align-items: center; padding-top: 15px; border-top: 1px solid #444;">
         <div class="left-buttons" style="display: flex; gap: 10px;">
-          <button type="button" id="keyboard-manager-reset-all">Sıfırla</button>
-          <button type="button" id="keyboard-manager-import">İçe Aktar</button>
-          <button type="button" id="keyboard-manager-export">Dışa Aktar</button>
+          <button type="button" id="keyboard-manager-reset-all" data-i18n="dialog.keyboard_manager.reset">Sıfırla</button>
+          <button type="button" id="keyboard-manager-import" data-i18n="dialog.keyboard_manager.import">İçe Aktar</button>
+          <button type="button" id="keyboard-manager-export" data-i18n="dialog.keyboard_manager.export">Dışa Aktar</button>
         </div>
         <div class="right-buttons" style="display: flex; gap: 10px;">
-          <button type="button" id="keyboard-manager-save" class="primary">Kaydet</button>
-          <button type="button" id="keyboard-manager-cancel">İptal</button>
+          <button type="button" id="keyboard-manager-save" class="primary" data-i18n="dialog.keyboard_manager.save">Kaydet</button>
+          <button type="button" id="keyboard-manager-cancel" data-i18n="dialog.cancel">İptal</button>
         </div>
       </div>
     </form>
@@ -1779,7 +2199,9 @@
   <script src="scripts/dialogs.js"></script>
   <script src="scripts/tab-manager.js"></script>
   <script src="scripts/status-bar.js"></script>
+  <script src="scripts/update-manager.js"></script>
   <script src="scripts/app.js"></script>
+  <script src="scripts/startup-welcome.js"></script>
   <script src="scripts/cta-library.js"></script>
   <script src="scripts/cta-overlay-preview.js"></script>
   <script src="scripts/transition-preview.js"></script>
@@ -1787,23 +2209,28 @@
   <dialog id="cta-library-dialog" aria-labelledby="cta-library-title"
     style="width: 900px; max-width: 95vw; height: 85vh;">
     <form method="dialog" style="height: 100%; display: flex; flex-direction: column;">
-      <h2 id="cta-library-title">CTA / Overlay Kütüphanesi</h2>
+      <h2 id="cta-library-title" data-i18n="dialog.cta_library.title">CTA / Overlay Kütüphanesi</h2>
 
       <div class="cta-container" style="flex: 1; display: flex; gap: 20px; overflow: hidden; margin-bottom: 20px;">
         <!-- Categories Sidebar -->
         <aside class="cta-sidebar"
           style="width: 200px; border-right: 1px solid #444; padding-right: 10px; display: flex; flex-direction: column;">
-          <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--accent-color);">Kategoriler</h3>
+          <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--accent-color);" data-i18n="dialog.cta_library.categories">Kategoriler</h3>
           <ul id="cta-categories-list" role="listbox" aria-label="Kategoriler"
             style="list-style: none; padding: 0; margin: 0; flex: 1;">
-            <li role="option" data-category="all" class="selected" tabindex="0">Tümü</li>
-            <li role="option" data-category="like" tabindex="-1">Beğen (Like)</li>
-            <li role="option" data-category="subscribe" tabindex="-1">Abone Ol (Subscribe)</li>
-            <li role="option" data-category="bell" tabindex="-1">Bildirim (Bell)</li>
-            <li role="option" data-category="package" tabindex="-1">Paketler (Like+Sub)</li>
-            <li role="option" data-category="share" tabindex="-1">Paylaş (Share)</li>
+            <li role="option" data-category="all" class="selected" tabindex="0" data-i18n="dialog.cta_library.all">Tümü</li>
+            <li role="option" data-category="like" tabindex="-1" data-i18n="dialog.cta_library.like">Beğen (Like)</li>
+            <li role="option" data-category="subscribe" tabindex="-1" data-i18n="dialog.cta_library.subscribe">Abone Ol (Subscribe)</li>
+            <li role="option" data-category="bell" tabindex="-1" data-i18n="dialog.cta_library.bell">Bildirim (Bell)</li>
+            <li role="option" data-category="package" tabindex="-1" data-i18n="dialog.cta_library.package">Paketler (Like+Sub)</li>
+            <li role="option" data-category="share" tabindex="-1" data-i18n="dialog.cta_library.share">Paylaş (Share)</li>
+            <li role="option" data-category="follow" tabindex="-1" data-i18n="dialog.cta_library.follow">Takip Et (Follow)</li>
+            <li role="option" data-category="comment" tabindex="-1" data-i18n="dialog.cta_library.comment">Yorum (Comment)</li>
+            <li role="option" data-category="save" tabindex="-1" data-i18n="dialog.cta_library.save">Kaydet (Save)</li>
+            <li role="option" data-category="join" tabindex="-1" data-i18n="dialog.cta_library.join">Katıl (Join)</li>
+            <li role="option" data-category="next" tabindex="-1" data-i18n="dialog.cta_library.next">Sonraki Video (Next)</li>
           </ul>
-          <button type="button" id="cta-import-btn" style="margin-top: 10px;">Dışarıdan Ekle...</button>
+          <button type="button" id="cta-import-btn" style="margin-top: 10px;" data-i18n="dialog.cta_library.import">Dışarıdan Ekle...</button>
         </aside>
 
         <!-- Main Content: Grid + Preview -->
@@ -1822,68 +2249,68 @@
             <div class="preview-box"
               style="width: 200px; background: #000; display: flex; align-items: center; justify-content: center; position: relative;">
               <video id="cta-preview-video" loop autoplay style="max-width: 100%; max-height: 100%;"></video>
-              <div id="cta-preview-placeholder">Seçim Yapın</div>
+              <div id="cta-preview-placeholder" data-i18n="dialog.cta_library.make_selection">Seçim Yapın</div>
             </div>
 
             <!-- Settings Controls -->
             <div class="settings-box" style="flex: 1; overflow-y: auto;">
               <div class="form-group grid-2-col" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div>
-                  <label for="cta-position">Konum:</label>
+                  <label for="cta-position" data-i18n="dialog.cta_library.position">Konum:</label>
                   <select id="cta-position">
-                    <option value="bottom-left">Sol Alt</option>
-                    <option value="bottom-center">Alt Orta</option>
-                    <option value="bottom-right" selected>Sağ Alt</option>
-                    <option value="top-left">Sol Üst</option>
-                    <option value="top-right">Sağ Üst</option>
-                    <option value="center">Orta (Tam Ekran)</option>
-                    <option value="custom">Özel...</option>
+                    <option value="bottom-left" data-i18n="dialog.cta_library.pos_bottom_left">Sol Alt</option>
+                    <option value="bottom-center" data-i18n="dialog.cta_library.pos_bottom_center">Alt Orta</option>
+                    <option value="bottom-right" selected data-i18n="dialog.cta_library.pos_bottom_right">Sağ Alt</option>
+                    <option value="top-left" data-i18n="dialog.cta_library.pos_top_left">Sol Üst</option>
+                    <option value="top-right" data-i18n="dialog.cta_library.pos_top_right">Sağ Üst</option>
+                    <option value="center" data-i18n="dialog.cta_library.pos_center">Orta (Tam Ekran)</option>
+                    <option value="custom" data-i18n="dialog.cta_library.pos_custom">Özel...</option>
                   </select>
                 </div>
                 <div>
-                  <label for="cta-scale">Boyut (%):</label>
-                  <input type="number" id="cta-scale" value="100" min="10" max="200" step="5">
+                  <label for="cta-scale" data-i18n="dialog.cta_library.scale">Boyut (%):</label>
+                  <input type="number" id="cta-scale" value="30" min="10" max="200" step="5">
                 </div>
               </div>
 
               <div class="form-group">
                 <button type="button" id="cta-ai-suggest-btn" class="secondary-btn"
-                  style="width: 100%; margin-bottom: 10px;">
+                  style="width: 100%; margin-bottom: 10px;" data-i18n="dialog.cta_library.ai_suggest">
                   ✨ Yapay Zeka ile Konum/Boyut Öner (Gemini)
                 </button>
               </div>
 
               <div class="form-group grid-2-col" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div>
-                  <label for="cta-opacity">Opaklık (%):</label>
+                  <label for="cta-opacity" data-i18n="dialog.cta_library.opacity">Opaklık (%):</label>
                   <input type="range" id="cta-opacity" value="100" min="10" max="100">
                 </div>
                 <div>
-                  <label for="cta-duration">Süre (sn):</label>
+                  <label for="cta-duration" data-i18n="dialog.cta_library.duration">Süre (sn):</label>
                   <input type="number" id="cta-duration" value="5" min="1" max="60" step="0.5">
-                  <span class="hint" style="font-size: 0.8em;">(0 = Video uzunluğu)</span>
+                  <span class="hint" style="font-size: 0.8em;" data-i18n="dialog.cta_library.duration_hint">(0 = Video uzunluğu)</span>
                 </div>
               </div>
 
               <!-- Sound Selector -->
               <div class="form-group">
-                <label for="cta-sound">Ses Efekti:</label>
+                <label for="cta-sound" data-i18n="dialog.cta_library.sound">Ses Efekti:</label>
                 <select id="cta-sound">
-                  <option value="none">Yok (Sessiz)</option>
-                  <option value="embedded" selected>Varsayılan (Videodaki Ses)</option>
+                  <option value="none" data-i18n="dialog.cta_library.sound_none">Yok (Sessiz)</option>
+                  <option value="embedded" selected data-i18n="dialog.cta_library.sound_default">Varsayılan (Videodaki Ses)</option>
                   <!-- Custom sounds will be injected here -->
                 </select>
               </div>
 
               <div class="form-group checkbox-group">
                 <input type="checkbox" id="cta-fade">
-                <label for="cta-fade">Fade In/Out (Yavaşça belir/kaybol)</label>
+                <label for="cta-fade" data-i18n="dialog.cta_library.fade">Fade In/Out (Yavaşça belir/kaybol)</label>
               </div>
 
               <div class="form-group">
-                <label for="cta-desc">Erişilebilirlik Açıklaması:</label>
-                <input type="text" id="cta-desc" placeholder="Örn: Abone ol butonu animasyonu">
-                <span class="hint" style="font-size: 0.8em; display: block; margin-top: 2px;">Ekran okuyucular için
+                <label for="cta-desc" data-i18n="dialog.cta_library.description">Erişilebilirlik Açıklaması:</label>
+                <input type="text" id="cta-desc" placeholder="Örn: Abone ol butonu animasyonu" data-i18n-placeholder="dialog.cta_library.description_placeholder">
+                <span class="hint" style="font-size: 0.8em; display: block; margin-top: 2px;" data-i18n="dialog.cta_library.description_hint">Ekran okuyucular için
                   betimleme.</span>
               </div>
 
@@ -1893,21 +2320,8 @@
       </div>
 
       <div class="dialog-buttons">
-        <button type="button" id="cta-add-timeline">Zaman Çizelgesine Ekle</button>
-        <button type="button" id="cta-cancel">İptal</button>
-      </div>
-    </form>
-  </dialog>
-
-  <!-- Video Katmanı Sihirbazı -->
-  <dialog id="video-layer-wizard-dialog" aria-labelledby="video-layer-wizard-title"
-    style="width: 800px; max-width: 95vw; height: 85vh;">
-    <!-- ... (Mevcut Video Layer Wizard içeriği buraya gelecek, dokunmuyoruz) ... -->
-    <form method="dialog">
-      <h2 id="video-layer-wizard-title">Video Katmanı Ekle</h2>
-      <p>Bu özellik henüz yapım aşamasındadır.</p>
-      <div class="dialog-buttons">
-        <button type="button" id="video-layer-wizard-close">Kapat</button>
+        <button type="button" id="cta-add-timeline" data-i18n="dialog.cta_library.add_to_timeline">Zaman Çizelgesine Ekle</button>
+        <button type="button" id="cta-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>
@@ -1915,137 +2329,151 @@
   <!-- Ses Kayıt Aracı -->
   <dialog id="audio-recorder-dialog" aria-labelledby="audio-recorder-title"
     style="width: 500px; padding: 20px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff;">
-    <h2 id="audio-recorder-title" style="margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 10px;">Ses Ekle /
+    <h2 id="audio-recorder-title" style="margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 10px;" data-i18n="dialog.audio_recorder.title">Ses Ekle /
       Kaydet</h2>
 
     <div style="margin-bottom: 15px;">
-      <label for="rec-mic-select" style="display:block; margin-bottom: 5px; font-size: 0.9em; color: #ccc;">Mikrofon
+      <label for="rec-mic-select" style="display:block; margin-bottom: 5px; font-size: 0.9em; color: #ccc;" data-i18n="dialog.audio_recorder.mic_select">Mikrofon
         Seçin:</label>
       <select id="rec-mic-select"
         style="width: 100%; padding: 8px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
-        <option value="">Varsayılan Mikrofon</option>
+        <option value="" data-i18n="dialog.audio_recorder.default_mic">Varsayılan Mikrofon</option>
       </select>
     </div>
 
     <div style="text-align: center; padding: 20px 0;">
       <div id="recorder-timer" style="font-size: 3em; font-family: monospace; font-weight: bold; margin-bottom: 10px;">
         00:00</div>
-      <div id="recorder-status" style="color: #aaa; margin-bottom: 10px;">Kayıt Bekleniyor</div>
-      <div id="recorder-markers-info" style="font-size: 0.9em; color: var(--accent-color);">0 İşaretçi</div>
+      <div id="recorder-status" style="color: #aaa; margin-bottom: 10px;" data-i18n="dialog.audio_recorder.waiting">Kayıt Bekleniyor</div>
+      <div id="recorder-markers-info" style="font-size: 0.9em; color: var(--accent-color);" data-i18n="dialog.audio_recorder.markers_default">0 İşaretçi</div>
 
       <!-- Gizli Player -->
       <audio id="recorder-preview-player" style="display: none;"></audio>
     </div>
 
     <div class="dialog-buttons" style="justify-content: center; gap: 15px; margin-bottom: 20px;">
-      <button type="button" id="rec-record-btn" class="icon-btn" style="min-width: 120px;">Kaydet (R)</button>
-      <button type="button" id="rec-stop-btn" disabled>Durdur (S)</button>
+      <button type="button" id="rec-record-btn" class="icon-btn" style="min-width: 120px;" data-i18n="dialog.audio_recorder.record">Kaydet (R)</button>
+      <button type="button" id="rec-stop-btn" disabled data-i18n="dialog.audio_recorder.stop">Durdur (S)</button>
       <button type="button" id="rec-play-btn" disabled
-        aria-label="Dinle. Oynat/duraklat: K. İleri/geri sar: L, J. İşaretçi koy: M. Sesi düzenle bağlam menüsü veya tab.">Dinle
+        data-i18n-aria="dialog.audio_recorder.listen_aria" aria-label="Dinle. Oynat/duraklat: K. İleri/geri sar: L, J. İşaretçi koy: M. Sesi düzenle bağlam menüsü veya tab." data-i18n="dialog.audio_recorder.listen">Dinle
         (K)</button>
-      <button type="button" id="rec-edit-btn" disabled>Düzenle</button>
-      <button type="button" id="rec-reset-btn" disabled>Sıfırla</button>
+      <button type="button" id="rec-edit-btn" disabled data-i18n="dialog.audio_recorder.edit">Düzenle</button>
+      <button type="button" id="rec-reset-btn" disabled data-i18n="dialog.audio_recorder.reset">Sıfırla</button>
     </div>
 
     <div class="dialog-footer"
       style="border-top: 1px solid #444; padding-top: 15px; display: flex; justify-content: flex-end; gap: 10px;">
-      <button type="button" id="rec-next-btn" class="primary" disabled>İleri ></button>
-      <button type="button" id="rec-cancel-btn">İptal</button>
+      <button type="button" id="rec-next-btn" class="primary" disabled data-i18n="dialog.audio_recorder.next">İleri ></button>
+      <button type="button" id="rec-cancel-btn" data-i18n="dialog.cancel">İptal</button>
     </div>
   </dialog>
 
   <!-- Ses Ayarları Diyaloğu -->
   <dialog id="audio-settings-dialog" aria-labelledby="audio-settings-title" style="width: 700px; max-width: 95vw;">
     <form method="dialog">
-      <h2 id="audio-settings-title">Ses Ayarları</h2>
-      <p>Bu ayarlar seçili klibe veya tüm kanala uygulanır.</p>
+      <h2 id="audio-settings-title" data-i18n="dialog.audio_settings.title">Ses Ayarları</h2>
+      <p data-i18n="dialog.audio_settings.description">Bu ayarlar seçili klibe veya tüm kanala uygulanır.</p>
 
       <!-- 1. Ses Seviyesi -->
       <fieldset class="setting-group"
         style="border: 1px solid #444; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
-        <legend style="padding: 0 5px; font-weight: bold; color: var(--accent-color);">1. Ses Seviyesi (Volume)</legend>
+        <legend style="padding: 0 5px; font-weight: bold; color: var(--accent-color);" data-i18n="dialog.audio_settings.volume_group">1. Ses Seviyesi (Volume)</legend>
         <div class="form-group">
-          <label for="as-volume-slider">Seviye (%0 - %200):</label>
+          <label for="as-volume-slider" data-i18n="dialog.audio_settings.level">Seviye (%0 - %400):</label>
           <div style="display: flex; align-items: center; gap: 10px;">
-            <input type="range" id="as-volume-slider" min="0" max="200" value="100" style="flex: 1;">
+            <input type="range" id="as-volume-slider" min="0" max="400" value="100" style="flex: 1;">
             <span id="as-volume-value" style="width: 50px; text-align: right;">%100</span>
           </div>
         </div>
         <div class="form-group checkbox-group">
           <input type="checkbox" id="as-volume-bypass">
-          <label for="as-volume-bypass">Devre Dışı Bırak (Bypass)</label>
+          <label for="as-volume-bypass" data-i18n="dialog.audio_settings.bypass">Devre Dışı Bırak (Bypass)</label>
         </div>
       </fieldset>
 
-      <!-- 2. Gürültü Temizleme -->
+      <!-- 2. Kanal Düzeni -->
       <fieldset class="setting-group"
         style="border: 1px solid #444; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
-        <legend style="padding: 0 5px; font-weight: bold; color: var(--accent-color);">2. Gürültü Temizleme (Noise
-          Reduction)</legend>
+        <legend style="padding: 0 5px; font-weight: bold; color: var(--accent-color);" data-i18n="dialog.audio_settings.channel_group">2. Kanal Düzeni</legend>
+        <div class="form-group">
+          <p id="as-channel-current" class="hint" data-i18n="dialog.audio_settings.channel_current_unknown">Mevcut kanal düzeni belirlenemedi.</p>
+        </div>
+        <div class="form-group">
+          <label for="as-channel-mode" data-i18n="dialog.audio_settings.channel_mode">Dönüştürme:</label>
+          <select id="as-channel-mode" aria-describedby="as-channel-current">
+            <option value="source" data-i18n="dialog.audio_settings.channel_keep">Mevcut düzeni koru</option>
+            <option value="mono" data-i18n="dialog.audio_settings.channel_to_mono">Mono yap</option>
+            <option value="stereo" data-i18n="dialog.audio_settings.channel_to_stereo">Stereo yap</option>
+          </select>
+        </div>
+      </fieldset>
+
+      <!-- 3. Gürültü Temizleme -->
+      <fieldset class="setting-group"
+        style="border: 1px solid #444; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
+        <legend style="padding: 0 5px; font-weight: bold; color: var(--accent-color);" data-i18n="dialog.audio_settings.noise_group">3. Gürültü Temizleme (Noise Reduction)</legend>
         <div class="form-group checkbox-group">
           <input type="checkbox" id="as-noise-enable">
-          <label for="as-noise-enable">Gürültü Temizlemeyi Etkinleştir</label>
+          <label for="as-noise-enable" data-i18n="dialog.audio_settings.noise_enable">Gürültü Temizlemeyi Etkinleştir</label>
         </div>
         <div id="as-noise-controls" style="opacity: 0.5; pointer-events: none; transition: opacity 0.3s;">
           <div class="form-group">
-            <label>Seviye:</label>
+            <label data-i18n="dialog.audio_settings.noise_level">Seviye:</label>
             <div class="radio-group" style="display: flex; gap: 15px; margin-top: 5px;">
               <div>
                 <input type="radio" name="noise-level" id="noise-low" value="low">
-                <label for="noise-low">Hafif</label>
+                <label for="noise-low" data-i18n="dialog.audio_settings.low">Hafif</label>
               </div>
               <div>
                 <input type="radio" name="noise-level" id="noise-mid" value="medium" checked>
-                <label for="noise-mid">Orta</label>
+                <label for="noise-mid" data-i18n="dialog.audio_settings.medium">Orta</label>
               </div>
               <div>
                 <input type="radio" name="noise-level" id="noise-high" value="high">
-                <label for="noise-high">Yüksek</label>
+                <label for="noise-high" data-i18n="dialog.audio_settings.high">Yüksek</label>
               </div>
               <div>
                 <input type="radio" name="noise-level" id="noise-custom" value="custom">
-                <label for="noise-custom">Özel</label>
+                <label for="noise-custom" data-i18n="dialog.audio_settings.custom">Özel</label>
               </div>
             </div>
           </div>
           <div class="form-group" id="noise-custom-group" style="display:none; margin-top: 10px;">
-            <label for="as-noise-slider">Özel Değer (0-100):</label>
+            <label for="as-noise-slider" data-i18n="dialog.audio_settings.custom_value">Özel Değer (0-100):</label>
             <div style="display: flex; align-items: center; gap: 10px;">
               <input type="range" id="as-noise-slider" min="0" max="100" value="50" style="flex: 1;">
               <span id="as-noise-value" style="width: 50px; text-align: right;">50</span>
             </div>
           </div>
           <div class="form-group" style="margin-top: 10px;">
-            <button type="button" id="as-compare-AB" style="width: 100%;">A/B Karşılaştırma (Basılı Tut:
-              Orijinal)</button>
+            <button type="button" id="as-compare-AB" style="width: 100%;" data-i18n="dialog.audio_settings.compare_ab">A/B Karşılaştırma (Basılı Tut: Orijinal)</button>
           </div>
         </div>
       </fieldset>
 
-      <!-- 3. Ses Efektleri -->
+      <!-- 4. Ses Efektleri -->
       <fieldset class="setting-group"
         style="border: 1px solid #444; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
-        <legend style="padding: 0 5px; font-weight: bold; color: var(--accent-color);">3. Ses Efektleri (Opsiyonel)
-        </legend>
+        <legend style="padding: 0 5px; font-weight: bold; color: var(--accent-color);" data-i18n="dialog.audio_settings.effects_group">4. Ses Efektleri (Opsiyonel)</legend>
         <div class="form-group checkbox-group">
           <input type="checkbox" id="as-effect-echo">
-          <label for="as-effect-echo">Yankı (Echo)</label>
+          <label for="as-effect-echo" data-i18n="dialog.audio_settings.echo">Yankı (Echo)</label>
         </div>
         <div class="form-group checkbox-group">
           <input type="checkbox" id="as-effect-reverb">
-          <label for="as-effect-reverb">Salon Efekti (Reverb)</label>
+          <label for="as-effect-reverb" data-i18n="dialog.audio_settings.reverb">Salon Efekti (Reverb)</label>
         </div>
         <div class="form-group checkbox-group">
           <input type="checkbox" id="as-effect-phone">
-          <label for="as-effect-phone">Telefon Sesi (Band-pass)</label>
+          <label for="as-effect-phone" data-i18n="dialog.audio_settings.phone">Telefon Sesi (Band-pass)</label>
         </div>
       </fieldset>
 
       <div class="dialog-buttons">
-        <button type="button" id="as-preview-toggle">Ön İzle Başlat (Alt+P)</button>
-        <button type="submit" id="as-apply">Uygula / Kaydet</button>
-        <button type="button" id="as-reset">Sıfırla</button>
-        <button type="button" id="as-cancel">İptal</button>
+        <button type="button" id="as-preview-toggle" data-i18n="dialog.audio_settings.preview">Ön İzle Başlat (Alt+P)</button>
+        <button type="submit" id="as-apply" data-i18n="dialog.audio_settings.apply">Uygula / Kaydet</button>
+        <button type="button" id="as-reset" data-i18n="dialog.audio_settings.reset">Sıfırla</button>
+        <button type="button" id="as-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
   </dialog>

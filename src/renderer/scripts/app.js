@@ -5,21 +5,46 @@
 
 const App = {
     isReady: false,
+    startupReadyAnnounced: false,
+    startupPostTasksHandled: false,
     currentFilePath: null,
     originalFilePath: null, // Orijinal dosya (değişiklikler için)
     hasChanges: false, // Kaydedilmemiş değişiklik var mı?
     isOpeningFile: false, // Dosya açma işlemi sürüyor mu?
+    nativeMenuActive: false,
     clipboard: null, // {type: 'video'|'audio', start, end, data}
     undoStack: [],
     redoStack: [],
+    verticalClipQueue: [],
+
+    t(key, fallback, params = {}) {
+        if (!window.i18nHelper) return fallback;
+        const value = window.i18nHelper.t(key, params);
+        return value && !value.startsWith('[') ? value : fallback;
+    },
+
+    async ensureI18nReady() {
+        if (!window.i18nHelper || !window.api?.i18n) {
+            return;
+        }
+
+        if (window.i18nHelper.currentLang && Object.keys(window.i18nHelper.cache || {}).length > 0) {
+            return;
+        }
+
+        window.i18nHelper.currentLang = await window.api.i18n.getLanguage();
+        window.i18nHelper.cache = await window.api.i18n.getAll();
+        document.documentElement.lang = window.i18nHelper.currentLang;
+    },
 
     /**
      * Uygulamayı başlat
      */
-    init() {
+    async init() {
         // Modülleri başlat
         Settings.init(); // Ayarları yükle (ilk)
         Accessibility.init();
+        this.setupAccessibilityDialogAnnouncements();
         Utils; // Statik modül
         VideoPlayer.init();
         Markers.init();
@@ -28,6 +53,7 @@ const App = {
         Dialogs.init();
         Keyboard.init();
         TabManager.init();
+        this.setupLaunchSurfaceActions();
         if (typeof InsertionQueue !== 'undefined') InsertionQueue.init();
         if (typeof AudioPlayer !== 'undefined') AudioPlayer.init();
 
@@ -38,7 +64,9 @@ const App = {
         VideoPlayer.onConversionNeeded = (filePath, errorMessage) => {
             console.warn('VideoPlayer oynatma hatası (smartOpen zaten uygulandı):', errorMessage);
             // Sadece kullanıcıya bilgi ver, dönüştürme önerme
-            Accessibility.announceError('Video oynatma hatası: ' + errorMessage);
+            Accessibility.announceError(this.t('runtime.app.playback_error', 'Video oynatma hatası: {error}', {
+                error: errorMessage
+            }));
         };
 
         // IPC event'lerini dinle
@@ -46,23 +74,737 @@ const App = {
 
         // Klavye Kısayolları (Proje Yönetimi)
         window.addEventListener('keydown', (e) => {
+            if (this.nativeMenuActive) {
+                return;
+            }
+
+            // Ctrl+Shift+N: Yeni Slayt Projesi
+            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'n') {
+                e.preventDefault();
+                window.api.send('slideshow-new-project');
+            }
             // Ctrl+Shift+P: Projeyi Kaydet (.kve)
-            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') {
+            else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') {
                 e.preventDefault();
                 this.saveProject();
             }
             // Ctrl+Shift+O: Proje Aç (.kve)
-            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'o') {
+            else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'o') {
                 e.preventDefault();
                 this.loadProject();
             }
             // NOT: Ctrl+Shift+S (Videoyu Farklı Kaydet) menü tarafından handle ediliyor
         });
 
+        document.addEventListener('click', (event) => {
+            const target = event.target;
+            if (!target || typeof target.closest !== 'function') {
+                return;
+            }
+
+            const dialogButton = target.closest('dialog[open] button, dialog[open] [role="button"]');
+            if (dialogButton) {
+                this.suppressPlaybackShortcuts();
+            }
+        }, true);
+
         // Hazır
         this.isReady = true;
-        console.log('Engelsiz Video Düzenleyicisi başlatıldı');
-        Accessibility.announce('Engelsiz Video Düzenleyicisi hazır. Video açmak için Control artı O tuşlarına basın. Temel klavye kısayollarını öğrenmek için F1\'e basın. Bir video açtığınızda içerisinde yön tuşlarıyla dolaşıp, boşluk, enter gibi tuşlarla duraklama yapmak, dilediğiniz aralıkları seçmek, istediğiniz noktalara M ile yer işareti koymak için, ekran okuyucu kullanıyorsanız, tarama kipini kapatmanız gerekebilir.');
+        await this.ensureI18nReady();
+        const shouldDelayStartupAnnouncement = window.StartupWelcome && window.StartupWelcome.shouldShow();
+        if (!shouldDelayStartupAnnouncement) {
+            this.handlePostStartupTasks();
+        }
+
+        if (window.StartupWelcome) {
+            setTimeout(() => {
+                window.StartupWelcome.showIfNeeded();
+            }, 150);
+        }
+    },
+
+    buildAccessibilityDialogAnnouncementText(payload = {}) {
+        return [payload.title, payload.message, payload.detail]
+            .map((part) => String(part || '').trim())
+            .filter(Boolean)
+            .join('. ');
+    },
+
+    setupAccessibilityDialogAnnouncements() {
+        if (this._dialogAccessibilityBound) {
+            return;
+        }
+
+        this._dialogAccessibilityBound = true;
+        window.addEventListener('evd-accessibility-dialog-announce', (event) => {
+            const message = this.buildAccessibilityDialogAnnouncementText(event.detail);
+            if (!message) return;
+            Accessibility.alert(message);
+        });
+    },
+
+    announceStartupReady() {
+        if (this.startupReadyAnnounced) {
+            return;
+        }
+
+        this.startupReadyAnnounced = true;
+        Accessibility.announce(this.t(
+            'runtime.app.startup_ready',
+            'EVD is ready. Press Control plus O to open a video. Press F1 to learn the basic keyboard shortcuts. When a video is open, you may need to turn off browse mode in your screen reader to move with the arrow keys, pause with Space or Enter, select ranges, and place markers with M.'
+        ));
+    },
+
+    handlePostStartupTasks() {
+        if (this.startupPostTasksHandled) {
+            window.UpdateManager?.maybeShowPendingUpdatePrompt?.();
+            return;
+        }
+
+        this.startupPostTasksHandled = true;
+        this.announceStartupReady();
+
+        setTimeout(() => {
+            window.UpdateManager?.checkForUpdatesOnStartup?.();
+            window.UpdateManager?.maybeShowPendingUpdatePrompt?.();
+        }, 400);
+    },
+
+    suppressPlaybackShortcuts(durationMs = 600) {
+        const safeDuration = Math.max(0, Number(durationMs) || 0);
+        this._suppressPlaybackShortcutsUntil = Date.now() + safeDuration;
+    },
+
+    shouldSuppressPlaybackShortcuts() {
+        return Date.now() < (this._suppressPlaybackShortcutsUntil || 0);
+    },
+
+    setupLaunchSurfaceActions() {
+        const placeholder = document.getElementById('video-placeholder');
+        if (!placeholder || placeholder.dataset.actionsBound === 'true') {
+            return;
+        }
+
+        placeholder.addEventListener('click', (event) => {
+            const trigger = event.target.closest('[data-launch-action]');
+            if (!trigger) {
+                return;
+            }
+
+            const action = trigger.getAttribute('data-launch-action');
+            if (action) {
+                this.runLaunchAction(action);
+            }
+        });
+
+        placeholder.dataset.actionsBound = 'true';
+    },
+
+    runLaunchAction(action) {
+        switch (action) {
+            case 'open-video':
+                this.openFile();
+                break;
+            case 'open-project':
+                this.loadProject();
+                break;
+            case 'new-slideshow':
+                window.api.send('slideshow-new-project');
+                break;
+            case 'sync-audio':
+                window.api.openSyncWizard('A');
+                break;
+            case 'vertical-video':
+                window.api.openVerticalWizard();
+                break;
+            case 'recording-wizard':
+                window.api.openRecordingWizard();
+                break;
+            case 'api-key':
+                Dialogs.showGeminiApiKeyDialog();
+                break;
+            case 'quick-start':
+                window.StartupWelcome?.showQuickStartDialog?.();
+                break;
+            default:
+                break;
+        }
+    },
+
+    formatVerticalClipTime(seconds) {
+        const totalSeconds = Math.max(0, Math.floor(seconds || 0));
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const secs = totalSeconds % 60;
+        if (hours > 0) {
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    },
+
+    parseFilePath(filePath) {
+        const normalized = String(filePath || '').replace(/\\/g, '/');
+        const filename = normalized.split('/').pop() || '';
+        const lastDot = filename.lastIndexOf('.');
+        const ext = lastDot > 0 ? filename.slice(lastDot) : '';
+        const name = lastDot > 0 ? filename.slice(0, lastDot) : (filename || 'video');
+        const separator = String(filePath || '').includes('\\') ? '\\' : '/';
+        return { name, ext, separator };
+    },
+
+    joinFilePath(folderPath, fileName) {
+        const separator = String(folderPath || '').includes('\\') ? '\\' : '/';
+        const trimmedFolder = String(folderPath || '').replace(/[\\/]+$/, '');
+        return trimmedFolder ? `${trimmedFolder}${separator}${fileName}` : fileName;
+    },
+
+    buildVerticalClipFromSelection() {
+        if (!VideoPlayer.hasVideo()) {
+            return {
+                success: false,
+                message: this.t('runtime.vertical.open_video_first', 'Önce bir video açmalısınız.')
+            };
+        }
+
+        if (!Selection.hasSelection()) {
+            return {
+                success: false,
+                message: this.t('runtime.vertical.select_area_first', 'Önce dikey videoya dönüştürmek istediğiniz alanı seçin.')
+            };
+        }
+
+        const selection = Selection.getSelection();
+        if (!selection || selection.end <= selection.start) {
+            return {
+                success: false,
+                message: this.t('runtime.vertical.invalid_selection', 'Geçerli bir seçim bulunamadı.')
+            };
+        }
+
+        const startInfo = Timeline.getSegmentAt(selection.start);
+        const endInfo = Timeline.getSegmentAt(Math.max(selection.start, selection.end - 0.001));
+        if (!startInfo || !endInfo) {
+            return {
+                success: false,
+                message: this.t('runtime.vertical.selection_segment_unavailable', 'Seçili alan için kaynak segment bilgisi alınamadı.')
+            };
+        }
+
+        if (startInfo.segmentIndex !== endInfo.segmentIndex) {
+            return {
+                success: false,
+                message: this.t('runtime.vertical.selection_single_segment_only', 'Şimdilik kısa video üretimi aynı segment içindeki tek bir seçimle çalışır. Lütfen daha kısa bir alan seçin.')
+            };
+        }
+
+        const segment = startInfo.segment;
+        if ((segment.speed || 1) !== 1) {
+            return {
+                success: false,
+                message: this.t('runtime.vertical.selection_speed_unsupported', 'Hızı değiştirilmiş alanlar için kısa video üretimi henüz desteklenmiyor. Lütfen normal hızdaki bir alan seçin.')
+            };
+        }
+
+        const sourcePath = segment.sourceFile || this.currentFilePath || this.originalFilePath;
+        if (!sourcePath) {
+            return {
+                success: false,
+                message: this.t('runtime.vertical.source_path_missing', 'Kaynak video yolu bulunamadı.')
+            };
+        }
+
+        const startTime = Timeline.timelineToSource(selection.start);
+        const endTime = Timeline.timelineToSource(selection.end);
+        const duration = Math.max(0, endTime - startTime);
+        if (duration <= 0.05) {
+            return {
+                success: false,
+                message: this.t('runtime.vertical.selection_too_short', 'Seçili alan çok kısa. Lütfen biraz daha uzun bir alan seçin.')
+            };
+        }
+
+        const startLabel = this.formatVerticalClipTime(startTime);
+        const endLabel = this.formatVerticalClipTime(endTime);
+        return {
+            success: true,
+            clip: {
+                id: `vertical_clip_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                sourcePath,
+                startTime,
+                endTime,
+                duration,
+                label: this.t('runtime.vertical.clip_label', 'Klip {start} - {end}', {
+                    start: startLabel,
+                    end: endLabel
+                }),
+                filenameSuffix: `${startLabel.replace(/:/g, '-')}_${endLabel.replace(/:/g, '-')}`,
+                selectionStart: selection.start,
+                selectionEnd: selection.end
+            }
+        };
+    },
+
+    addSelectionToVerticalQueue() {
+        const built = this.buildVerticalClipFromSelection();
+        if (!built.success) {
+            Accessibility.alert(built.message);
+            return null;
+        }
+
+        if (this.verticalClipQueue.length > 0) {
+            const firstSourcePath = this.verticalClipQueue[0].sourcePath;
+            if (firstSourcePath !== built.clip.sourcePath) {
+                Accessibility.alert(this.t('runtime.vertical.queue_mixed_source_not_supported', 'Seçim listesi şimdilik tek bir kaynak video için kullanılabilir. Farklı bir videodan eklemeden önce listeyi temizleyin.'));
+                return null;
+            }
+        }
+
+        this.verticalClipQueue.push(built.clip);
+        Accessibility.announce(this.t('runtime.vertical.queue_add_success', '{label} seçim listesine eklendi. Listede toplam {count} öğe var.', {
+            label: built.clip.label,
+            count: String(this.verticalClipQueue.length)
+        }));
+        return built.clip;
+    },
+
+    openVerticalWizardFromSelection() {
+        const built = this.buildVerticalClipFromSelection();
+        if (!built.success) {
+            Accessibility.alert(built.message);
+            return;
+        }
+
+        window.api.openVerticalWizard({
+            filePath: built.clip.sourcePath,
+            clipQueue: [built.clip]
+        });
+    },
+
+    openVerticalWizardFromQueue() {
+        if (!Array.isArray(this.verticalClipQueue) || this.verticalClipQueue.length === 0) {
+            Accessibility.alert(this.t('runtime.vertical.queue_empty', 'Seçim listesi şu anda boş.'));
+            return;
+        }
+
+        const firstClip = this.verticalClipQueue[0];
+        window.api.openVerticalWizard({
+            filePath: firstClip.sourcePath,
+            clipQueue: this.verticalClipQueue
+        });
+    },
+
+    openSelectionQueueDialog() {
+        Dialogs.showSelectionQueueDialog();
+    },
+
+    moveVerticalClipQueueItem(index, direction) {
+        const currentIndex = Number(index);
+        const targetIndex = currentIndex + Number(direction);
+        if (!Number.isInteger(currentIndex) || currentIndex < 0 || currentIndex >= this.verticalClipQueue.length) {
+            return -1;
+        }
+        if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= this.verticalClipQueue.length) {
+            return currentIndex;
+        }
+
+        const [item] = this.verticalClipQueue.splice(currentIndex, 1);
+        this.verticalClipQueue.splice(targetIndex, 0, item);
+
+        Accessibility.announce(this.t(
+            direction < 0 ? 'runtime.selection_queue.moved_up' : 'runtime.selection_queue.moved_down',
+            direction < 0 ? 'Seçim yukarı taşındı.' : 'Seçim aşağı taşındı.'
+        ));
+        return targetIndex;
+    },
+
+    removeVerticalClipQueueItem(index) {
+        const currentIndex = Number(index);
+        if (!Number.isInteger(currentIndex) || currentIndex < 0 || currentIndex >= this.verticalClipQueue.length) {
+            return -1;
+        }
+
+        this.verticalClipQueue.splice(currentIndex, 1);
+        Accessibility.announce(this.t('runtime.selection_queue.item_removed', 'Seçim listeden kaldırıldı.'));
+
+        if (this.verticalClipQueue.length === 0) {
+            return -1;
+        }
+        return Math.min(currentIndex, this.verticalClipQueue.length - 1);
+    },
+
+    previewVerticalClipQueueItem(index) {
+        const currentIndex = Number(index);
+        const clip = this.verticalClipQueue[currentIndex];
+        if (!clip) {
+            return;
+        }
+
+        try {
+            if (Number.isFinite(clip.selectionStart) && Number.isFinite(clip.selectionEnd)) {
+                Selection.setSelection(clip.selectionStart, clip.selectionEnd);
+                if (typeof VideoPlayer.seekToTimelineTime === 'function') {
+                    VideoPlayer.seekToTimelineTime(clip.selectionStart);
+                } else {
+                    VideoPlayer.seekTo(clip.selectionStart);
+                }
+                if (typeof VideoPlayer.playSelectionWithDialogOpen === 'function') {
+                    VideoPlayer.playSelectionWithDialogOpen();
+                } else {
+                    VideoPlayer.playSelection();
+                }
+                Accessibility.announce(this.t('runtime.selection_queue.preview_started', '{label} oynatılıyor.', {
+                    label: clip.label || this.t('runtime.app.selection_item_label', 'Seçim {index}', {
+                        index: String(currentIndex + 1)
+                    })
+                }));
+                return true;
+            }
+        } catch (error) {
+            console.error('Selection queue preview failed:', error);
+        }
+
+        Accessibility.alert(this.t('runtime.selection_queue.preview_unavailable', 'Bu seçim için önizleme başlatılamadı.'));
+        return false;
+    },
+
+    async mergeVerticalClipQueue() {
+        if (!Array.isArray(this.verticalClipQueue) || this.verticalClipQueue.length === 0) {
+            Accessibility.alert(this.t('runtime.selection_queue.empty', 'Seçim listesi şu anda boş.'));
+            return;
+        }
+
+        const parsedSource = this.parseFilePath(this.verticalClipQueue[0]?.sourcePath || this.currentFilePath || '');
+        const saveResult = await window.api.showSaveDialog({
+            title: this.t('messages.merge_selection_queue', 'Seçim Listesini Tek Klipte Birleştir'),
+            defaultPath: `${parsedSource.name || 'video'}-selection-merge.mp4`,
+            filters: [{ name: this.t('runtime.app.mp4_video_filter', 'MP4 Video'), extensions: ['mp4'] }]
+        });
+
+        if (saveResult.canceled || !saveResult.filePath) {
+            return;
+        }
+
+        const tempFiles = [];
+        try {
+            this.showProgress(this.t('runtime.selection_queue.merging', 'Seçimler yeni bir klipte birleştiriliyor...'));
+            Accessibility.announce(this.t('runtime.selection_queue.merging', 'Seçimler yeni bir klipte birleştiriliyor...'));
+
+            for (let i = 0; i < this.verticalClipQueue.length; i++) {
+                const clip = this.verticalClipQueue[i];
+                this.showProgress(this.t('runtime.selection_queue.preparing_item', 'Kuyruktaki {index}. seçim hazırlanıyor. Toplam {count} seçim var.', {
+                    index: String(i + 1),
+                    count: String(this.verticalClipQueue.length)
+                }));
+
+                const tempPath = await window.api.getTempPath(`evd_selection_merge_${Date.now()}_${i + 1}.mp4`);
+                tempFiles.push(tempPath);
+
+                const cutResult = await window.api.cutVideo({
+                    inputPath: clip.sourcePath,
+                    outputPath: tempPath,
+                    startTime: clip.startTime,
+                    endTime: clip.endTime
+                });
+
+                if (!cutResult.success) {
+                    throw new Error(cutResult.error || this.t('runtime.common.error', 'Hata: {error}', { error: 'Unknown' }));
+                }
+            }
+
+            this.showProgress(this.t('runtime.selection_queue.concatenating', 'Hazırlanan seçimler birleştiriliyor...'));
+            const concatResult = await window.api.concatVideosFast({
+                inputPaths: tempFiles,
+                outputPath: saveResult.filePath
+            });
+
+            if (!concatResult.success) {
+                throw new Error(concatResult.error || this.t('runtime.selection_queue.merge_failed', 'Seçimler birleştirilemedi.'));
+            }
+
+            this.hideProgress();
+            await this.openFile(saveResult.filePath);
+            Accessibility.announceComplete(this.t('runtime.selection_queue.merge_completed', 'Seçim listesi tek klip olarak oluşturuldu.'));
+        } catch (error) {
+            this.hideProgress();
+            Accessibility.announceError(error.message);
+        } finally {
+            if (tempFiles.length > 0) {
+                try {
+                    await window.api.deleteFiles(tempFiles);
+                } catch (cleanupError) {
+                    console.warn('Selection merge temp cleanup failed:', cleanupError);
+                }
+            }
+        }
+    },
+
+    clearVerticalClipQueue(shouldAnnounce = true) {
+        this.verticalClipQueue = [];
+        if (shouldAnnounce) {
+            Accessibility.announce(this.t('runtime.vertical.queue_cleared', 'Seçim listesi temizlendi.'));
+        }
+    },
+
+    getSelectionSaveItems() {
+        if (Array.isArray(this.verticalClipQueue) && this.verticalClipQueue.length > 0) {
+            return this.verticalClipQueue.map((clip, index) => ({
+                sourcePath: clip.sourcePath,
+                startTime: clip.startTime,
+                endTime: clip.endTime,
+                label: clip.label || this.t('runtime.app.selection_item_label', 'Seçim {index}', { index: String(index + 1) }),
+                index
+            }));
+        }
+
+        const built = this.buildVerticalClipFromSelection();
+        if (!built.success) {
+            return { success: false, message: built.message };
+        }
+
+        return [{
+            sourcePath: built.clip.sourcePath,
+            startTime: built.clip.startTime,
+            endTime: built.clip.endTime,
+            label: built.clip.label,
+            index: 0
+        }];
+    },
+
+    buildSelectionOutputPath(folderPath, itemIndex, sourcePath, isLossless) {
+        const parsedSource = this.parseFilePath(sourcePath || '');
+        const sourceExt = (parsedSource.ext || '.mp4').toLowerCase();
+        const baseName = parsedSource.name || 'video';
+        const ext = isLossless ? sourceExt : '.mp4';
+        return this.joinFilePath(folderPath, `${baseName}-selection${itemIndex + 1}${ext}`);
+    },
+
+    async chooseSelectionSaveTargets(items, isLossless) {
+        if (!Array.isArray(items) || items.length === 0) {
+            return { cancelled: true, targets: [] };
+        }
+
+        if (items.length === 1) {
+            const sourcePath = items[0].sourcePath || this.currentFilePath || '';
+            const parsedSource = this.parseFilePath(sourcePath || '');
+            const sourceExt = (parsedSource.ext || '.mp4').toLowerCase();
+            const saveExt = isLossless ? sourceExt : '.mp4';
+            const defaultName = `${parsedSource.name || 'video'}-selection1${saveExt}`;
+            const filterName = isLossless
+                ? this.t('runtime.app.lossless_selection_filter', 'Kaynak Biçim')
+                : this.t('runtime.app.mp4_video_filter', 'MP4 Video');
+            const result = await window.api.showSaveDialog({
+                title: isLossless
+                    ? this.t('messages.save_selection_fast', 'Seçili Alanı Akıllı Hızlı Kaydet')
+                    : this.t('messages.save_selection', 'Seçili Alanı Kaydet'),
+                defaultPath: defaultName,
+                filters: [{ name: filterName, extensions: [saveExt.replace('.', '')] }]
+            });
+
+            if (result.canceled || !result.filePath) {
+                return { cancelled: true, targets: [] };
+            }
+
+            return { cancelled: false, targets: [result.filePath] };
+        }
+
+        const folderResult = await window.api.openFileDialog({
+            title: isLossless
+                ? this.t('messages.save_selection_fast_folder', 'Akıllı hızlı seçimleri kaydetmek için klasör seçin')
+                : this.t('messages.save_selection_folder', 'Seçimleri kaydetmek için klasör seçin'),
+            properties: ['openDirectory']
+        });
+
+        if (folderResult.canceled || !folderResult.filePaths || folderResult.filePaths.length === 0) {
+            return { cancelled: true, targets: [] };
+        }
+
+        const folderPath = folderResult.filePaths[0];
+        return {
+            cancelled: false,
+            targets: items.map((item, index) => this.buildSelectionOutputPath(folderPath, index, item.sourcePath, isLossless))
+        };
+    },
+
+    async chooseLosslessSelectionMode(items) {
+        const modeChoice = await window.api.showMessageBox({
+            type: 'question',
+            title: this.t('runtime.app.lossless_selection_mode_title', 'Akıllı hızlı kaydetme modu'),
+            message: this.t('runtime.app.lossless_selection_mode_message', 'Akıllı hızlı kaydetme için hangi yöntemi kullanmak istersiniz?'),
+            detail: this.t('runtime.app.lossless_selection_mode_detail', 'Sınırları aynen koru seçeneği mevcut seçimi korur ama uçlarda yeniden kodlama yapabilir. Keyframelere genişlet seçeneği seçimi en yakın ana karelere büyütür ve mümkün olduğunda kayıpsız kopyalama hedefler.'),
+            buttons: [
+                this.t('runtime.app.lossless_selection_mode_keep_exact', 'Sınırları aynen koru'),
+                this.t('runtime.app.lossless_selection_mode_expand_keyframes', 'Keyframelere genişlet'),
+                this.t('dialog.common.cancel', 'İptal')
+            ],
+            defaultId: 0,
+            cancelId: 2,
+            noLink: true
+        });
+
+        if (modeChoice.response === 2) {
+            return { cancelled: true };
+        }
+
+        if (modeChoice.response === 0) {
+            return {
+                cancelled: false,
+                mode: 'smart-exact',
+                items
+            };
+        }
+
+        const adjustedItems = [];
+        const summaryLines = [];
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const bounds = await window.api.getCutVideoFastBounds({
+                inputPath: item.sourcePath,
+                startTime: item.startTime,
+                endTime: item.endTime
+            });
+
+            if (!bounds || !bounds.success) {
+                throw new Error(bounds?.error || this.t('runtime.app.lossless_selection_bounds_failed', 'Kayıpsız sınırlar hesaplanamadı.'));
+            }
+
+            adjustedItems.push({
+                ...item,
+                startTime: bounds.startTime,
+                endTime: bounds.endTime
+            });
+
+            summaryLines.push(this.t('runtime.app.lossless_selection_adjusted_item', '{label}: {oldStart} - {oldEnd} yerine {newStart} - {newEnd}', {
+                label: item.label || this.t('runtime.app.selection_item_label', 'Seçim {index}', { index: String(i + 1) }),
+                oldStart: Utils.formatTime(item.startTime),
+                oldEnd: Utils.formatTime(item.endTime),
+                newStart: Utils.formatTime(bounds.startTime),
+                newEnd: Utils.formatTime(bounds.endTime)
+            }));
+        }
+
+        const confirmChoice = await window.api.showMessageBox({
+            type: 'question',
+            title: this.t('runtime.app.lossless_selection_adjusted_title', 'Yeni seçim sınırları'),
+            message: this.t('runtime.app.lossless_selection_adjusted_message', 'Tam kayıpsız kopyalama için seçimler aşağıdaki sınırlara genişletilecek:'),
+            detail: summaryLines.join('\n'),
+            buttons: [
+                this.t('runtime.app.lossless_selection_adjusted_accept', 'Bu sınırlarla kaydet'),
+                this.t('dialog.common.cancel', 'İptal')
+            ],
+            defaultId: 0,
+            cancelId: 1,
+            noLink: true
+        });
+
+        if (confirmChoice.response === 1) {
+            return { cancelled: true };
+        }
+
+        Accessibility.announce(this.t('runtime.app.lossless_selection_adjusted_announce', '{count} seçim keyframe sınırlarına genişletildi.', {
+            count: String(adjustedItems.length)
+        }));
+
+        return {
+            cancelled: false,
+            mode: 'lossless-expand',
+            items: adjustedItems
+        };
+    },
+
+    async saveSelectionInteractive(isLossless = false) {
+        const itemsOrError = this.getSelectionSaveItems();
+        if (!Array.isArray(itemsOrError)) {
+            Accessibility.alert(itemsOrError.message);
+            return;
+        }
+
+        let saveItems = itemsOrError;
+        let fastMode = 'smart-exact';
+
+        if (isLossless) {
+            const losslessChoice = await this.chooseLosslessSelectionMode(itemsOrError);
+            if (losslessChoice.cancelled) {
+                return;
+            }
+            saveItems = losslessChoice.items;
+            fastMode = losslessChoice.mode;
+        }
+
+        const picked = await this.chooseSelectionSaveTargets(saveItems, isLossless);
+        if (picked.cancelled) {
+            return;
+        }
+
+        await this.saveSelectionBatch(saveItems, picked.targets, {
+            isLossless,
+            fastMode
+        });
+    },
+
+    async saveSelectionBatch(items, outputPaths, isLosslessOrOptions = false) {
+        const options = typeof isLosslessOrOptions === 'object'
+            ? isLosslessOrOptions
+            : { isLossless: Boolean(isLosslessOrOptions), fastMode: 'smart-exact' };
+        const isLossless = Boolean(options.isLossless);
+
+        if (!Array.isArray(items) || items.length === 0) {
+            Accessibility.alert(this.t('runtime.app.select_area_first', 'Önce bir alan seçmelisiniz'));
+            return;
+        }
+
+        const operationLabel = isLossless
+            ? this.t('runtime.app.selection_save_lossless_operation', 'Akıllı hızlı seçim kaydetme')
+            : this.t('runtime.app.selection_save_operation', 'Seçim kaydetme');
+
+        this.showProgress(isLossless
+            ? this.t('runtime.app.saving_selection_fast', 'Seçim akıllı hızlı kaydediliyor')
+            : this.t('runtime.app.saving_selection', 'Seçim kaydediliyor'));
+        Accessibility.announce(isLossless
+            ? this.t('runtime.app.saving_selection_fast', 'Seçim akıllı hızlı kaydediliyor')
+            : this.t('runtime.app.saving_selection', 'Seçim kaydediliyor'));
+
+        try {
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const outputPath = outputPaths[i];
+
+                this.showProgress(items.length > 1
+                    ? this.t('runtime.app.saving_selection_batch_progress', 'Kuyruktaki {index}. seçim kaydediliyor. Toplam {count} seçim var.', {
+                        index: String(i + 1),
+                        count: String(items.length)
+                    })
+                    : (isLossless
+                        ? this.t('runtime.app.saving_selection_fast', 'Seçim akıllı hızlı kaydediliyor')
+                        : this.t('runtime.app.saving_selection', 'Seçim kaydediliyor')));
+
+                const result = isLossless
+                    ? await window.api.cutVideoFast({
+                        inputPath: item.sourcePath,
+                        outputPath,
+                        startTime: item.startTime,
+                        endTime: item.endTime,
+                        mode: options.fastMode || 'smart-exact'
+                    })
+                    : await window.api.cutVideo({
+                        inputPath: item.sourcePath,
+                        outputPath,
+                        startTime: item.startTime,
+                        endTime: item.endTime
+                    });
+
+                if (!result.success) {
+                    throw new Error(result.error || this.t('runtime.common.error', 'Hata: {error}', { error: 'Unknown' }));
+                }
+            }
+
+            this.hideProgress();
+            Accessibility.announceComplete(items.length > 1
+                ? this.t('runtime.app.selection_batch_save_operation', '{count} seçim kaydedildi', { count: String(items.length) })
+                : operationLabel);
+        } catch (error) {
+            this.hideProgress();
+            Accessibility.announceError(error.message);
+        }
     },
 
     /**
@@ -81,6 +823,9 @@ const App = {
         window.api.onProjectOpen(() => {
             this.loadProject();
         });
+        window.api.onProjectFileOpen((filePath) => {
+            this.loadProjectFromPath(filePath);
+        });
 
         // Dosya işlemleri
         window.api.onFileOpen((filePath) => {
@@ -95,8 +840,18 @@ const App = {
             this.saveFileAs(filePath);
         });
 
+        window.api.onFileSaveFast((filePath) => {
+            this.saveFileFast(filePath);
+        });
+
         window.api.onFileSaveSelection((filePath) => {
             this.saveSelection(filePath);
+        });
+        window.api.onFileSaveSelectionRequest(() => {
+            this.saveSelectionInteractive(false);
+        });
+        window.api.onFileSaveSelectionFastRequest(() => {
+            this.saveSelectionInteractive(true);
         });
 
         window.api.onExportVideoOnly((filePath) => {
@@ -121,12 +876,13 @@ const App = {
         window.api.onSelectClear(() => Selection.clear());
         window.api.onSelectRangeDialog(() => Dialogs.showRangeDialog());
         window.api.onSelectBetweenMarkers(() => Selection.selectBetweenMarkers());
+        window.api.onShowSpeedDialog(() => Dialogs.showSpeedDialog());
         window.api.onIntelligentSelection(() => Dialogs.showAIDialog());
 
         // Ekleme işlemleri
         window.api.onInsertAudio((filePath) => {
             if (!VideoPlayer.hasVideo()) {
-                Accessibility.alert('Önce bir video açmalısınız');
+                Accessibility.alert(this.t('runtime.app.open_video_first', 'Önce bir video açmalısınız'));
                 return;
             }
             Dialogs.showAudioAddDialog(filePath);
@@ -136,21 +892,47 @@ const App = {
         window.api.onInsertVideo((filePath) => {
             this.insertVideo(filePath);
         });
+        window.api.onVerticalVideoFromSelection(() => {
+            this.openVerticalWizardFromSelection();
+        });
+        window.api.onVerticalVideoQueueAddSelection(() => {
+            this.addSelectionToVerticalQueue();
+        });
+        window.api.onVerticalVideoQueueOpen(() => {
+            this.openVerticalWizardFromQueue();
+        });
+        window.api.onVerticalVideoQueueClear(() => {
+            this.clearVerticalClipQueue();
+        });
+        window.api.onSelectionQueueOpen(() => {
+            this.openSelectionQueueDialog();
+        });
+
+        // Kaydı bitir ve projeye ekle
+        window.api.onAddToTimeline((filePath) => {
+            console.log('Kayıt projeye ekleniyor:', filePath);
+            // Yeni proje olarak aç (mevcut dosya kapanır)
+            this.openFile(filePath);
+        });
 
 
         // Ses Ekle (Dosya veya Kayıt Seçimi)
         window.api.onInsertAudioRequest(async () => {
             if (!VideoPlayer.hasVideo()) {
-                Accessibility.alert('Önce bir video açmalısınız');
+                Accessibility.alert(this.t('runtime.app.open_video_first', 'Önce bir video açmalısınız'));
                 return;
             }
 
             // Kullanıcıya seçenek sun: Dosya seç veya Kaydet
             const choice = await window.api.showMessageBox({
                 type: 'question',
-                title: 'Ses Ekle',
-                message: 'Ses nasıl eklenmesini istersiniz?',
-                buttons: ['Dosya Seç', 'Kayıt Yap', 'İptal'],
+                title: window.i18nHelper.t('dialog.insert_audio_title') || 'Ses Ekle',
+                message: window.i18nHelper.t('dialog.insert_audio_msg') || 'Ses nasıl eklenmesini istersiniz?',
+                buttons: [
+                    window.i18nHelper.t('dialog.select_file') || 'Dosya Seç',
+                    window.i18nHelper.t('dialog.record') || 'Kayıt Yap',
+                    window.i18nHelper.t('dialog.cancel') || 'İptal'
+                ],
                 defaultId: 0,
                 cancelId: 2
             });
@@ -158,7 +940,7 @@ const App = {
             if (choice.response === 0) {
                 // Dosya seç
                 const result = await window.api.openFileDialog({
-                    title: 'Ses Dosyası Seç',
+                    title: this.t('runtime.app.select_audio_file', 'Ses Dosyası Seç'),
                     filters: [
                         { name: 'Ses Dosyaları', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'wma'] },
                         { name: 'Tüm Dosyalar', extensions: ['*'] }
@@ -176,7 +958,7 @@ const App = {
                         await Dialogs.showAudioAddDialog(audioPath);
                     } else {
                         console.error('Audio path is undefined');
-                        Accessibility.alert('Ses dosyası seçilemedi');
+                        Accessibility.alert(this.t('runtime.app.audio_file_not_selected', 'Ses dosyası seçilemedi'));
                     }
                 } else {
                     console.log('No file selected or dialog canceled');
@@ -190,7 +972,7 @@ const App = {
 
         window.api.onInsertTextDialog(async () => {
             if (!VideoPlayer.hasVideo()) {
-                Accessibility.alert('Önce bir video açmalısınız');
+                Accessibility.alert(this.t('runtime.app.open_video_first', 'Önce bir video açmalısınız'));
                 return;
             }
             // Ayrı pencerede dialog aç
@@ -205,7 +987,7 @@ const App = {
 
         window.api.onOpenImageWizard(() => {
             if (!VideoPlayer.hasVideo()) {
-                Accessibility.alert('Önce bir video açmalısınız');
+                Accessibility.alert(this.t('runtime.app.open_video_first', 'Önce bir video açmalısınız'));
                 return;
             }
             Dialogs.showImageWizard();
@@ -249,7 +1031,9 @@ const App = {
             // İşaretçi listesi diyaloğu
             const markerList = document.getElementById('marker-list');
             markerList.focus();
-            Accessibility.announce(`${Markers.getCount()} işaretçi mevcut`);
+            Accessibility.announce(this.t('runtime.app.marker_count', '{count} işaretçi mevcut', {
+                count: Markers.getCount()
+            }));
         });
 
         // Yardım
@@ -259,20 +1043,37 @@ const App = {
         window.api.onShowHelp(() => {
             Dialogs.showHelpDialog();
         });
+        window.api.onShowFeedback(() => {
+            this.openFeedbackDraft();
+        });
+        window.api.onShowStartupWelcome(() => {
+            window.StartupWelcome?.show?.({ force: true });
+        });
 
         // İnce Ayar diyaloğu
         window.api.onShowFineTuneDialog(() => Dialogs.showFineTuneDialog());
 
         // FFmpeg ilerleme
         window.api.onFfmpegProgress((data) => {
-            this.updateProgress(data.operation, data.percent);
+            this.updateProgress(data.operation, data.percent, data);
         });
 
         // Uygulama hazır
         window.api.onAppReady((data) => {
+            if (data?.appVersion && window.UpdateManager) {
+                window.UpdateManager.setCurrentVersion(data.appVersion);
+            }
+            if (window.UpdateManager) {
+                window.UpdateManager.setPortableMode(data?.isPortable === true);
+            }
             if (data.accessibilityEnabled) {
                 console.log('Erişilebilirlik özellikleri etkin');
             }
+        });
+
+        window.api.onNativeMenuState((active) => {
+            this.nativeMenuActive = Boolean(active);
+            Keyboard.setEnabled(!this.nativeMenuActive);
         });
 
         // Dosya kapatma isteği
@@ -308,7 +1109,7 @@ const App = {
         // Akıllı Seçim Kontrolü
         window.api.onIntelligentSelection(() => {
             // Gelecek özellik: Seçimi içeriğe göre (sessizlik, sahne değişimi vb.) optimize et
-            Accessibility.announce('Akıllı seçim kontrolü özelliği yakında eklenecek.');
+            Accessibility.announce(this.t('runtime.app.intelligent_selection_soon', 'Akıllı seçim kontrolü özelliği yakında eklenecek.'));
             // Veya basit bir işlem:
             const selection = Selection.getSelection();
             if (selection && selection.start !== selection.end) {
@@ -317,9 +1118,12 @@ const App = {
                 let end = Math.round(selection.end);
                 if (start === end) end += 1;
                 Selection.setSelection(start, end);
-                Accessibility.announce(`Seçim tam saniyelere yuvarlandı: ${Utils.formatTime(start)} - ${Utils.formatTime(end)}`);
+                Accessibility.announce(this.t('runtime.app.selection_rounded', 'Seçim tam saniyelere yuvarlandı: {start} - {end}', {
+                    start: Utils.formatTime(start),
+                    end: Utils.formatTime(end)
+                }));
             } else {
-                Accessibility.announce('Önce bir alan seçmelisiniz.');
+                Accessibility.announce(this.t('runtime.app.select_area_first', 'Önce bir alan seçmelisiniz.'));
             }
         });
 
@@ -333,13 +1137,6 @@ const App = {
             this.describeCurrentPosition(durationArg);
         });
 
-        // FFmpeg ilerleme bildirimi
-        window.api.onFfmpegProgress((data) => {
-            if (data && data.percent !== undefined) {
-                this.updateProgress(data.operation || '', data.percent);
-            }
-        });
-
         // Dosya kapatıldı bildirimi
         window.api.onFileClosed(() => {
             this.closeCurrentFile();
@@ -347,19 +1144,19 @@ const App = {
 
         // Oynatma olayları
         window.api.onPlaybackToggle(() => {
+            if (this.shouldSuppressPlaybackShortcuts()) return;
             if (canControlVideo()) VideoPlayer.togglePlay();
         });
 
         window.api.onPlaybackPauseAtPosition(() => {
+            if (this.shouldSuppressPlaybackShortcuts()) return;
             if (isDialogOpen()) return; // Dialog varsa enter ile kapatıyor olabilir, karışma
             // Ancak liste odaklıysa enter seçim yapar, playing durmamalı mı?
             // Pause at position genellikle Enter tuşuna bağlı. Listede Enter seçim yapar.
             // Bu yüzden listedeysek video durmasın (zaten duruyorsa durur).
             // Input/List odaklıysa videoya müdahale etme
             if (!Keyboard.isInputFocused()) {
-                VideoPlayer.pause();
-                VideoPlayer.setCursorToCurrentTime();
-                Accessibility.announce(`Pozisyonda duraklatıldı: ${Utils.formatTime(VideoPlayer.getCurrentTime())}`);
+                VideoPlayer.togglePauseAtCurrentPosition();
             }
         });
 
@@ -382,30 +1179,23 @@ const App = {
         window.api.onGotoStart(() => {
             if (isDialogOpen()) return; // Home tuşu inputlarda başa gider, engelle
             if (Keyboard.isInputFocused()) return;
-            VideoPlayer.seekTo(0);
-            Accessibility.announceNavigation('Başa gidildi', 0);
+            VideoPlayer.goToStart();
         });
 
         window.api.onGotoEnd(() => {
             if (isDialogOpen()) return;
             if (Keyboard.isInputFocused()) return; // End tuşu inputlarda sona gider
-            const duration = VideoPlayer.getDuration();
-            VideoPlayer.seekTo(duration);
-            Accessibility.announceNavigation('Sona gidildi', duration);
+            VideoPlayer.goToEnd();
         });
 
         window.api.onGotoMiddle(() => {
             if (isDialogOpen()) return;
-            const middle = VideoPlayer.getDuration() / 2;
-            VideoPlayer.seekTo(middle);
-            Accessibility.announceNavigation('Ortaya gidildi', middle);
+            VideoPlayer.goToMiddle();
         });
 
         window.api.onGotoBeforeEnd(() => {
             if (isDialogOpen()) return;
-            const time = Math.max(0, VideoPlayer.getDuration() - 30);
-            VideoPlayer.seekTo(time);
-            Accessibility.announceNavigation('Sondan 30 saniye önce', time);
+            VideoPlayer.goToBeforeEnd();
         });
 
         window.api.onGotoTimeDialog(() => {
@@ -428,13 +1218,18 @@ const App = {
         window.api.onInsertionQueueAdd((data) => {
             console.log('Ekleme listesine ekleniyor:', data);
             InsertionQueue.addItem(data.type, data.options);
-            Accessibility.announce(`${data.type === 'text' ? 'Yazı' : 'Ses'} listeye eklendi. Toplam: ${InsertionQueue.getCount()} öğe`);
+            Accessibility.announce(this.t('runtime.app.queue_item_added', '{type} listeye eklendi. Toplam: {count} öğe', {
+                type: data.type === 'text'
+                    ? this.t('runtime.app.queue_item_text', 'Yazı')
+                    : this.t('runtime.app.queue_item_audio', 'Ses'),
+                count: InsertionQueue.getCount()
+            }));
         });
 
         window.api.onInsertionQueueUpdate((data) => {
             console.log('Ekleme listesi güncelleniyor:', data);
             InsertionQueue.updateItem(data.id, data.options);
-            Accessibility.announce('Öğe güncellendi');
+            Accessibility.announce(this.t('runtime.app.queue_item_updated', 'Öğe güncellendi'));
         });
 
         window.api.onShowInsertionQueue(() => {
@@ -476,7 +1271,7 @@ const App = {
         // === VIDEO KATMANI (Picture-in-Picture) ===
         window.api.onOpenVideoLayerWizard((filePath) => {
             if (!VideoPlayer.hasVideo()) {
-                Accessibility.alert('Önce bir video açmalısınız');
+                Accessibility.alert(this.t('runtime.app.open_video_first', 'Önce bir video açmalısınız'));
                 return;
             }
             Dialogs.showVideoLayerWizard(filePath);
@@ -485,7 +1280,7 @@ const App = {
         // CTA Library
         window.api.onShowCtaLibrary(() => {
             if (!VideoPlayer.hasVideo()) {
-                Accessibility.alert('Önce bir video açmalısınız');
+                Accessibility.alert(this.t('runtime.app.open_video_first', 'Önce bir video açmalısınız'));
                 return;
             }
             Dialogs.showCtaLibraryDialog();
@@ -517,21 +1312,21 @@ const App = {
         if (this.currentFilePath && this.originalFilePath &&
             this.currentFilePath !== this.originalFilePath) {
             console.warn('Dönüştürülmüş video da hata verdi:', this.currentFilePath);
-            Accessibility.announceError('Video oynatma hatası: ' + errorMessage);
+            Accessibility.announceError(this.t('runtime.app.playback_error', 'Video oynatma hatası: {error}', { error: errorMessage }));
             return;
         }
 
         // Kullanıcıya sor
         const confirmed = await Dialogs.showAccessibleConfirm(
-            'Oynatma Hatası',
-            `Video oynatılırken bir sorun oluştu (${errorMessage}). Formatı tamir etmek için dönüştürmek ister misiniz?`
+            window.i18nHelper.t('dialog.playback_error_title') || 'Oynatma Hatası',
+            (window.i18nHelper.t('dialog.playback_error_msg') || 'Video oynatılırken bir sorun oluştu ({error}). Formatı tamir etmek için dönüştürmek ister misiniz?').replace('{error}', errorMessage)
         );
 
         if (confirmed) {
             const inputPath = this.originalFilePath || filePath;
             const tempPath = await window.api.getTempPath(`repair_${Date.now()}.mp4`);
 
-            this.showProgress('Video onarılıyor...');
+            this.showProgress(this.t('runtime.app.repairing_video', 'Video onarılıyor...'));
 
             const result = await window.api.convertVideo({
                 inputPath: inputPath,
@@ -546,9 +1341,11 @@ const App = {
                 if (!this.originalFilePath) this.originalFilePath = filePath;
 
                 await VideoPlayer.loadVideo(tempPath);
-                Accessibility.announce('Video onarıldı ve tekrar yüklendi.');
+                Accessibility.announce(this.t('runtime.app.video_repaired_reloaded', 'Video onarıldı ve tekrar yüklendi.'));
             } else {
-                Accessibility.announceError('Onarım başarısız: ' + result.error);
+                Accessibility.announceError(this.t('runtime.app.repair_failed', 'Onarım başarısız: {error}', {
+                    error: result.error
+                }));
             }
         }
     },
@@ -571,11 +1368,17 @@ const App = {
         // Eğer dosya yolu yoksa, diyalog aç
         if (!filePath) {
             const result = await window.api.openFileDialog({
+                title: this.t('messages.open_video', 'Video Dosyası Aç'),
                 filters: [
-                    { name: 'Videolar', extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv'] },
-                    { name: 'Tüm Dosyalar', extensions: ['*'] }
-                ]
+                    { name: this.t('messages.media_files_filter', 'Medya Dosyaları'), extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'wma'] },
+                    { name: this.t('runtime.app.video_files_filter', 'Video Dosyaları'), extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv'] },
+                    { name: this.t('dialog.sync.audio_files_filter', 'Ses Dosyaları'), extensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'wma'] },
+                    { name: this.t('dialog.common.all_files', 'Tüm Dosyalar'), extensions: ['*'] }
+                ],
+                properties: ['openFile']
             });
+
+            console.log('Dosya aç diyaloğu sonucu:', result);
 
             if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
                 return;
@@ -583,12 +1386,13 @@ const App = {
             filePath = result.filePaths[0];
         }
 
+        console.log('Dosya açma başlatılıyor:', filePath);
         this.isOpeningFile = true;
         try {
             await this._openFileInternal(filePath, resetUI);
         } catch (error) {
             console.error('Dosya açma hatası:', error);
-            Accessibility.announceError('Dosya açılırken hata oluştu.');
+            Accessibility.announceError(this.t('runtime.app.file_open_error', 'Dosya açılırken bir hata oluştu'));
         } finally {
             this.isOpeningFile = false;
         }
@@ -599,23 +1403,26 @@ const App = {
      * @param {boolean} resetUI
      */
     async _openFileInternal(filePath, resetUI = true) {
+        console.log('İç dosya açma akışı başladı:', filePath, 'resetUI=', resetUI);
         // Media compatibility status listener'ı kur
         const statusHandler = (status) => {
             console.log('Media Compat Status:', status);
 
             switch (status.status) {
                 case 'analyzing':
-                    Accessibility.announce('Dosya analiz ediliyor...');
+                    Accessibility.announce(this.t('runtime.app.analyzing_file', 'Dosya analiz ediliyor...'));
                     break;
                 case 'remuxing':
-                    this.showProgress('Hızlı format dönüşümü yapılıyor (kalite kaybı yok)');
-                    Accessibility.announce(status.message || 'Hızlı dönüşüm başladı');
+                    this.showProgress(this.t('runtime.app.fast_remux_progress', 'Hızlı format dönüşümü yapılıyor (kalite kaybı yok)'));
+                    Accessibility.announce(status.message || this.t('runtime.app.fast_remux_started', 'Hızlı dönüşüm başladı'));
                     break;
                 case 'transcoding':
-                    this.showProgress('Video dönüştürülüyor...');
-                    Accessibility.announce(status.message || 'Dönüştürme başladı');
+                    this.showProgress(this.t('runtime.app.converting_video', 'Video dönüştürülüyor...'));
+                    Accessibility.announce(status.message || this.t('runtime.app.conversion_started', 'Dönüştürme başladı'));
                     if (status.estimatedTime) {
-                        Accessibility.announce(`Tahmini süre: ${Math.ceil(status.estimatedTime)} saniye`);
+                        Accessibility.announce(this.t('runtime.app.estimated_time_seconds', 'Tahmini süre: {seconds} saniye', {
+                            seconds: Math.ceil(status.estimatedTime)
+                        }));
                     }
                     break;
                 case 'ready':
@@ -623,7 +1430,7 @@ const App = {
                     break;
                 case 'error':
                     this.hideProgress();
-                    Accessibility.announceError(status.message || 'Bir hata oluştu');
+                    Accessibility.announceError(status.message || this.t('runtime.app.generic_error', 'Bir hata oluştu'));
                     break;
             }
         };
@@ -633,9 +1440,9 @@ const App = {
             if (progress && progress.percent !== undefined) {
                 let message = '';
                 if (progress.stage === 'remux') {
-                    message = 'Hızlı dönüşüm';
+                    message = this.t('runtime.app.fast_remux_operation', 'Hızlı dönüşüm');
                 } else if (progress.stage === 'transcode') {
-                    message = 'Dönüştürme';
+                    message = this.t('runtime.app.conversion_operation', 'Dönüştürme');
                 }
                 this.updateProgress(message, progress.percent);
             }
@@ -647,7 +1454,9 @@ const App = {
 
         try {
             // Akıllı dosya açma - otomatik olarak en uygun stratejiyi seçer
+            console.log('smartOpenVideo çağrılıyor:', filePath);
             const result = await window.api.smartOpenVideo(filePath);
+            console.log('smartOpenVideo sonucu:', result);
 
             // Event listener'ları temizle
             window.api.removeAllListeners('media-compat-status');
@@ -655,7 +1464,9 @@ const App = {
             this.hideProgress();
 
             if (!result.success) {
-                Accessibility.announceError(`Video açılamadı: ${result.error}`);
+                Accessibility.announceError(this.t('runtime.app.video_open_failed', 'Video açılamadı: {error}', {
+                    error: result.error
+                }));
                 return;
             }
 
@@ -666,17 +1477,17 @@ const App = {
             let strategyMessage = '';
             switch (result.strategy) {
                 case 'DIRECT_PLAY':
-                    strategyMessage = 'Doğrudan açıldı';
+                    strategyMessage = this.t('runtime.app.strategy_direct', 'Doğrudan açıldı');
                     break;
                 case 'QUICK_REMUX':
                     strategyMessage = result.cached
-                        ? 'Önbellekten hızlı açıldı'
-                        : 'Hızlı dönüşüm yapıldı (kalite kaybı yok)';
+                        ? this.t('runtime.app.strategy_fast_cache', 'Önbellekten hızlı açıldı')
+                        : this.t('runtime.app.strategy_fast_remux', 'Hızlı dönüşüm yapıldı (kalite kaybı yok)');
                     break;
                 case 'TRANSCODE':
                     strategyMessage = result.cached
-                        ? 'Önbellekten açıldı'
-                        : 'Dönüştürme tamamlandı';
+                        ? this.t('runtime.app.strategy_cache', 'Önbellekten açıldı')
+                        : this.t('runtime.app.strategy_conversion_done', 'Dönüştürme tamamlandı');
                     break;
             }
 
@@ -688,7 +1499,7 @@ const App = {
                 await VideoPlayer.loadVideo(playbackPath);
             } catch (error) {
                 console.error('Video yükleme hatası:', error);
-                Accessibility.announceError('Video oynatıcıya yüklenemedi');
+                Accessibility.announceError(this.t('runtime.app.video_player_load_failed', 'Video oynatıcıya yüklenemedi'));
                 return;
             }
 
@@ -697,7 +1508,7 @@ const App = {
 
             if (duration <= 0) {
                 console.error('Video süresi alınamadı!');
-                Accessibility.alert('Video açılamadı');
+                Accessibility.alert(this.t('runtime.app.video_open_failed_short', 'Video açılamadı'));
                 return;
             }
 
@@ -720,6 +1531,7 @@ const App = {
             Timeline.segments = tab.timeline.segments.map(s => ({ ...s }));
             Timeline.sourceFile = playbackPath;
             Timeline.hasChanges = false;
+            Timeline.renderVisuals();
 
             // İşaretçileri ve seçimi temizle (Sadece yeni dosya açarken)
             if (resetUI) {
@@ -753,11 +1565,11 @@ const App = {
 
             if (finalWidth && finalHeight) {
                 if (finalWidth > finalHeight) {
-                    orientation = 'Yatay';
+                    orientation = this.t('runtime.video_player.orientation_landscape', 'Landscape');
                 } else if (finalWidth < finalHeight) {
-                    orientation = 'Dikey';
+                    orientation = this.t('runtime.video_player.orientation_portrait', 'Portrait');
                 } else {
-                    orientation = 'Kare';
+                    orientation = this.t('runtime.video_player.orientation_square', 'Square');
                 }
             }
 
@@ -767,21 +1579,30 @@ const App = {
                 : filePath.split(/[\\/]/).pop();
 
             const fileInfo = [
-                `${filename} açıldı`,
+                this.t('runtime.app.file_opened', '{filename} opened', { filename }),
                 strategyMessage,
-                `Süre: ${durationStr}`,
-                resolution ? `Çözünürlük: ${resolution}` : '',
-                orientation ? `Yön: ${orientation}` : '',
-                loadedMetadata.frameRate ? `FPS: ${typeof loadedMetadata.frameRate === 'number' ? loadedMetadata.frameRate.toFixed(2) : loadedMetadata.frameRate}` : '',
-                loadedMetadata.bitrate ? `Bitrate: ${(loadedMetadata.bitrate / 1000000).toFixed(1)} Mbps` : '',
-                loadedMetadata.codec ? `Codec: ${loadedMetadata.codec}` : ''
+                this.t('runtime.app.meta_duration', 'Duration: {value}', { value: durationStr }),
+                resolution ? this.t('runtime.app.meta_resolution', 'Resolution: {value}', { value: resolution }) : '',
+                orientation ? this.t('runtime.app.meta_orientation', 'Orientation: {value}', { value: orientation }) : '',
+                loadedMetadata.frameRate ? this.t('runtime.app.meta_fps', 'FPS: {value}', {
+                    value: typeof loadedMetadata.frameRate === 'number' ? loadedMetadata.frameRate.toFixed(2) : loadedMetadata.frameRate
+                }) : '',
+                loadedMetadata.bitrate ? this.t('runtime.app.meta_bitrate', 'Bitrate: {value} Mbps', {
+                    value: (loadedMetadata.bitrate / 1000000).toFixed(1)
+                }) : '',
+                loadedMetadata.codec ? this.t('runtime.app.meta_codec', 'Codec: {value}', { value: loadedMetadata.codec }) : '',
+                loadedMetadata.size && !isNaN(loadedMetadata.size) ? this.t('runtime.app.meta_size', 'Size: {value}', {
+                    value: Utils.formatFileSize(loadedMetadata.size)
+                }) : ''
             ].filter(x => x).join('. ');
 
 
 
             // Eğer zaten aynı dosya açıksa (reload/re-open durumu) sadece kısa bilgi ver
             if (this._lastLoadedPath === filePath) {
-                Accessibility.announceImmediate(`Video tekrar yüklendi. ${strategyMessage}`);
+                Accessibility.announceImmediate(this.t('runtime.app.video_reloaded', 'Video reloaded. {message}', {
+                    message: strategyMessage
+                }));
             } else {
                 // Yeni dosya - Detaylı bilgi
                 Accessibility.announceImmediate(fileInfo);
@@ -795,8 +1616,53 @@ const App = {
             window.api.removeAllListeners('media-compat-status');
             window.api.removeAllListeners('media-compat-progress');
             this.hideProgress();
-            Accessibility.announceError('Dosya açılırken bir hata oluştu');
+            Accessibility.announceError(this.t('runtime.app.file_open_error', 'An error occurred while opening the file'));
         }
+    },
+
+    async openFeedbackDraft() {
+        const choice = await Dialogs.showAccessibleChoice({
+            title: this.t('feedback.dialog.title', 'Geri Bildirim Gonder'),
+            message: this.t(
+                'feedback.dialog.message',
+                'Bir e-posta taslagi acilacak. Isterseniz tanı bilgilerini ve son oturum log ozetini de ekleyebiliriz. Bunlar dosya yolları ve sistem bilgileri gibi size ozel veriler icerebilir.'
+            ),
+            buttons: [
+                this.t('feedback.dialog.include_diagnostics', 'Tani Bilgilerini Ekle'),
+                this.t('feedback.dialog.email_only', 'Sadece E-posta Taslagi'),
+                this.t('dialog.cancel', 'Iptal')
+            ],
+            cancelValue: -1,
+            focusIndex: 0,
+            detailsLabel: this.t('feedback.dialog.details_label', 'Neler eklenecek?'),
+            details: this.t(
+                'feedback.dialog.details',
+                'Tani bilgileri acik dosya yolunu, uygulama surumunu, sistem bilgisini ve son log satirlarini icerebilir.'
+            )
+        });
+
+        if (choice === -1 || choice === 2) {
+            Accessibility.announce(this.t('feedback.runtime.cancelled', 'Geri bildirim islemi iptal edildi.'));
+            return;
+        }
+
+        const result = await window.api.createFeedbackDraft({
+            includeDiagnostics: choice === 0,
+            currentFilePath: this.currentFilePath || ''
+        });
+
+        if (result?.success) {
+            Accessibility.announce(
+                result.includedDiagnostics
+                    ? this.t('feedback.runtime.opened_with_diagnostics', 'E-posta taslagi tanı bilgileriyle acildi.')
+                    : this.t('feedback.runtime.opened_basic', 'E-posta taslagi acildi.')
+            );
+            return;
+        }
+
+        Accessibility.announceError(this.t('feedback.runtime.failed', 'Geri bildirim e-postasi acilamadi: {error}', {
+            error: result?.error || this.t('recording.unknown_error', 'Bilinmeyen hata')
+        }));
     },
 
     /**
@@ -811,15 +1677,22 @@ const App = {
         }
 
         // Dönüştürme öner (erişilebilir dialog)
-        const runtimeErrorMessage = `${errorMessage}. Videoyu MP4 (H.264) formatına dönüştürmek ister misiniz?`;
-        const shouldConvert = await Dialogs.showAccessibleConfirm('Video Oynatılamıyor', runtimeErrorMessage);
+        const runtimeErrorMessage = this.t(
+            'runtime.app.convert_prompt',
+            '{error}. Videoyu MP4 (H.264) formatına dönüştürmek ister misiniz?',
+            { error: errorMessage }
+        );
+        const shouldConvert = await Dialogs.showAccessibleConfirm(
+            this.t('runtime.app.video_unplayable_title', 'Video Oynatılamıyor'),
+            runtimeErrorMessage
+        );
 
         if (shouldConvert) {
             const ext = filePath.split('.').pop().toLowerCase();
             const tempPath = await window.api.getTempPath(`converted_${Date.now()}.mp4`);
 
-            this.showProgress('Video dönüştürülüyor');
-            Accessibility.announce('Video dönüştürülüyor, lütfen bekleyin');
+            this.showProgress(this.t('runtime.app.converting_video_short', 'Video dönüştürülüyor'));
+            Accessibility.announce(this.t('runtime.app.converting_video_wait', 'Video dönüştürülüyor, lütfen bekleyin'));
 
             const convertResult = await window.api.convertVideo({
                 inputPath: filePath,
@@ -830,7 +1703,7 @@ const App = {
             this.hideProgress();
 
             if (convertResult.success) {
-                Accessibility.announceImmediate('Dönüştürme tamamlandı, video yeniden açılıyor');
+                Accessibility.announceImmediate(this.t('runtime.app.conversion_reopening', 'Dönüştürme tamamlandı, video yeniden açılıyor'));
 
                 // Mevcut sekmeyi güncelle (varsa)
                 const activeTab = TabManager.getActiveTab();
@@ -844,9 +1717,11 @@ const App = {
                 this.currentFilePath = tempPath;
                 Timeline.sourceFile = tempPath;
 
-                Accessibility.announce('Video hazır');
+                Accessibility.announce(this.t('runtime.app.video_ready', 'Video hazır'));
             } else {
-                Accessibility.announceError(`Dönüştürme hatası: ${convertResult.error}`);
+                Accessibility.announceError(this.t('runtime.app.conversion_error', 'Dönüştürme hatası: {error}', {
+                    error: convertResult.error
+                }));
             }
         }
     },
@@ -867,6 +1742,7 @@ const App = {
         Timeline.segments = [];
         Timeline.sourceFile = null;
         Timeline.hasChanges = false;
+        Timeline.renderVisuals();
 
         // Diğer modülleri temizle
         Markers.clearAll();
@@ -874,7 +1750,7 @@ const App = {
         VideoPlayer.showEmptyState();
 
         // UI güncelle
-        document.getElementById('file-name').textContent = 'Yeni Proje';
+        document.getElementById('file-name').textContent = this.t('runtime.app.new_project', 'Yeni Proje');
         document.getElementById('total-duration').textContent = '00:00:00.000';
     },
 
@@ -889,8 +1765,10 @@ const App = {
 
         if (tab.hasChanges) {
             const result = await window.api.showSaveConfirm(
-                'Kaydet?',
-                `"${tab.name}" dosyasında kaydedilmemiş değişiklikler var. Kaydetmek istiyor musunuz?`
+                this.t('runtime.app.save_question_title', 'Kaydet?'),
+                this.t('runtime.app.tab_unsaved_changes', '"{name}" dosyasında kaydedilmemiş değişiklikler var. Kaydetmek istiyor musunuz?', {
+                    name: tab.name
+                })
             );
 
             if (result === 0) { // Kaydet
@@ -915,7 +1793,7 @@ const App = {
 
         // Yeni proje veya segment varsa kaydet
         if (Timeline.segments.length === 0) {
-            Accessibility.alert('Kaydedilecek içerik yok');
+            Accessibility.alert(this.t('runtime.app.nothing_to_save', 'Kaydedilecek içerik yok'));
             return;
         }
 
@@ -923,10 +1801,10 @@ const App = {
         if (!this.currentFilePath) {
             console.log('Dosya kayıtlı değil, Save As diyaloğu açılıyor');
             const result = await window.api.showSaveDialog({
-                title: 'Projeyi Kaydet',
+                title: this.t('runtime.app.save_project_title', 'Projeyi Kaydet'),
                 defaultPath: 'yeni_video.mp4',
                 filters: [
-                    { name: 'Video Dosyaları', extensions: ['mp4'] }
+                    { name: this.t('runtime.app.video_files_filter', 'Video Dosyaları'), extensions: ['mp4'] }
                 ]
             });
 
@@ -961,7 +1839,7 @@ const App = {
 
         if (!Timeline.hasChanges && ctaCount === 0) {
             console.log('Değişiklik bulunamadı, kaydetme atlandı');
-            Accessibility.announce('Değişiklik yok, kaydetme atlandı');
+            Accessibility.announce(this.t('runtime.app.no_changes_skip_save', 'Değişiklik yok, kaydetme atlandı'));
             return;
         }
 
@@ -996,20 +1874,42 @@ const App = {
     },
 
     /**
+     * Hızlı Dışa Aktar (Smart Cut Mode)
+     * @param {string} filePath
+     */
+    async saveFileFast(filePath) {
+        if (!VideoPlayer.hasVideo()) return;
+
+        // Geçiş kontrolü - Kullanıcı isteği üzerine engellendi
+        if (typeof Transitions !== 'undefined' && Transitions.getCount() > 0) {
+            Accessibility.announceError(this.t('runtime.app.fast_export_transition_short', 'Geçiş efektleri var, Hızlı Dışa Aktar kullanılamaz.'));
+            await window.api.showError({
+                title: this.t('runtime.app.operation_unavailable', 'İşlem Yapılamıyor'),
+                message: this.t('runtime.app.fast_export_transition_error', 'Projenizde geçiş efektleri (Transitions) bulunmaktadır. "Hızlı Dışa Aktar" özelliği geçiş efektleriyle uyumlu değildir. Lütfen "Videoyu Farklı Kaydet" seçeneğini kullanın.')
+            });
+            return;
+        }
+
+        if (!filePath) return;
+        console.log('Hızlı Dışa Aktar (Smart Cut) başlatılıyor...');
+        await this.exportTimeline(filePath, { forceSmartCut: true });
+    },
+
+    /**
      * Timeline segment'lerini video olarak dışa aktar
      * Kesimler kesin (re-encode), birleştirme hızlı (stream copy)
      * @param {string} outputPath - Çıktı dosya yolu
      */
-    async exportTimeline(outputPath) {
+    async exportTimeline(outputPath, options = {}) {
         const segments = Timeline.getSegments();
 
         if (segments.length === 0) {
-            Accessibility.alert('Dışa aktarılacak içerik yok');
+            Accessibility.alert(this.t('runtime.app.nothing_to_export', 'Dışa aktarılacak içerik yok'));
             return;
         }
 
-        this.showProgress('Video dışa aktarılıyor');
-        Accessibility.announce('Video dışa aktarılıyor');
+        this.showProgress(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'));
+        Accessibility.announce(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'));
 
         try {
             // CTA overlay sayısı
@@ -1024,9 +1924,12 @@ const App = {
                 const meta = VideoPlayer.metadata || { width: 0, height: 0 };
                 console.log('Safe Render Check - Meta:', meta, 'CTA Count:', ctaCount);
 
-                // Kullanıcının "4k tarzı" dediği ancak testlerde çıkmadığı durumlar için eşiği düşürüyoruz.
-                // 1200x700 (HD) ve üzeri tüm videolarda güvenli modu önerelim.
-                const isHighRes = meta && (meta.width >= 1200 || meta.height >= 700);
+                // V90: Piksel sayısına göre kontrol (yatay/dikey fark etmez)
+                // 2K (2560x1440) = ~3.7 milyon piksel
+                // 4K (3840x2160) = ~8.3 milyon piksel
+                // 1080p (1920x1080 veya 1080x1920) = ~2 milyon piksel (uyarı YOK)
+                const totalPixels = (meta.width || 0) * (meta.height || 0);
+                const isHighRes = totalPixels >= 3500000; // 3.5M+ piksel (2K ve üzeri)
 
                 // FFmpeg (Lavf) tarafından oluşturulmuş
                 const isConvertedByFfmpeg = meta.encoder && meta.encoder.toLowerCase().includes('lavf');
@@ -1044,17 +1947,17 @@ const App = {
                 if (isHighRes && !isSafeFile) {
                     this.hideProgress();
                     const confirmed = await Dialogs.showAccessibleConfirm(
-                        'Güvenli Render Uyarısı',
-                        'Yüksek çözünürlüklü ve ham videolarda bindirme (Overlay) işlemi öncesinde, sistem kararlılığı için Safe Render (Tam Yeniden Kodlama) önerilir. Bu işlem daha uzun sürer ancak donmaları engeller. Güvenli Render kullanılsın mı?'
+                        this.t('runtime.app.safe_render_warning_title', 'Güvenli Render Uyarısı'),
+                        this.t('runtime.app.safe_render_warning_message', 'Yüksek çözünürlüklü ve ham videolarda bindirme (Overlay) işlemi öncesinde, sistem kararlılığı için Safe Render (Tam Yeniden Kodlama) önerilir. Bu işlem daha uzun sürer ancak donmaları engeller. Güvenli Render kullanılsın mı?')
                     );
 
                     if (confirmed) {
                         safeRenderMode = true;
-                        Accessibility.announce('Güvenli render modu etkinleştirildi.');
+                        Accessibility.announce(this.t('runtime.app.safe_render_enabled', 'Güvenli render modu etkinleştirildi.'));
                     } else {
-                        Accessibility.announce('Standart render ile devam ediliyor.');
+                        Accessibility.announce(this.t('runtime.app.standard_render_continue', 'Standart render ile devam ediliyor.'));
                     }
-                    this.showProgress('Video dışa aktarılıyor');
+                    this.showProgress(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'));
                 } else if (isSafeFile) {
                     console.log('Dosya zaten güvenli/dönüştürülmüş (Lavf/Converted), Safe Render uyarısı atlandı.');
                     // Varsayılan olarak safeRenderMode = false (Smart Cut) devam eder.
@@ -1072,13 +1975,164 @@ const App = {
                 segments[0].start === 0 &&
                 segments[0].end === Timeline.sourceDuration &&
                 !segments[0].sourceFile &&
+                (segments[0].speed === undefined || segments[0].speed === 1.0) &&
                 ctaCount === 0) {
                 // Değişiklik yok, dosya kopyala
                 const sourceFile = this.originalFilePath || this.currentFilePath;
                 await window.api.copyFile(sourceFile, outputPath);
                 this.hideProgress();
-                Accessibility.announceComplete('Dosya kopyalandı (değişiklik yok)');
+                Accessibility.announceComplete(this.t('runtime.app.file_copied_unchanged', 'Dosya kopyalandı (değişiklik yok)'));
+                if (Utils && Utils.playSound) Utils.playSound('success');
                 return;
+            }
+
+            // V88 OPTIMIZATION: Sadece CTA varsa ve timeline değişikliği yoksa, render'ı atla
+            // V91: Koşullar iyileştirildi - sourceDuration=0 ve sourceFile durumları ele alındı
+
+            const seg = segments[0];
+            const origFile = this.originalFilePath || this.currentFilePath;
+
+            // sourceDuration 0 ise, segment süresini referans al
+            const effectiveSourceDuration = Timeline.sourceDuration > 0
+                ? Timeline.sourceDuration
+                : (seg?.end || 0);
+
+            // Süre farkı kontrolü (0.5 saniye tolerans)
+            const durationMatches = seg && Math.abs(seg.end - effectiveSourceDuration) < 0.5;
+
+            // sourceFile kontrolü: boş VEYA orijinal dosyayla aynı ise OK
+            const sourceFileOk = !seg?.sourceFile ||
+                seg.sourceFile === origFile ||
+                seg.sourceFile === this.currentFilePath;
+
+            const hasNoTimelineChanges = segments.length === 1 &&
+                seg?.start === 0 &&
+                durationMatches &&
+                sourceFileOk &&
+                !seg?.noiseReduction?.enabled &&
+                !seg?.isMuted &&
+                (seg?.audioVolume === undefined || seg?.audioVolume === 100) &&
+                (!seg?.audioChannelMode || seg?.audioChannelMode === 'source') &&
+                (seg?.speed === undefined || seg?.speed === 1.0);
+
+            const hasNoTransitions = typeof Transitions === 'undefined' || Transitions.getCount() === 0;
+
+            // V91 DEBUG: Log all conditions
+            console.log('V91 Optimization Check:', {
+                segmentCount: segments.length,
+                segStart: seg?.start,
+                segEnd: seg?.end,
+                sourceDuration: Timeline.sourceDuration,
+                effectiveSourceDuration,
+                durationMatches,
+                sourceFile: seg?.sourceFile,
+                origFile,
+                sourceFileOk,
+                noiseReduction: seg?.noiseReduction?.enabled,
+                isMuted: seg?.isMuted,
+                audioVolume: seg?.audioVolume,
+                hasNoTimelineChanges,
+                hasNoTransitions,
+                ctaCount,
+                willUseFastPath: hasNoTimelineChanges && hasNoTransitions && ctaCount > 0
+            });
+
+            if (hasNoTimelineChanges && hasNoTransitions && ctaCount > 0) {
+                // Sadece CTA overlay var, timeline değişikliği yok
+                // Render'ı atla, doğrudan orijinal dosyaya overlay uygula
+
+
+                Accessibility.announce(this.t('runtime.app.overlay_only_optimization', 'Optimizasyon: Sadece overlay ekleniyor (render atlanıyor)'));
+                console.log('V88 Fast Path: Skipping renderTimeline, applying CTA directly to source');
+                if (Utils && Utils.playSound) Utils.playSound('start');
+
+                const sourceFile = this.originalFilePath || this.currentFilePath;
+                const rawOverlays = CtaOverlayPreview.getTimelineOverlays();
+
+                // Relative path'leri absolute path'e dönüştür
+                const resolveAssetPath = (assetPath) => {
+                    if (assetPath.match(/^[A-Za-z]:[\\\/]/) || assetPath.startsWith('/')) {
+                        return assetPath;
+                    }
+                    const baseUrl = new URL('.', window.location.href);
+                    const absoluteUrl = new URL(assetPath, baseUrl);
+                    let absolutePath = decodeURIComponent(absoluteUrl.pathname);
+                    if (absolutePath.match(/^\/[A-Za-z]:\//)) {
+                        absolutePath = absolutePath.substring(1);
+                    }
+                    return absolutePath.replace(/\//g, '\\');
+                };
+
+                const overlays = rawOverlays.map(o => ({
+                    assetPath: resolveAssetPath(o.asset.path),
+                    startTime: o.startTime,
+                    duration: o.duration,
+                    position: o.position,
+                    scale: o.scale,
+                    opacity: o.opacity,
+                    sound: o.sound ? resolveAssetPath(o.sound) : null,
+                    fade: o.fade,
+                    removeBackground: 'black'
+                }));
+
+                // CTA progress handler
+                let lastAnnouncedPercent = 0;
+
+                // V92: İlerleme çubuğunu göster
+                this.showProgress(this.t('runtime.app.applying_cta_overlay', 'CTA Overlay uygulanıyor'));
+
+                const self = this; // Closure için referans
+                const ctaProgressHandler = (data) => {
+                    if (data.operation === 'apply-cta-smart' && data.percent != null) {
+                        const percent = Math.round(data.percent);
+                        if (!isFinite(percent) || percent < 0 || percent > 100) return;
+
+                        // V92: İlerleme çubuğunu her zaman güncelle
+                        if (self.updateProgress) {
+                            self.updateProgress('apply-cta-smart', percent);
+                        }
+
+                        // Sesli duyuru sadece %10'luk artışlarda
+                        if (percent >= lastAnnouncedPercent + 10 || percent === 100) {
+                            lastAnnouncedPercent = percent;
+                            Accessibility.announce(this.t('runtime.app.cta_overlay_progress', 'CTA overlay: yüzde {percent}', { percent }));
+                        }
+                    }
+                };
+                window.api.onFfmpegProgress(ctaProgressHandler);
+
+                try {
+                    const result = await window.api.applyCtaOverlaysSmart({
+                        videoPath: sourceFile,
+                        outputPath: outputPath,
+                        overlays: overlays
+                    });
+
+                    window.api.offFfmpegProgress(ctaProgressHandler);
+
+                    if (!result.success) {
+                        throw new Error('CTA Overlay hatası: ' + result.error);
+                    }
+
+                    this.hideProgress();
+                    this.hasChanges = false;
+                    Timeline.hasChanges = false;
+
+                    if (typeof CtaOverlayPreview !== 'undefined') {
+                        CtaOverlayPreview.clearAllOverlays();
+                    }
+
+                    if (Utils && Utils.playSound) Utils.playSound('success');
+
+                    Accessibility.announceComplete(this.t('runtime.app.export_complete_with_cta', 'Video dışa aktarma tamamlandı ({count} CTA overlay)', {
+                        count: ctaCount
+                    }));
+                    return;
+
+                } catch (err) {
+                    window.api.offFfmpegProgress(ctaProgressHandler);
+                    throw err;
+                }
             }
 
             // === TEK ÇİZGİ (SINGLE PASS) RENDER ===
@@ -1096,28 +2150,23 @@ const App = {
                 noiseReduction: seg.noiseReduction, // { enabled: true, level: 'high', ... }
                 audioEffects: seg.audioEffects,
                 audioVolume: seg.audioVolume,
-                isMuted: seg.isMuted
+                audioChannelMode: seg.audioChannelMode,
+                isMuted: seg.isMuted,
+                speed: seg.speed || 1.0,
+                speedBgAudio: seg.speedBgAudio
             }));
 
-            // DEBUG: İlk segmentin gürültü temizleme ayarını konsola bas
-            if (renderSegments.length > 0) {
-                console.log('[App.js] Segment 0 Noise Reduction:', renderSegments[0].noiseReduction);
-            }
-
-            Accessibility.announce('Timeline tek seferde render ediliyor (Single Pass)');
-            console.log('RenderTimeline başlıyor:', { inputPath, segments: renderSegments, outputPath });
+            Accessibility.announce(this.t('runtime.app.single_pass_render', 'Timeline tek seferde render ediliyor (Single Pass)'));
 
             // Geçişleri al
             const transitions = typeof Transitions !== 'undefined' ? Transitions.getAll() : [];
-            if (transitions.length > 0) {
-                console.log('Uygulanacak geçişler:', transitions);
-            }
 
             const renderResult = await window.api.renderTimeline({
                 inputPath: inputPath,
                 segments: renderSegments,
                 outputPath: outputPath,
-                transitions: transitions
+                transitions: transitions,
+                options: options
             });
 
             if (!renderResult.success) {
@@ -1126,7 +2175,7 @@ const App = {
 
             // CTA Overlay'leri uygula
             if (ctaCount > 0) {
-                Accessibility.announce('CTA overlay\'ler ekleniyor (Smart Processing)');
+                Accessibility.announce(this.t('runtime.app.cta_overlay_processing', 'CTA overlay\'ler ekleniyor (Smart Processing)'));
 
                 const rawOverlays = CtaOverlayPreview.getTimelineOverlays();
 
@@ -1162,15 +2211,12 @@ const App = {
                     removeBackground: 'black' // Varsayılan olarak siyah arka planı sil
                 }));
 
-                console.log('CTA Overlays with resolved paths:', overlays);
-
                 const timestamp = Date.now();
                 const ctaOutputPath = outputPath.replace(/\.mp4$/i, `_cta_final_${timestamp}.mp4`);
 
                 // CTA progress için listener ekle
                 let lastAnnouncedPercent = 0;
                 const ctaProgressHandler = (data) => {
-                    console.log('CTA Progress Event:', data);
                     if (data.operation === 'apply-cta-smart' && data.percent != null) {
                         const percent = Math.round(data.percent);
                         // Geçerli değer mi kontrol et
@@ -1180,8 +2226,7 @@ const App = {
                         // Her %10'da bir duyur
                         if (percent >= lastAnnouncedPercent + 10 || percent === 100) {
                             lastAnnouncedPercent = percent;
-                            const message = `CTA overlay ekleniyor: yüzde ${percent}`;
-                            console.log('CTA Announce:', message);
+                            const message = this.t('runtime.app.cta_overlay_adding_progress', 'CTA overlay ekleniyor: yüzde {percent}', { percent });
                             Accessibility.announce(message);
                             if (this.updateProgress && typeof this.updateProgress === 'function') {
                                 this.updateProgress('apply-cta-smart', percent);
@@ -1192,7 +2237,7 @@ const App = {
                 window.api.onFfmpegProgress(ctaProgressHandler);
 
                 try {
-                    Accessibility.announce('CTA overlay işlemi başlıyor...');
+                    Accessibility.announce(this.t('runtime.app.cta_overlay_starting', 'CTA overlay işlemi başlıyor...'));
                     const result = await window.api.applyCtaOverlaysSmart({
                         videoPath: outputPath,
                         outputPath: ctaOutputPath,
@@ -1200,7 +2245,7 @@ const App = {
                     });
 
                     // Listener'ı kaldır
-                    window.api.removeAllListeners('ffmpeg-progress');
+                    window.api.offFfmpegProgress(ctaProgressHandler);
 
                     if (result.success) {
                         // Temp dosyayı asıl çıktıya taşı (overwrite)
@@ -1214,7 +2259,7 @@ const App = {
                     }
                 } catch (err) {
                     console.error('CTA processing error:', err);
-                    window.api.removeAllListeners('ffmpeg-progress');
+                    window.api.offFfmpegProgress(ctaProgressHandler);
                     // Cleanup temp if exists
                     // window.api.deleteFiles([ctaOutputPath]); // Optional
                     throw err;
@@ -1225,13 +2270,18 @@ const App = {
             this.hasChanges = false;
             Timeline.hasChanges = false;
 
+            // Başarı sesi çal
+            if (Utils && Utils.playSound) Utils.playSound('success');
+
             // CTA overlay'leri temizle
             if (typeof CtaOverlayPreview !== 'undefined') {
                 CtaOverlayPreview.clearAllOverlays();
             }
 
-            const ctaMessage = ctaCount > 0 ? ` (${ctaCount} CTA overlay dahil)` : '';
-            Accessibility.announceComplete(`Video dışa aktarma tamamlandı${ctaMessage}`);
+            const ctaMessage = ctaCount > 0
+                ? this.t('runtime.app.export_complete_cta_suffix', ' ({count} CTA overlay dahil)', { count: ctaCount })
+                : '';
+            Accessibility.announceComplete(this.t('runtime.app.export_complete', 'Video dışa aktarma tamamlandı') + ctaMessage);
 
         } catch (error) {
             this.hideProgress();
@@ -1246,29 +2296,18 @@ const App = {
      */
     async saveSelection(filePath) {
         if (!Selection.hasSelection()) {
-            Accessibility.alert('Önce bir alan seçmelisiniz');
+            Accessibility.alert(this.t('runtime.app.select_area_first', 'Önce bir alan seçmelisiniz'));
             return;
         }
 
         const sel = Selection.getSelection();
-        this.showProgress('Seçim kaydediliyor');
-        Accessibility.announce('Seçim kaydediliyor');
-
-        // Kesin kesim için re-encode kullan (stream copy keyframe sorunlarına yol açar)
-        const result = await window.api.cutVideo({
-            inputPath: this.currentFilePath,
-            outputPath: filePath,
+        await this.saveSelectionBatch([{
+            sourcePath: this.currentFilePath,
             startTime: sel.start,
-            endTime: sel.end
-        });
-
-        this.hideProgress();
-
-        if (result.success) {
-            Accessibility.announceComplete('Seçim kaydetme');
-        } else {
-            Accessibility.announceError(result.error);
-        }
+            endTime: sel.end,
+            label: this.t('runtime.app.selection_item_label', 'Seçim {index}', { index: '1' }),
+            index: 0
+        }], [filePath], false);
     },
 
     /**
@@ -1278,7 +2317,7 @@ const App = {
     async exportVideoOnly(filePath) {
         if (!VideoPlayer.hasVideo()) return;
 
-        this.showProgress('Video dışa aktarılıyor');
+        this.showProgress(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'));
 
         const result = await window.api.extractVideo({
             inputPath: this.currentFilePath,
@@ -1288,7 +2327,7 @@ const App = {
         this.hideProgress();
 
         if (result.success) {
-            Accessibility.announceComplete('Video dışa aktarma');
+            Accessibility.announceComplete(this.t('runtime.app.video_export_operation', 'Video dışa aktarma'));
         } else {
             Accessibility.announceError(result.error);
         }
@@ -1301,19 +2340,119 @@ const App = {
     async exportAudioOnly(filePath) {
         if (!VideoPlayer.hasVideo()) return;
 
-        this.showProgress('Ses dışa aktarılıyor');
-
-        const result = await window.api.extractAudio({
-            inputPath: this.currentFilePath,
-            outputPath: filePath
+        // Kullanıcıya sor: İşlenmiş ses mi, yoksa ham ses mi?
+        const choice = await window.api.showMessageBox({
+            type: 'question',
+            title: this.t('runtime.app.export_audio_title', 'Ses Dışa Aktarma'),
+            message: this.t('runtime.app.export_audio_message', 'Sesi nasıl dışa aktarmak istersiniz?'),
+            detail: this.t('runtime.app.export_audio_detail', 'İşlenmiş: Kesmeler, birleştirmeler ve efektler dahil (Yavaş)\nHam: Orijinal videodaki sesi olduğu gibi çıkar (Hızlı)'),
+            buttons: [
+                this.t('runtime.app.export_audio_render', 'İşlenmiş (Render)'),
+                this.t('runtime.app.export_audio_raw', 'Ham (Sadece Çıkar)'),
+                this.t('dialog.cancel', 'İptal')
+            ],
+            defaultId: 0,
+            cancelId: 2
         });
 
-        this.hideProgress();
+        if (choice.response === 2) return; // İptal
 
-        if (result.success) {
-            Accessibility.announceComplete('Ses dışa aktarma');
-        } else {
-            Accessibility.announceError(result.error);
+        if (choice.response === 1) {
+            // --- SEÇENEK: HAM (Sadece Extract) ---
+            this.showProgress(this.t('runtime.app.exporting_audio_raw', 'Ses dışa aktarılıyor (Ham)...'));
+            try {
+                // Eğer proje henüz kaydedilmediyse (yeni proje) ve dosya yoksa hata verebilir.
+                // Ama VideoPlayer.hasVideo() kontrolü yaptık.
+                const inputPath = this.originalFilePath || this.currentFilePath;
+
+                const result = await window.api.extractAudio({
+                    inputPath: inputPath,
+                    outputPath: filePath
+                });
+
+                this.hideProgress();
+
+                if (result.success) {
+                    Accessibility.announceComplete(this.t('runtime.app.audio_export_raw_operation', 'Ses dışa aktarma (Ham)'));
+                } else {
+                    Accessibility.announceError(result.error);
+                }
+            } catch (error) {
+                this.hideProgress();
+                console.error('Raw Audio Export Error:', error);
+                Accessibility.announceError(error.message);
+            }
+            return;
+        }
+
+        // --- SEÇENEK: İŞLENMİŞ (Render) ---
+        this.showProgress(this.t('runtime.app.exporting_audio_render', 'Ses dışa aktarılıyor (Render Ediliyor)...'));
+
+        const processedAudioProgressHandler = (data) => {
+            if (!data || data.percent === undefined) return;
+
+            if (data.operation === 'render-timeline') {
+                const stagedPercent = Math.max(1, Math.min(85, Math.round((data.percent || 0) * 0.85)));
+                this.updateProgress(this.t('runtime.app.operation_render_processed_audio', 'Preparing processed audio'), stagedPercent);
+            } else if (data.operation === 'extract-audio') {
+                const stagedPercent = Math.max(85, Math.min(100, Math.round(85 + ((data.percent || 0) * 0.15))));
+                this.updateProgress(this.t('runtime.app.operation_extract_processed_audio', 'Extracting processed audio'), stagedPercent);
+            }
+        };
+        window.api.onFfmpegProgress(processedAudioProgressHandler);
+
+        try {
+            // 1. Önce Timeline'ı geçici bir dosyaya render et (Böylece kesmeler/efektler uygulanır)
+            const tempVideoPath = await window.api.getTempPath(`audio_export_render_${Date.now()}.mp4`);
+
+            const segments = Timeline.segments.map(seg => ({
+                start: seg.start,
+                end: seg.end,
+                sourceFile: seg.sourceFile || this.originalFilePath || this.currentFilePath,
+                noiseReduction: seg.noiseReduction,
+                audioEffects: seg.audioEffects,
+                audioVolume: seg.audioVolume,
+                audioChannelMode: seg.audioChannelMode,
+                isMuted: seg.isMuted
+            }));
+
+            // Tek parça ve efekt yoksa direkt extract yapılabilir mi?
+            // Hayır, çünkü kesme yapılmış olabilir. Her durumda render en güvenlisi.
+            // Ancak, segments.length > 1 veya start/end değişmişse render şart.
+
+            console.log('Exporting Audio from Timeline:', segments);
+
+            const renderResult = await window.api.renderTimeline({
+                inputPath: this.originalFilePath || this.currentFilePath,
+                segments: segments,
+                outputPath: tempVideoPath,
+                options: { audioOnly: false } // Geçici video oluşturuyoruz
+            });
+
+            if (!renderResult.success) throw new Error(renderResult.error);
+
+            this.updateProgress(this.t('runtime.app.operation_extract_processed_audio', 'Extracting processed audio'), 85);
+
+            // 2. Render edilen videodan sesi çıkar
+            const extractResult = await window.api.extractAudio({
+                inputPath: tempVideoPath,
+                outputPath: filePath
+            });
+
+            // 3. Geçici dosyayı sil
+            await window.api.deleteFiles([tempVideoPath]);
+
+            if (!extractResult.success) throw new Error(extractResult.error);
+
+            this.hideProgress();
+            Accessibility.announceComplete(this.t('runtime.app.audio_export_operation', 'Ses dışa aktarma'));
+
+        } catch (error) {
+            this.hideProgress();
+            console.error('Audio Export Error:', error);
+            Accessibility.announceError(error.message);
+        } finally {
+            window.api.offFfmpegProgress(processedAudioProgressHandler);
         }
     },
 
@@ -1322,7 +2461,7 @@ const App = {
      */
     cut() {
         if (!Selection.hasSelection()) {
-            Accessibility.alert('Önce bir alan seçmelisiniz');
+            Accessibility.alert(this.t('runtime.app.select_area_first', 'Önce bir alan seçmelisiniz'));
             return;
         }
 
@@ -1331,9 +2470,12 @@ const App = {
         if (Timeline.cut(sel.start, sel.end)) {
             this.hasChanges = true;
             this.updateAfterEdit();
-            Accessibility.announce(`${Utils.formatTime(sel.end - sel.start)} kesildi`);
+            Accessibility.announce(this.t('runtime.app.selection_cut', '{duration} kesildi', {
+                duration: Utils.formatTime(sel.end - sel.start)
+            }));
+            if (Utils && Utils.playSound) Utils.playSound('start'); // Kısa geri bildirim
         } else {
-            Accessibility.alert('Kesme işlemi başarısız');
+            Accessibility.alert(this.t('runtime.app.cut_failed', 'Kesme işlemi başarısız'));
         }
 
         Selection.clear();
@@ -1344,7 +2486,7 @@ const App = {
      */
     copy() {
         if (!Selection.hasSelection()) {
-            Accessibility.alert('Önce bir alan seçmelisiniz');
+            Accessibility.alert(this.t('runtime.app.select_area_first', 'Önce bir alan seçmelisiniz'));
             return;
         }
 
@@ -1356,9 +2498,11 @@ const App = {
             const metadata = activeTab ? activeTab.metadata : null;
             TabManager.copyToClipboard(Timeline.clipboard.segments, metadata);
 
-            Accessibility.announce(`${Utils.formatTime(sel.end - sel.start)} kopyalandı`);
+            Accessibility.announce(this.t('runtime.app.selection_copied', '{duration} kopyalandı', {
+                duration: Utils.formatTime(sel.end - sel.start)
+            }));
         } else {
-            Accessibility.alert('Kopyalama işlemi başarısız');
+            Accessibility.alert(this.t('runtime.app.copy_failed', 'Kopyalama işlemi başarısız'));
         }
     },
 
@@ -1370,7 +2514,7 @@ const App = {
         const globalClipboard = TabManager.getClipboard();
 
         if (!globalClipboard && !Timeline.clipboard) {
-            Accessibility.alert('Panoda içerik yok');
+            Accessibility.alert(this.t('runtime.app.clipboard_empty', 'Panoda içerik yok'));
             return;
         }
 
@@ -1422,9 +2566,11 @@ const App = {
             }
             document.getElementById('total-duration').textContent = Utils.formatTime(Timeline.getTotalDuration());
 
-            Accessibility.announce(`${Utils.formatTime(Timeline.clipboard.duration)} yapıştırıldı`);
+            Accessibility.announce(this.t('runtime.app.selection_pasted', '{duration} yapıştırıldı', {
+                duration: Utils.formatTime(Timeline.clipboard.duration)
+            }));
         } else {
-            Accessibility.alert('Yapıştırma işlemi başarısız');
+            Accessibility.alert(this.t('runtime.app.paste_failed', 'Yapıştırma işlemi başarısız'));
         }
     },
 
@@ -1436,13 +2582,13 @@ const App = {
 
         if (!Selection.hasSelection()) {
             console.log('Seçim yok');
-            Accessibility.alert('Önce bir alan seçmelisiniz');
+            Accessibility.alert(this.t('runtime.app.select_area_first', 'Önce bir alan seçmelisiniz'));
             return;
         }
 
         if (!VideoPlayer.hasVideo()) {
             console.log('Video yok');
-            Accessibility.alert('Açık video yok');
+            Accessibility.alert(this.t('runtime.app.no_open_video', 'Açık video yok'));
             return;
         }
 
@@ -1460,9 +2606,11 @@ const App = {
             this.hasChanges = true;
             this.updateAfterEdit();
             Selection.clear(); // Sadece başarılı olduğunda temizle
-            Accessibility.announce(`${Utils.formatTime(deletedDuration)} silindi`);
+            Accessibility.announce(this.t('runtime.app.selection_deleted', '{duration} silindi', {
+                duration: Utils.formatTime(deletedDuration)
+            }));
         } else {
-            Accessibility.alert('Silme işlemi başarısız - Timeline segmentleri kontrol edin');
+            Accessibility.alert(this.t('runtime.app.delete_failed', 'Silme işlemi başarısız - Timeline segmentleri kontrol edin'));
         }
     },
 
@@ -1473,7 +2621,7 @@ const App = {
      */
     split() {
         if (!VideoPlayer.hasVideo()) {
-            Accessibility.alert('Açık video yok');
+            Accessibility.alert(this.t('runtime.app.no_open_video', 'Açık video yok'));
             return;
         }
 
@@ -1496,7 +2644,7 @@ const App = {
             this.updateAfterEdit();
             Accessibility.announce(message);
         } else {
-            Accessibility.alert('Bölme işlemi başarısız');
+            Accessibility.alert(this.t('runtime.app.split_failed', 'Bölme işlemi başarısız'));
         }
     },
 
@@ -1607,7 +2755,7 @@ const App = {
      */
     describeCurrentPosition(durationArg) {
         if (!VideoPlayer.hasVideo()) {
-            Accessibility.alert('Önce bir video açmalısınız');
+            Accessibility.alert(this.t('runtime.app.open_video_first', 'Önce bir video açmalısınız'));
             return;
         }
         const currentTime = VideoPlayer.getCurrentTime();
@@ -1636,7 +2784,7 @@ const App = {
         const finalDuration = end - start;
 
         if (finalDuration <= 0.5) {
-            Accessibility.alert('Betimlenecek alan çok kısa veya video sonunda.');
+            Accessibility.alert(this.t('runtime.app.describe_area_too_short', 'Betimlenecek alan çok kısa veya video sonunda.'));
             return;
         }
 
@@ -1649,9 +2797,9 @@ const App = {
     undo() {
         if (Timeline.undo()) {
             this.updateAfterEdit();
-            Accessibility.announce('İşlem geri alındı');
+            Accessibility.announce(this.t('runtime.app.undo_done', 'İşlem geri alındı'));
         } else {
-            Accessibility.announce('Geri alınacak işlem yok');
+            Accessibility.announce(this.t('runtime.app.nothing_to_undo', 'Geri alınacak işlem yok'));
         }
     },
 
@@ -1661,9 +2809,9 @@ const App = {
     redo() {
         if (Timeline.redo()) {
             this.updateAfterEdit();
-            Accessibility.announce('İşlem yinelendi');
+            Accessibility.announce(this.t('runtime.app.redo_done', 'İşlem yinelendi'));
         } else {
-            Accessibility.announce('Yinelenecek işlem yok');
+            Accessibility.announce(this.t('runtime.app.nothing_to_redo', 'Yinelenecek işlem yok'));
         }
     },
 
@@ -1683,7 +2831,7 @@ const App = {
             trimEnd = 0
         } = options;
 
-        this.showProgress('Ses ekleniyor...');
+        this.showProgress(this.t('runtime.app.adding_audio', 'Ses ekleniyor...'));
 
         try {
             // Çıktı dosya yolunu oluştur - _audio eki ile
@@ -1707,13 +2855,15 @@ const App = {
             console.log('Mix sonucu:', result);
 
             if (result.success) {
-                Accessibility.announceComplete('Ses ekleme');
+                Accessibility.announceComplete(this.t('runtime.app.add_audio_operation', 'Ses ekleme'));
                 console.log('Yeni dosya yükleniyor:', outputPath);
 
                 // Yeni dosyayı aç (openFile metodu sekme ve dosya yüklemeyi düzgün halleder)
                 await this.openFile(outputPath);
 
-                Accessibility.announce('Ses eklenmiş video yüklendi: ' + outputPath.split(/[/\\]/).pop());
+                Accessibility.announce(this.t('runtime.app.audio_added_video_loaded', 'Ses eklenmiş video yüklendi: {filename}', {
+                    filename: outputPath.split(/[/\\]/).pop()
+                }));
             } else {
                 console.error('Mix hatası:', result.error);
                 Accessibility.announceError(result.error);
@@ -1743,12 +2893,13 @@ const App = {
             duration = 5,
             startTime = 0,
             shadow = 'none',
-            // TTS seçenekleri
             ttsEnabled = false,
             ttsVoice = null,
             ttsSpeed = 1.0,
             ttsVolume = 1.0,
-            videoVolume = 1.0
+            videoVolume = 1.0,
+            customX,
+            customY
         } = options;
 
         this.showProgress('Yazı ekleniyor...');
@@ -1787,6 +2938,8 @@ const App = {
                 fontColor: fontColor,
                 background: background,
                 position: position,
+                customX: customX,
+                customY: customY,
                 transition: transition,
                 shadow: shadow,
                 startTime: effectiveStartTime,
@@ -1804,7 +2957,7 @@ const App = {
 
             // Adım 2: TTS etkinse ses ekle
             if (ttsEnabled) {
-                this.showProgress('Seslendiriliyor...');
+                this.showProgress(this.t('runtime.app.generating_voiceover', 'Seslendiriliyor...'));
 
                 // TTS ses dosyası oluştur
                 const ttsResult = await window.api.generateTts({
@@ -1817,7 +2970,7 @@ const App = {
                     console.error('TTS hatası:', ttsResult.error);
                     // TTS başarısız olsa bile devam et
                 } else {
-                    this.showProgress('Ses ekleniyor...');
+                    this.showProgress(this.t('runtime.app.adding_audio', 'Ses ekleniyor...'));
 
                     // TTS + Video ses karıştırma
                     finalOutputPath = this.currentFilePath.replace(/\.[^.]+$/, '_text_tts.mp4');
@@ -1845,10 +2998,10 @@ const App = {
             this.hideProgress();
             console.log('Yazı ekleme sonucu: başarılı');
 
-            Accessibility.announceComplete('Yazı ekleme');
+            Accessibility.announceComplete(this.t('runtime.app.text_add_operation', 'Yazı ekleme'));
             console.log('Yeni dosya yükleniyor:', finalOutputPath);
             await this.openFile(finalOutputPath);
-            Accessibility.announce('Yazı eklenmiş video yüklendi');
+            Accessibility.announce(this.t('runtime.app.text_added_video_loaded', 'Yazı eklenmiş video yüklendi'));
 
         } catch (error) {
             this.hideProgress();
@@ -1864,15 +3017,18 @@ const App = {
         const items = InsertionQueue.getItems();
 
         if (items.length === 0) {
-            Accessibility.announce('Ekleme listesi boş');
+            Accessibility.announce(this.t('runtime.app.insertion_queue_empty', 'Ekleme listesi boş'));
             return;
         }
 
         if (!VideoPlayer.hasVideo()) {
-            Accessibility.alert('Önce bir video açmalısınız');
+            Accessibility.alert(this.t('runtime.app.open_video_first', 'Önce bir video açmalısınız'));
             return;
         }
 
+        const transitionItems = items.filter(i => i.type === 'transition');
+        const objectItems = items.filter(i => i.type === 'object');
+        const overlayItems = items.filter(i => i.type === 'overlay');
         const textItems = items.filter(i => i.type === 'text');
         const audioItems = items.filter(i => i.type === 'audio');
         const imageItems = items.filter(i => i.type === 'image');
@@ -1889,9 +3045,149 @@ const App = {
 
             let currentVideoPath = this.currentFilePath;
             let stepCount = 0;
-            const totalSteps = textItems.length + audioItems.length + imageItems.length;
+            const totalSteps = transitionItems.length + objectItems.length + overlayItems.length + textItems.length + audioItems.length + imageItems.length;
+            const resolveAssetPath = (assetPath) => {
+                if (!assetPath || typeof assetPath !== 'string') {
+                    return assetPath;
+                }
 
-            // Önce yazıları uygula (her biri için drawtext)
+                if (assetPath.match(/^[A-Za-z]:[\\/]/) || assetPath.startsWith('/')) {
+                    return assetPath;
+                }
+
+                const baseUrl = new URL('.', window.location.href);
+                const absoluteUrl = new URL(assetPath, baseUrl);
+                let absolutePath = decodeURIComponent(absoluteUrl.pathname);
+
+                if (absolutePath.match(/^\/[A-Za-z]:\//)) {
+                    absolutePath = absolutePath.substring(1);
+                }
+
+                return absolutePath.replace(/\//g, '\\');
+            };
+
+            // 1. Önce geçişleri uygula
+            if (transitionItems.length > 0) {
+                stepCount += transitionItems.length; // Toplu uygulandığı için tek adımda say
+                this.updateProgress(`Geçişler uygulanıyor (${stepCount}/${totalSteps})`, (stepCount / totalSteps) * 100);
+
+                const outputPath = await window.api.getTempPath(`transitions_${Date.now()}.mp4`);
+                const queuedTransitionIds = new Set(transitionItems.map(item => item.options.id).filter(Boolean));
+                const liveTransitions = (window.Transitions && typeof window.Transitions.getAll === 'function')
+                    ? window.Transitions.getAll().filter(t => queuedTransitionIds.size === 0 || queuedTransitionIds.has(t.id))
+                    : [];
+                const transitionSource = liveTransitions.length > 0
+                    ? liveTransitions
+                    : transitionItems.map(item => item.options);
+
+                const transitionOpts = transitionSource.map(t => {
+                    let sfxPath = t.customSfxPath;
+                    if (!sfxPath && t.defaultSfx) {
+                        sfxPath = `assets/sfx/${t.defaultSfx}`;
+                    }
+
+                    return {
+                        ...t,
+                        type: t.ffmpegType || t.transitionType || t.transitionId || 'cross_dissolve',
+                        transitionType: t.ffmpegType || t.transitionType || t.transitionId || 'cross_dissolve',
+                        useSfx: t.useSfx !== false,
+                        customSfxPath: sfxPath
+                    };
+                });
+
+                const result = await window.api.applyTransitionsSmart({
+                    videoPath: currentVideoPath,
+                    outputPath: outputPath,
+                    transitions: transitionOpts
+                });
+
+                if (result.success && result.outputPath) {
+                    currentVideoPath = result.outputPath;
+                } else {
+                    console.error('Geçiş ekleme hatası:', result.error);
+                }
+            }
+
+            // 2. Ardından nesne işlemlerini uygula
+            for (const item of objectItems) {
+                stepCount++;
+                this.updateProgress(`Nesne işlemi uygulanıyor (${stepCount}/${totalSteps})`, (stepCount / totalSteps) * 100);
+
+                const opts = item.options;
+                const result = await window.api.applyObjectEffect({
+                    videoPath: currentVideoPath,
+                    objectTracks: opts.objectTracks,
+                    effectType: opts.actionType,
+                    scope: opts.durationMode,
+                    customStart: opts.startTime,
+                    customEnd: opts.endTime
+                });
+
+                if (result.success && result.outputPath) {
+                    currentVideoPath = result.outputPath;
+                } else {
+                    console.error('Nesne işlemi hatası:', result.error);
+                }
+            }
+
+            // 3. CTA/Overlay'leri uygula (Video katmanları)
+            if (overlayItems.length > 0) {
+                stepCount += overlayItems.length;
+                this.updateProgress(`Overlay'ler uygulanıyor (${stepCount}/${totalSteps})`, (stepCount / totalSteps) * 100);
+
+                const outputPath = await window.api.getTempPath(`overlays_${Date.now()}.mp4`);
+                const queuedOverlayIds = new Set(overlayItems.map(item => item.options.timelineOverlayId).filter(Boolean));
+                const liveOverlays = (window.CtaOverlayPreview && typeof window.CtaOverlayPreview.getTimelineOverlays === 'function')
+                    ? window.CtaOverlayPreview.getTimelineOverlays().filter(o => queuedOverlayIds.size === 0 || queuedOverlayIds.has(o.id))
+                    : [];
+                const overlaySource = liveOverlays.length > 0
+                    ? liveOverlays.map(o => ({
+                        assetId: o.asset?.id,
+                        assetPath: resolveAssetPath(o.asset?.path),
+                        assetName: o.asset?.name,
+                        assetType: o.asset?.type,
+                        startTime: o.startTime,
+                        duration: o.duration,
+                        position: o.position,
+                        scale: o.scale,
+                        opacity: o.opacity,
+                        sound: o.sound ? resolveAssetPath(o.sound) : null,
+                        fade: o.fade,
+                        removeBackground: 'black'
+                    }))
+                    : overlayItems
+                    .map(item => ({
+                        assetId: item.options.overlayId,
+                        assetPath: resolveAssetPath(item.options.internalAsset?.path || item.options.assetPath),
+                        assetName: item.options.overlayName,
+                        assetType: item.options.internalAsset?.type || item.options.assetType,
+                        startTime: item.options.startTime || 0,
+                        duration: item.options.duration,
+                        position: item.options.position,
+                        scale: item.options.scale,
+                        opacity: item.options.opacity,
+                        sound: item.options.sound ? resolveAssetPath(item.options.sound) : null,
+                        fade: item.options.fade,
+                        removeBackground: 'black'
+                    }));
+
+                const overlayOpts = overlaySource
+                    .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+
+                const result = await window.api.applyCtaOverlaysSmart({
+                    videoPath: currentVideoPath,
+                    outputPath: outputPath,
+                    overlays: overlayOpts
+                });
+
+                if (result.success && result.outputPath) {
+                    currentVideoPath = result.outputPath;
+                } else {
+                    console.error('Overlay ekleme hatası:', result.error);
+                }
+            }
+
+            // 4. Yazıları uygula
             for (const item of textItems) {
                 stepCount++;
                 this.updateProgress(`Yazı ekleniyor (${stepCount}/${totalSteps})`, (stepCount / totalSteps) * 100);
@@ -1914,6 +3210,8 @@ const App = {
                     fontColor: opts.fontColor || 'white',
                     background: opts.background || 'none',
                     position: opts.position || 'bottom-center',
+                    customX: opts.customX,
+                    customY: opts.customY,
                     transition: opts.transition || 'none',
                     startTime: opts.startTime || 0,
                     endTime: endTime,
@@ -2016,12 +3314,12 @@ const App = {
 
                 // Sonucu yükle
                 await this.openFile(saveResult.filePath);
-                Accessibility.announce(`${textItems.length} yazı, ${audioItems.length} ses ve ${imageItems.length} görsel eklendi. Dosya kaydedildi: ${saveResult.filePath}`);
+                Accessibility.announce(`Tüm eklemeler başarıyla uygulandı ve kaydedildi: ${saveResult.filePath}`);
             } else {
                 // Kullanıcı iptal ettiyse geçici dosyayı yükle
                 InsertionQueue.clear();
                 await this.openFile(currentVideoPath);
-                Accessibility.announce(`${textItems.length} yazı, ${audioItems.length} ses ve ${imageItems.length} görsel eklendi. Video geçici klasöre kaydedildi.`);
+                Accessibility.announce(`Tüm eklemeler başarıyla uygulandı. Video geçici klasöre kaydedildi.`);
             }
 
         } catch (error) {
@@ -2058,7 +3356,7 @@ const App = {
             return;
         }
 
-        Accessibility.announce('Video ekleniyor...');
+        Accessibility.announce(this.t('runtime.app.video_inserting', 'Video ekleniyor...'));
         // TODO: FFmpeg ile video birleştirme logic'i (concat) buraya gelecek
     },
 
@@ -2070,7 +3368,7 @@ const App = {
     async addTextOverlay(text, options) {
         if (!VideoPlayer.hasVideo()) return;
 
-        this.showProgress('Metin ekleniyor');
+        this.showProgress(this.t('runtime.app.adding_text_overlay', 'Metin ekleniyor'));
 
         const outputPath = this.currentFilePath.replace(/\.[^.]+$/, '_text.mp4');
 
@@ -2087,6 +3385,8 @@ const App = {
             fontColor: options.fontColor,
             background: options.background,
             position: options.position,
+            customX: options.customX,
+            customY: options.customY,
             transition: options.transition,
             startTime: startTime,
             endTime: endTime,
@@ -2101,7 +3401,7 @@ const App = {
         this.hideProgress();
 
         if (result.success) {
-            Accessibility.announceComplete('Metin ekleme');
+            Accessibility.announceComplete(this.t('runtime.app.text_add_operation', 'Metin ekleme'));
             await this.openFile(outputPath);
         } else {
             Accessibility.announceError(result.error);
@@ -2114,7 +3414,7 @@ const App = {
      * @param {number} duration - Her görsel için süre
      */
     async insertImages(imagePaths, duration) {
-        this.showProgress('Görseller ekleniyor');
+        this.showProgress(this.t('runtime.app.adding_images', 'Görseller ekleniyor'));
 
         const outputPath = this.currentFilePath
             ? this.currentFilePath.replace(/\.[^.]+$/, '_images.mp4')
@@ -2129,7 +3429,7 @@ const App = {
         this.hideProgress();
 
         if (result.success) {
-            Accessibility.announceComplete('Görsel ekleme');
+            Accessibility.announceComplete(this.t('runtime.app.image_add_operation', 'Görsel ekleme'));
             await this.openFile(outputPath);
         } else {
             Accessibility.announceError(result.error);
@@ -2142,7 +3442,7 @@ const App = {
     async addImageOverlay(options) {
         if (!VideoPlayer.hasVideo()) return;
 
-        this.showProgress('Görsel ekleniyor');
+        this.showProgress(this.t('runtime.app.adding_image', 'Görsel ekleniyor'));
 
         const { imagePath, x, y, width, height, opacity, startTime, endTime } = options;
 
@@ -2158,7 +3458,7 @@ const App = {
         this.hideProgress();
 
         if (result.success) {
-            Accessibility.announceComplete('Görsel ekleme');
+            Accessibility.announceComplete(this.t('runtime.app.image_add_operation', 'Görsel ekleme'));
             await this.openFile(outputPath);
         } else {
             Accessibility.announceError(result.error);
@@ -2172,68 +3472,115 @@ const App = {
     async insertSubtitle(subtitlePath) {
         if (!VideoPlayer.hasVideo()) return;
 
-        // 1. Altyazı dosyasını oku ve parse et (Önizleme metni için)
-        const fileResult = await window.api.readFileContent(subtitlePath);
-        if (!fileResult.success) {
-            Accessibility.announceError('Altyazı dosyası okunamadı');
+        if (this.isProcessingSubtitle) {
+            console.warn('[insertSubtitle] Re-entrance detected, skipping:', subtitlePath);
             return;
         }
-
-        const content = fileResult.content;
-        const lines = content.split(/\r?\n/);
-        let firstText = "Önizleme metni bulunamadı";
-        const subtitles = [];
-
-        // Basit SRT Parser
-        let currentSub = {};
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) {
-                if (currentSub.text) {
-                    subtitles.push(currentSub);
-                    currentSub = {};
-                }
-                continue;
-            }
-            if (line.includes('-->')) {
-                currentSub.timing = line;
-            } else if (!currentSub.timing && /^\d+$/.test(line)) {
-                currentSub.id = line;
-            } else {
-                currentSub.text = (currentSub.text ? currentSub.text + ' ' : '') + line;
-            }
-        }
-        if (currentSub.text) subtitles.push(currentSub);
-        if (subtitles.length > 0) firstText = subtitles[0].text;
-
-        Accessibility.announce('Altyazı analiz edildi. Seçenekler açılıyor...');
-
-        // 2. İşlem Seçimi Diyaloğu
-        const action = await Dialogs.showSubtitleActionDialog();
-
-        if (action === 'cancel' || !action) {
-            Accessibility.announce('İşlem iptal edildi.');
-            return;
-        }
-
-        // --- SEÇENEK A: Sadece Altyazı Göm ---
-        if (action === 'burn') {
-            await this.performSubtitleBurn(subtitlePath);
-            return;
-        }
-
-        // --- SEÇENEK B ve C: TTS İşlemleri ---
-        const ttsOptions = await Dialogs.showSubtitleTtsOptionsDialog(firstText);
-
-        if (!ttsOptions || !ttsOptions.confirmed) {
-            Accessibility.announce('Seslendirme işlemi iptal edildi.');
-            return;
-        }
-
-        // İşlem Başlıyor
-        this.showProgress('Seslendirme işlemi hazırlanıyor...');
+        this.isProcessingSubtitle = true;
+        console.log('[insertSubtitle] Started:', subtitlePath);
 
         try {
+            // 1. Altyazı dosyasını oku ve parse et (Önizleme metni için)
+            const fileResult = await window.api.readFileContent(subtitlePath);
+            if (!fileResult.success) {
+                Accessibility.announceError(this.t('runtime.app.subtitle_file_read_failed', 'Altyazı dosyası okunamadı'));
+                return;
+            }
+
+            const content = fileResult.content;
+            const lines = content.split(/\r?\n/);
+            let firstText = "Önizleme metni bulunamadı";
+            const subtitles = [];
+
+            // Basit SRT Parser
+            let currentSub = {};
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) {
+                    if (currentSub.text) {
+                        subtitles.push(currentSub);
+                        currentSub = {};
+                    }
+                    continue;
+                }
+                if (line.includes('-->')) {
+                    currentSub.timing = line;
+                } else if (!currentSub.timing && /^\d+$/.test(line)) {
+                    currentSub.id = line;
+                } else {
+                    currentSub.text = (currentSub.text ? currentSub.text + ' ' : '') + line;
+              }
+            }
+            if (currentSub.text) subtitles.push(currentSub);
+            if (subtitles.length > 0) firstText = subtitles[0].text;
+            let firstSubtitleStartTime = 0;
+            if (subtitles.length > 0 && subtitles[0].timing) {
+                const startPart = subtitles[0].timing.split('-->')[0]?.trim() || '';
+                const timeParts = startPart.split(':');
+                if (timeParts.length === 3) {
+                    const secParts = timeParts[2].split(/[,\.]/);
+                    firstSubtitleStartTime =
+                        (parseInt(timeParts[0], 10) || 0) * 3600 +
+                        (parseInt(timeParts[1], 10) || 0) * 60 +
+                        (parseInt(secParts[0], 10) || 0) +
+                        ((parseInt(secParts[1], 10) || 0) / 1000);
+                }
+            }
+
+            Accessibility.announce(this.t('runtime.app.subtitle_analyzed_opening_options', 'Altyazı analiz edildi. Seçenekler açılıyor...'));
+
+            // 2. İşlem Seçimi Diyaloğu
+            const subtitleActionResult = await Dialogs.showSubtitleActionDialog({
+                videoPath: this.currentFilePath,
+                previewText: firstText,
+                previewTime: firstSubtitleStartTime
+            });
+            console.log('[insertSubtitle] User Action:', subtitleActionResult);
+
+            if (subtitleActionResult === 'cancel' || !subtitleActionResult) {
+                Accessibility.announce(this.t('runtime.app.operation_cancelled', 'İşlem iptal edildi.'));
+                return;
+            }
+            const action = typeof subtitleActionResult === 'string'
+                ? subtitleActionResult
+                : subtitleActionResult.action;
+            let subtitleStyleOptions = null;
+
+            if (action === 'burn' || action === 'tts-burn') {
+                subtitleStyleOptions = await Dialogs.showSubtitleStyleDialog({
+                    videoPath: this.currentFilePath,
+                    previewText: firstText,
+                    previewTime: firstSubtitleStartTime
+                });
+
+                if (subtitleStyleOptions === 'cancel' || !subtitleStyleOptions) {
+                    Accessibility.announce(this.t('runtime.app.operation_cancelled', 'İşlem iptal edildi.'));
+                    return;
+                }
+            }
+
+            // --- SEÇENEK A: Sadece Altyazı Göm ---
+            if (action === 'burn') {
+                console.log('[insertSubtitle] Action BURN selected. Executing...');
+                await this.performSubtitleBurn(subtitlePath, subtitleStyleOptions);
+                console.log('[insertSubtitle] Burn completed.');
+                return;
+            }
+
+            console.log('[insertSubtitle] Action is NOT burn:', action);
+
+            // --- SEÇENEK B ve C: TTS İşlemleri ---
+            const ttsOptions = await Dialogs.showSubtitleTtsOptionsDialog(firstText);
+
+            if (!ttsOptions || !ttsOptions.confirmed) {
+                Accessibility.announce(this.t('runtime.app.voiceover_cancelled', 'Seslendirme işlemi iptal edildi.'));
+                return;
+            }
+
+            // İşlem Başlıyor
+            this.showProgress('Seslendirme işlemi hazırlanıyor...');
+
+            // try { removed to fix nesting and ensure finally runs
             // master_silence oluştur
             const tempSilencePath = await window.api.getTempPath(`master_silence_${Date.now()}.wav`);
             await window.api.generateSilence({ duration: 3600, outputPath: tempSilencePath });
@@ -2342,7 +3689,8 @@ const App = {
                 const burnRes = await window.api.burnSubtitles({
                     videoPath: audioMixOutputPath,
                     subtitlePath: subtitlePath,
-                    outputPath: finalOutputPath
+                    outputPath: finalOutputPath,
+                    styleOptions: subtitleStyleOptions
                 });
 
                 if (!burnRes.success) throw new Error(`Altyazı gömme hatası: ${burnRes.error}`);
@@ -2351,18 +3699,23 @@ const App = {
             this.hideProgress();
 
             // Sonucu Aç
-            Accessibility.announceComplete('İşlem');
+            Accessibility.announceComplete(this.t('runtime.app.operation_generic', 'İşlem'));
             console.log('Yeni dosya yükleniyor:', finalOutputPath);
             await this.openFile(finalOutputPath);
-            Accessibility.announce(`İşlem tamamlandı. Dosya açıldı: ${finalOutputPath.split(/[\\/]/).pop()}`);
+            Accessibility.announce(this.t('runtime.app.operation_completed_file_opened', 'İşlem tamamlandı. Dosya açıldı: {filename}', {
+                filename: finalOutputPath.split(/[\\/]/).pop()
+            }));
 
             // Geçici dosyaları sil
             await window.api.invoke('delete-files', audioFilesToDelete);
 
         } catch (err) {
             this.hideProgress();
-            console.error(err);
-            Accessibility.announceError('Hata: ' + err.message);
+            console.error('[insertSubtitle] Error:', err);
+            Accessibility.announceError(this.t('runtime.app.error_message', 'Hata: {message}', { message: err.message }));
+        } finally {
+            this.isProcessingSubtitle = false;
+            console.log('[insertSubtitle] Finished (flag reset).');
         }
     },
 
@@ -2374,7 +3727,7 @@ const App = {
      */
     async addCtaToTimeline(params) {
         if (!VideoPlayer.hasVideo()) {
-            Accessibility.alert('Lütfen önce bir video açın.');
+            Accessibility.alert(this.t('runtime.app.open_video_first_polite', 'Lütfen önce bir video açın.'));
             return;
         }
 
@@ -2386,7 +3739,7 @@ const App = {
         const startTime = VideoPlayer.getTimelineTime();
 
         // 1. İşlem başlıyor
-        this.showProgress(`CTA Ekleniyor: ${asset.name}...`);
+        this.showProgress(this.t('runtime.app.adding_cta_named', 'CTA Ekleniyor: {name}...', { name: asset.name }));
 
         try {
             // Eğer import edilen bir dosya ise, asset.path doğrudur.
@@ -2433,39 +3786,44 @@ const App = {
 
             if (result.success) {
                 // Başarılı
-                Accessibility.announceComplete('CTA ekleme');
+                Accessibility.announceComplete(this.t('runtime.app.cta_add_operation', 'CTA ekleme'));
                 await this.openFile(outputPath);
             } else {
                 // Hata
-                Accessibility.announceError(`Hata: ${result.error}`);
+                Accessibility.announceError(this.t('runtime.app.error_message', 'Hata: {message}', { message: result.error }));
             }
 
         } catch (err) {
             this.hideProgress();
             console.error(err);
-            Accessibility.announceError('Beklenmeyen hata: ' + err.message);
+            Accessibility.announceError(this.t('runtime.app.unexpected_error_message', 'Beklenmeyen hata: {message}', { message: err.message }));
         }
     },
 
     /**
      * Sadece altyazı gömme işlemini gerçekleştirir
      */
-    async performSubtitleBurn(subtitlePath) {
-        this.showProgress('Altyazı gömülüyor...');
+    async performSubtitleBurn(subtitlePath, styleOptions = null) {
+        console.log('[App] performSubtitleBurn started:', subtitlePath);
+        this.showProgress(this.t('runtime.app.burning_subtitles', 'Altyazı gömülüyor...'));
         const outputPath = this.currentFilePath.replace(/\.[^.]+$/, '_sub.mp4');
 
         const result = await window.api.burnSubtitles({
             videoPath: this.currentFilePath,
             subtitlePath: subtitlePath,
-            outputPath: outputPath
+            outputPath: outputPath,
+            styleOptions
         });
 
+        console.log('[App] burnSubtitles result:', result);
         this.hideProgress();
 
         if (result.success) {
-            Accessibility.announceComplete('Altyazı gömme');
+            Accessibility.announceComplete(this.t('runtime.app.subtitle_burn_operation', 'Altyazı gömme'));
+            console.log('[App] Opening burnt file:', outputPath);
             await this.openFile(outputPath);
         } else {
+            console.error('[App] Burn failed:', result.error);
             Accessibility.announceError(result.error);
         }
     },
@@ -2477,7 +3835,7 @@ const App = {
     async rotateVideo(degrees) {
         if (!VideoPlayer.hasVideo()) return;
 
-        this.showProgress('Video döndürülüyor');
+        this.showProgress(this.t('runtime.app.rotating_video', 'Video döndürülüyor'));
 
         const outputPath = this.currentFilePath.replace(/\.[^.]+$/, `_rotated${degrees}.mp4`);
 
@@ -2490,7 +3848,7 @@ const App = {
         this.hideProgress();
 
         if (result.success) {
-            Accessibility.announceComplete('Video döndürme');
+            Accessibility.announceComplete(this.t('runtime.app.rotate_video_operation', 'Video döndürme'));
             await this.openFile(outputPath);
         } else {
             Accessibility.announceError(result.error);
@@ -2521,6 +3879,9 @@ const App = {
         if (statusBarText) statusBarText.textContent = message + '...';
         if (statusBarPercent) statusBarPercent.textContent = '%0';
 
+        this.resetProgressEstimate();
+        this._announcedFinalizeExport = false;
+
         // Klavye kısayollarını devre dışı bırak
         Keyboard.setEnabled(false);
     },
@@ -2538,11 +3899,238 @@ const App = {
         const statusBarText = document.getElementById('status-bar-text');
         const statusBarPercent = document.getElementById('status-bar-percent');
 
-        if (statusBarText) statusBarText.textContent = 'Hazır';
+        if (statusBarText) statusBarText.textContent = this.t('player.status_ready', 'Hazır');
         if (statusBarPercent) statusBarPercent.textContent = '';
+
+        this.stopSyntheticConcatProgress();
+        this.resetProgressEstimate();
+        this._announcedFinalizeExport = false;
 
         // Klavye kısayollarını etkinleştir
         Keyboard.setEnabled(true);
+    },
+
+    resetProgressEstimate() {
+        this._progressEstimateState = {
+            operation: null,
+            lastPercent: 0,
+            points: []
+        };
+    },
+
+    stopSyntheticConcatProgress() {
+        if (this._syntheticConcatProgressTimer) {
+            clearInterval(this._syntheticConcatProgressTimer);
+            this._syntheticConcatProgressTimer = null;
+        }
+        this._syntheticConcatProgressValue = null;
+        this._syntheticConcatProgressBase = null;
+        this._syntheticConcatProgressLastReal = null;
+    },
+
+    ensureSyntheticConcatProgress(realPercent) {
+        const safeReal = Math.max(0, Math.min(100, Number(realPercent) || 0));
+
+        if (safeReal >= 100) {
+            this.stopSyntheticConcatProgress();
+            return;
+        }
+
+        this._syntheticConcatProgressBase = safeReal;
+        this._syntheticConcatProgressLastReal = safeReal;
+
+        if (this._syntheticConcatProgressValue == null || this._syntheticConcatProgressValue < safeReal) {
+            this._syntheticConcatProgressValue = safeReal;
+        }
+
+        if (this._syntheticConcatProgressTimer) {
+            return;
+        }
+
+        this._syntheticConcatProgressTimer = setInterval(() => {
+            if (this._syntheticConcatProgressValue == null) return;
+            const current = this._syntheticConcatProgressValue;
+            const floor = Math.max(90, this._syntheticConcatProgressBase || 0);
+            const target = Math.min(99, floor + 8);
+
+            if (current >= target) {
+                return;
+            }
+
+            const remaining = target - current;
+            const step = remaining > 3 ? 0.4 : remaining > 1 ? 0.2 : 0.08;
+            this._syntheticConcatProgressValue = Math.min(target, current + step);
+            this.renderProgressState('concat', this._syntheticConcatProgressValue, true);
+        }, 400);
+    },
+
+    renderProgressState(operation, percent, skipMilestones = false, meta = null) {
+        const bar = document.getElementById('progress-bar');
+        const percentEl = document.getElementById('progress-percent');
+        const roundedPercent = Math.round(percent || 0);
+        const etaSeconds = this.getProgressEstimate(operation, roundedPercent);
+        const isFinalizingExport = operation === 'finalize-export' && roundedPercent < 100;
+        const etaSuffix = etaSeconds != null
+            ? this.t('runtime.app.progress_eta_suffix', ' · Yaklaşık {eta} kaldı', {
+                eta: this.formatProgressEta(etaSeconds)
+            })
+            : '';
+        const progressLabel = isFinalizingExport
+            ? this.t('runtime.app.progress_finalizing_label', 'Son aşama')
+            : `%${roundedPercent}${etaSuffix}`;
+        const stepSuffix = meta && Number.isFinite(Number(meta.current)) && Number.isFinite(Number(meta.total)) && Number(meta.total) > 0
+            ? this.t('runtime.app.progress_step_suffix', ' · Parça {current}/{total}', {
+                current: Math.max(1, Math.round(Number(meta.current))),
+                total: Math.max(1, Math.round(Number(meta.total)))
+            })
+            : '';
+        const fullProgressLabel = `${progressLabel}${stepSuffix}`;
+
+        if (bar && percentEl) {
+            bar.value = roundedPercent;
+            percentEl.textContent = fullProgressLabel;
+        }
+
+        const operationNames = {
+            'cut': this.t('runtime.app.operation_cut', 'Video kesme'),
+            'concat': this.t('runtime.app.operation_concat', 'Video birleştirme'),
+            'render-timeline': this.t('runtime.app.operation_render_timeline', 'Zaman çizelgesi işleniyor'),
+            'finalize-export': this.t('runtime.app.operation_finalize_export', 'Çıktı dosyası tamamlanıyor'),
+            'rotate': this.t('runtime.app.operation_rotate', 'Video döndürme'),
+            'extract-audio': this.t('runtime.app.operation_extract_audio', 'Ses çıkarma'),
+            'extract-video': this.t('runtime.app.operation_extract_video', 'Video çıkarma'),
+            'mix-audio': this.t('runtime.app.operation_mix_audio', 'Ses miksajı'),
+            'mix-audio-advanced': this.t('runtime.app.operation_mix_audio_advanced', 'Gelişmiş ses miksajı'),
+            'burn-subtitles': this.t('runtime.app.operation_burn_subtitles', 'Altyazı gömme'),
+            'add-text': this.t('runtime.app.operation_add_text', 'Metin ekleme'),
+            'images-to-video': this.t('runtime.app.operation_images_to_video', 'Video oluşturma'),
+            'convert': this.t('runtime.app.operation_convert', 'Video dönüştürme'),
+            'apply-cta-smart': this.t('runtime.app.operation_apply_cta', 'CTA overlay ekleme')
+        };
+        const operationName = operationNames[operation] || operation || this.t('runtime.app.operation_processing', 'İşleniyor');
+
+        const statusBarText = document.getElementById('status-bar-text');
+        const statusBarPercent = document.getElementById('status-bar-percent');
+
+        if (statusBarText) statusBarText.textContent = `${operationName}...`;
+        if (statusBarPercent) statusBarPercent.textContent = fullProgressLabel;
+
+        if (isFinalizingExport) {
+            if (!this._announcedFinalizeExport) {
+                this._announcedFinalizeExport = true;
+                Accessibility.announce(this.t(
+                    'runtime.app.progress_finalizing_announcement',
+                    'Son aşamaya geçildi. Çıktı dosyası tamamlanıyor.'
+                ));
+            }
+        } else {
+            this._announcedFinalizeExport = false;
+        }
+
+        if (!skipMilestones) {
+            const milestone = Math.floor(roundedPercent / 10) * 10;
+            if (this._lastProgressMilestone === undefined) {
+                this._lastProgressMilestone = -1;
+            }
+            if (milestone > this._lastProgressMilestone && milestone > 0) {
+                this._lastProgressMilestone = milestone;
+                Accessibility.announce(this.t('runtime.app.progress_percent', '{operation}: Yüzde {percent}', {
+                    operation: operationName,
+                    percent: milestone
+                }));
+            }
+            if (roundedPercent >= 100) {
+                this._lastProgressMilestone = -1;
+            }
+
+            if (this._lastPlayedPercent !== roundedPercent && roundedPercent > 0 && roundedPercent < 100) {
+                this._lastPlayedPercent = roundedPercent;
+                if (roundedPercent % 2 === 0) {
+                    if (Utils && Utils.playProgressTone) Utils.playProgressTone(roundedPercent);
+                }
+            }
+        }
+    },
+
+    formatProgressEta(seconds) {
+        const totalSeconds = Math.max(0, Math.round(seconds || 0));
+        const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
+
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        if (hours <= 0) {
+            return this.t('runtime.app.duration_minutes_short', '{count} dk', {
+                count: totalMinutes
+            });
+        }
+
+        const hourText = this.t('runtime.app.duration_hours_short', '{count} sa', {
+            count: hours
+        });
+        if (minutes <= 0) {
+            return hourText;
+        }
+
+        const minuteText = this.t('runtime.app.duration_minutes_short', '{count} dk', { count: minutes });
+        return `${hourText} ${minuteText}`;
+    },
+
+    getProgressEstimate(operation, percent) {
+        const now = Date.now();
+        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+
+        if (!this._progressEstimateState) {
+            this.resetProgressEstimate();
+        }
+
+        const state = this._progressEstimateState;
+        const operationChanged = state.operation !== operation;
+        const movedBackward = safePercent + 1 < (state.lastPercent || 0);
+
+        if (operationChanged || movedBackward || safePercent <= 0 || safePercent >= 100) {
+            state.operation = operation;
+            state.lastPercent = safePercent;
+            state.points = safePercent > 0 && safePercent < 100
+                ? [{ time: now, percent: safePercent }]
+                : [];
+            return null;
+        }
+
+        const lastPoint = state.points[state.points.length - 1];
+        if (!lastPoint || safePercent > lastPoint.percent) {
+            state.points.push({ time: now, percent: safePercent });
+            if (state.points.length > 8) {
+                state.points.shift();
+            }
+        }
+
+        state.lastPercent = safePercent;
+
+        if (state.points.length < 3) {
+            return null;
+        }
+
+        const firstPoint = state.points[0];
+        const latestPoint = state.points[state.points.length - 1];
+        const elapsedSeconds = (latestPoint.time - firstPoint.time) / 1000;
+        const progressed = latestPoint.percent - firstPoint.percent;
+
+        if (elapsedSeconds < 4 || progressed < 2) {
+            return null;
+        }
+
+        const percentPerSecond = progressed / elapsedSeconds;
+        if (!isFinite(percentPerSecond) || percentPerSecond <= 0) {
+            return null;
+        }
+
+        const remainingSeconds = (100 - safePercent) / percentPerSecond;
+        if (!isFinite(remainingSeconds) || remainingSeconds < 120 || remainingSeconds > 24 * 3600) {
+            return null;
+        }
+
+        return remainingSeconds;
     },
 
     /**
@@ -2550,58 +4138,20 @@ const App = {
      * @param {string} operation - İşlem kodu (örn: 'cut', 'concat')
      * @param {number} percent - Yüzde (0-100)
      */
-    updateProgress(operation, percent) {
-        const bar = document.getElementById('progress-bar');
-        const percentEl = document.getElementById('progress-percent');
+    updateProgress(operation, percent, meta = null) {
         const roundedPercent = Math.round(percent || 0);
 
-        if (bar && percentEl) {
-            bar.value = roundedPercent;
-            percentEl.textContent = `%${roundedPercent}`;
+        if (operation === 'concat' && roundedPercent >= 90 && roundedPercent < 100) {
+            this.ensureSyntheticConcatProgress(roundedPercent);
+            this.renderProgressState(operation, Math.max(roundedPercent, this._syntheticConcatProgressValue || roundedPercent), false, meta);
+            return;
         }
 
-        // İşlem adını Türkçe'ye çevir
-        const operationNames = {
-            'cut': 'Video kesme',
-            'concat': 'Video birleştirme',
-            'rotate': 'Video döndürme',
-            'extract-audio': 'Ses çıkarma',
-            'extract-video': 'Video çıkarma',
-            'mix-audio': 'Ses miksajı',
-            'mix-audio-advanced': 'Gelişmiş ses miksajı',
-            'burn-subtitles': 'Altyazı gömme',
-            'add-text': 'Metin ekleme',
-            'images-to-video': 'Video oluşturma',
-            'convert': 'Video dönüştürme',
-            'apply-cta-smart': 'CTA overlay ekleme'
-        };
-        const operationName = operationNames[operation] || operation || 'İşleniyor';
-
-        // Durum Çubuğunu Güncelle
-        const statusBarText = document.getElementById('status-bar-text');
-        const statusBarPercent = document.getElementById('status-bar-percent');
-
-        if (statusBarText) statusBarText.textContent = `${operationName}...`;
-        if (statusBarPercent) statusBarPercent.textContent = `%${roundedPercent}`;
-
-        // Erişilebilirlik: Her %10'da bir duyur (milestone yaklaşımı)
-        const milestone = Math.floor(roundedPercent / 10) * 10;
-
-        // Son duyurulan milestone'u takip et
-        if (this._lastProgressMilestone === undefined) {
-            this._lastProgressMilestone = -1;
+        if (operation !== 'concat' || roundedPercent >= 100) {
+            this.stopSyntheticConcatProgress();
         }
 
-        // Yeni milestone'a ulaşıldıysa duyur
-        if (milestone > this._lastProgressMilestone && milestone > 0) {
-            this._lastProgressMilestone = milestone;
-            Accessibility.announce(`${operationName}: Yüzde ${milestone}`);
-        }
-
-        // İşlem %100'e ulaştığında sıfırla
-        if (roundedPercent >= 100) {
-            this._lastProgressMilestone = -1;
-        }
+        this.renderProgressState(operation, roundedPercent, false, meta);
     },
 
     /**
@@ -2609,15 +4159,15 @@ const App = {
      */
     async handleFileCloseRequest() {
         if (!VideoPlayer.hasVideo()) {
-            Accessibility.announce('Açık dosya yok');
+            Accessibility.announce(this.t('runtime.app.no_open_file', 'Açık dosya yok'));
             return;
         }
 
         if (this.hasChanges) {
             // Kaydetme onayı iste
             const result = await window.api.showSaveConfirm({
-                title: 'Değişiklikleri Kaydet',
-                message: 'Videoda kaydedilmemiş değişiklikler var. Kaydetmek istiyor musunuz?'
+                title: this.t('runtime.app.save_changes_title', 'Değişiklikleri Kaydet'),
+                message: this.t('runtime.app.unsaved_changes', 'Videoda kaydedilmemiş değişiklikler var. Kaydetmek istiyor musunuz?')
             });
 
             // 0 = Kaydet, 1 = Kaydetme, 2 = İptal
@@ -2642,8 +4192,8 @@ const App = {
         if (this.hasChanges) {
             // Kaydetme onayı iste
             const result = await window.api.showSaveConfirm({
-                title: 'Değişiklikleri Kaydet',
-                message: 'Videoda kaydedilmemiş değişiklikler var. Kaydetmek istiyor musunuz?'
+                title: this.t('runtime.app.save_changes_title', 'Değişiklikleri Kaydet'),
+                message: this.t('runtime.app.unsaved_changes', 'Videoda kaydedilmemiş değişiklikler var. Kaydetmek istiyor musunuz?')
             });
 
             // 0 = Kaydet, 1 = Kaydetme, 2 = İptal
@@ -2683,37 +4233,22 @@ const App = {
         // UI'ı güncelle
         document.getElementById('current-time').textContent = '00:00:00';
         document.getElementById('total-time').textContent = '00:00:00';
-        document.getElementById('file-name').textContent = 'Dosya açılmadı';
+        document.getElementById('file-name').textContent = this.t('runtime.app.no_file_opened', 'Dosya açılmadı');
 
         // Metadata bilgilerini temizle
         document.getElementById('meta-resolution').textContent = '-';
         document.getElementById('meta-framerate').textContent = '-';
         document.getElementById('meta-codec').textContent = '-';
         document.getElementById('meta-size').textContent = '-';
+        document.getElementById('meta-orientation').textContent = '-';
 
         // Bekleyen duyuruları temizle
         Accessibility.clearPending();
 
-        Accessibility.announceImmediate('Dosya kapatıldı. Yeni dosya açmak için Control artı O tuşlarına basın.');
+        Accessibility.announceImmediate(this.t('runtime.app.file_closed_hint', 'Dosya kapatıldı. Yeni dosya açmak için Control artı O tuşlarına basın.'));
     },
 
-    /**
-     * İlerleme göstergesini göster
-     * @param {string} message - Gösterilecek mesaj
-     */
-    showProgress(message) {
-        Accessibility.announce(message);
-        // TODO: Görsel ilerleme çubuğu eklenebilir
-        console.log('İşlem başladı:', message);
-    },
-
-    /**
-     * İlerleme göstergesini gizle
-     */
-    hideProgress() {
-        // TODO: Görsel ilerleme çubuğu gizlenebilir
-        console.log('İşlem tamamlandı');
-    },
+    // Not: showProgress ve hideProgress fonksiyonları yukarıda (satır ~2648-2690) tanımlı
 
     /**
      * Video dosyası ekle
@@ -2725,7 +4260,7 @@ const App = {
             const result = await window.api.getVideoMetadata(filePath);
 
             if (!result || !result.success || !result.data) {
-                Accessibility.alert('Video bilgisi alınamadı');
+                Accessibility.alert(this.t('runtime.app.video_info_unavailable', 'Video bilgisi alınamadı'));
                 return;
             }
 
@@ -2734,7 +4269,9 @@ const App = {
             // Eğer hiç video açık değilse veya boş proje ise - ilk video olarak aç
             if (!VideoPlayer.hasVideo() || Timeline.segments.length === 0) {
                 await this.openFile(filePath);
-                Accessibility.announce(`Video açıldı: ${insertMetadata.filename}`);
+                Accessibility.announce(this.t('runtime.app.file_opened', '{filename} açıldı', {
+                    filename: insertMetadata.filename
+                }));
                 return;
             }
 
@@ -2742,7 +4279,7 @@ const App = {
             const sourceMetadata = VideoPlayer.metadata;
 
             if (!sourceMetadata) {
-                Accessibility.alert('Mevcut video bilgisi alınamadı');
+                Accessibility.alert(this.t('runtime.app.current_video_info_unavailable', 'Mevcut video bilgisi alınamadı'));
                 return;
             }
 
@@ -2756,13 +4293,13 @@ const App = {
                 const choice = await Dialogs.showVideoMismatchDialog(sourceMetadata, insertMetadata);
 
                 if (choice === 'cancel') {
-                    Accessibility.announce('Video ekleme iptal edildi');
+                    Accessibility.announce(this.t('runtime.app.video_insert_cancelled', 'Video ekleme iptal edildi'));
                     return;
                 }
 
                 if (choice === 'convert') {
                     // Video'yu kaynak özelliklere dönüştür
-                    this.showProgress('Video dönüştürülüyor...');
+                    this.showProgress(this.t('runtime.app.converting_video', 'Video dönüştürülüyor...'));
 
                     // Geçici dosya oluştur
                     const tempPath = filePath.replace(/\.[^.]+$/, '_converted.mp4');
@@ -2787,7 +4324,7 @@ const App = {
                     }
 
                     videoToInsert = tempPath;
-                    Accessibility.announce('Video dönüştürüldü');
+                    Accessibility.announce(this.t('runtime.app.video_converted', 'Video dönüştürüldü'));
                 }
             }
 
@@ -2885,36 +4422,36 @@ const App = {
      */
     async applyAllTransitions() {
         if (!this.currentFilePath) {
-            Accessibility.announce('Önce bir video açmalısınız');
+            Accessibility.announce(this.t('runtime.app.open_video_first', 'Önce bir video açmalısınız'));
             return;
         }
 
         const transitions = Transitions.getAll();
         if (transitions.length === 0) {
-            Accessibility.announce('Uygulanacak geçiş yok. Ş tuşu ile geçiş ekleyin.');
+            Accessibility.announce(this.t('runtime.app.no_transitions_to_apply', 'Uygulanacak geçiş yok. Ş tuşu ile geçiş ekleyin.'));
             return;
         }
 
         // Onay al
         const confirmed = await Dialogs.showAccessibleConfirm(
-            `${transitions.length} geçiş videoya uygulanacak. Bu işlem uzun sürebilir. Devam edilsin mi?`,
-            'Geçişleri Uygula'
+            this.t('runtime.app.apply_all_transitions_confirm_message', '{count} transitions will be applied to the video. This may take a while. Continue?', { count: transitions.length }),
+            this.t('runtime.app.apply_all_transitions_confirm_title', 'Apply Transitions')
         );
 
         if (!confirmed) {
-            Accessibility.announce('İşlem iptal edildi');
+            Accessibility.announce(this.t('runtime.app.operation_cancelled_short', 'İşlem iptal edildi'));
             return;
         }
 
         // Kayıt yeri seç
         const saveResult = await window.api.showSaveDialog({
-            title: 'Geçişli Videoyu Kaydet',
+            title: this.t('runtime.app.save_transitioned_video_title', 'Save Transitioned Video'),
             defaultPath: this.currentFilePath.replace(/(\.[^.]+)$/, '_transitions$1'),
-            filters: [{ name: 'Video Dosyaları', extensions: ['mp4'] }]
+            filters: [{ name: this.t('messages.media_files_filter', 'Video Files'), extensions: ['mp4'] }]
         });
 
         if (!saveResult || saveResult.canceled) {
-            Accessibility.announce('Kayıt yeri seçilmedi');
+            Accessibility.announce(this.t('runtime.app.save_location_not_selected', 'Kayıt yeri seçilmedi'));
             return;
         }
 
@@ -2927,22 +4464,31 @@ const App = {
         const progressBar = document.getElementById('progress-bar');
 
         if (progressOverlay) progressOverlay.classList.remove('hidden');
-        if (progressMessage) progressMessage.textContent = 'Geçişler uygulanıyor...';
+        if (progressMessage) progressMessage.textContent = this.t('runtime.app.applying_transitions', 'Geçişler uygulanıyor...');
         if (progressPercent) progressPercent.textContent = '0%';
         if (progressBar) progressBar.value = 0;
 
-        Accessibility.announce(`${transitions.length} geçiş uygulanıyor. Lütfen bekleyin.`);
+        Accessibility.announce(this.t('runtime.app.applying_transitions_announce', `${transitions.length} geçiş uygulanıyor. Lütfen bekleyin.`, { count: transitions.length }));
 
         try {
             // Smart Transition Kullanımı
-            const smartTransitions = transitions.map(t => ({
-                transitionType: t.ffmpegType,
-                time: t.time,
-                duration: t.duration,
-                useSfx: t.useSfx !== false,
-                customSfxPath: t.customSfxPath,
-                transitionName: t.transitionName
-            }));
+            // V102: defaultSfx yolunu da gönder
+            const smartTransitions = transitions.map(t => {
+                // customSfxPath yoksa defaultSfx'i kullan
+                let sfxPath = t.customSfxPath;
+                if (!sfxPath && t.defaultSfx) {
+                    // defaultSfx'i tam yola çevir
+                    sfxPath = `assets/sfx/${t.defaultSfx}`;
+                }
+                return {
+                    transitionType: t.ffmpegType,
+                    time: t.time,
+                    duration: t.duration,
+                    useSfx: t.useSfx !== false,
+                    customSfxPath: sfxPath,
+                    transitionName: t.transitionName
+                };
+            });
 
             // İlerleme dinleyicisi ekle
             const progressListener = (data) => {
@@ -2966,17 +4512,21 @@ const App = {
             // Şimdilik kalsın, zaten üstüne yazar.)
 
             if (!result.success) {
-                throw new Error(result.error || 'Geçiş uygulanamadı');
+                throw new Error(result.error || this.t('runtime.app.transition_apply_failed', 'Geçiş uygulanamadı'));
             }
 
             if (progressOverlay) progressOverlay.classList.add('hidden');
 
-            Accessibility.announce(`Tamamlandı. ${transitions.length} geçiş başarıyla uygulandı. Video kaydedildi: ${outputPath}`);
+            Accessibility.announce(this.t(
+                'runtime.app.transitions_applied_saved',
+                'Tamamlandı. {count} geçiş başarıyla uygulandı. Video kaydedildi: {path}',
+                { count: transitions.length, path: outputPath }
+            ));
 
             // Yeni videoyu aç
             const openNew = await Dialogs.showAccessibleConfirm(
-                'Geçişler başarıyla uygulandı. Yeni videoyu açmak ister misiniz?',
-                'Tamamlandı'
+                this.t('runtime.app.transitions_open_new_message', 'Geçişler başarıyla uygulandı. Yeni videoyu açmak ister misiniz?'),
+                this.t('runtime.app.completed_title', 'Tamamlandı')
             );
 
             if (openNew) {
@@ -2986,7 +4536,7 @@ const App = {
         } catch (error) {
             if (progressOverlay) progressOverlay.classList.add('hidden');
             console.error('Geçiş uygulama hatası:', error);
-            Accessibility.announce(`Hata: ${error.message}`);
+            Accessibility.announce(this.t('runtime.app.error_message', 'Hata: {message}', { message: error.message }));
         }
     },
     // ==========================================
@@ -2998,7 +4548,7 @@ const App = {
      */
     async saveProject() {
         if (!this.currentFilePath) {
-            Accessibility.announce('Kaydedilecek bir proje yok (video yüklenmedi).');
+            Accessibility.announce(this.t('runtime.app.no_project_to_save', 'Kaydedilecek bir proje yok (video yüklenmedi).'));
             return;
         }
 
@@ -3023,9 +4573,9 @@ const App = {
             };
 
             const result = await window.api.showSaveDialog({
-                title: 'Projeyi Kaydet',
+                title: this.t('runtime.app.save_project_title', 'Projeyi Kaydet'),
                 defaultPath: 'proje.kve',
-                filters: [{ name: 'Korcul Proje Dosyası', extensions: ['kve'] }]
+                filters: [{ name: this.t('runtime.app.project_file_filter', 'Korcul Proje Dosyası'), extensions: ['kve'] }]
             });
 
             if (!result.canceled && result.filePath) {
@@ -3036,14 +4586,18 @@ const App = {
                 });
 
                 if (saveResult.success) {
-                    Accessibility.announce('Proje başarıyla kaydedildi.');
+                    Accessibility.announce(this.t('runtime.app.project_saved', 'Proje başarıyla kaydedildi.'));
                 } else {
-                    Accessibility.announce('Kaydetme hatası: ' + saveResult.error);
+                    Accessibility.announce(this.t('runtime.app.save_error', 'Kaydetme hatası: {error}', {
+                        error: saveResult.error
+                    }));
                 }
             }
         } catch (error) {
             console.error(error);
-            Accessibility.announce('Proje kaydedilemedi: ' + error.message);
+            Accessibility.announce(this.t('runtime.app.project_save_failed', 'Proje kaydedilemedi: {error}', {
+                error: error.message
+            }));
         }
     },
 
@@ -3053,35 +4607,43 @@ const App = {
     async loadProject() {
         try {
             const result = await window.api.openFileDialog({
-                title: 'Proje Aç',
-                filters: [{ name: 'Korcul Proje Dosyası', extensions: ['kve'] }],
+                title: this.t('runtime.app.open_project_title', 'Proje Aç'),
+                filters: [{ name: this.t('runtime.app.project_file_filter', 'Korcul Proje Dosyası'), extensions: ['kve'] }],
                 properties: ['openFile']
             });
 
             if (result.canceled || result.filePaths.length === 0) return;
+            await this.loadProjectFromPath(result.filePaths[0]);
+        } catch (error) {
+            console.error('Project load error:', error);
+            Accessibility.announce(this.t('runtime.app.project_load_failed', 'Proje yüklenemedi: {error}', {
+                error: error.message
+            }));
+        }
+    },
 
-            const contentResult = await window.api.readFileContent(result.filePaths[0]);
+    async loadProjectFromPath(projectPath) {
+        try {
+            const contentResult = await window.api.readFileContent(projectPath);
             if (!contentResult.success) {
-                Accessibility.announce('Dosya okunamadı: ' + contentResult.error);
+                Accessibility.announce(this.t('runtime.app.file_read_failed', 'Dosya okunamadı: {error}', {
+                    error: contentResult.error
+                }));
                 return;
             }
 
             const projectData = JSON.parse(contentResult.content);
 
-            // Videoyu yükle
             if (projectData.videoPath) {
                 let videoToLoad = projectData.videoPath;
                 let videoFound = false;
 
-                // 1. Mutlak yolda var mı?
                 const checkAbs = await window.api.checkFileExists(videoToLoad);
                 if (checkAbs) {
                     videoFound = true;
                 } else {
-                    // 2. Proje dosyasının yanında mı? (Relative check)
-                    const projectDir = result.filePaths[0].replace(/[/\\][^/\\]+$/, ''); // Klasör yolu
-                    const fileName = videoToLoad.split(/[/\\]/).pop(); // Dosya adı
-                    // Windows/Unix path birleştirme (basit)
+                    const projectDir = projectPath.replace(/[/\\][^/\\]+$/, '');
+                    const fileName = videoToLoad.split(/[/\\]/).pop();
                     const relativePath = projectDir + (projectDir.includes('/') ? '/' : '\\') + fileName;
 
                     const checkRel = await window.api.checkFileExists(relativePath);
@@ -3092,18 +4654,21 @@ const App = {
                     }
                 }
 
-                // 3. Hala bulunamadıysa kullanıcıya sor
                 if (!videoFound) {
                     const userChoice = await Dialogs.showAccessibleConfirm(
-                        `Projedeki video dosyası (${videoToLoad.split(/[/\\]/).pop()}) bulunamadı. Yerini kendiniz göstermek ister misiniz?`,
-                        'Gözat',
-                        'İptal'
+                        this.t(
+                            'runtime.app.project_video_missing',
+                            'Projedeki video dosyası ({filename}) bulunamadı. Yerini kendiniz göstermek ister misiniz?',
+                            { filename: videoToLoad.split(/[/\\]/).pop() }
+                        ),
+                        this.t('runtime.app.browse', 'Gözat'),
+                        this.t('dialog.cancel', 'İptal')
                     );
 
                     if (userChoice) {
                         const manualSelect = await window.api.openFileDialog({
-                            title: 'Video Dosyasını Bul',
-                            filters: [{ name: 'Video Dosyaları', extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm'] }],
+                            title: this.t('runtime.app.find_video_file', 'Video Dosyasını Bul'),
+                            filters: [{ name: this.t('runtime.app.video_files_filter', 'Video Dosyaları'), extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm'] }],
                             properties: ['openFile']
                         });
 
@@ -3111,26 +4676,24 @@ const App = {
                             videoToLoad = manualSelect.filePaths[0];
                             videoFound = true;
                         } else {
-                            Accessibility.announce('Video seçilmedi. Proje yükleme iptal edildi.');
+                            Accessibility.announce(this.t('runtime.app.project_load_cancelled_no_video', 'Video seçilmedi. Proje yükleme iptal edildi.'));
                             return;
                         }
                     } else {
-                        Accessibility.announce('Video bulunamadığı için proje yüklenemedi.');
+                        Accessibility.announce(this.t('runtime.app.project_load_failed_video_missing', 'Video bulunamadığı için proje yüklenemedi.'));
                         return;
                     }
                 }
 
-                // Videoyu aç
                 try {
                     await this.openFile(videoToLoad, false);
                 } catch (e) {
-                    Accessibility.announce('Video dosyası açılamadı.');
+                    Accessibility.announce(this.t('runtime.app.video_file_open_failed', 'Video dosyası açılamadı.'));
                     console.error('Video open error:', e);
                     return;
                 }
             }
 
-            // Timeline'ı geri yükle
             if (projectData.timeline) {
                 Timeline.restoreState(
                     projectData.timeline.segments,
@@ -3139,24 +4702,19 @@ const App = {
                 );
             }
 
-            // Ekleme listesini geri yükle
             if (projectData.insertionQueue) {
                 InsertionQueue.restore(projectData.insertionQueue);
             }
 
-            // CTA Overlay'leri geri yükle
             if (projectData.ctaOverlays && typeof CtaOverlayPreview !== 'undefined') {
                 CtaOverlayPreview.importFromProject(projectData.ctaOverlays);
             }
 
-            // Geçişleri yükle
             if (projectData.transitions) {
                 Transitions.restore(projectData.transitions);
                 Dialogs.updateAppliedTransitionList();
             }
 
-            // İşaretçileri yükle
-            // İşaretçileri yükle
             console.log('Restoring markers...', projectData.markers);
             if (projectData.markers && typeof Markers !== 'undefined' && Markers.restore) {
                 Markers.restore(projectData.markers);
@@ -3169,11 +4727,12 @@ const App = {
                 });
             }
 
-            Accessibility.announce('Proje başarıyla yüklendi.');
-
+            Accessibility.announce(this.t('runtime.app.project_loaded', 'Proje başarıyla yüklendi.'));
         } catch (error) {
             console.error('Project load error:', error);
-            Accessibility.announce('Proje yüklenemedi: ' + error.message);
+            Accessibility.announce(this.t('runtime.app.project_load_failed', 'Proje yüklenemedi: {error}', {
+                error: error.message
+            }));
         }
     },
 
@@ -3183,15 +4742,31 @@ const App = {
     async handleAppQuitRequest() {
         // Kaydedilmemiş değişiklik kontrolü
         if (this.hasChanges || Timeline.hasChanges) {
-            const confirmed = await Dialogs.showAccessibleConfirm(
-                'Kaydedilmemiş Değişiklikler',
-                'Kaydedilmemiş değişikleriniz var. Kaydetmeden çıkmak istiyor musunuz?'
-            );
-            if (!confirmed) {
-                return; // Kullanıcı iptal etti
+            const result = await Dialogs.showAccessibleChoice({
+                title: this.t('runtime.app.save_changes_title', 'Değişiklikleri Kaydet'),
+                message: this.t('runtime.app.unsaved_changes', 'Videoda kaydedilmemiş değişiklikler var. Kaydetmek istiyor musunuz?'),
+                buttons: [
+                    this.t('menu.file.save', 'Kaydet'),
+                    this.t('runtime.app.dont_save', 'Kaydetme'),
+                    this.t('dialog.cancel', 'İptal')
+                ],
+                cancelValue: 2,
+                focusIndex: 0
+            });
+
+            if (result === 0) {
+                await this.saveFile();
+                if (this.hasChanges || Timeline.hasChanges) {
+                    return;
+                }
+            } else if (result === 1) {
+                window.api.sendQuitApp();
+                return;
+            } else {
+                return;
             }
         }
-        // Uygulamayı kapat
+
         window.api.sendQuitApp();
     },
 
@@ -3200,24 +4775,40 @@ const App = {
      */
     async handleFileCloseRequest() {
         if (!VideoPlayer.hasVideo()) {
-            Accessibility.announce('Açık dosya yok');
+            Accessibility.announce(this.t('runtime.app.no_open_file', 'Açık dosya yok'));
             return;
         }
 
         // Kaydedilmemiş değişiklik kontrolü
         if (this.hasChanges || Timeline.hasChanges) {
-            const confirmed = await Dialogs.showAccessibleConfirm(
-                'Kaydedilmemiş Değişiklikler',
-                'Kaydedilmemiş değişikleriniz var. Kaydetmeden kapatmak istiyor musunuz?'
-            );
-            if (!confirmed) {
+            const result = await Dialogs.showAccessibleChoice({
+                title: this.t('runtime.app.save_changes_title', 'Değişiklikleri Kaydet'),
+                message: this.t('runtime.app.unsaved_changes', 'Videoda kaydedilmemiş değişiklikler var. Kaydetmek istiyor musunuz?'),
+                buttons: [
+                    this.t('menu.file.save', 'Kaydet'),
+                    this.t('runtime.app.dont_save', 'Kaydetme'),
+                    this.t('dialog.cancel', 'İptal')
+                ],
+                cancelValue: 2,
+                focusIndex: 0
+            });
+
+            if (result === 0) {
+                await this.saveFile();
+                if (this.hasChanges || Timeline.hasChanges) {
+                    return;
+                }
+            } else if (result === 1) {
+                this.closeCurrentFile();
+                Accessibility.announce(this.t('runtime.app.file_closed', 'Dosya kapatıldı'));
+                return;
+            } else {
                 return;
             }
         }
 
-        // Dosyayı kapat
         this.closeCurrentFile();
-        Accessibility.announce('Dosya kapatıldı');
+        Accessibility.announce(this.t('runtime.app.file_closed', 'Dosya kapatıldı'));
     }
 };
 
@@ -3230,12 +4821,16 @@ document.addEventListener('DOMContentLoaded', () => {
 // Eksik fonksiyonu ekle
 App.addAudioToVideo = async function (options) {
     if (!this.currentFilePath) {
-        Accessibility.alert('Önce bir video açmalısınız.');
+        Accessibility.alert(this.t('runtime.app.open_video_first', 'Önce bir video açmalısınız'));
         return;
     }
-    const result = await window.api.showSaveDialog({ title: 'Videoyu Kaydet', defaultPath: `video_mixed_${Date.now()}.mp4`, filters: [{ name: 'MP4 Video', extensions: ['mp4'] }] });
+    const result = await window.api.showSaveDialog({
+        title: this.t('runtime.app.save_video_title', 'Videoyu Kaydet'),
+        defaultPath: `video_mixed_${Date.now()}.mp4`,
+        filters: [{ name: this.t('runtime.app.mp4_video_filter', 'MP4 Video'), extensions: ['mp4'] }]
+    });
     if (result.canceled || !result.filePath) return;
-    this.showProgress('Ses ekleniyor...');
+    this.showProgress(this.t('runtime.app.adding_audio', 'Ses ekleniyor...'));
     try {
         const response = await window.api.mixAudio({
             videoPath: this.currentFilePath,
@@ -3249,10 +4844,17 @@ App.addAudioToVideo = async function (options) {
         });
         this.hideProgress();
         if (response && response.success) {
-            Accessibility.announce('Video oluşturuldu.');
-            if (await Dialogs.showAccessibleConfirm('Tamamlandı', 'Video oluşturuldu. Açmak ister misiniz?')) await this.openFile(result.filePath);
+            Accessibility.announce(this.t('runtime.app.video_created', 'Video oluşturuldu.'));
+            if (await Dialogs.showAccessibleConfirm(
+                this.t('runtime.app.completed_title', 'Tamamlandı'),
+                this.t('runtime.app.video_created_open_prompt', 'Video oluşturuldu. Açmak ister misiniz?')
+            )) await this.openFile(result.filePath);
         } else throw new Error(response?.error);
-    } catch (e) { this.hideProgress(); console.error(e); Accessibility.announceError('Hata: ' + e.message); }
+    } catch (e) {
+        this.hideProgress();
+        console.error(e);
+        Accessibility.announceError(this.t('runtime.app.error_message', 'Hata: {message}', { message: e.message }));
+    }
 };
 
 window.App = App;

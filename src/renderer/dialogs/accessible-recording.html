@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="recording_wizard.window_title">EVD</title>
+    <link rel="stylesheet" href="../styles/main.css">
+    <link rel="stylesheet" href="../styles/wizard.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1e1e1e;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #fff;
+            margin-top: 0;
+        }
+
+        h2 {
+            border-bottom: 2px solid #0078d4;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        #wizard-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .step-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: none;
+        }
+
+        .step-content.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #live-region,
+        #chat-live-region {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            border: 0;
+            padding: 0;
+            clip: rect(0 0 0 0);
+            overflow: hidden;
+        }
+
+        .wizard-footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #333;
+        }
+
+        .status-line {
+            padding: 8px 10px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .hint {
+            font-size: 0.9em;
+            color: #aaa;
+        }
+
+        .kbd {
+            font-family: monospace;
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .step-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .window-selection-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .window-list-panel {
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 6px;
+            background: #252525;
+        }
+
+        .window-list-panel select {
+            width: 100%;
+            min-height: 120px;
+        }
+
+        .readonly-summary {
+            width: 100%;
+            resize: vertical;
+            min-height: 68px;
+        }
+
+        .live-effects-launch {
+            margin-top: 12px;
+        }
+
+        .live-effects-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.72);
+            z-index: 5000;
+        }
+
+        .live-effects-overlay.open {
+            display: flex;
+        }
+
+        .live-effects-panel {
+            width: min(920px, calc(100vw - 40px));
+            max-height: calc(100vh - 40px);
+            overflow: auto;
+            background: #171717;
+            border: 1px solid #4b4b4b;
+            border-radius: 14px;
+            padding: 18px;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        }
+
+        .live-effects-topbar {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: flex-start;
+        }
+
+        .live-effects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .live-effects-preview {
+            margin-top: 16px;
+        }
+
+        .live-effects-preview[hidden] {
+            display: none;
+        }
+
+        .live-effects-preview video {
+            width: 100%;
+            max-height: 260px;
+            border-radius: 10px;
+            background: #000;
+        }
+
+        .live-effects-slot {
+            text-align: left;
+            background: #222;
+            border: 1px solid #444;
+            color: #eee;
+            padding: 12px;
+        }
+
+        .live-effects-slot.active {
+            border-color: #2e8cff;
+            box-shadow: 0 0 0 2px rgba(46, 140, 255, 0.25);
+        }
+
+        .live-effects-slot.playing {
+            border-color: #27b36a;
+        }
+
+        .live-effects-slot strong,
+        .live-effects-slot span {
+            display: block;
+        }
+
+        .live-effects-slot-meta {
+            margin-top: 6px;
+            color: #bdbdbd;
+            font-size: 0.92em;
+        }
+
+        .live-effects-status {
+            margin-top: 14px;
+        }
+
+        fieldset {
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 8px 0;
+        }
+
+        fieldset legend {
+            font-weight: bold;
+            padding: 0 6px;
+            color: #ccc;
+        }
+
+        fieldset label {
+            display: block;
+            margin: 6px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 data-i18n="recording_wizard.window_title">Erişilebilir Video Kayıt Sihirbazı</h1>
+
+    <div id="live-region" aria-live="polite"></div>
+    <div id="chat-live-region" role="alert" aria-live="assertive" aria-atomic="true" aria-relevant="additions text"></div>
+    <div class="status-line" id="js-status" data-i18n="recording_wizard.status.starting">Sihirbaz başlatılıyor...</div>
+
+    <div id="wizard-container">
+        <!-- Step 1: Mode -->
+        <section class="step-content" id="step-1" role="region" aria-label="Adım 1: Mod Seçimi" data-i18n-aria="recording_wizard.step1.aria" style="display:none;">
+            <h2 data-i18n="recording_wizard.step1.title">1. Mod Seçimi</h2>
+            <p data-i18n="recording_wizard.step1.description">Bu sihirbaz ile OBS Studio üzerinden erişilebilir kayıt alabilirsiniz.</p>
+            <fieldset role="radiogroup" aria-label="Kayıt modu seçimi" data-i18n-aria="recording_wizard.step1.mode_group_aria">
+                <legend data-i18n="recording_wizard.step1.mode_legend">Kayıt Modu</legend>
+                <label>
+                    <input type="radio" name="mode" value="record" id="mode-record" checked>
+                    <span data-i18n="recording_wizard.step1.mode_record">Çevrimdışı Kayıt (MP4)</span>
+                </label>
+                <label>
+                    <input type="radio" name="mode" value="broadcast" id="mode-broadcast">
+                    <span data-i18n="recording_wizard.step1.mode_broadcast">Canlı Yayın (Faz 2 - Yakında)</span>
+                </label>
+            </fieldset>
+            <br>
+            <fieldset role="radiogroup" aria-label="Format seçimi" data-i18n-aria="recording_wizard.step1.format_group_aria">
+                <legend data-i18n="recording_wizard.step1.format_legend">Kayıt Formatı</legend>
+                <label>
+                    <input type="radio" name="format" value="mp4" id="format-mp4" checked>
+                    <span data-i18n="recording_wizard.step1.format_mp4">MP4 (Önerilen)</span>
+                </label>
+                <label>
+                    <input type="radio" name="format" value="mkv" id="format-mkv">
+                    <span data-i18n="recording_wizard.step1.format_mkv">MKV (Güvenli - Olası çökmede kayıt bozulmaz)</span>
+                </label>
+            </fieldset>
+            <div class="form-group" style="margin-top: 14px;">
+                <label for="video-quality-preset" data-i18n="recording_wizard.step1.video_quality">Video quality</label>
+                <select id="video-quality-preset" data-i18n-aria="recording_wizard.step1.video_quality_aria">
+                    <option value="current" data-i18n="recording_wizard.step1.video_quality_current">Use current OBS setting</option>
+                    <option value="hd_1080" data-i18n="recording_wizard.step1.video_quality_hd_1080">1080p 30 FPS (larger file size)</option>
+                    <option value="balanced_720" data-i18n="recording_wizard.step1.video_quality_balanced_720">720p 30 FPS (balanced)</option>
+                    <option value="compact_540" data-i18n="recording_wizard.step1.video_quality_compact_540">540p 24 FPS (smaller file size)</option>
+                </select>
+                <p class="hint" data-i18n="recording_wizard.step1.video_quality_hint">This changes output resolution and frame rate. The default option keeps your current OBS quality settings.</p>
+            </div>
+            <p class="hint" data-i18n="recording_wizard.step1.hint">Canlı yayın adımları şimdilik sadece ayarları hazırlar.</p>
+            <fieldset aria-describedby="live-effects-hint">
+                <legend data-i18n="recording_wizard.step1.live_effects_title">Canlı Efekt Paneli</legend>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="live-effects-enable">
+                        <span data-i18n="recording_wizard.step1.live_effects_enable">Bu oturumda Canlı Efekt Panelini etkinleştir</span>
+                    </label>
+                </div>
+                <div class="window-selection-row">
+                    <div class="form-group">
+                        <label for="live-effects-profile" data-i18n="recording_wizard.step1.live_effects_profile">Kullanılacak efekt profili</label>
+                        <select id="live-effects-profile" data-i18n-aria="recording_wizard.step1.live_effects_profile_aria"></select>
+                    </div>
+                    <div class="step-actions">
+                        <button type="button" id="btn-open-live-effects-panel" data-i18n="recording_wizard.step1.live_effects_edit">Efekt Panelini Aç</button>
+                        <button type="button" id="btn-refresh-live-effects" data-i18n="recording_wizard.step1.live_effects_refresh">Profilleri Yenile</button>
+                    </div>
+                </div>
+                <p class="hint" id="live-effects-hint" data-i18n="recording_wizard.step1.live_effects_hint_disabled">Bu özellik kapalıyken kayıt normal şekilde devam eder. Açarsanız oturum için bir efekt profili bağlanır.</p>
+            </fieldset>
+            <div class="step-actions" id="interview-quickstart-actions" style="display:none;">
+                <button type="button" id="btn-interview-quickstart" data-i18n="recording_wizard.step1.interview_quickstart">Dogrudan Kayit Adimina Git</button>
+            </div>
+            <p class="hint" id="interview-quickstart-hint" style="display:none;" data-i18n="recording_wizard.step1.interview_quickstart_hint">Bu secenek, OBS baglantisi ve varsayilan kaynaklar hazirsa sizi dogrudan kayit ekranina goturur.</p>
+        </section>
+
+        <!-- Step 2: Setup & Checks -->
+        <section class="step-content" id="step-2" role="region" aria-label="Adım 2: Kurulum ve Kontroller" data-i18n-aria="recording_wizard.step2.aria">
+            <h2 data-i18n="recording_wizard.step2.title">2. Kurulum ve Kontroller</h2>
+
+            <div class="status-line" id="obs-detect-status" data-i18n="recording_wizard.obs.checking">OBS Studio kontrol ediliyor...</div>
+
+            <div class="step-actions">
+                <button type="button" id="btn-open-obs-site" data-i18n="recording_wizard.step2.open_obs_site">OBS Studio indirme sayfasini aç</button>
+                <button type="button" id="btn-recheck-obs" data-i18n="recording_wizard.step2.retry_setup">Kurulumu yaptim, yeniden dene</button>
+            </div>
+
+            <hr>
+
+            <h3 data-i18n="recording_wizard.step2.websocket_title">OBS WebSocket Baglantisi</h3>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="obs-host" data-i18n="recording_wizard.step2.host">Host</label>
+                    <input type="text" id="obs-host" value="127.0.0.1">
+                </div>
+                <div class="form-group">
+                    <label for="obs-port" data-i18n="recording_wizard.step2.port">Port</label>
+                    <input type="number" id="obs-port" value="4455" min="1" max="65535">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="obs-password" data-i18n="recording_wizard.step2.password">Parola</label>
+                <input type="password" id="obs-password" placeholder="(bos birakilabilir)" data-i18n-placeholder="recording_wizard.step2.password_placeholder">
+                <div>
+                    <label><input type="checkbox" id="toggle-password"> <span data-i18n="recording_wizard.step2.show_password">Parolayi goster</span></label>
+                </div>
+            </div>
+            <div class="step-actions">
+                <button type="button" id="btn-test-connection" data-i18n="recording_wizard.step2.test_connection">Baglantiyi test et</button>
+                <button type="button" id="btn-toggle-help" data-i18n="recording_wizard.step2.toggle_help">OBS WebSocket nasil acilir?</button>
+                <button type="button" id="btn-open-ws-docs" data-i18n="recording_wizard.step2.open_docs">OBS WebSocket dokumantasyonunu ac</button>
+            </div>
+            <div class="status-line" id="obs-conn-status" data-i18n="recording_wizard.step2.connection_waiting">Baglanti testi bekleniyor.</div>
+            <div id="obs-help" class="status-line" style="display:none;">
+                <div data-i18n-html="recording_wizard.step2.help_html">
+                    <strong>OBS WebSocket Kurulum Adimlari:</strong>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 3: Source Selection -->
+        <section class="step-content" id="step-3" role="region" aria-label="Adım 3: Kaynak Seçimi" data-i18n-aria="recording_wizard.step3.aria">
+            <h2 data-i18n="recording_wizard.step3.title">3. Kaynak Secimi</h2>
+            <div class="status-line" id="source-status" data-i18n="recording_wizard.status.sources_preparing">Kaynak listesi hazirlaniyor...</div>
+            <fieldset role="radiogroup" aria-label="Yakalama modu seçimi" data-i18n-aria="recording_wizard.step3.capture_mode_aria">
+                <legend data-i18n="recording_wizard.step3.capture_mode">Yakalama Modu</legend>
+                <label>
+                    <input type="radio" name="capture-mode" value="screen" id="capture-screen">
+                    <span data-i18n="recording_wizard.step3.capture_screen">Tum Ekran</span>
+                </label>
+                <label>
+                    <input type="radio" name="capture-mode" value="window" id="capture-window">
+                    <span data-i18n="recording_wizard.step3.capture_window">Pencere</span>
+                </label>
+            </fieldset>
+            <div class="form-group">
+                <label for="screen-select" data-i18n="recording_wizard.step3.screen_list">Ekran Listesi</label>
+                <select id="screen-select"></select>
+            </div>
+            <div class="form-group">
+                <label for="window-select" data-i18n="recording_wizard.step3.window_list">Pencere Listesi</label>
+                <div class="window-selection-row">
+                    <select id="window-select"></select>
+                    <button type="button" id="btn-add-window" data-i18n="recording_wizard.step3.add_window">Listeye Ekle</button>
+                </div>
+            </div>
+            <div class="window-list-panel" id="selected-window-panel">
+                <label for="selected-window-list" data-i18n="recording_wizard.step3.selected_windows">Kayitta Kullanilacak Pencereler</label>
+                <select id="selected-window-list" size="5" aria-label="Kayitta kullanilacak pencere listesi" data-i18n-aria="recording_wizard.step3.selected_windows_aria"></select>
+                <div class="step-actions" style="margin-top: 10px;">
+                    <button type="button" id="btn-remove-window" data-i18n="recording_wizard.step3.remove_window">Listeden Cikar</button>
+                    <button type="button" id="btn-set-active-window" data-i18n="recording_wizard.step3.set_active_window">Aktif Yap</button>
+                </div>
+                <p class="hint" id="selected-window-hint" data-i18n="recording_wizard.step3.selected_windows_hint">Listedeki ilk pencere aktif penceredir. Kayit sirasinda Alt+Ctrl+U, Alt+Ctrl+O ve Alt+Ctrl+I kisayollariyla degistirilebilir.</p>
+            </div>
+            <div class="step-actions">
+                <button type="button" id="btn-refresh-sources" onclick="window.refreshSources()" data-i18n="recording_wizard.step3.refresh_sources">Listeyi Yeniden Tara</button>
+            </div>
+
+            <div class="form-group">
+                <label><input type="checkbox" id="camera-enable"> <span data-i18n="recording_wizard.step3.camera_overlay">Kamera overlay ekle</span></label>
+            </div>
+            <div class="status-line" id="camera-status" style="display:none;"></div>
+            <div class="form-group">
+                <label for="camera-select" data-i18n="recording_wizard.step3.camera">Kamera</label>
+                <select id="camera-select"></select>
+            </div>
+            <div class="step-actions">
+                <button type="button" id="btn-camera-permission" onclick="window.requestCameraPermission()" data-i18n="recording_wizard.step3.camera_permission">Kamera erisimi icin izin iste</button>
+                <button type="button" id="btn-refresh-devices" onclick="window.refreshDevices()" data-i18n="recording_wizard.step3.refresh_devices">Cihazlari yeniden tara</button>
+            </div>
+
+            <div class="form-group">
+                <label><input type="checkbox" id="system-audio-enable"> <span data-i18n="recording_wizard.step3.system_audio">Sistem sesini kaydet</span></label>
+            </div>
+            <fieldset id="system-audio-mode-group" role="radiogroup" aria-label="Ses yakalama modu" data-i18n-aria="recording_wizard.step3.system_audio_mode_aria">
+                <legend data-i18n="recording_wizard.step3.system_audio_mode">Ses yakalama modu</legend>
+                <label>
+                    <input type="radio" name="system-audio-mode" value="system" id="system-audio-mode-system" checked>
+                    <span data-i18n="recording_wizard.step3.system_audio_mode_system">Tüm sistem sesi</span>
+                </label>
+                <label>
+                    <input type="radio" name="system-audio-mode" value="window" id="system-audio-mode-window">
+                    <span data-i18n="recording_wizard.step3.system_audio_mode_window">Seçili pencere sesi</span>
+                </label>
+            </fieldset>
+            <div class="form-group" id="system-audio-window-target-group" style="display:none;">
+                <label for="system-audio-window-target" data-i18n="recording_wizard.step3.system_audio_window_target">Sesi alınacak pencere</label>
+                <select id="system-audio-window-target" data-i18n-aria="recording_wizard.step3.system_audio_window_target_aria"></select>
+                <p class="hint" id="system-audio-window-target-hint" data-i18n="recording_wizard.step3.system_audio_window_target_hint">Birden fazla pencere eklediyseniz sesin hangi pencereden alınacağını burada seçin.</p>
+            </div>
+
+            <div class="form-group">
+                <label for="mic-select" data-i18n="recording_wizard.step3.mic_required">Mikrofon (zorunlu)</label>
+                <select id="mic-select"></select>
+            </div>
+            <div class="step-actions">
+                <button type="button" id="btn-mic-permission" onclick="window.requestMicPermission()" data-i18n="recording_wizard.step3.mic_permission">Mikrofon izni iste</button>
+            </div>
+        </section>
+
+        <!-- Step 4: Layout -->
+        <section class="step-content" id="step-4" role="region" aria-label="Adım 4: Düzen ve Ön Ayarlar" data-i18n-aria="recording_wizard.step4.aria">
+            <h2 data-i18n="recording_wizard.step4.title">4. Duzen ve On Ayarlar</h2>
+            <fieldset role="radiogroup" aria-label="Düzen seçimi" data-i18n-aria="recording_wizard.step4.layout_aria">
+                <legend data-i18n="recording_wizard.step4.layout_presets">Duzen On Ayarlari</legend>
+                <label><input type="radio" name="layout-preset" value="fullscreen" checked> <span data-i18n="recording_wizard.layout.fullscreen">Tam Ekran (Sadece Ekran)</span></label>
+                <label><input type="radio" name="layout-preset" value="camera-only"> <span data-i18n="recording_wizard.layout.camera_only">Yalnizca Kamera (Ekran Gizli)</span></label>
+                <label><input type="radio" name="layout-preset" value="br"> <span data-i18n="recording_wizard.layout.br">Tam Ekran + Kamera Sag Alt</span></label>
+                <label><input type="radio" name="layout-preset" value="bl"> <span data-i18n="recording_wizard.layout.bl">Tam Ekran + Kamera Sol Alt</span></label>
+                <label><input type="radio" name="layout-preset" value="tr"> <span data-i18n="recording_wizard.layout.tr">Tam Ekran + Kamera Sag Ust</span></label>
+                <label><input type="radio" name="layout-preset" value="tl"> <span data-i18n="recording_wizard.layout.tl">Tam Ekran + Kamera Sol Ust</span></label>
+                <label><input type="radio" name="layout-preset" value="side-l"> <span data-i18n="recording_wizard.layout.side_l">Yan Yana (Ekran Sol / Kamera Sag)</span></label>
+                <label><input type="radio" name="layout-preset" value="side-r"> <span data-i18n="recording_wizard.layout.side_r">Yan Yana (Kamera Sol / Ekran Sag)</span></label>
+                <label><input type="radio" name="layout-preset" value="side-l-slide"> <span data-i18n="recording_wizard.layout.side_l_slide">Sunum Yanyana (Ekran Solda %65, Kamera Sagda %35) - Tablo/Grafik icin</span></label>
+                <label><input type="radio" name="layout-preset" value="side-r-slide"> <span data-i18n="recording_wizard.layout.side_r_slide">Sunum Yanyana (Kamera Solda %35, Ekran Sagda %65) - Tablo/Grafik icin</span></label>
+                <label><input type="radio" name="layout-preset" value="manual"> <span id="manual-preset-label">Manuel (Elle Ozellestirilmis, X %0, Y %0)</span></label>
+            </fieldset>
+
+            <h3 data-i18n="recording_wizard.step4.fine_tune">Ince Ayar (Kamera)</h3>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="cam-x">X</label>
+                    <input type="number" id="cam-x" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="cam-y">Y</label>
+                    <input type="number" id="cam-y" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="cam-scale" data-i18n="recording_wizard.step4.scale">Olcek (%)</label>
+                    <input type="number" id="cam-scale" value="25" min="5" max="200">
+                </div>
+                <div class="form-group">
+                    <label for="cam-bg-color" data-i18n="recording_wizard.step4.camera_bg">Kamera Arka Plan Rengi</label>
+                    <select id="cam-bg-color">
+                        <option value="none" selected data-i18n="recording_wizard.camera_bg.none">Yok (Normal Goruntu)</option>
+                        <option value="black" data-i18n="recording_wizard.camera_bg.black">Siyah</option>
+                        <option value="white" data-i18n="recording_wizard.camera_bg.white">Beyaz</option>
+                        <option value="charcoal" data-i18n="recording_wizard.camera_bg.charcoal">Fume / Koyu Gri (Premium)</option>
+                        <option value="purple" data-i18n="recording_wizard.camera_bg.purple">Mor (Yayinci Estetigi)</option>
+                        <option value="turquoise" data-i18n="recording_wizard.camera_bg.turquoise">Turkuaz (Ferah Onizleme)</option>
+                        <option value="green" data-i18n="recording_wizard.camera_bg.green">Yesil (Chroma Key)</option>
+                        <option value="blue" data-i18n="recording_wizard.camera_bg.blue">Mavi</option>
+                        <option value="blur" data-i18n="recording_wizard.camera_bg.blur">Bulanik (Sanal Arka Plan)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="cam-panel-fill-color" data-i18n="recording_wizard.step4.camera_panel_fill">Yan Yana Bosluk Dolgusu</label>
+                    <select id="cam-panel-fill-color">
+                        <option value="none" selected data-i18n="recording_wizard.camera_bg.none">Yok (Normal Goruntu)</option>
+                        <option value="black" data-i18n="recording_wizard.camera_bg.black">Siyah</option>
+                        <option value="white" data-i18n="recording_wizard.camera_bg.white">Beyaz</option>
+                        <option value="charcoal" data-i18n="recording_wizard.camera_bg.charcoal">Fume / Koyu Gri (Premium)</option>
+                        <option value="purple" data-i18n="recording_wizard.camera_bg.purple">Mor (Yayinci Estetigi)</option>
+                        <option value="turquoise" data-i18n="recording_wizard.camera_bg.turquoise">Turkuaz (Ferah Onizleme)</option>
+                        <option value="green" data-i18n="recording_wizard.camera_bg.green">Yesil (Chroma Key)</option>
+                        <option value="blue" data-i18n="recording_wizard.camera_bg.blue">Mavi</option>
+                        <option value="blur" data-i18n="recording_wizard.camera_bg.blur">Bulanik (Sanal Arka Plan)</option>
+                    </select>
+                </div>
+            </div>
+            <p class="hint" data-i18n="recording_wizard.step4.hint">Ok tuslariyla konum degistirilebilir. Shift: +10, Ctrl: +50.</p>
+
+            <div class="step-actions">
+                <button type="button" id="btn-apply-preset" onclick="window.applySelectedPreset()" data-i18n="recording_wizard.step4.apply_preset">On ayari uygula</button>
+                <button type="button" id="btn-ai-suggest" onclick="window.requestAiSuggestion()" data-i18n="recording_wizard.step4.ai_suggest">Yapay zekadan oneri al</button>
+                <button type="button" id="btn-apply-ai" disabled onclick="window.applyAiSuggestion()" data-i18n="recording_wizard.step4.apply_ai">Oneriyi uygula</button>
+            </div>
+            <div class="status-line" id="ai-status" data-i18n="recording_wizard.step4.ai_waiting">AI onerisi bekleniyor.</div>
+            <div id="ai-followup-panel" style="display:none; margin-top:12px;">
+                <div class="form-group">
+                    <label for="ai-followup-question" data-i18n="recording_wizard.step4.ai_followup_label">Ek soru sor</label>
+                    <textarea id="ai-followup-question" rows="3" data-i18n-placeholder="recording_wizard.step4.ai_followup_placeholder"
+                        placeholder="Ornegin: Kamera yuzumu cok mu kucuk gosteriyor, daha iyi bir yer olur mu?"></textarea>
+                </div>
+                <div class="step-actions">
+                    <button type="button" id="btn-ai-followup" onclick="window.requestAiFollowup()" data-i18n="recording_wizard.step4.ai_followup_button">Ek soruyu gonder</button>
+                </div>
+                <div class="status-line" id="ai-followup-status" data-i18n="recording_wizard.step4.ai_followup_waiting">Ek soru hazir. Isterseniz daha ayrintili bir soru sorabilirsiniz.</div>
+            </div>
+            <div class="step-actions">
+                <button type="button" id="btn-ai-describe" onclick="window.requestAiDescription()" data-i18n="recording_wizard.step4.ai_describe">Ekrani Betimle (AI)</button>
+            </div>
+            <div class="status-line" id="ai-describe-status" data-i18n="recording_wizard.step4.description_waiting">Betimleme bekleniyor.</div>
+        </section>
+
+        <!-- Step 5: Audio -->
+        <section class="step-content" id="step-5" role="region" aria-label="Adım 5: Ses Ayarları" data-i18n-aria="recording_wizard.step5.aria">
+            <h2 data-i18n="recording_wizard.step5.title">5. Ses Ayarlari</h2>
+            <div class="form-group">
+                <label for="mic-volume" data-i18n="recording_wizard.step5.mic_volume">Mikrofon Seviyesi (%)</label>
+                <input type="range" id="mic-volume" min="0" max="400" value="300">
+                <span id="mic-volume-value">%300</span>
+            </div>
+            <div class="form-group">
+                <label for="system-volume" data-i18n="recording_wizard.step5.system_volume">Sistem Ses Seviyesi (%)</label>
+                <input type="range" id="system-volume" min="0" max="200" value="65" disabled>
+                <span id="system-volume-value">%65</span>
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="monitor-enable"> <span data-i18n="recording_wizard.step5.monitoring">Ses izlemesini ac (echo riski)</span></label>
+            </div>
+        </section>
+
+        <!-- Step 6: Recording -->
+        <section class="step-content" id="step-6" role="region" aria-label="Adım 6: Kayıt Kontrolleri" data-i18n-aria="recording_wizard.step6.aria">
+            <h2 data-i18n="recording_wizard.step6.title">6. Kayit Kontrolleri</h2>
+            <div class="status-line" id="recording-status" data-i18n="recording_wizard.recording.ready">Hazir.</div>
+            <fieldset id="broadcast-settings-panel" style="display:none;">
+                <legend data-i18n="recording_wizard.broadcast.settings_legend">Canli Yayin Hedefi</legend>
+                <div class="form-group">
+                    <label for="broadcast-platform" data-i18n="recording_wizard.broadcast.platform">Platform</label>
+                    <select id="broadcast-platform">
+                        <option value="youtube" data-i18n="recording_wizard.broadcast.platform_youtube">YouTube Live</option>
+                        <option value="generic" data-i18n="recording_wizard.broadcast.platform_generic">Genel RTMP</option>
+                    </select>
+                </div>
+                <div id="youtube-stream-method-panel">
+                    <div class="form-group">
+                        <label for="youtube-stream-method" data-i18n="recording_wizard.broadcast.youtube_stream_method">YouTube Baglanti Yontemi</label>
+                        <select id="youtube-stream-method">
+                            <option value="manual" data-i18n="recording_wizard.broadcast.youtube_stream_method_manual">Mevcut stream key ile devam et</option>
+                            <option value="api" data-i18n="recording_wizard.broadcast.youtube_stream_method_api">YouTube API ile hesap bagla</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="youtube-api-panel" style="display:none;">
+                    <div class="step-actions">
+                        <button type="button" id="btn-youtube-connect" data-i18n="recording_wizard.broadcast.youtube_connect">YouTube hesabini bagla</button>
+                        <button type="button" id="btn-youtube-disconnect" data-i18n="recording_wizard.broadcast.youtube_disconnect">Baglantiyi kaldir</button>
+                    </div>
+                    <div class="status-line" id="youtube-auth-status" data-i18n="recording_wizard.broadcast.youtube_auth_waiting">YouTube hesabi bagli degil.</div>
+                    <div class="form-group">
+                        <label for="youtube-account-select" data-i18n="recording_wizard.broadcast.youtube_account_select">Etkin YouTube hesabi</label>
+                        <select id="youtube-account-select" data-i18n-aria="recording_wizard.broadcast.youtube_account_select_aria"></select>
+                        <p class="hint" data-i18n="recording_wizard.broadcast.youtube_account_hint">Planli yayinlar ve yeni yayin hazirlama, burada secili hesap uzerinden yapilir.</p>
+                    </div>
+
+                    <div id="youtube-chat-watch-fields" style="display:none;">
+                        <div class="form-group">
+                            <label for="youtube-chat-watch-url" data-i18n="recording_wizard.broadcast.youtube_chat_watch_url">YouTube canlı yayın bağlantısı</label>
+                            <input type="text" id="youtube-chat-watch-url"
+                                data-i18n-placeholder="recording_wizard.broadcast.youtube_chat_watch_url_placeholder"
+                                placeholder="https://www.youtube.com/watch?v=...">
+                        </div>
+                        <div class="step-actions">
+                            <button type="button" id="btn-youtube-chat-watch-connect" data-i18n="recording_wizard.broadcast.youtube_chat_watch_connect">Sohbete Bağlan</button>
+                            <button type="button" id="btn-youtube-chat-watch-clear" data-i18n="recording_wizard.broadcast.youtube_chat_watch_clear">Bağlantıyı Temizle</button>
+                        </div>
+                        <p class="hint" data-i18n="recording_wizard.broadcast.youtube_chat_watch_hint">Bağlı hesap moderatör veya kanal sahibi ise mesaj gönderme ve silme gibi işlemler de kullanılabilir.</p>
+                    </div>
+
+                    <fieldset role="radiogroup" aria-label="YouTube yayin akisi secimi" data-i18n-aria="recording_wizard.broadcast.youtube_api_mode_aria">
+                        <legend data-i18n="recording_wizard.broadcast.youtube_api_mode">YouTube API Akisi</legend>
+                        <label>
+                            <input type="radio" name="youtube-api-mode" value="instant" id="youtube-api-mode-instant" checked>
+                            <span data-i18n="recording_wizard.broadcast.youtube_api_mode_instant">Hemen yeni canli yayin hazirla</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="youtube-api-mode" value="existing" id="youtube-api-mode-existing">
+                            <span data-i18n="recording_wizard.broadcast.youtube_api_mode_existing">Planli yayinlar arasindan sec</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="youtube-api-mode" value="planned" id="youtube-api-mode-planned">
+                            <span data-i18n="recording_wizard.broadcast.youtube_api_mode_planned">Yeni planli yayin olustur</span>
+                        </label>
+                    </fieldset>
+
+                    <div id="youtube-create-fields">
+                        <div class="form-group">
+                            <label for="youtube-live-title" data-i18n="recording_wizard.broadcast.youtube_live_title">Yayin Basligi</label>
+                            <input type="text" id="youtube-live-title" data-i18n-placeholder="recording_wizard.broadcast.youtube_live_title_placeholder" placeholder="Yayin basligini girin">
+                        </div>
+                        <div class="form-group">
+                            <label for="youtube-live-description" data-i18n="recording_wizard.broadcast.youtube_live_description">Yayin Aciklamasi</label>
+                            <textarea id="youtube-live-description" rows="3" data-i18n-placeholder="recording_wizard.broadcast.youtube_live_description_placeholder"
+                                placeholder="Yayin aciklamasi"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="youtube-live-visibility" data-i18n="recording_wizard.broadcast.youtube_visibility">Gorunurluk</label>
+                            <select id="youtube-live-visibility">
+                                <option value="private" data-i18n="recording_wizard.broadcast.youtube_visibility_private">Gizli</option>
+                                <option value="unlisted" data-i18n="recording_wizard.broadcast.youtube_visibility_unlisted">Liste disi</option>
+                                <option value="public" data-i18n="recording_wizard.broadcast.youtube_visibility_public">Herkese acik</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="youtube-playlist-select" data-i18n="recording_wizard.broadcast.youtube_playlist_select">Oynatma Listesi</label>
+                            <div class="window-selection-row">
+                                <select id="youtube-playlist-select" data-i18n-aria="recording_wizard.broadcast.youtube_playlist_select_aria"></select>
+                                <button type="button" id="btn-youtube-refresh-playlists" data-i18n="recording_wizard.broadcast.youtube_refresh_playlists">Listeleri yenile</button>
+                            </div>
+                            <p class="hint" data-i18n="recording_wizard.broadcast.youtube_playlist_hint">Secerseniz yayin secili YouTube oynatma listesine eklenir.</p>
+                            <p class="hint" data-i18n="recording_wizard.broadcast.youtube_made_for_kids_hint">Bu ekrandan olusturulan yeni YouTube yayinlari varsayilan olarak cocuklara ozel degil seklinde isaretlenir.</p>
+                        </div>
+                    </div>
+
+                    <div id="youtube-planned-fields" style="display:none;">
+                        <div class="form-group">
+                            <label for="youtube-live-scheduled-at" data-i18n="recording_wizard.broadcast.youtube_scheduled_at">Planlanan Baslangic Zamani</label>
+                            <input type="datetime-local" id="youtube-live-scheduled-at">
+                        </div>
+                    </div>
+
+                    <div id="youtube-existing-fields" style="display:none;">
+                        <div class="form-group">
+                            <label for="youtube-existing-broadcasts" data-i18n="recording_wizard.broadcast.youtube_existing_list">Planli YouTube Yayinlari</label>
+                            <div class="window-selection-row">
+                                <select id="youtube-existing-broadcasts"></select>
+                                <button type="button" id="btn-youtube-refresh-broadcasts" data-i18n="recording_wizard.broadcast.youtube_refresh_broadcasts">Listeyi yenile</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="hint" data-i18n="recording_wizard.broadcast.youtube_api_hint">YouTube API secildiginde yayin URL ve stream key otomatik olarak hazirlanir.</p>
+                    <div class="status-line" id="youtube-broadcast-status" data-i18n="recording_wizard.broadcast.youtube_broadcast_waiting">YouTube yayin secimi bekleniyor.</div>
+                    <div class="form-group" id="youtube-watch-link-panel" style="display:none;">
+                        <label for="youtube-watch-link" data-i18n="recording_wizard.broadcast.youtube_watch_link">Izleyici Baglantisi</label>
+                        <input type="text" id="youtube-watch-link" readonly>
+                        <div class="step-actions" style="margin-top: 10px;">
+                            <button type="button" id="btn-youtube-open-watch-link" data-i18n="recording_wizard.broadcast.youtube_open_watch_link">Baglantiyi ac</button>
+                            <button type="button" id="btn-youtube-copy-watch-link" data-i18n="recording_wizard.broadcast.youtube_copy_watch_link">Baglantiyi kopyala</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="broadcast-manual-fields">
+                    <div class="form-group">
+                        <label for="broadcast-title" data-i18n="recording_wizard.broadcast.title">Yayin Basligi</label>
+                        <input type="text" id="broadcast-title" data-i18n-placeholder="recording_wizard.broadcast.title_placeholder" placeholder="Yayin basligini girin">
+                    </div>
+                    <div class="form-group">
+                        <label for="broadcast-server" data-i18n="recording_wizard.broadcast.server">Yayin Sunucusu / URL</label>
+                        <input type="text" id="broadcast-server" data-i18n-placeholder="recording_wizard.broadcast.server_placeholder" placeholder="rtmps://...">
+                    </div>
+                    <div class="form-group">
+                        <label for="broadcast-stream-key" data-i18n="recording_wizard.broadcast.stream_key">Yayin Anahtari</label>
+                        <input type="password" id="broadcast-stream-key" data-i18n-placeholder="recording_wizard.broadcast.stream_key_placeholder" placeholder="Yayin anahtari">
+                        <div>
+                            <label><input type="checkbox" id="broadcast-show-key"> <span data-i18n="recording_wizard.broadcast.show_key">Yayin anahtarini goster</span></label>
+                        </div>
+                    </div>
+                    <p class="hint" data-i18n="recording_wizard.broadcast.hint">Bilgiler cihazda saklanir. Sonraki yayinda isterseniz sadece URL veya anahtari degistirirsiniz.</p>
+                    <p class="hint" data-i18n="recording_wizard.broadcast.youtube_planned_hint">Ayni yayin anahtari birden fazla planli YouTube yayiniyla kullaniliyorsa, hangi yayinin acilacagini YouTube belirler. Dogru yayini YouTube Studio tarafinda kontrol edin.</p>
+                </div>
+            </fieldset>
+            <p id="recording-shortcuts-text" data-i18n-html="recording_wizard.step6.shortcuts_html">Bu ekrandayken (Odaktayken) Kisayollar: <span class="kbd">R</span> baslat/durdur, <span class="kbd">P</span> duraklat/devam, <span class="kbd">S</span> durdur.</p>
+            <div class="form-group" style="margin-top: 10px; margin-bottom: 15px;">
+                <label for="global-shortcuts-info" data-i18n="recording_wizard.step6.global_shortcuts_label">Sihirbaz Kapaliyken veya Arka Plandayken (Global) Kullanabileceginiz Kisayollar:</label>
+                <textarea id="global-shortcuts-info" readonly rows="8" aria-multiline="true"
+                    aria-label="Tum Global Kisayollar Listesi." data-i18n-aria="recording_wizard.step6.global_shortcuts_aria"
+                    data-i18n="recording_wizard.step6.global_shortcuts_text"
+                    style="width: 100%; resize: none; background: #2a2a2a; color: #ccc; border: 1px solid #444; padding: 10px; border-radius: 4px; font-family: inherit; margin-top: 5px;">
+Alt+Ctrl+R: Kaydı Başlat veya Durdur
+Alt+Ctrl+P: Kaydı Duraklat veya Devam Ettir
+Alt+Ctrl+M: Mikrofonu Aç veya Kapat
+Alt+Ctrl+H: Sistem Sesini Aç veya Kapat
+Alt+Ctrl+K: Kamerayı Tam Ekran Yap
+Alt+Ctrl+J: Önceki Düzen Ayarına Geri Dön
+Alt+Ctrl+L: Ekranı Bulanıklaştır (Gizle) veya Geri Aç
+Alt+Ctrl+U: Önceki Pencere
+Alt+Ctrl+O: Sonraki Pencere
+Alt+Ctrl+I: Pencere Listesini Ac</textarea>
+            </div>
+            <div class="step-actions">
+                <button type="button" id="btn-toggle-record" onclick="window.toggleRecording()" data-i18n="recording_wizard.recording.start_button">Kaydi Baslat (R)</button>
+                <button type="button" id="btn-pause-record" disabled onclick="window.togglePause()" data-i18n="recording_wizard.recording.pause_button">Duraklat / Devam (P)</button>
+                <button type="button" id="btn-stop-record" style="display:none;" onclick="window.stopRecording()" data-i18n="recording_wizard.recording.stop_hidden">Durdur (Gizli/Yedek)</button>
+            </div>
+            <p id="interview-quickstart-note" class="hint" style="display:none;" data-i18n="recording_wizard.step6.interview_quickstart_note">Röportaj kaydı ön ayarıyla doğrudan bu adıma geldiniz. Ayarları değiştirmek isterseniz Geri düğmesini, kayıt sırasında küçük değişiklikler için Canlı Ayarlar bölümünü kullanın.</p>
+
+            <!-- Live Settings Panel -->
+            <details id="live-settings-panel"
+                style="margin-top: 20px; border: 1px solid #444; padding: 10px; border-radius: 5px;">
+                <summary style="cursor: pointer; padding: 5px; font-weight: bold; color: #0078d4;" data-i18n="recording_wizard.step6.live_settings">Canli Ayarlar (Kaydi durdurmadan degistir)</summary>
+                <div class="live-controls" style="padding-top: 10px;">
+                    <fieldset>
+                        <legend data-i18n="recording_wizard.step1.live_effects_title">Canlı Efekt Paneli</legend>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="live-effects-enable-step6">
+                                <span data-i18n="recording_wizard.step1.live_effects_enable">Bu oturumda Canlı Efekt Panelini etkinleştir</span>
+                            </label>
+                        </div>
+                        <div class="window-selection-row">
+                            <div class="form-group">
+                                <label for="live-effects-profile-step6" data-i18n="recording_wizard.step1.live_effects_profile">Kullanılacak efekt profili</label>
+                                <select id="live-effects-profile-step6" data-i18n-aria="recording_wizard.step1.live_effects_profile_aria"></select>
+                            </div>
+                            <div class="step-actions">
+                                <button type="button" id="btn-open-live-effects-panel-step6" data-i18n="recording_wizard.step1.live_effects_edit">Efekt Panelini Aç</button>
+                                <button type="button" id="btn-refresh-live-effects-step6" data-i18n="recording_wizard.step1.live_effects_refresh">Profilleri Yenile</button>
+                            </div>
+                        </div>
+                        <p class="hint" id="live-effects-hint-step6" data-i18n="recording_wizard.step1.live_effects_hint_disabled">Bu özellik kapalıyken kayıt normal şekilde devam eder. Açarsanız oturum için bir efekt profili bağlanır.</p>
+                    </fieldset>
+
+                    <fieldset role="radiogroup" aria-label="Canlı düzen değişimi" data-i18n-aria="recording_wizard.step6.live_layout_aria">
+                        <legend data-i18n="recording_wizard.step6.live_layout">Hizli Duzen Degisikligi</legend>
+                        <label><input type="radio" name="live-layout" value="fullscreen" checked> <span data-i18n="recording_wizard.layout.live_fullscreen">Tam Ekran</span></label>
+                        <label><input type="radio" name="live-layout" value="camera-only"> <span data-i18n="recording_wizard.layout.live_camera_only">Yalnizca Kamera</span></label>
+                        <label><input type="radio" name="live-layout" value="br"> <span data-i18n="recording_wizard.layout.live_br">Kamera Sag Alt</span></label>
+                        <label><input type="radio" name="live-layout" value="bl"> <span data-i18n="recording_wizard.layout.live_bl">Kamera Sol Alt</span></label>
+                        <label><input type="radio" name="live-layout" value="tr"> <span data-i18n="recording_wizard.layout.live_tr">Kamera Sag Ust</span></label>
+                        <label><input type="radio" name="live-layout" value="tl"> <span data-i18n="recording_wizard.layout.live_tl">Kamera Sol Ust</span></label>
+                        <label><input type="radio" name="live-layout" value="side-l"> <span data-i18n="recording_wizard.layout.live_side_l">Yan Yana (Esit)</span></label>
+                        <label><input type="radio" name="live-layout" value="side-l-slide"> <span data-i18n="recording_wizard.layout.live_side_l_slide">Sunum (Ekran 65, Kamera Sagda %35)</span></label>
+                        <label><input type="radio" name="live-layout" value="side-r-slide"> <span data-i18n="recording_wizard.layout.live_side_r_slide">Sunum (Kamera Solda %35, Ekran %65)</span></label>
+                    </fieldset>
+
+                    <div style="margin-top: 15px; display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div class="form-group" style="flex:1;">
+                            <label><input type="checkbox" id="live-system-audio-check"
+                                    onclick="window.toggleLiveSystemAudio(this)"> <span data-i18n="recording_wizard.step6.live_system_audio">Sistem Sesi Kaydi</span></label>
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <button type="button" id="btn-apply-live-layout" onclick="window.applyLiveLayout()" data-i18n="recording_wizard.step6.apply_live_layout">Secili Duzeni Uygula</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="live-window-select" data-i18n="recording_wizard.step6.live_window">Aktif Pencere</label>
+                        <div class="window-selection-row">
+                            <select id="live-window-select" aria-label="Aktif pencere secimi" data-i18n-aria="recording_wizard.step6.live_window_aria"></select>
+                            <button type="button" id="btn-apply-live-window" data-i18n="recording_wizard.step6.apply_live_window">Pencereyi Etkinlestir</button>
+                        </div>
+                    </div>
+
+                    <div class="grid-2" style="margin-top: 10px;">
+                        <div class="form-group">
+                            <label for="live-mic-select" data-i18n="recording_wizard.step6.live_mic_device">Mikrofon</label>
+                            <select id="live-mic-select" data-i18n-aria="recording_wizard.step6.live_mic_device_aria"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="live-mic-volume" data-i18n="recording_wizard.step6.live_mic_volume">Mikrofon Seviyesi</label>
+                            <input type="range" id="live-mic-volume" min="0" max="400" value="300"
+                                oninput="window.setLiveVolume('mic', this.value)">
+                        </div>
+                        <div class="form-group">
+                            <label for="live-system-volume" data-i18n="recording_wizard.step6.live_system_volume">Sistem Sesi</label>
+                            <input type="range" id="live-system-volume" min="0" max="200" value="65"
+                                oninput="window.setLiveVolume('system', this.value)">
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <div class="status-line" id="recording-output" aria-live="polite" data-i18n="recording_wizard.step6.output_default">Cikti yolu: -</div>
+            <div class="form-group" id="broadcast-error-panel" style="display:none;">
+                <label for="broadcast-error-summary" data-i18n="recording_wizard.step6.broadcast_error_label">Canlı yayın başlatma ayrıntıları</label>
+                <textarea id="broadcast-error-summary" class="readonly-summary" readonly rows="4"
+                    data-i18n-aria="recording_wizard.step6.broadcast_error_aria"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="obs-stats-summary" data-i18n="recording_wizard.step6.obs_stats_label">OBS yayin durumu</label>
+                <textarea id="obs-stats-summary" class="readonly-summary" readonly rows="6"
+                    data-i18n-aria="recording_wizard.step6.obs_stats_aria">OBS istatistikleri bu adimda gorunecek.</textarea>
+            </div>
+            <div class="form-group" id="youtube-watch-link-summary-panel" style="display:none;">
+                <label for="youtube-watch-link-summary" data-i18n="recording_wizard.broadcast.youtube_watch_link_summary">Canli yayin baglantisi</label>
+                <textarea id="youtube-watch-link-summary" class="readonly-summary" readonly rows="3"
+                    data-i18n-aria="recording_wizard.broadcast.youtube_watch_link_summary_aria"></textarea>
+            </div>
+            <section id="youtube-moderator-panel" class="form-group" style="display:none; border: 1px solid #444; border-radius: 6px; padding: 12px;">
+                <h3 style="margin:0 0 8px 0;" data-i18n="recording_wizard.broadcast.youtube_moderator_title">YouTube Moderatörleri</h3>
+                <p class="hint" data-i18n="recording_wizard.broadcast.youtube_moderator_hint">Yayın hazırlandıktan sonra kanal URL'si, @kullanıcı adı veya kanal kimliği girerek moderatör ekleyebilirsiniz.</p>
+                <div class="form-group">
+                    <label for="youtube-moderator-input" data-i18n="recording_wizard.broadcast.youtube_moderator_input">Moderatör kanal bağlantısı veya kimliği</label>
+                    <input type="text" id="youtube-moderator-input"
+                        data-i18n-placeholder="recording_wizard.broadcast.youtube_moderator_input_placeholder"
+                        placeholder="https://www.youtube.com/@kanal veya UC...">
+                </div>
+                <div class="step-actions">
+                    <button type="button" id="btn-youtube-add-moderator" data-i18n="recording_wizard.broadcast.youtube_moderator_add">Moderatör Ekle</button>
+                    <button type="button" id="btn-youtube-refresh-moderators" data-i18n="recording_wizard.broadcast.youtube_moderator_refresh">Moderatörleri Yenile</button>
+                </div>
+                <div class="form-group">
+                    <label for="youtube-moderator-list" data-i18n="recording_wizard.broadcast.youtube_moderator_list">Kaldırmak için moderatör seçin</label>
+                    <select id="youtube-moderator-list" size="5"
+                        data-i18n-aria="recording_wizard.broadcast.youtube_moderator_list_aria"></select>
+                </div>
+                <div class="step-actions">
+                    <button type="button" id="btn-youtube-remove-moderator" data-i18n="recording_wizard.broadcast.youtube_moderator_remove">Seçili Moderatörü Kaldır</button>
+                </div>
+                <label for="youtube-moderator-summary" data-i18n="recording_wizard.broadcast.youtube_moderator_summary">Mevcut moderatörler</label>
+                <textarea id="youtube-moderator-summary" class="readonly-summary" readonly rows="4"
+                    data-i18n-aria="recording_wizard.broadcast.youtube_moderator_summary_aria"></textarea>
+             </section>
+            <section id="youtube-chat-panel" class="form-group" style="display:none; border: 1px solid #444; border-radius: 6px; padding: 12px;">
+                <div class="window-selection-row" style="align-items:flex-start;">
+                    <div style="flex:1;">
+                        <h3 style="margin:0 0 6px 0;" data-i18n="recording_wizard.chat.title">Canlı Sohbet</h3>
+                        <p id="youtube-chat-status" class="hint" role="status" aria-live="assertive" aria-atomic="true" data-i18n="recording_wizard.chat.status_idle">Canlı sohbet bekleniyor.</p>
+                    </div>
+                    <div class="step-actions" style="margin:0;">
+                        <button type="button" id="btn-toggle-chat-panel" data-i18n="recording_wizard.chat.open_panel">Sohbeti Aç</button>
+                    </div>
+                </div>
+                <div class="window-selection-row" style="margin-top:10px;">
+                    <label><input type="checkbox" id="youtube-chat-visible-toggle" checked> <span data-i18n="recording_wizard.chat.visible_on_stream">Sohbeti yayında göster</span></label>
+                    <label><input type="checkbox" id="youtube-chat-auto-read-toggle"> <span data-i18n="recording_wizard.chat.auto_read">Yeni mesajları ekran okuyucuya otomatik duyur</span></label>
+                    <label><input type="checkbox" id="youtube-chat-background-notification-toggle"> <span data-i18n="recording_wizard.chat.background_notification">Arka planda yeni mesaj geldiğinde sistem bildirimi göster</span></label>
+                    <label><input type="checkbox" id="youtube-chat-background-flash-toggle"> <span data-i18n="recording_wizard.chat.background_flash">Arka planda yeni mesaj geldiğinde görev çubuğunda dikkat çek</span></label>
+                    <label><input type="checkbox" id="youtube-chat-background-sound-toggle"> <span data-i18n="recording_wizard.chat.background_sound">Arka planda yeni mesaj geldiğinde kısa bir ses çal</span></label>
+                </div>
+                <div id="youtube-chat-visual-panel" style="margin-top:12px;">
+                    <label for="youtube-chat-list" data-i18n="recording_wizard.chat.list_label">Sohbet mesajları</label>
+                    <select id="youtube-chat-list" size="8" style="width:100%;" data-i18n-aria="recording_wizard.chat.list_aria"></select>
+                    <p class="hint" id="youtube-chat-help" data-i18n="recording_wizard.chat.help">Alt+Ctrl+C ile sohbet listesine geçin. Yukarı ve aşağı oklarla mesajlar arasında gezin. Tab ile yazma alanına geçin. Enter gönderir, Shift+Enter yeni satır ekler.</p>
+                    <label for="youtube-chat-composer" data-i18n="recording_wizard.chat.composer_label">Mesaj yaz</label>
+                    <textarea id="youtube-chat-composer" rows="3" style="width:100%; resize:vertical;"
+                        data-i18n-aria="recording_wizard.chat.composer_aria"
+                        data-i18n-placeholder="recording_wizard.chat.composer_placeholder"
+                        placeholder="Mesajınızı yazın"></textarea>
+                    <div class="step-actions" style="margin-top:10px;">
+                        <button type="button" id="btn-youtube-chat-send" data-i18n="recording_wizard.chat.send">Mesajı Gönder</button>
+                        <button type="button" id="btn-close-youtube-chat-panel" data-i18n="recording_wizard.chat.close_panel">Sohbeti Kapat</button>
+                    </div>
+                    <div class="form-group" id="youtube-chat-ban-panel" style="margin-top:12px;">
+                        <label for="youtube-chat-ban-list" data-i18n="recording_wizard.chat.ban_list_label">Bu oturumda susturulan veya yasaklanan kullanıcılar</label>
+                        <p class="hint" data-i18n="recording_wizard.chat.ban_list_hint">YouTube API mevcut yasaklıları listelemediği için burada yalnızca EVD içinden uyguladığınız işlemler görünür.</p>
+                        <select id="youtube-chat-ban-list" size="5" style="width:100%;" data-i18n-aria="recording_wizard.chat.ban_list_aria"></select>
+                        <div class="step-actions" style="margin-top:10px;">
+                            <button type="button" id="btn-chat-unban-selected" data-i18n="recording_wizard.chat.unban_selected">Seçili Yasağı Kaldır</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <div class="form-group">
+                <label for="live-effects-session-summary" data-i18n="recording_wizard.step6.live_effects_summary_label">Canlı efekt oturum özeti</label>
+                <textarea id="live-effects-session-summary" class="readonly-summary" readonly rows="6"
+                    data-i18n-aria="recording_wizard.step6.live_effects_summary_aria">Bu oturum için canlı efekt profili etkin değil.</textarea>
+            </div>
+            <div class="step-actions live-effects-launch">
+                <button type="button" id="btn-toggle-live-effects-overlay" data-i18n="recording_wizard.step6.live_effects_open">Efekt Katmanını Aç (Alt+Ctrl+Boşluk)</button>
+            </div>
+            <div class="step-actions">
+                <button type="button" id="btn-open-folder" disabled data-i18n="recording_wizard.step6.open_folder">Kayit klasorunu ac</button>
+                <button type="button" id="btn-copy-path" disabled data-i18n="recording_wizard.step6.copy_path">Dosya yolunu kopyala</button>
+                <button type="button" id="btn-finish-add" disabled
+                    style="display:none; background-color: #28a745; color: white;" data-i18n="recording_wizard.step6.finish_add">Bitir ve Projeye Ekle</button>
+                <button type="button" id="btn-switch-to-recording" style="display:none;" data-i18n="recording_wizard.step6.switch_to_recording">Kayit moduna gec</button>
+            </div>
+            <p id="broadcast-warning" class="hint" style="display:none;" data-i18n="recording_wizard.recording.broadcast_phase_two">Canli yayin Faz 2'de gelecek. Simdilik sadece kayit moduna gecebilirsiniz.</p>
+        </section>
+    </div>
+
+    <div class="wizard-footer">
+        <button type="button" id="btn-back" data-i18n="recording_wizard.back">Geri</button>
+        <div style="display:flex; gap:10px;">
+            <button type="button" id="btn-next" onclick="window.__kveNext && window.__kveNext(event)" data-i18n="recording_wizard.next">İleri</button>
+            <button type="button" id="btn-cancel" onclick="window.close()" data-i18n="recording_wizard.cancel">İptal</button>
+        </div>
+    </div>
+
+
+    <dialog id="obs-open-dialog" aria-labelledby="obs-open-title" style="width: 520px; max-width: 95vw;">
+        <form method="dialog">
+            <h2 id="obs-open-title" data-i18n="recording_wizard.obs_open.title">OBS Açmak İster misiniz?</h2>
+            <p data-i18n="recording_wizard.obs_open.description">OBS bağlantısı kurulamadı. OBS kapalı olabilir. Şimdi OBS uygulamasını açmamı ister misiniz?</p>
+            <div class="dialog-buttons" style="display:flex; gap:10px; justify-content:flex-end;">
+                <button type="button" id="obs-open-no" data-i18n="recording_wizard.no">Hayır</button>
+                <button type="button" id="obs-open-yes" class="primary" data-i18n="recording_wizard.obs_open.yes">Evet, OBS’i Aç</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="window-switcher-dialog" aria-labelledby="window-switcher-title" style="width: 560px; max-width: 95vw;">
+        <form method="dialog">
+            <h2 id="window-switcher-title" data-i18n="recording_wizard.step6.window_switcher_title">Pencere Listesi</h2>
+            <p data-i18n="recording_wizard.step6.window_switcher_description">Ok tuslariyla pencere secin ve Enter ile aktif pencereyi degistirin.</p>
+            <select id="window-switcher-list" size="8" style="width:100%; margin: 10px 0;" aria-label="Pencere listesi" data-i18n-aria="recording_wizard.step6.window_switcher_aria"></select>
+            <div class="dialog-buttons" style="display:flex; gap:10px; justify-content:flex-end;">
+                <button type="button" id="window-switcher-cancel" data-i18n="recording_wizard.cancel">Iptal</button>
+                <button type="button" id="window-switcher-activate" class="primary" data-i18n="recording_wizard.step6.apply_live_window">Pencereyi Etkinlestir</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="youtube-chat-menu-dialog" aria-labelledby="youtube-chat-menu-title" style="width: 420px; max-width: 95vw;">
+        <form method="dialog">
+            <h2 id="youtube-chat-menu-title" data-i18n="recording_wizard.chat.menu_title">Sohbet Mesajı İşlemleri</h2>
+            <p id="youtube-chat-menu-summary" class="hint" data-i18n="recording_wizard.chat.menu_waiting">Önce bir mesaj seçin.</p>
+            <p id="youtube-chat-menu-permission-hint" class="hint" style="display:none;" data-i18n="recording_wizard.chat.moderation_unavailable">Moderasyon işlemleri yalnızca moderatörler veya yayın sahibi için kullanılabilir.</p>
+            <div class="dialog-buttons" style="display:grid; gap:10px; justify-content:stretch;">
+                <button type="button" id="btn-chat-copy-message" data-i18n="recording_wizard.chat.copy_message">Mesajı Kopyala</button>
+                <button type="button" id="btn-chat-copy-author" data-i18n="recording_wizard.chat.copy_author">Yazarı Kopyala</button>
+                <button type="button" id="btn-chat-copy-channel" data-i18n="recording_wizard.chat.copy_channel">Kanal Kimliğini Kopyala</button>
+                <button type="button" id="btn-chat-mention-author" data-i18n="recording_wizard.chat.mention_author">Yazma Alanına @ekle</button>
+                <button type="button" id="btn-chat-delete-message" data-i18n="recording_wizard.chat.delete_message">Mesajı Sil</button>
+                <button type="button" id="btn-chat-timeout-5m" data-i18n="recording_wizard.chat.timeout_5m">Kullanıcıyı 5 Dakika Sustur</button>
+                <button type="button" id="btn-chat-timeout-10m" data-i18n="recording_wizard.chat.timeout_10m">Kullanıcıyı 10 Dakika Sustur</button>
+                <button type="button" id="btn-chat-ban-user" data-i18n="recording_wizard.chat.ban_user">Kullanıcıyı Yasakla</button>
+                <button type="button" id="btn-chat-unban-user" data-i18n="recording_wizard.chat.unban_user">Yasağı Kaldır</button>
+                <button type="button" id="btn-chat-close-menu" data-i18n="recording_wizard.chat.close_menu">Menüyü Kapat</button>
+            </div>
+        </form>
+    </dialog>
+
+    <div id="live-effects-overlay" class="live-effects-overlay" aria-hidden="true">
+        <section class="live-effects-panel" id="live-effects-overlay-panel" role="dialog" aria-modal="true"
+            aria-labelledby="live-effects-overlay-title" tabindex="-1">
+            <div class="live-effects-topbar">
+                <div>
+                    <h3 id="live-effects-overlay-title" data-i18n="recording_wizard.step6.live_effects_overlay_title">Canlı Efekt Katmanı</h3>
+                    <p class="hint" data-i18n="recording_wizard.step6.live_effects_overlay_description">Alt+Ctrl+Boşluk ile açıp kapatabilirsiniz. 1 ile 0 arası bir slotu çalar ve seçili yapar.</p>
+                </div>
+                <button type="button" id="btn-close-live-effects-overlay" data-i18n="recording_wizard.step6.live_effects_close">Katmanı Kapat</button>
+            </div>
+             <div class="form-group">
+                 <label for="live-effects-active-status" data-i18n="recording_wizard.step6.live_effects_active_status">Canlı efekt durumu</label>
+                 <textarea id="live-effects-active-status" class="readonly-summary" readonly rows="4"
+                     data-i18n-aria="recording_wizard.step6.live_effects_active_status_aria"></textarea>
+              </div>
+             <div class="form-group live-effects-preview" id="live-effects-video-preview-panel" hidden>
+                 <label for="live-effects-video-preview" data-i18n="recording_wizard.step6.live_effects_video_preview">Video onizleme</label>
+                 <div id="live-effects-video-preview-container">
+                     <video id="live-effects-video-preview" preload="auto" playsinline></video>
+                 </div>
+             </div>
+             <div id="live-effects-slot-grid" class="live-effects-grid"></div>
+             <div class="status-line live-effects-status" id="live-effects-help-text" data-i18n="recording_wizard.step6.live_effects_help">Kısayollar: 1-0 slot çal, S durdur, P veya K duraklat/devam, R döngü aç/kapat, Yukarı/Aşağı ses seviyesi, J/L geri/ileri sar, Escape katmanı kapatır.</div>
+             <div id="live-effects-media-host" aria-hidden="true" style="display:none;"></div>
+          </section>
+      </div>
+
+    <script src="../scripts/accessible-recording.js"></script>
+    <script>
+        // Failsafe inline controls (ONLY activates if main script completely fails to load)
+        (function () {
+            // Wait a moment to check if the main script loaded successfully
+            setTimeout(() => {
+                // If the main wizard script loaded and registered its handlers, do nothing
+                if (window.__kveWizardLoaded && window.__kveNext) {
+                    return;
+                }
+
+                const steps = Array.from(document.querySelectorAll('.step-content'));
+                const jsStatus = document.getElementById('js-status');
+                let idx = steps.findIndex(s => s.classList.contains('active'));
+                if (idx < 0) idx = 0; // Start from step 0 (not step 2!)
+
+                const show = (i) => {
+                    if (i < 0) i = 0; // Allow all steps including 0 and 1
+                    if (i >= steps.length) i = steps.length - 1;
+                    idx = i;
+                    steps.forEach((s, n) => {
+                        s.classList.toggle('active', n === idx);
+                        s.style.display = n === idx ? 'flex' : 'none';
+                    });
+                    if (jsStatus) jsStatus.textContent = `Yedek kontrol - Adım: ${idx + 1}`;
+                };
+
+                if (!window.__kveNext) window.__kveNext = () => show(idx + 1);
+                if (!window.__kveForceNext) window.__kveForceNext = () => show(idx + 1);
+                if (!window.__kveBack) window.__kveBack = () => show(idx - 1);
+
+                if (jsStatus) jsStatus.textContent = 'Yedek kontrol hazır (ana script yüklenemedi).';
+                console.warn('Failsafe controls activated - main wizard script did not load properly.');
+            }, 3000); // Wait 3 seconds before activating failsafe
+        })();
+    </script>
+</body>
+
+</html>

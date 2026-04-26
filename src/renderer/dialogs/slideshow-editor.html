@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Slideshow Düzenleyici</title>
+    <title data-i18n="dialog.slideshow_editor.window_title">Slideshow Editor</title>
     <style>
         * {
             box-sizing: border-box;
@@ -395,10 +395,10 @@
 
     <!-- Header -->
     <header class="header">
-        <h1>Slideshow Düzenleyici</h1>
+        <h1 data-i18n="dialog.slideshow_editor.title">Slideshow Editor</h1>
         <div class="project-info">
-            <span id="aspect-ratio-display">16:9 Yatay</span> •
-            <span id="total-duration-display">Toplam: 0:00</span>
+            <span id="aspect-ratio-display">16:9 Landscape</span> •
+            <span id="total-duration-display">Total: 0:00</span>
         </div>
     </header>
 
@@ -410,53 +410,53 @@
             <div class="tabs" role="tablist">
                 <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="images-panel"
                     id="images-tab" tabindex="0">
-                    Resimler
+                    <span data-i18n="dialog.slideshow_editor.tabs.images">Images</span>
                 </button>
                 <button class="tab-btn" role="tab" aria-selected="false" aria-controls="audio-panel" id="audio-tab"
                     tabindex="-1">
-                    Sesler
+                    <span data-i18n="dialog.slideshow_editor.tabs.audio">Audio</span>
                 </button>
                 <button class="tab-btn" role="tab" aria-selected="false" aria-controls="text-panel" id="text-tab"
                     tabindex="-1">
-                    Yazılar
+                    <span data-i18n="dialog.slideshow_editor.tabs.text">Text</span>
                 </button>
             </div>
 
             <!-- Resimler Paneli -->
             <div class="tab-content active" id="images-panel" role="tabpanel" aria-labelledby="images-tab">
                 <div class="list-header">
-                    <h3>Resim Listesi (<span id="image-count">0</span>)</h3>
+                    <h3><span data-i18n="dialog.slideshow_editor.images_list">Image List</span> (<span id="image-count">0</span>)</h3>
                     <div style="display: flex; gap: 8px;">
-                        <button class="add-btn" id="describe-all-btn" style="background: #6b4c9a;" disabled>Tümünü
-                            Betimle</button>
-                        <button class="add-btn" id="add-image-btn">+ Resim Ekle</button>
+                        <button class="add-btn" id="auto-pair-btn" style="background: #2d7d46;" disabled
+                            title="Eşit sayıda resim ve ses varsa otomatik eşle" data-i18n="dialog.slideshow_editor.auto_pair" data-i18n-title="dialog.slideshow_editor.auto_pair_title">Auto Pair</button>
+                        <button class="add-btn" id="describe-all-btn" style="background: #6b4c9a;" disabled data-i18n="dialog.slideshow_editor.describe_all">Describe All</button>
+                        <button class="add-btn" id="add-image-btn" data-i18n="dialog.slideshow_editor.add_image">+ Add Image</button>
                     </div>
                 </div>
 
                 <!-- Geçiş Efekti Seçimi -->
                 <div style="padding: 10px 15px; background: #252525; border-bottom: 1px solid #444;">
-                    <label for="transition-select" style="color: #b0b0b0; font-size: 13px; margin-right: 10px;">Geçiş
-                        Efekti:</label>
+                    <label for="transition-select" style="color: #b0b0b0; font-size: 13px; margin-right: 10px;" data-i18n="dialog.slideshow_editor.transition_effect">Transition Effect:</label>
                     <select id="transition-select"
                         style="padding: 6px 12px; background: #1e1e1e; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 13px;">
-                        <option value="none" selected>Yok (Anında geçiş)</option>
-                        <option value="fade">Solma (Fade)</option>
-                        <option value="dissolve">Çözünme (Dissolve)</option>
-                        <option value="wipeleft">Sola Kayma</option>
-                        <option value="wiperight">Sağa Kayma</option>
-                        <option value="slideup">Yukarı Kayma</option>
-                        <option value="slidedown">Aşağı Kayma</option>
+                        <option value="none" selected data-i18n="dialog.slideshow_editor.transition_none">None (Instant transition)</option>
+                        <option value="fade" data-i18n="dialog.slideshow_editor.transition_fade">Fade</option>
+                        <option value="dissolve" data-i18n="dialog.slideshow_editor.transition_dissolve">Dissolve</option>
+                        <option value="wipeleft" data-i18n="dialog.slideshow_editor.transition_wipe_left">Wipe Left</option>
+                        <option value="wiperight" data-i18n="dialog.slideshow_editor.transition_wipe_right">Wipe Right</option>
+                        <option value="slideup" data-i18n="dialog.slideshow_editor.transition_slide_up">Slide Up</option>
+                        <option value="slidedown" data-i18n="dialog.slideshow_editor.transition_slide_down">Slide Down</option>
                     </select>
                 </div>
 
                 <div class="list-container">
                     <ul class="item-list" id="image-list" role="listbox"
-                        aria-label="Resim listesi. Bağlam menüsü için Uygulama tuşuna basın." tabindex="0">
+                        aria-label="Resim listesi. Bağlam menüsü için Uygulama tuşuna basın." tabindex="0" data-i18n-aria="dialog.slideshow_editor.image_list_aria">
                         <!-- Resimler buraya dinamik olarak eklenir -->
                     </ul>
                     <div class="empty-message" id="images-empty">
-                        <p>Henüz resim eklenmedi.</p>
-                        <p>Resim eklemek için "Resim Ekle" düğmesine basın.</p>
+                        <p data-i18n="dialog.slideshow_editor.no_images">No images have been added yet.</p>
+                        <p data-i18n="dialog.slideshow_editor.no_images_hint">Press the Add Image button to add images.</p>
                     </div>
                 </div>
             </div>
@@ -464,17 +464,17 @@
             <!-- Sesler Paneli -->
             <div class="tab-content" id="audio-panel" role="tabpanel" aria-labelledby="audio-tab">
                 <div class="list-header">
-                    <h3>Ses Listesi (<span id="audio-count">0</span>)</h3>
-                    <button class="add-btn" id="add-audio-btn">+ Ses Ekle</button>
+                    <h3><span data-i18n="dialog.slideshow_editor.audio_list">Audio List</span> (<span id="audio-count">0</span>)</h3>
+                    <button class="add-btn" id="add-audio-btn" data-i18n="dialog.slideshow_editor.add_audio">+ Add Audio</button>
                 </div>
                 <div class="list-container">
                     <ul class="item-list" id="audio-list" role="listbox"
-                        aria-label="Ses listesi. Bağlam menüsü için Uygulama tuşuna basın." tabindex="0">
+                        aria-label="Ses listesi. Bağlam menüsü için Uygulama tuşuna basın." tabindex="0" data-i18n-aria="dialog.slideshow_editor.audio_list_aria">
                         <!-- Sesler buraya dinamik olarak eklenir -->
                     </ul>
                     <div class="empty-message" id="audio-empty">
-                        <p>Henüz ses eklenmedi.</p>
-                        <p>Ses/müzik eklemek için "Ses Ekle" düğmesine basın.</p>
+                        <p data-i18n="dialog.slideshow_editor.no_audio">No audio has been added yet.</p>
+                        <p data-i18n="dialog.slideshow_editor.no_audio_hint">Press the Add Audio button to add audio or music.</p>
                     </div>
                 </div>
             </div>
@@ -482,17 +482,17 @@
             <!-- Yazılar Paneli -->
             <div class="tab-content" id="text-panel" role="tabpanel" aria-labelledby="text-tab">
                 <div class="list-header">
-                    <h3>Yazı Listesi (<span id="text-count">0</span>)</h3>
-                    <button class="add-btn" id="add-text-btn">+ Yazı Ekle</button>
+                    <h3><span data-i18n="dialog.slideshow_editor.text_list">Text List</span> (<span id="text-count">0</span>)</h3>
+                    <button class="add-btn" id="add-text-btn" data-i18n="dialog.slideshow_editor.add_text">+ Add Text</button>
                 </div>
                 <div class="list-container">
                     <ul class="item-list" id="text-list" role="listbox"
-                        aria-label="Yazı listesi. Bağlam menüsü için Uygulama tuşuna basın." tabindex="0">
+                        aria-label="Yazı listesi. Bağlam menüsü için Uygulama tuşuna basın." tabindex="0" data-i18n-aria="dialog.slideshow_editor.text_list_aria">
                         <!-- Yazılar buraya dinamik olarak eklenir -->
                     </ul>
                     <div class="empty-message" id="text-empty">
-                        <p>Henüz yazı eklenmedi.</p>
-                        <p>Yazı eklemek için "Yazı Ekle" düğmesine basın.</p>
+                        <p data-i18n="dialog.slideshow_editor.no_text">No text has been added yet.</p>
+                        <p data-i18n="dialog.slideshow_editor.no_text_hint">Press the Add Text button to add text.</p>
                     </div>
                 </div>
             </div>
@@ -502,12 +502,12 @@
         <div class="right-panel">
             <div class="preview-container">
                 <div class="preview-placeholder" id="preview-placeholder">
-                    Bir resim seçin
+                    <span data-i18n="dialog.slideshow_editor.select_image_preview">Select an image</span>
                 </div>
                 <img class="preview-image" id="preview-image" style="display: none;" alt="Seçili resim önizlemesi">
                 <div class="preview-controls">
                     <button class="preview-btn" id="preview-btn" disabled aria-keyshortcuts="Alt+P">
-                        Önizle (Alt+P)
+                        <span data-i18n="dialog.slideshow_editor.preview">Preview (Alt+P)</span>
                     </button>
                 </div>
             </div>
@@ -517,75 +517,96 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="project-stats">
-            <span id="stats-images">0 resim</span>
-            <span id="stats-audio">0 ses</span>
-            <span id="stats-text">0 yazı</span>
+            <span id="stats-images">0 images</span>
+            <span id="stats-audio">0 audio</span>
+            <span id="stats-text">0 text</span>
         </div>
         <div class="footer-buttons">
-            <button class="footer-btn secondary" id="close-btn">Kapat</button>
-            <button class="footer-btn secondary" id="save-project-btn" style="background: #4a7c59;">Projeyi
-                Kaydet</button>
-            <button class="footer-btn primary" id="export-btn" disabled>Video Oluştur</button>
+            <button class="footer-btn secondary" id="close-btn" data-i18n="dialog.common.close">Close</button>
+            <button class="footer-btn secondary" id="save-project-btn" style="background: #4a7c59;" data-i18n="dialog.slideshow_editor.save_project">Save Project</button>
+            <button class="footer-btn primary" id="export-btn" disabled data-i18n="dialog.slideshow_editor.create_video">Create Video</button>
         </div>
     </footer>
 
     <!-- Resim Bağlam Menüsü -->
-    <div class="context-menu" id="image-context-menu" role="menu" aria-label="Resim işlemleri">
+    <div class="context-menu" id="image-context-menu" role="menu" aria-label="Resim işlemleri" data-i18n-aria="dialog.slideshow_editor.image_menu_aria">
         <div class="context-menu-item" role="menuitem" tabindex="0" data-action="move-up">
-            Yukarı Taşı
+            <span data-i18n="dialog.slideshow_editor.menu.move_up">Move Up</span>
             <span class="context-menu-shortcut">Alt+↑</span>
         </div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="move-down">
-            Aşağı Taşı
+            <span data-i18n="dialog.slideshow_editor.menu.move_down">Move Down</span>
             <span class="context-menu-shortcut">Alt+↓</span>
         </div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="edit-duration">
-            Süreyi Düzenle
+            <span data-i18n="dialog.slideshow_editor.menu.edit_duration">Edit Duration</span>
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="rotate-left">
+            <span data-i18n="dialog.slideshow_editor.menu.rotate_left">Rotate Left</span>
+        </div>
+        <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="rotate-right">
+            <span data-i18n="dialog.slideshow_editor.menu.rotate_right">Rotate Right</span>
         </div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="describe">
-            Resmi Betimle (AI)
+            <span data-i18n="dialog.slideshow_editor.menu.describe_image">Describe Image (AI)</span>
         </div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="view-description">
-            Detaylı Betimlemeyi Gör
+            <span data-i18n="dialog.slideshow_editor.menu.view_description">View Detailed Description</span>
         </div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="add-text">
-            Bu Resme Yazı Ekle
+            <span data-i18n="dialog.slideshow_editor.menu.add_text_to_image">Add Text to This Image</span>
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="pair-audio">
+            <span data-i18n="dialog.slideshow_editor.menu.pair_audio">Pair Audio with This Image</span>
+        </div>
+        <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="unpair-audio" style="color: #ffaa33;">
+            <span data-i18n="dialog.slideshow_editor.menu.unpair_audio">Remove Audio Pairing</span>
         </div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="delete" style="color: #ff6b6b;">
-            Sil
+            <span data-i18n="dialog.common.delete">Delete</span>
             <span class="context-menu-shortcut">Delete</span>
         </div>
     </div>
 
     <!-- Ses Bağlam Menüsü -->
-    <div class="context-menu" id="audio-context-menu" role="menu" aria-label="Ses işlemleri">
+    <div class="context-menu" id="audio-context-menu" role="menu" aria-label="Ses işlemleri" data-i18n-aria="dialog.slideshow_editor.audio_menu_aria">
         <div class="context-menu-item" role="menuitem" tabindex="0" data-action="move-up">
-            Yukarı Taşı
+            <span data-i18n="dialog.slideshow_editor.menu.move_up">Move Up</span>
             <span class="context-menu-shortcut">Alt+↑</span>
         </div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="move-down">
-            Aşağı Taşı
+            <span data-i18n="dialog.slideshow_editor.menu.move_down">Move Down</span>
             <span class="context-menu-shortcut">Alt+↓</span>
         </div>
         <div class="context-menu-separator"></div>
+        <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="pair-to-image">
+            <span data-i18n="dialog.slideshow_editor.menu.pair_to_image">Pair This Audio with an Image</span>
+        </div>
+        <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="unpair-from-image"
+            style="color: #ffaa33;">
+            <span data-i18n="dialog.slideshow_editor.menu.remove_pairing">Remove Pairing</span>
+        </div>
+        <div class="context-menu-separator"></div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="delete" style="color: #ff6b6b;">
-            Sil
+            <span data-i18n="dialog.common.delete">Delete</span>
             <span class="context-menu-shortcut">Delete</span>
         </div>
     </div>
 
     <!-- Yazı Bağlam Menüsü -->
-    <div class="context-menu" id="text-context-menu" role="menu" aria-label="Yazı işlemleri">
+    <div class="context-menu" id="text-context-menu" role="menu" aria-label="Yazı işlemleri" data-i18n-aria="dialog.slideshow_editor.text_menu_aria">
         <div class="context-menu-item" role="menuitem" tabindex="0" data-action="edit-text">
-            Yazıyı Düzenle
+            <span data-i18n="dialog.slideshow_editor.menu.edit_text">Edit Text</span>
         </div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="delete" style="color: #ff6b6b;">
-            Sil
+            <span data-i18n="dialog.common.delete">Delete</span>
             <span class="context-menu-shortcut">Delete</span>
         </div>
     </div>
@@ -593,6 +614,106 @@
     <script>
         const { ipcRenderer } = require('electron');
         const path = require('path');
+        let i18nState = { lang: 'tr', cache: {} };
+
+        function getValue(obj, key) {
+            return key.split('.').reduce((acc, part) => (acc && acc[part] !== undefined ? acc[part] : null), obj);
+        }
+
+        function t(key, fallback = key, params = {}) {
+            const template = getValue(i18nState.cache, key) ?? fallback;
+            return Object.entries(params).reduce((text, [name, value]) => (
+                String(text).replace(new RegExp(`{${name}}`, 'g'), value)
+            ), template);
+        }
+
+        function translateDOM(root = document) {
+            const scope = root && root.querySelectorAll ? root : document;
+            const textEls = [];
+            if (root !== document && root?.hasAttribute?.('data-i18n')) textEls.push(root);
+            textEls.push(...scope.querySelectorAll('[data-i18n]'));
+            textEls.forEach((el) => {
+                const value = t(el.getAttribute('data-i18n'), null);
+                if (value) el.textContent = value;
+            });
+
+            const ariaEls = [];
+            if (root !== document && root?.hasAttribute?.('data-i18n-aria')) ariaEls.push(root);
+            ariaEls.push(...scope.querySelectorAll('[data-i18n-aria]'));
+            ariaEls.forEach((el) => {
+                const value = t(el.getAttribute('data-i18n-aria'), null);
+                if (value) el.setAttribute('aria-label', value);
+            });
+
+            const titleEls = document.querySelectorAll('title[data-i18n], [data-i18n-title]');
+            titleEls.forEach((el) => {
+                const attr = el.tagName === 'TITLE' ? 'data-i18n' : 'data-i18n-title';
+                const value = t(el.getAttribute(attr), null);
+                if (!value) return;
+                if (el.tagName === 'TITLE') document.title = value;
+                else el.setAttribute('title', value);
+            });
+            document.documentElement.lang = i18nState.lang;
+        }
+
+        async function initI18n() {
+            try {
+                i18nState.lang = await ipcRenderer.invoke('i18n-get-language');
+                i18nState.cache = await ipcRenderer.invoke('i18n-get-all');
+                translateDOM();
+                ipcRenderer.on('language-changed', async (_event, lang) => {
+                    i18nState.lang = lang;
+                    i18nState.cache = await ipcRenderer.invoke('i18n-get-all');
+                    translateDOM();
+                    updateProjectInfo();
+                    renderImageList();
+                    renderAudioList();
+                    renderTextList();
+                });
+            } catch (error) {
+                console.warn('Slideshow editor i18n init failed:', error);
+            }
+        }
+
+        function formatAspectRatioLabel(aspectRatio) {
+            return aspectRatio === '16:9'
+                ? t('dialog.slideshow_editor.aspect_landscape', '16:9 Landscape')
+                : t('dialog.slideshow_editor.aspect_portrait', '9:16 Portrait');
+        }
+
+        function formatTotalDurationLabel(minutes, seconds) {
+            return t('dialog.slideshow_editor.total_duration', 'Total: {time}', {
+                time: `${minutes}:${seconds.toString().padStart(2, '0')}`
+            });
+        }
+
+        function formatStatsLabel(key, count) {
+            return t(`runtime.slideshow_editor.stats_${key}`, `{count} ${key}`, { count });
+        }
+
+        function formatOrientationText(orientation) {
+            return orientation === 'landscape'
+                ? t('runtime.slideshow_editor.orientation_landscape', 'Landscape')
+                : t('runtime.slideshow_editor.orientation_portrait', 'Portrait');
+        }
+
+        function normalizeRotation(rotation) {
+            const normalized = Number(rotation || 0) % 360;
+            return normalized < 0 ? normalized + 360 : normalized;
+        }
+
+        function getDisplayMetrics(img) {
+            const rotation = normalizeRotation(img.rotation);
+            const swapsDimensions = rotation === 90 || rotation === 270;
+            const width = swapsDimensions ? img.height : img.width;
+            const height = swapsDimensions ? img.width : img.height;
+            return {
+                rotation,
+                width,
+                height,
+                orientation: width > height ? 'landscape' : 'portrait'
+            };
+        }
 
         // Proje verileri
         let projectData = {
@@ -633,7 +754,8 @@
 
         // Sayfa yüklendiğinde
         window.addEventListener('load', () => {
-            announce('Slideshow Düzenleyici açıldı. Resim, ses ve yazı eklemek için ilgili sekmeleri kullanın. Bağlam menüsüne Uygulama tuşu ile ulaşabilirsiniz.');
+            initI18n();
+            announce(t('runtime.slideshow_editor.opened', 'Slideshow editor opened. Use the relevant tabs to add images, audio, and text. Use the Application key to open the context menu.'));
         });
 
         // Proje ayarlarını al
@@ -642,8 +764,10 @@
             projectData.fillFrame = settings.fillFrame;
             updateProjectInfo();
 
-            const ratioText = settings.aspectRatio === '16:9' ? 'Yatay 16:9' : 'Dikey 9:16';
-            announce(`Proje oluşturuldu. ${ratioText} formatında.`);
+            const ratioText = settings.aspectRatio === '16:9'
+                ? t('dialog.slideshow_editor.aspect_landscape_spoken', 'Landscape 16:9')
+                : t('dialog.slideshow_editor.aspect_portrait_spoken', 'Portrait 9:16');
+            announce(t('runtime.slideshow_editor.project_created', 'Project created in {ratio} format.', { ratio: ratioText }));
         });
 
         // Main process resim listesi isterse gönder
@@ -657,7 +781,9 @@
             projectData.textOverlays.push(textData);
             renderTextList();
             updateStats();
-            announce(`Yazı eklendi: "${textData.content.substring(0, 30)}..."`);
+            announce(t('runtime.slideshow_editor.text_added', 'Text added: "{content}..."', {
+                content: textData.content.substring(0, 30)
+            }));
         });
 
         // Yazı güncelleme sonucu
@@ -666,17 +792,21 @@
             textData.id = oldId || textData.id;
             projectData.textOverlays[editIndex] = textData;
             renderTextList();
-            announce(`Yazı güncellendi: "${textData.content.substring(0, 30)}..."`);
+            announce(t('runtime.slideshow_editor.text_updated', 'Text updated: "{content}..."', {
+                content: textData.content.substring(0, 30)
+            }));
         });
 
         // Video oluşturma ilerleme durumu
         let exportProgressInterval = null;
-        ipcRenderer.on('export-progress', (event, { status, message }) => {
+        let lastAnnouncedPercent = -1;
+        ipcRenderer.on('export-progress', (event, { status, message, percent }) => {
             const exportBtn = document.getElementById('export-btn');
 
             if (status === 'started') {
                 exportBtn.disabled = true;
-                exportBtn.textContent = 'Oluşturuluyor...';
+                exportBtn.textContent = t('dialog.slideshow_editor.creating_video', 'Creating video...');
+                lastAnnouncedPercent = -1;
                 announce(message);
 
                 let seconds = 0;
@@ -684,20 +814,33 @@
                     seconds += 30;
                     const minutes = Math.floor(seconds / 60);
                     const secs = seconds % 60;
-                    if (minutes > 0) {
-                        announce(`Video oluşturuluyor... ${minutes} dakika ${secs} saniye geçti.`);
-                    } else {
-                        announce(`Video oluşturuluyor... ${secs} saniye geçti.`);
-                    }
+                    announce(t('runtime.slideshow_editor.export_elapsed', 'Creating video... {minutes} minutes {seconds} seconds elapsed.', {
+                        minutes,
+                        seconds: secs
+                    }));
                 }, 30000);
 
+            } else if (status === 'progress') {
+                const safePercent = typeof percent === 'number' ? Math.max(0, Math.min(99, Math.round(percent))) : null;
+                exportBtn.disabled = true;
+                exportBtn.textContent = safePercent !== null
+                    ? t('dialog.slideshow_editor.creating_video_percent', 'Creating video... %{percent}', { percent: safePercent })
+                    : t('dialog.slideshow_editor.creating_video', 'Creating video...');
+                if (safePercent !== null && (safePercent === 0 || safePercent >= lastAnnouncedPercent + 10)) {
+                    lastAnnouncedPercent = safePercent;
+                    announce(t('runtime.slideshow_editor.export_progress', '{message} {percent} percent completed.', {
+                        message,
+                        percent: safePercent
+                    }));
+                }
             } else if (status === 'completed') {
                 if (exportProgressInterval) {
                     clearInterval(exportProgressInterval);
                     exportProgressInterval = null;
                 }
                 exportBtn.disabled = false;
-                exportBtn.textContent = 'Video Oluştur';
+                exportBtn.textContent = t('dialog.slideshow_editor.create_video', 'Create Video');
+                lastAnnouncedPercent = -1;
                 announce(message);
 
             } else if (status === 'error') {
@@ -706,58 +849,96 @@
                     exportProgressInterval = null;
                 }
                 exportBtn.disabled = false;
-                exportBtn.textContent = 'Video Oluştur';
+                exportBtn.textContent = t('dialog.slideshow_editor.create_video', 'Create Video');
+                lastAnnouncedPercent = -1;
                 announce(message);
             }
+        });
+
+        ipcRenderer.on('slideshow-export-result', (_event, { message }) => {
+            if (message) announce(message);
         });
 
         // Proje bilgilerini güncelle
         function updateProjectInfo() {
             const ratioDisplay = document.getElementById('aspect-ratio-display');
-            ratioDisplay.textContent = projectData.aspectRatio === '16:9' ? '16:9 Yatay' : '9:16 Dikey';
+            ratioDisplay.textContent = formatAspectRatioLabel(projectData.aspectRatio);
             updateTotalDuration();
             updateStats();
         }
 
         // Toplam süreyi güncelle
         function updateTotalDuration() {
-            let totalAudioDuration = 0;
-            projectData.audioTracks.forEach(track => {
-                totalAudioDuration += track.duration || 0;
-            });
+            // Eşlenmiş ses kontrolü: eşlenmiş resimler var mı?
+            const hasPairedImages = projectData.images.some(img => img.pairedAudioId);
 
-            if (projectData.images.length > 0 && totalAudioDuration > 0) {
-                const durationPerImage = totalAudioDuration / projectData.images.length;
-                projectData.images.forEach((img, index) => {
-                    if (!img.manualDuration) {
-                        img.duration = durationPerImage;
+            if (hasPairedImages) {
+                // Eşlenmiş modda: aynı sese eşlenmiş resimler süreyi eşit paylaşır
+                // Önce her ses dosyasına kaç resim eşlenmiş hesapla
+                const audioPairCounts = {};
+                projectData.images.forEach(img => {
+                    if (img.pairedAudioId) {
+                        audioPairCounts[img.pairedAudioId] = (audioPairCounts[img.pairedAudioId] || 0) + 1;
                     }
                 });
-                projectData.totalDuration = totalAudioDuration;
-            } else {
-                let totalImageDuration = 0;
+
                 projectData.images.forEach(img => {
-                    totalImageDuration += img.duration || 5;
+                    if (img.pairedAudioId && !img.manualDuration) {
+                        const pairedAudio = projectData.audioTracks.find(a => a.id === img.pairedAudioId);
+                        if (pairedAudio) {
+                            const pairCount = audioPairCounts[img.pairedAudioId] || 1;
+                            img.duration = pairedAudio.duration / pairCount;
+                        }
+                    }
                 });
-                projectData.totalDuration = totalImageDuration;
+
+                // Toplam süre: tüm resimlerin sürelerinin toplamı
+                let total = 0;
+                projectData.images.forEach(img => total += img.duration || 5);
+                projectData.totalDuration = total;
+            } else {
+                // Eski davranış: ses varsa eşit böl, yoksa resim sürelerini kullan
+                let totalAudioDuration = 0;
+                projectData.audioTracks.forEach(track => {
+                    totalAudioDuration += track.duration || 0;
+                });
+
+                if (projectData.images.length > 0 && totalAudioDuration > 0) {
+                    const durationPerImage = totalAudioDuration / projectData.images.length;
+                    projectData.images.forEach((img, index) => {
+                        if (!img.manualDuration) {
+                            img.duration = durationPerImage;
+                        }
+                    });
+                    projectData.totalDuration = totalAudioDuration;
+                } else {
+                    let totalImageDuration = 0;
+                    projectData.images.forEach(img => {
+                        totalImageDuration += img.duration || 5;
+                    });
+                    projectData.totalDuration = totalImageDuration;
+                }
             }
 
             const total = projectData.totalDuration;
             const minutes = Math.floor(total / 60);
             const seconds = Math.floor(total % 60);
             document.getElementById('total-duration-display').textContent =
-                `Toplam: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                formatTotalDurationLabel(minutes, seconds);
 
             document.getElementById('export-btn').disabled =
                 projectData.images.length === 0 || projectData.audioTracks.length === 0;
             document.getElementById('preview-btn').disabled = projectData.images.length === 0;
+
+            // Otomatik eşle butonunu güncelle
+            updateAutoPairButton();
         }
 
         // İstatistikleri güncelle
         function updateStats() {
-            document.getElementById('stats-images').textContent = `${projectData.images.length} resim`;
-            document.getElementById('stats-audio').textContent = `${projectData.audioTracks.length} ses`;
-            document.getElementById('stats-text').textContent = `${projectData.textOverlays.length} yazı`;
+            document.getElementById('stats-images').textContent = formatStatsLabel('images', projectData.images.length);
+            document.getElementById('stats-audio').textContent = formatStatsLabel('audio', projectData.audioTracks.length);
+            document.getElementById('stats-text').textContent = formatStatsLabel('text', projectData.textOverlays.length);
 
             document.getElementById('image-count').textContent = projectData.images.length;
             document.getElementById('audio-count').textContent = projectData.audioTracks.length;
@@ -779,7 +960,9 @@
         document.getElementById('transition-select').addEventListener('change', (e) => {
             projectData.transition = e.target.value;
             const selectedOption = e.target.options[e.target.selectedIndex];
-            announce(`Geçiş efekti ${selectedOption.text} olarak ayarlandı.`);
+            announce(t('runtime.slideshow_editor.transition_changed', 'Transition effect set to {name}.', {
+                name: selectedOption.text
+            }));
         });
 
         // Tab değiştirme
@@ -803,7 +986,9 @@
                 const panelId = btn.getAttribute('aria-controls');
                 document.getElementById(panelId).classList.add('active');
 
-                announce(`${btn.textContent.trim()} sekmesi açıldı.`);
+                announce(t('runtime.slideshow_editor.tab_opened', '{name} tab opened.', {
+                    name: btn.textContent.trim()
+                }));
             });
 
             // Klavye ile tab gezinme
@@ -838,7 +1023,10 @@
                     filename: path.basename(filePath),
                     width: info.width,
                     height: info.height,
+                    rotation: 0,
                     orientation: info.width > info.height ? 'landscape' : 'portrait',
+                    orientationStatus: null,
+                    orientationMessage: null,
                     duration: 5, // varsayılan
                     shortDescription: null,
                     longDescription: null,
@@ -851,7 +1039,9 @@
             renderImageList();
             updateTotalDuration();
             updateStats();
-            announce(`${filePaths.length} resim eklendi.`);
+            announce(t('runtime.slideshow_editor.images_added', '{count} images added.', {
+                count: filePaths.length
+            }));
         });
 
         // Resim listesi render et
@@ -880,21 +1070,42 @@
                 li.setAttribute('aria-selected', index === selectedImageIndex ? 'true' : 'false');
                 li.dataset.index = index;
 
-                const orientationText = img.orientation === 'landscape' ? 'Yatay' : 'Dikey';
+                const metrics = getDisplayMetrics(img);
+                const orientationText = formatOrientationText(metrics.orientation);
                 const displayName = img.shortDescription || img.filename;
                 const durationText = `${img.duration.toFixed(1)}s`;
+
+                // Eşlenmiş ses bilgisi
+                const pairedAudio = img.pairedAudioId
+                    ? projectData.audioTracks.find(a => a.id === img.pairedAudioId)
+                    : null;
+                const pairedAudioInfo = pairedAudio
+                    ? `<span style="color: #4ec94e; font-size: 11px;">🔗 ${pairedAudio.filename}</span>`
+                    : '';
 
                 li.innerHTML = `
                     <div class="item-title">${displayName}</div>
                     <div class="item-info">
-                        ${img.width}x${img.height} • ${orientationText}
+                        ${metrics.width}x${metrics.height} • ${orientationText}
                         <span class="item-duration">${durationText}</span>
                     </div>
+                    ${pairedAudioInfo ? `<div class="item-info">${pairedAudioInfo}</div>` : ''}
                 `;
 
                 // Ekran okuyucu için tam açıklama
+                const pairedLabel = pairedAudio
+                    ? t('runtime.slideshow_editor.paired_audio_label', ', paired audio: {name}', { name: pairedAudio.filename })
+                    : '';
                 li.setAttribute('aria-label',
-                    `${index + 1}. ${displayName}, ${img.width} çarpı ${img.height} piksel, ${orientationText}, ${img.duration.toFixed(1)} saniye`);
+                    t('runtime.slideshow_editor.image_item_aria', '{index}. {name}, {width} by {height} pixels, {orientation}, {duration} seconds{paired}', {
+                        index: index + 1,
+                        name: displayName,
+                        width: metrics.width,
+                        height: metrics.height,
+                        orientation: orientationText,
+                        duration: img.duration.toFixed(1),
+                        paired: pairedLabel
+                    }));
 
                 if (index === selectedImageIndex) {
                     li.classList.add('selected');
@@ -907,24 +1118,76 @@
             });
         }
 
-        // Resim seçimi
-        function selectImage(index) {
+        function resolveImageIndex(index) {
+            const numericIndex = Number(index);
+            if (Number.isInteger(numericIndex) && numericIndex >= 0 && numericIndex < projectData.images.length) {
+                return numericIndex;
+            }
+
+            const activeItem = document.activeElement?.closest?.('#image-list .list-item');
+            const activeIndex = Number(activeItem?.dataset?.index);
+            if (Number.isInteger(activeIndex) && activeIndex >= 0 && activeIndex < projectData.images.length) {
+                return activeIndex;
+            }
+
+            return -1;
+        }
+
+        function requireImageSelection(index) {
+            const resolvedIndex = resolveImageIndex(index);
+            if (resolvedIndex === -1) {
+                announce(t('runtime.slideshow_editor.select_image_first', 'Please select an image first.'));
+                return null;
+            }
+
+            if (selectedImageIndex !== resolvedIndex) {
+                selectedImageIndex = resolvedIndex;
+            }
+
+            return resolvedIndex;
+        }
+
+        function applyImageSelection(index, options = {}) {
+            const {
+                announceSelection = true,
+                restoreListFocus = true
+            } = options;
+
+            if (index < 0 || index >= projectData.images.length) {
+                return;
+            }
+
             selectedImageIndex = index;
             renderImageList();
 
             const img = projectData.images[index];
-            if (img) {
-                // Önizleme göster
-                previewImage.src = `file://${img.path}`;
-                previewImage.style.display = 'block';
-                previewPlaceholder.style.display = 'none';
-                document.getElementById('preview-btn').disabled = false;
-
-                announce(`${img.shortDescription || img.filename} seçildi. ${img.width} çarpı ${img.height} piksel.`);
+            if (!img) {
+                return;
             }
 
-            // Listedeki öğeye odaklan
-            restoreFocus();
+            const metrics = getDisplayMetrics(img);
+            previewImage.src = `file://${img.path}`;
+            previewImage.style.transform = `rotate(${metrics.rotation}deg)`;
+            previewImage.style.display = 'block';
+            previewPlaceholder.style.display = 'none';
+            document.getElementById('preview-btn').disabled = false;
+
+            if (announceSelection) {
+                announce(t('runtime.slideshow_editor.image_selected', '{name} selected. {width} by {height} pixels.', {
+                    name: img.shortDescription || img.filename,
+                    width: metrics.width,
+                    height: metrics.height
+                }));
+            }
+
+            if (restoreListFocus) {
+                restoreFocus();
+            }
+        }
+
+        // Resim seçimi
+        function selectImage(index) {
+            applyImageSelection(index);
         }
 
         // Resim listesi klavye işlemleri
@@ -995,9 +1258,20 @@
         });
 
         // Bağlam menüsünü göster
-        function showContextMenu(type, rect) {
+        function showContextMenu(type, rect, sourceElement = document.activeElement) {
             // Önceki menüyü kapat
             hideAllContextMenus();
+
+            if (type === 'image') {
+                const imageItem = sourceElement?.closest?.('#image-list .list-item');
+                const imageIndex = Number(imageItem?.dataset?.index);
+                if (Number.isInteger(imageIndex) && imageIndex >= 0 && imageIndex < projectData.images.length) {
+                    applyImageSelection(imageIndex, {
+                        announceSelection: false,
+                        restoreListFocus: false
+                    });
+                }
+            }
 
             const menu = document.getElementById(`${type}-context-menu`);
             menu.style.top = `${rect.bottom + 5}px`;
@@ -1009,7 +1283,7 @@
             const firstItem = menu.querySelector('[role="menuitem"]');
             if (firstItem) firstItem.focus();
 
-            announce('Bağlam menüsü açıldı. Ok tuşları ile gezinin, Enter ile seçin, Escape ile kapatın.');
+            announce(t('runtime.slideshow_editor.context_menu_opened', 'Context menu opened. Use arrow keys to navigate, Enter to choose, and Escape to close.'));
         }
 
         // Tüm bağlam menülerini kapat
@@ -1077,6 +1351,12 @@
                 case 'edit-duration':
                     editImageDuration(selectedImageIndex);
                     break;
+                case 'rotate-left':
+                    rotateImage(selectedImageIndex, -90);
+                    break;
+                case 'rotate-right':
+                    rotateImage(selectedImageIndex, 90);
+                    break;
                 case 'describe':
                     describeImage(selectedImageIndex);
                     break;
@@ -1085,6 +1365,12 @@
                     break;
                 case 'add-text':
                     addTextToImage(selectedImageIndex);
+                    break;
+                case 'pair-audio':
+                    pairAudioToImage(selectedImageIndex);
+                    break;
+                case 'unpair-audio':
+                    unpairAudioFromImage(selectedImageIndex);
                     break;
                 case 'delete':
                     deleteImage(selectedImageIndex);
@@ -1096,7 +1382,9 @@
         function moveImage(index, direction) {
             const newIndex = direction === 'up' ? index - 1 : index + 1;
             if (newIndex < 0 || newIndex >= projectData.images.length) {
-                announce(direction === 'up' ? 'Zaten en üstte.' : 'Zaten en altta.');
+                announce(direction === 'up'
+                    ? t('runtime.slideshow_editor.already_top', 'Already at the top.')
+                    : t('runtime.slideshow_editor.already_bottom', 'Already at the bottom.'));
                 return;
             }
 
@@ -1108,9 +1396,40 @@
             renderImageList();
 
             const img = projectData.images[newIndex];
-            announce(`${img.shortDescription || img.filename} ${direction === 'up' ? 'yukarı' : 'aşağı'} taşındı. Şimdi ${newIndex + 1}. sırada.`);
+            announce(t('runtime.slideshow_editor.image_moved', '{name} moved {direction}. It is now at position {index}.', {
+                name: img.shortDescription || img.filename,
+                direction: direction === 'up'
+                    ? t('runtime.slideshow_editor.direction_up', 'up')
+                    : t('runtime.slideshow_editor.direction_down', 'down'),
+                index: newIndex + 1
+            }));
 
             restoreFocus();
+        }
+
+        function rotateImage(index, delta) {
+            if (index < 0 || index >= projectData.images.length) {
+                announce(t('runtime.slideshow_editor.select_image_first', 'Please select an image first.'));
+                return;
+            }
+
+            const img = projectData.images[index];
+            img.rotation = normalizeRotation((img.rotation || 0) + delta);
+
+            const metrics = getDisplayMetrics(img);
+            img.orientation = metrics.orientation;
+
+            renderImageList();
+            if (selectedImageIndex === index) {
+                selectImage(index);
+            } else {
+                restoreFocus();
+            }
+
+            announce(t('runtime.slideshow_editor.image_rotated', '{name} rotated to {degrees} degrees.', {
+                name: img.shortDescription || img.filename,
+                degrees: img.rotation
+            }));
         }
 
         // Resim sil
@@ -1139,15 +1458,19 @@
                 restoreFocus();
             }
 
-            announce(`${img.shortDescription || img.filename} silindi.`);
+            announce(t('runtime.slideshow_editor.image_deleted', '{name} deleted.', {
+                name: img.shortDescription || img.filename
+            }));
         }
 
         // Resim süresini düzenle
         async function editImageDuration(index) {
             const img = projectData.images[index];
             const newDuration = await ipcRenderer.invoke('show-input-dialog', {
-                title: 'Süre Düzenle',
-                message: `"${img.shortDescription || img.filename}" için ekranda kalma süresini saniye olarak girin:`,
+                title: t('dialog.slideshow_editor.edit_duration_title', 'Edit Duration'),
+                message: t('dialog.slideshow_editor.edit_duration_message', 'Enter the on-screen duration in seconds for "{name}":', {
+                    name: img.shortDescription || img.filename
+                }),
                 defaultValue: img.duration.toString()
             });
 
@@ -1159,7 +1482,9 @@
                     renderImageList();
                     updateTotalDuration();
                     updateTotalDuration();
-                    announce(`Süre ${duration} saniye olarak ayarlandı.`);
+                    announce(t('runtime.slideshow_editor.duration_set', 'Duration set to {duration} seconds.', {
+                        duration
+                    }));
                     restoreFocus();
                 }
             }
@@ -1167,35 +1492,68 @@
 
         // AI ile resim betimleme
         async function describeImage(index) {
-            const img = projectData.images[index];
-            announce('Resim yapay zeka ile betimleniyor, lütfen bekleyin...');
+            const resolvedIndex = requireImageSelection(index);
+            if (resolvedIndex === null) {
+                return;
+            }
+
+            const img = projectData.images[resolvedIndex];
+            if (!img?.path) {
+                announce(t('runtime.slideshow_editor.select_image_first', 'Please select an image first.'));
+                return;
+            }
+
+            announce(t('runtime.slideshow_editor.ai_describing_image', 'The image is being described by AI, please wait...'));
 
             try {
-                const result = await ipcRenderer.invoke('describe-image-ai', img.path);
+                const result = await ipcRenderer.invoke('describe-image-ai', {
+                    path: img.path,
+                    rotation: img.rotation || 0
+                });
 
                 img.shortDescription = result.short;
                 img.longDescription = result.long;
+                img.orientationStatus = result.orientationStatus || null;
+                img.orientationMessage = result.orientationMessage || null;
 
                 renderImageList();
                 renderImageList();
-                announce(`Betimleme tamamlandı: ${result.short}`);
+                const completionMessage = result.orientationMessage
+                    ? t('runtime.slideshow_editor.description_completed_with_orientation', 'Description completed: {text} {orientation}', {
+                        text: result.short,
+                        orientation: result.orientationMessage
+                    })
+                    : t('runtime.slideshow_editor.description_completed', 'Description completed: {text}', {
+                        text: result.short
+                    });
+                announce(completionMessage);
                 restoreFocus();
             } catch (error) {
-                announce(`Betimleme hatası: ${error.message}`);
+                announce(t('runtime.slideshow_editor.description_error', 'Description error: {error}', {
+                    error: error.message
+                }));
             }
         }
 
         // Detaylı betimlemeyi göster
         function viewImageDescription(index) {
-            const img = projectData.images[index];
+            const resolvedIndex = requireImageSelection(index);
+            if (resolvedIndex === null) {
+                return;
+            }
+
+            const img = projectData.images[resolvedIndex];
             if (img.longDescription) {
+                const detailMessage = img.orientationMessage
+                    ? `${img.orientationMessage}\n\n${img.longDescription}`
+                    : img.longDescription;
                 ipcRenderer.invoke('show-message-dialog', {
-                    title: 'Detaylı Betimleme',
-                    message: img.longDescription
+                    title: t('dialog.slideshow_editor.detailed_description_title', 'Detailed Description'),
+                    message: detailMessage
                 });
-                announce(img.longDescription);
+                announce(detailMessage);
             } else {
-                announce('Bu resim için henüz betimleme yapılmadı. Önce "Resmi Betimle" seçeneğini kullanın.');
+                announce(t('runtime.slideshow_editor.no_description_yet', 'No description has been created for this image yet. Use Describe Image first.'));
             }
         }
 
@@ -1205,6 +1563,325 @@
                 imageIds: [projectData.images[index].id]
             });
         }
+
+        // ========== RESİM-SES EŞLEŞTİRME SİSTEMİ ==========
+
+        /**
+         * Resme ses eşle — kullanıcıya mevcut seslerin listesini gösterir
+         */
+        async function pairAudioToImage(imageIndex) {
+            const img = projectData.images[imageIndex];
+            if (!img) {
+                announce(t('runtime.slideshow_editor.select_image_first', 'Please select an image first.'));
+                return;
+            }
+
+            if (projectData.audioTracks.length === 0) {
+                announce(t('runtime.slideshow_editor.add_audio_first', 'You need to add audio files before pairing. Add audio from the Audio tab.'));
+                return;
+            }
+
+            // Seçilebilir seslerin listesini oluştur
+            const audioOptions = projectData.audioTracks.map((audio, i) => {
+                const pairedCount = projectData.images.filter(
+                    im => im.pairedAudioId === audio.id && im.id !== img.id
+                ).length;
+                const pairedInfo = pairedCount > 0
+                    ? ` (${pairedCount} resimle eşli)`
+                    : '';
+                return `${i + 1}. ${audio.filename}${pairedInfo}`;
+            }).join('\n');
+
+            const result = await ipcRenderer.invoke('show-input-dialog', {
+                title: t('dialog.slideshow_editor.pair_audio_title', 'Pair Audio'),
+                message: t('dialog.slideshow_editor.pair_audio_message', 'Enter the number of the audio file to pair with "{name}".\n\nAn audio file can be paired with multiple images. Duration is split automatically.\n\n{options}', {
+                    name: img.shortDescription || img.filename,
+                    options: audioOptions
+                }),
+                defaultValue: '1'
+            });
+
+            if (result !== null) {
+                const audioIndex = parseInt(result) - 1;
+                if (audioIndex >= 0 && audioIndex < projectData.audioTracks.length) {
+                    const audio = projectData.audioTracks[audioIndex];
+
+                    // Çoklu eşlemeye izin ver: önceki eşlemeyi temizleme
+                    img.pairedAudioId = audio.id;
+                    renderImageList();
+                    renderAudioList();
+                    updateTotalDuration();
+
+                    // Kaç resim bu sese eşli?
+                    const totalPaired = projectData.images.filter(im => im.pairedAudioId === audio.id).length;
+                    const perImageDuration = (audio.duration / totalPaired).toFixed(1);
+                    announce(t('runtime.slideshow_editor.image_audio_paired', '{image} was paired with {audio}. This audio is shared with {count} images, each lasting {duration} seconds.', {
+                        image: img.shortDescription || img.filename,
+                        audio: audio.filename,
+                        count: totalPaired,
+                        duration: perImageDuration
+                    }));
+                    restoreFocus();
+                } else {
+                    announce(t('runtime.slideshow_editor.invalid_number_audio', 'Invalid number. Enter an audio number from the list.'));
+                }
+            }
+        }
+
+        /**
+         * Resimden ses eşlemesini kaldır
+         */
+        function unpairAudioFromImage(imageIndex) {
+            const img = projectData.images[imageIndex];
+            if (!img) {
+                announce(t('runtime.slideshow_editor.select_image_first', 'Please select an image first.'));
+                return;
+            }
+
+            if (!img.pairedAudioId) {
+                announce(t('runtime.slideshow_editor.image_has_no_paired_audio', 'This image does not have paired audio.'));
+                return;
+            }
+
+            const pairedAudio = projectData.audioTracks.find(a => a.id === img.pairedAudioId);
+            const audioName = pairedAudio ? pairedAudio.filename : t('runtime.slideshow_editor.unknown', 'unknown');
+
+            img.pairedAudioId = null;
+            img.manualDuration = false; // Süreyi serbest bırak
+            renderImageList();
+            renderAudioList();
+            updateTotalDuration();
+
+            announce(t('runtime.slideshow_editor.image_audio_unpaired', 'The audio pairing {audio} was removed from {image}.', {
+                audio: audioName,
+                image: img.shortDescription || img.filename
+            }));
+            restoreFocus();
+        }
+
+        /**
+         * Sesi resimlere eşle — ses bağlam menüsünden çağrılır
+         * Virgülle ayrılmış birden fazla resim numarası girilebilir (ör: 1,3,5)
+         */
+        async function pairImageToAudio(audioIndex) {
+            const audio = projectData.audioTracks[audioIndex];
+            if (!audio) {
+                announce(t('runtime.slideshow_editor.select_audio_first', 'Please select an audio item first.'));
+                return;
+            }
+
+            if (projectData.images.length === 0) {
+                announce(t('runtime.slideshow_editor.add_images_before_pairing', 'You need to add image files before pairing.'));
+                return;
+            }
+
+            // Mevcut eşlemeleri göster
+            const currentlyPaired = projectData.images
+                .map((img, i) => img.pairedAudioId === audio.id ? (i + 1) : null)
+                .filter(v => v !== null);
+
+            const imageOptions = projectData.images.map((img, i) => {
+                const displayName = img.shortDescription || img.filename;
+                const alreadyPaired = img.pairedAudioId
+                    ? t('runtime.slideshow_editor.audio_pair_option', ' (paired with {name})', {
+                        name: projectData.audioTracks.find(a => a.id === img.pairedAudioId)?.filename || '?'
+                    })
+                    : '';
+                return `${i + 1}. ${displayName}${alreadyPaired}`;
+            }).join('\n');
+
+            const defaultVal = currentlyPaired.length > 0 ? currentlyPaired.join(',') : '1';
+
+            const result = await ipcRenderer.invoke('show-input-dialog', {
+                title: t('dialog.slideshow_editor.pair_images_title', 'Pair with Images'),
+                message: t('dialog.slideshow_editor.pair_images_message', 'Enter the image numbers to pair with "{audio}".\nSeparate multiple images with commas (for example: {example}).\nThe duration is split equally between the images.\n\n{options}', {
+                    audio: audio.filename,
+                    example: '1,3,5',
+                    options: imageOptions
+                }),
+                defaultValue: defaultVal
+            });
+
+            if (result !== null) {
+                // Virgülle ayrılmış numaraları parse et
+                const indices = result.split(',').map(s => parseInt(s.trim()) - 1).filter(
+                    idx => idx >= 0 && idx < projectData.images.length
+                );
+
+                if (indices.length > 0) {
+                    // Önce bu sese ait eski eşlemeleri temizle
+                    projectData.images.forEach(im => {
+                        if (im.pairedAudioId === audio.id) {
+                            im.pairedAudioId = null;
+                            im.manualDuration = false;
+                        }
+                    });
+
+                    // Yeni eşlemeleri ata
+                    indices.forEach(idx => {
+                        projectData.images[idx].pairedAudioId = audio.id;
+                    });
+
+                    renderImageList();
+                    renderAudioList();
+                    updateTotalDuration();
+
+                    const perImageDuration = (audio.duration / indices.length).toFixed(1);
+                    const imageNames = indices.map(idx => projectData.images[idx].shortDescription || projectData.images[idx].filename).join(', ');
+                    announce(t('runtime.slideshow_editor.audio_paired_with_images', '{audio} was paired with {count} images: {names}. Each image lasts {duration} seconds.', {
+                        audio: audio.filename,
+                        count: indices.length,
+                        names: imageNames,
+                        duration: perImageDuration
+                    }));
+                } else {
+                    announce(t('runtime.slideshow_editor.invalid_number_image', 'Invalid number. Enter image numbers from the list.'));
+                }
+            }
+        }
+
+        /**
+         * Sesten tüm resim eşlemelerini kaldır
+         */
+        function unpairImageFromAudio(audioIndex) {
+            const audio = projectData.audioTracks[audioIndex];
+            if (!audio) {
+                announce(t('runtime.slideshow_editor.select_audio_first', 'Please select an audio item first.'));
+                return;
+            }
+
+            const pairedImages = projectData.images.filter(img => img.pairedAudioId === audio.id);
+            if (pairedImages.length === 0) {
+                announce(t('runtime.slideshow_editor.audio_has_no_paired_images', 'This audio does not have any paired images.'));
+                return;
+            }
+
+            pairedImages.forEach(img => {
+                img.pairedAudioId = null;
+                img.manualDuration = false;
+            });
+
+            renderImageList();
+            renderAudioList();
+            updateTotalDuration();
+
+            announce(t('runtime.slideshow_editor.audio_image_unpaired', 'The pairing between {audio} and {count} images was removed.', {
+                audio: audio.filename,
+                count: pairedImages.length
+            }));
+        }
+
+        /**
+         * Otomatik eşleme: Aynı adlı veya sıralı dosyaları eşle
+         */
+        function autoPairAll() {
+            const images = projectData.images;
+            const audios = projectData.audioTracks;
+
+            if (images.length === 0 || audios.length === 0) {
+                announce(t('runtime.slideshow_editor.auto_pair_requires_both', 'Auto pairing requires both image and audio files.'));
+                return;
+            }
+
+            if (images.length !== audios.length) {
+                announce(t('runtime.slideshow_editor.auto_pair_count_mismatch', 'Auto pairing requires the same number of images and audio files. There are currently {images} images and {audio} audio files.', {
+                    images: images.length,
+                    audio: audios.length
+                }));
+                return;
+            }
+
+            // Önce tüm mevcut eşlemeleri temizle
+            images.forEach(img => { img.pairedAudioId = null; img.manualDuration = false; });
+
+            let matchedByName = 0;
+            let matchedByOrder = 0;
+
+            // Dosya adından uzantıyı çıkaran yardımcı
+            function getBaseName(filename) {
+                return filename.replace(/\.[^/.]+$/, '').toLowerCase().trim();
+            }
+
+            // Strateji 1: İsim eşleştirme (uzantısız dosya adları aynı mı?)
+            const unmatchedImages = [];
+            const usedAudioIds = new Set();
+
+            images.forEach(img => {
+                const imgBase = getBaseName(img.filename);
+                const matchingAudio = audios.find(a =>
+                    !usedAudioIds.has(a.id) && getBaseName(a.filename) === imgBase
+                );
+
+                if (matchingAudio) {
+                    img.pairedAudioId = matchingAudio.id;
+                    usedAudioIds.add(matchingAudio.id);
+                    matchedByName++;
+                } else {
+                    unmatchedImages.push(img);
+                }
+            });
+
+            // Strateji 2: Kalan eşleşmeyenleri sırayla eşle
+            const remainingAudios = audios.filter(a => !usedAudioIds.has(a.id));
+            unmatchedImages.forEach((img, i) => {
+                if (remainingAudios[i]) {
+                    img.pairedAudioId = remainingAudios[i].id;
+                    matchedByOrder++;
+                }
+            });
+
+            renderImageList();
+            renderAudioList();
+            updateTotalDuration();
+
+            const totalMatched = matchedByName + matchedByOrder;
+            let message = t('runtime.slideshow_editor.auto_pair_completed', '{count} pairings were created.', {
+                count: totalMatched
+            });
+            if (matchedByName > 0) {
+                message += ` ${t('runtime.slideshow_editor.auto_pair_name_matches', '{count} were matched by filename similarity.', {
+                    count: matchedByName
+                })}`;
+            }
+            if (matchedByOrder > 0) {
+                message += ` ${t('runtime.slideshow_editor.auto_pair_order_matches', '{count} were matched by order.', {
+                    count: matchedByOrder
+                })}`;
+            }
+            announce(message);
+        }
+
+        /**
+         * Otomatik eşle butonunun durumunu güncelle
+         */
+        function updateAutoPairButton() {
+            const btn = document.getElementById('auto-pair-btn');
+            if (!btn) return;
+            const canAutoPair = projectData.images.length > 0
+                && projectData.audioTracks.length > 0
+                && projectData.images.length === projectData.audioTracks.length;
+            btn.disabled = !canAutoPair;
+            if (canAutoPair) {
+                btn.title = t('dialog.slideshow_editor.auto_pair_ready_title', 'Automatically pair {images} images and {audio} audio files', {
+                    images: projectData.images.length,
+                    audio: projectData.audioTracks.length
+                });
+            } else if (projectData.images.length !== projectData.audioTracks.length) {
+                btn.title = t('dialog.slideshow_editor.auto_pair_mismatch_title', 'Auto pairing requires the same number of images ({images}) and audio files ({audio})', {
+                    images: projectData.images.length,
+                    audio: projectData.audioTracks.length
+                });
+            } else {
+                btn.title = t('dialog.slideshow_editor.auto_pair_unavailable_title', 'Add images and audio files to use auto pairing');
+            }
+        }
+
+        // Otomatik Eşle butonu
+        document.getElementById('auto-pair-btn').addEventListener('click', () => {
+            autoPairAll();
+        });
+
+        // ========== SES EŞLEŞTİRME SONU ==========
 
         // Ses ekleme
         document.getElementById('add-audio-btn').addEventListener('click', () => {
@@ -1229,7 +1906,9 @@
             renderAudioList();
             updateTotalDuration();
             updateStats();
-            announce(`${filePaths.length} ses dosyası eklendi.`);
+            announce(t('runtime.slideshow_editor.audio_files_added', '{count} audio files added.', {
+                count: filePaths.length
+            }));
         });
 
         // Ses listesini render et
@@ -1248,16 +1927,40 @@
                 const seconds = Math.floor(audio.duration % 60);
                 const durationText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
+                // Eşlenmiş resim bilgisi (çoklu)
+                const pairedImages = projectData.images.filter(img => img.pairedAudioId === audio.id);
+                let pairedImageInfo = '';
+                if (pairedImages.length > 0) {
+                    const names = pairedImages.length <= 3
+                        ? pairedImages.map(img => img.shortDescription || img.filename).join(', ')
+                        : t('runtime.slideshow_editor.image_count_label', '{count} images', {
+                            count: pairedImages.length
+                        });
+                    pairedImageInfo = `<span style="color: #4ec94e; font-size: 11px;">🔗 ${names}</span>`;
+                }
+
                 li.innerHTML = `
                     <div class="item-title">${audio.filename}</div>
                     <div class="item-info">
-                        Süre: ${durationText}
+                        ${t('dialog.slideshow_editor.audio_duration', 'Duration')}: ${durationText}
                         <span class="item-duration">${durationText}</span>
                     </div>
+                    ${pairedImageInfo ? `<div class="item-info">${pairedImageInfo}</div>` : ''}
                 `;
 
+                const pairedLabel = pairedImages.length > 0
+                    ? t('runtime.slideshow_editor.audio_item_paired_label', ', paired with {count} images: {names}', {
+                        count: pairedImages.length,
+                        names: pairedImages.map(img => img.shortDescription || img.filename).join(', ')
+                    })
+                    : '';
                 li.setAttribute('aria-label',
-                    `${index + 1}. ${audio.filename}, ${durationText} süresinde`);
+                    t('runtime.slideshow_editor.audio_item_aria', '{index}. {name}, duration {duration}{paired}', {
+                        index: index + 1,
+                        name: audio.filename,
+                        duration: durationText,
+                        paired: pairedLabel
+                    }));
 
                 if (index === selectedAudioIndex) {
                     li.classList.add('selected');
@@ -1293,18 +1996,7 @@
                             break;
                         case 'Delete':
                             e.preventDefault();
-                            // deleteAudio fonksiyonu tanımlı olmalı (genelde actionlarda var)
-                            // Burada basitçe action çağırabiliriz veya implemente edebiliriz.
-                            // deleteAudio(currentIndex); // deleteAudio henüz global scope'da değil, context menu action'undan bakalım.
-                            if (typeof deleteAudio === 'function') deleteAudio(currentIndex);
-                            else {
-                                // Fallback: siliyoruz
-                                projectData.audioTracks.splice(index, 1);
-                                renderAudioList();
-                                updateTotalDuration();
-                                updateStats();
-                                announce('Ses silindi.');
-                            }
+                            deleteAudio(currentIndex);
                             break;
                         case 'ContextMenu':
                         case 'F10':
@@ -1312,6 +2004,17 @@
                             e.preventDefault();
                             showContextMenu('audio', e.target.getBoundingClientRect());
                             break;
+                    }
+
+                    // Alt + yukarı/aşağı ile taşı
+                    if (e.altKey) {
+                        if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            moveAudio(currentIndex, 'up');
+                        } else if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            moveAudio(currentIndex, 'down');
+                        }
                     }
                 });
 
@@ -1333,10 +2036,131 @@
 
             const audio = projectData.audioTracks[index];
             if (audio) {
-                announce(`${audio.filename} seçildi.`);
+                const pairedImage = projectData.images.find(img => img.pairedAudioId === audio.id);
+                const pairedInfo = pairedImage
+                    ? t('runtime.slideshow_editor.audio_paired_info', ' Paired with image {name}.', {
+                        name: pairedImage.shortDescription || pairedImage.filename
+                    })
+                    : '';
+                announce(t('runtime.slideshow_editor.audio_selected', '{name} selected.{paired}', {
+                    name: audio.filename,
+                    paired: pairedInfo
+                }));
+            }
+
+            // Odak yönetimi
+            setTimeout(() => {
+                const items = audioList.querySelectorAll('.list-item');
+                if (items[index]) {
+                    items.forEach(item => item.setAttribute('tabindex', '-1'));
+                    items[index].setAttribute('tabindex', '0');
+                    items[index].focus();
+                }
+            }, 50);
+        }
+
+        // Ses sil
+        function deleteAudio(index) {
+            if (index < 0 || index >= projectData.audioTracks.length) return;
+
+            const audio = projectData.audioTracks[index];
+
+            // Eşlemeleri temizle
+            projectData.images.forEach(img => {
+                if (img.pairedAudioId === audio.id) {
+                    img.pairedAudioId = null;
+                    img.manualDuration = false;
+                }
+            });
+
+            projectData.audioTracks.splice(index, 1);
+
+            if (selectedAudioIndex >= projectData.audioTracks.length) {
+                selectedAudioIndex = projectData.audioTracks.length - 1;
+            }
+
+            renderAudioList();
+            renderImageList();
+            updateTotalDuration();
+            updateStats();
+
+            announce(t('runtime.slideshow_editor.audio_deleted', '{name} deleted.', {
+                name: audio.filename
+            }));
+
+            if (projectData.audioTracks.length === 0) {
+                document.getElementById('add-audio-btn').focus();
             }
         }
 
+        // Ses taşı
+        function moveAudio(index, direction) {
+            const newIndex = direction === 'up' ? index - 1 : index + 1;
+            if (newIndex < 0 || newIndex >= projectData.audioTracks.length) {
+                announce(direction === 'up'
+                    ? t('runtime.slideshow_editor.already_top', 'Already at the top.')
+                    : t('runtime.slideshow_editor.already_bottom', 'Already at the bottom.'));
+                return;
+            }
+
+            [projectData.audioTracks[index], projectData.audioTracks[newIndex]] =
+                [projectData.audioTracks[newIndex], projectData.audioTracks[index]];
+
+            selectedAudioIndex = newIndex;
+            renderAudioList();
+
+            const audio = projectData.audioTracks[newIndex];
+            announce(t('runtime.slideshow_editor.audio_moved', '{name} moved {direction}. It is now at position {index}.', {
+                name: audio.filename,
+                direction: direction === 'up'
+                    ? t('runtime.slideshow_editor.direction_up', 'up')
+                    : t('runtime.slideshow_editor.direction_down', 'down'),
+                index: newIndex + 1
+            }));
+
+            setTimeout(() => {
+                const items = audioList.querySelectorAll('.list-item');
+                if (items[newIndex]) {
+                    items.forEach(item => item.setAttribute('tabindex', '-1'));
+                    items[newIndex].setAttribute('tabindex', '0');
+                    items[newIndex].focus();
+                }
+            }, 50);
+        }
+
+        // Ses bağlam menüsü aksiyonları
+        document.getElementById('audio-context-menu').addEventListener('click', (e) => {
+            const menuItem = e.target.closest('.context-menu-item');
+            if (!menuItem) return;
+
+            const action = menuItem.dataset.action;
+            hideAllContextMenus();
+
+            if (!action) return;
+
+            if (selectedAudioIndex < 0) {
+                announce(t('runtime.slideshow_editor.select_audio_first', 'Please select an audio item first.'));
+                return;
+            }
+
+            switch (action) {
+                case 'move-up':
+                    moveAudio(selectedAudioIndex, 'up');
+                    break;
+                case 'move-down':
+                    moveAudio(selectedAudioIndex, 'down');
+                    break;
+                case 'pair-to-image':
+                    pairImageToAudio(selectedAudioIndex);
+                    break;
+                case 'unpair-from-image':
+                    unpairImageFromAudio(selectedAudioIndex);
+                    break;
+                case 'delete':
+                    deleteAudio(selectedAudioIndex);
+                    break;
+            }
+        });
 
 
         // Önizleme
@@ -1361,8 +2185,14 @@
                 options: { mode, targetId }
             });
 
-            const modeText = mode === 'full' ? 'Tam proje' : (mode === 'image' ? 'Seçili resim' : (mode === 'audio' ? 'Seçili ses' : 'Seçili yazı'));
-            announce(`${modeText} önizlemesi başlıyor.`);
+            const modeText = mode === 'full'
+                ? t('runtime.slideshow_editor.preview_full', 'Full project')
+                : (mode === 'image'
+                    ? t('runtime.slideshow_editor.preview_image', 'Selected image')
+                    : (mode === 'audio'
+                        ? t('runtime.slideshow_editor.preview_audio', 'Selected audio')
+                        : t('runtime.slideshow_editor.preview_text', 'Selected text')));
+            announce(t('runtime.slideshow_editor.preview_starting', '{mode} preview is starting.', { mode: modeText }));
         });
 
         // Alt + P kısayolu
@@ -1381,7 +2211,7 @@
         // Video oluştur
         document.getElementById('export-btn').addEventListener('click', () => {
             ipcRenderer.send('slideshow-export', projectData);
-            announce('Video oluşturma başlıyor...');
+            announce(t('runtime.slideshow_editor.video_creation_starting', 'Video creation is starting...'));
         });
 
         // Tümünü Betimle
@@ -1390,7 +2220,7 @@
 
             const btn = document.getElementById('describe-all-btn');
             btn.disabled = true;
-            btn.textContent = 'Betimleniyor...';
+            btn.textContent = t('dialog.slideshow_editor.describing_all', 'Describing...');
 
             let describedCount = 0;
             const totalCount = projectData.images.length;
@@ -1404,24 +2234,38 @@
                     continue;
                 }
 
-                announce(`${i + 1}/${totalCount}: ${img.filename} betimleniyor...`);
+                announce(t('runtime.slideshow_editor.describe_progress', '{current}/{total}: {name} is being described...', {
+                    current: i + 1,
+                    total: totalCount,
+                    name: img.filename
+                }));
 
                 try {
-                    const result = await ipcRenderer.invoke('describe-image-ai', img.path);
+                    const result = await ipcRenderer.invoke('describe-image-ai', {
+                        path: img.path,
+                        rotation: img.rotation || 0
+                    });
                     img.shortDescription = result.short;
                     img.longDescription = result.long;
+                    img.orientationStatus = result.orientationStatus || null;
+                    img.orientationMessage = result.orientationMessage || null;
                     describedCount++;
 
                     renderImageList();
                 } catch (error) {
-                    console.error(`Betimleme hatası (${img.filename}):`, error);
-                    announce(`${img.filename} betimlenemedi: ${error.message}`);
+                    console.error(`Description error (${img.filename}):`, error);
+                    announce(t('runtime.slideshow_editor.describe_failed_item', '{name} could not be described: {error}', {
+                        name: img.filename,
+                        error: error.message
+                    }));
                 }
             }
 
             btn.disabled = false;
-            btn.textContent = 'Tümünü Betimle';
-            announce(`${describedCount} resim betimlendi.`);
+            btn.textContent = t('dialog.slideshow_editor.describe_all', 'Describe All');
+            announce(t('runtime.slideshow_editor.describe_all_completed', '{count} images were described.', {
+                count: describedCount
+            }));
         });
 
         // Projeyi Kaydet
@@ -1432,7 +2276,9 @@
         // Proje kaydedildi bildirimi
         ipcRenderer.on('slideshow-project-saved', (event, filePath) => {
             currentProjectPath = filePath;
-            announce(`Proje kaydedildi: ${path.basename(filePath)}`);
+            announce(t('runtime.slideshow_editor.project_saved', 'Project saved: {name}', {
+                name: path.basename(filePath)
+            }));
         });
 
         // Proje yüklendi
@@ -1448,7 +2294,10 @@
             updateProjectInfo();
             updateStats();
 
-            announce(`Proje yüklendi: ${projectData.images.length} resim, ${projectData.audioTracks.length} ses.`);
+            announce(t('runtime.slideshow_editor.project_loaded', 'Project loaded: {images} images, {audio} audio files.', {
+                images: projectData.images.length,
+                audio: projectData.audioTracks.length
+            }));
         });
 
         // Ctrl+S ile kaydet
@@ -1491,21 +2340,28 @@
                 if (text.targetImages.length <= 3) {
                     imageNames = text.targetImages.map(imgId => {
                         const img = projectData.images.find(i => i.id === imgId);
-                        return img ? (img.shortDescription || img.filename).substring(0, 15) : 'Bilinmiyor';
+                        return img ? (img.shortDescription || img.filename).substring(0, 15) : t('runtime.slideshow_editor.unknown', 'Unknown');
                     }).join(', ');
                 } else {
-                    imageNames = `${text.targetImages.length} resimde`;
+                    imageNames = t('runtime.slideshow_editor.text_images_count', '{count} images', {
+                        count: text.targetImages.length
+                    });
                 }
 
                 li.innerHTML = `
                     <div class="item-title">${shortContent}</div>
                     <div class="item-info">
-                        ${imageNames} • ${text.position} konum
+                        ${imageNames} • ${t('dialog.slideshow_editor.text_position', 'Position')}: ${text.position}
                     </div>
                 `;
 
                 li.setAttribute('aria-label',
-                    `${index + 1}. "${shortContent}", ${imageCount} resimde gösterilecek, ${text.position} konumda`);
+                    t('runtime.slideshow_editor.text_item_aria', '{index}. "{content}", shown on {count} images, position {position}', {
+                        index: index + 1,
+                        content: shortContent,
+                        count: imageCount,
+                        position: text.position
+                    }));
 
                 // Tıklama ile seçim
                 li.addEventListener('click', () => selectText(index));
@@ -1537,7 +2393,10 @@
                 const shortContent = text.content.length > 40
                     ? text.content.substring(0, 40) + '...'
                     : text.content;
-                announce(`Yazı ${index + 1}: "${shortContent}"`);
+                announce(t('runtime.slideshow_editor.text_selected', 'Text {index}: "{content}"', {
+                    index: index + 1,
+                    content: shortContent
+                }));
             }
         }
 
@@ -1556,7 +2415,9 @@
 
             renderTextList();
             updateStats();
-            announce(`"${shortContent}..." silindi.`);
+            announce(t('runtime.slideshow_editor.text_deleted', '"{content}..." deleted.', {
+                content: shortContent
+            }));
         }
 
         // Yazı listesi klavye navigasyonu
@@ -1596,7 +2457,7 @@
                     if (currentIndex >= 0 && projectData.textOverlays[currentIndex]) {
                         const text = projectData.textOverlays[currentIndex];
                         console.log('Enter ile yazı düzenleme:', text);
-                        announce('Yazı düzenleme diyaloğu açılıyor...');
+                        announce(t('runtime.slideshow_editor.text_edit_opening', 'Opening text edit dialog...'));
                         ipcRenderer.send('slideshow-edit-text', {
                             images: projectData.images,
                             editText: text,
@@ -1633,7 +2494,7 @@
 
             if (selectedTextIndex < 0) {
                 console.log('Index geçersiz:', selectedTextIndex);
-                announce('Lütfen önce bir yazı seçin.');
+                announce(t('runtime.slideshow_editor.select_text_first', 'Please select a text item first.'));
                 return;
             }
 
@@ -1661,7 +2522,7 @@
                         editIndex: selectedTextIndex
                     });
 
-                    announce('Yazı düzenleme diyaloğu açılıyor...');
+                    announce(t('runtime.slideshow_editor.text_edit_opening', 'Opening text edit dialog...'));
                     break;
                 case 'delete':
                     deleteText(selectedTextIndex);

@@ -3,11 +3,56 @@
  * Diyalogları ayrı pencerede açar
  */
 
-const { BrowserWindow, ipcMain } = require('electron');
+const { BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
+const i18n = require('./i18n');
 
 let activeDialogWindow = null;
 let mainWindowRef = null;
+let liveEffectsPanelWindow = null;
+let recordingWizardWindow = null;
+let activeRecordingWizardSession = null;
+
+function cloneSessionData(data) {
+    if (!data || typeof data !== 'object') {
+        return null;
+    }
+
+    try {
+        return JSON.parse(JSON.stringify(data));
+    } catch (error) {
+        console.warn('recording session clone failed:', error.message);
+        return null;
+    }
+}
+
+function hasActiveRecordingWizardSession() {
+    return !!(activeRecordingWizardSession && activeRecordingWizardSession.active);
+}
+
+function getRecordingWizardSession() {
+    return cloneSessionData(activeRecordingWizardSession);
+}
+
+function refreshApplicationMenu() {
+    if (!mainWindowRef || mainWindowRef.isDestroyed()) {
+        return;
+    }
+
+    try {
+        const { createMenu } = require('./menu');
+        Menu.setApplicationMenu(createMenu(mainWindowRef));
+    } catch (error) {
+        console.warn('menu refresh failed:', error.message);
+    }
+}
+
+function setRecordingWizardSession(session = null) {
+    const normalized = cloneSessionData(session);
+    activeRecordingWizardSession = normalized && normalized.active ? normalized : null;
+    refreshApplicationMenu();
+    return getRecordingWizardSession();
+}
 
 /**
  * Yazı ekleme diyaloğunu aç
@@ -33,7 +78,7 @@ function openTextOverlayDialog(parentWindow, data = {}) {
         resizable: true,
         minimizable: false,
         maximizable: false,
-        title: data.editItem ? 'Yazı Düzenle' : 'Yazı Ekle',
+        title: data.editItem ? (i18n.t('dialog.text.edit') || 'Yazı Düzenle') : (i18n.t('dialog.text.add') || 'Yazı Ekle'),
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
@@ -116,6 +161,26 @@ function setupDialogHandlers(mainWindow) {
             activeDialogWindow.webContents.send('init-data', activeDialogWindow.initData);
         }
     });
+
+    ipcMain.handle('recording-wizard-set-active-session', async (_event, session) => {
+        return {
+            success: true,
+            session: setRecordingWizardSession(session),
+            hasActiveSession: hasActiveRecordingWizardSession()
+        };
+    });
+
+    ipcMain.handle('recording-wizard-get-active-session', async () => {
+        return {
+            success: true,
+            session: getRecordingWizardSession(),
+            hasActiveSession: hasActiveRecordingWizardSession()
+        };
+    });
+
+    ipcMain.handle('recording-wizard-resume-active-session', async () => {
+        return resumeActiveRecordingWizard(mainWindow);
+    });
 }
 
 
@@ -131,7 +196,7 @@ function openSyncWizard(parentWindow, mode) {
         parent: parentWindow,
         modal: true,
         show: false,
-        title: mode === 'A' ? 'Ses Senkronizasyon' : 'Playback Kayıt',
+        title: mode === 'A' ? (i18n.t('dialog.sync.title_a') || 'Ses Senkronizasyon') : (i18n.t('dialog.sync.title_b') || 'Playback Kayıt'),
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
@@ -156,13 +221,13 @@ function openSyncWizard(parentWindow, mode) {
 /**
  * Dikey Video Sihirbazı (Shorts/Reels)
  */
-function openVerticalWizard(parentWindow) {
+function openVerticalWizard(parentWindow, data = null) {
     const wizardWin = new BrowserWindow({
         width: 900,
         height: 750,
         parent: parentWindow,
         show: false,
-        title: 'Dikey Video Oluşturucu (Shorts/Reels)',
+        title: i18n.t('dialog.vertical.title') || 'Dikey Video Oluşturucu (Shorts/Reels)',
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
@@ -173,6 +238,9 @@ function openVerticalWizard(parentWindow) {
 
     wizardWin.once('ready-to-show', () => {
         wizardWin.show();
+        if (data) {
+            wizardWin.webContents.send('init-data', data);
+        }
     });
 
     // Pencere kapatıldığında ana pencereye focus ver
@@ -183,9 +251,157 @@ function openVerticalWizard(parentWindow) {
     });
 }
 
+/**
+ * Erişilebilir Kayıt Sihirbazı
+ */
+function openRecordingWizard(parentWindow, options = {}) {
+    if (recordingWizardWindow && !recordingWizardWindow.isDestroyed()) {
+        if (parentWindow && !parentWindow.isDestroyed() && parentWindow.isMinimized()) {
+            parentWindow.restore();
+            parentWindow.show();
+        }
+        if (recordingWizardWindow.isMinimized()) {
+            recordingWizardWindow.restore();
+        }
+        recordingWizardWindow.show();
+        recordingWizardWindow.focus();
+        if (options && Object.keys(options).length > 0) {
+            recordingWizardWindow.webContents.send('recording-wizard-init', options);
+        }
+        return recordingWizardWindow;
+    }
+
+    const wizardWin = new BrowserWindow({
+        width: 1000,
+        height: 800,
+        parent: parentWindow,
+        modal: true,
+        show: false,
+        title: i18n.t('dialog.recording.title') || 'Erişilebilir Video Kayıt Sihirbazı',
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+
+    wizardWin.loadFile(path.join(__dirname, '../renderer/dialogs/accessible-recording.html'));
+
+    wizardWin.webContents.once('did-finish-load', () => {
+        wizardWin.webContents.send('recording-wizard-init', options);
+    });
+
+    wizardWin.once('ready-to-show', () => {
+        wizardWin.show();
+    });
+
+    wizardWin.on('minimize', () => {
+        if (parentWindow && !parentWindow.isDestroyed() && !parentWindow.isMinimized()) {
+            parentWindow.minimize();
+        }
+    });
+
+    wizardWin.on('restore', () => {
+        if (parentWindow && !parentWindow.isDestroyed()) {
+            if (parentWindow.isMinimized()) {
+                parentWindow.restore();
+            }
+            parentWindow.show();
+        }
+    });
+
+    wizardWin.once('closed', () => {
+        recordingWizardWindow = null;
+        refreshApplicationMenu();
+        if (parentWindow && !parentWindow.isDestroyed()) {
+            if (parentWindow.isMinimized()) {
+                parentWindow.restore();
+            }
+            parentWindow.show();
+            parentWindow.focus();
+        }
+    });
+
+    recordingWizardWindow = wizardWin;
+    refreshApplicationMenu();
+    return wizardWin;
+}
+
+function resumeActiveRecordingWizard(parentWindow) {
+    if (recordingWizardWindow && !recordingWizardWindow.isDestroyed()) {
+        if (parentWindow && !parentWindow.isDestroyed() && parentWindow.isMinimized()) {
+            parentWindow.restore();
+            parentWindow.show();
+        }
+        if (recordingWizardWindow.isMinimized()) {
+            recordingWizardWindow.restore();
+        }
+        recordingWizardWindow.show();
+        recordingWizardWindow.focus();
+        return { success: true, reusedWindow: true };
+    }
+
+    if (!hasActiveRecordingWizardSession()) {
+        return { success: false, error: 'no_active_session' };
+    }
+
+    const session = getRecordingWizardSession();
+    openRecordingWizard(parentWindow, {
+        launchProfile: session.launchProfile || 'broadcast',
+        restoreSession: session
+    });
+    return { success: true, reusedWindow: false };
+}
+
+/**
+ * Canli Efekt Paneli
+ */
+function openLiveEffectsPanel(parentWindow) {
+    if (liveEffectsPanelWindow && !liveEffectsPanelWindow.isDestroyed()) {
+        if (liveEffectsPanelWindow.isMinimized()) {
+            liveEffectsPanelWindow.restore();
+        }
+        liveEffectsPanelWindow.show();
+        liveEffectsPanelWindow.focus();
+        return liveEffectsPanelWindow;
+    }
+
+    liveEffectsPanelWindow = new BrowserWindow({
+        width: 980,
+        height: 760,
+        show: false,
+        title: i18n.t('live_effects_panel.window_title') || 'Canli Efekt Paneli',
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+
+    liveEffectsPanelWindow.loadFile(path.join(__dirname, '../renderer/dialogs/live-effects-panel.html'));
+
+    liveEffectsPanelWindow.once('ready-to-show', () => {
+        liveEffectsPanelWindow.show();
+        liveEffectsPanelWindow.focus();
+    });
+
+    liveEffectsPanelWindow.once('closed', () => {
+        liveEffectsPanelWindow = null;
+        if (parentWindow && !parentWindow.isDestroyed()) {
+            parentWindow.focus();
+        }
+    });
+
+    return liveEffectsPanelWindow;
+}
+
 module.exports = {
     openTextOverlayDialog,
     openSyncWizard,
     openVerticalWizard,
-    setupDialogHandlers
+    openRecordingWizard,
+    resumeActiveRecordingWizard,
+    openLiveEffectsPanel,
+    setupDialogHandlers,
+    setRecordingWizardSession,
+    getRecordingWizardSession,
+    hasActiveRecordingWizardSession
 };

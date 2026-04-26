@@ -15,6 +15,8 @@ const Dialogs = {
     aiDialog: null,
     videoPropertiesDialog: null,
     ctaLibraryDialog: null,
+    speedDialog: null,
+    speedSuccessDialog: null,
 
     // Geçici veriler
     pendingAudioPath: null,
@@ -35,11 +37,500 @@ const Dialogs = {
     silencePreviewTarget: 0, // Önizleme atlama hedefi (sessizliğin sonu)
     aiChatHistory: [], // Yapay zeka konuşma geçmişi
     currentAiApiKey: null, // Mevcut API anahtarı
+    t(key, fallback, params = {}) {
+        if (!window.i18nHelper) return fallback;
+        const value = window.i18nHelper.t(key, params);
+        return value && !value.startsWith('[') ? value : fallback;
+    },
+    getCurrentAiLocale() {
+        const supported = ['tr', 'en', 'de', 'es', 'fr'];
+        const lang = window.i18nHelper?.currentLang || 'en';
+        return supported.includes(lang) ? lang : 'en';
+    },
+    getCurrentAiLanguageName() {
+        const names = {
+            tr: 'Turkish',
+            en: 'English',
+            de: 'German',
+            es: 'Spanish',
+            fr: 'French'
+        };
+        return names[this.getCurrentAiLocale()] || 'English';
+    },
+    getAiSystemInstruction(mode = 'default') {
+        const lang = this.getCurrentAiLanguageName();
+        const key = mode === 'json'
+            ? 'runtime.dialogs.ai_system_instruction_json'
+            : 'runtime.dialogs.ai_system_instruction';
+        const fallback = mode === 'json'
+            ? 'Respond only in {lang}. If JSON output is requested, keep all JSON keys and schema exactly as requested while writing any free text values in {lang}.'
+            : 'Respond only in {lang}. Keep the same response language in follow-up answers.';
+        return this.t(key, fallback, { lang });
+    },
+    buildAiFollowupPrompt(question) {
+        const lang = this.getCurrentAiLanguageName();
+        return this.t(
+            'runtime.dialogs.ai_followup_prompt',
+            'Answer the following question only in {lang}: {question}',
+            { lang, question }
+        );
+    },
+    getHelpTopicLocalized(topic) {
+        return {
+            title: this.t(topic.titleKey, topic.title),
+            content: this.t(topic.contentKey, topic.content)
+        };
+    },
+    async loadImageFromBase64(base64, mimeTypes = ['image/jpeg', 'image/png', 'image/webp']) {
+        const normalized = String(base64 || '').trim();
+        if (!normalized) {
+            throw new Error('Preview frame is empty.');
+        }
+
+        const loadImageFromSource = (src) => new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = () => reject(new Error(`Preview image could not be loaded from source: ${src.slice(0, 32)}...`));
+            image.src = src;
+        });
+
+        let payload = normalized;
+        if (normalized.startsWith('data:')) {
+            try {
+                return await loadImageFromSource(normalized);
+            } catch (error) {
+                console.warn('[SubtitleStyleAI] Direct data URL load failed:', error);
+                payload = normalized.split(',').pop() || '';
+            }
+        }
+
+        let lastError = null;
+        for (const mimeType of mimeTypes) {
+            try {
+                return await loadImageFromSource(`data:${mimeType};base64,${payload}`);
+            } catch (error) {
+                lastError = error;
+            }
+        }
+
+        const decodeBase64 = (input) => {
+            const binary = atob(input);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        };
+
+        try {
+            const bytes = decodeBase64(payload);
+            for (const mimeType of mimeTypes) {
+                const blob = new Blob([bytes], { type: mimeType });
+                const objectUrl = URL.createObjectURL(blob);
+                try {
+                    const image = await loadImageFromSource(objectUrl);
+                    URL.revokeObjectURL(objectUrl);
+                    return image;
+                } catch (error) {
+                    lastError = error;
+                    URL.revokeObjectURL(objectUrl);
+                }
+            }
+        } catch (decodeError) {
+            lastError = decodeError;
+        }
+
+        throw lastError || new Error('Preview image could not be loaded.');
+    },
+    buildSubtitlePreviewFromCurrentVideo(previewText, styleOptions) {
+        if (!window.VideoPlayer?.videoElement || !window.VideoPlayer.videoElement.videoWidth || !window.VideoPlayer.videoElement.videoHeight) {
+            return null;
+        }
+
+        const videoEl = window.VideoPlayer.videoElement;
+        const maxWidth = 640;
+        const scale = videoEl.videoWidth > maxWidth ? (maxWidth / videoEl.videoWidth) : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(videoEl.videoWidth * scale));
+        canvas.height = Math.max(1, Math.round(videoEl.videoHeight * scale));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        this.drawSubtitlePreviewOnCanvas(ctx, canvas.width, canvas.height, previewText, styleOptions);
+        return canvas.toDataURL('image/jpeg', 0.78).split(',')[1];
+    },
+    buildCurrentVideoFramePreview() {
+        if (!window.VideoPlayer?.videoElement || !window.VideoPlayer.videoElement.videoWidth || !window.VideoPlayer.videoElement.videoHeight) {
+            return null;
+        }
+
+        const videoEl = window.VideoPlayer.videoElement;
+        const maxWidth = 640;
+        const scale = videoEl.videoWidth > maxWidth ? (maxWidth / videoEl.videoWidth) : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(videoEl.videoWidth * scale));
+        canvas.height = Math.max(1, Math.round(videoEl.videoHeight * scale));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg', 0.78).split(',')[1];
+    },
+    drawSubtitlePreviewOnCanvas(ctx, width, height, previewText, styleOptions) {
+        const baseDimension = Math.max(320, Math.min(width, height));
+        const sizeScale = Math.max(10, Math.min(140, Number(styleOptions?.sizeScale || 50))) / 100;
+        const fontSize = Math.max(10, Math.min(28, Math.round(baseDimension * 0.026 * sizeScale)));
+        const lineHeight = Math.round(fontSize * 1.25);
+        const maxTextWidth = Math.round(width * 0.82);
+        ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+
+        const words = String(previewText || '').split(/\s+/).filter(Boolean);
+        const lines = [];
+        let currentLine = '';
+        words.forEach((word) => {
+            const candidate = currentLine ? `${currentLine} ${word}` : word;
+            if (ctx.measureText(candidate).width > maxTextWidth && currentLine) {
+                lines.push(currentLine);
+                currentLine = word;
+            } else {
+                currentLine = candidate;
+            }
+        });
+        if (currentLine) lines.push(currentLine);
+        if (lines.length === 0) lines.push('-');
+
+        const backgroundMode = styleOptions?.backgroundMode || 'box';
+        const bgOpacity = Math.max(0, Math.min(100, Number(styleOptions?.backgroundOpacity ?? 5))) / 100;
+        const textColor = styleOptions?.textColor || '#ffffff';
+        const bgColor = styleOptions?.backgroundColor || '#000000';
+        const paddingX = Math.round(fontSize * 0.6);
+        const paddingY = Math.round(fontSize * 0.35);
+        const totalTextHeight = (lines.length * lineHeight) + (paddingY * 2);
+        const boxY = height - Math.max(6, Math.round(height * 0.008)) - totalTextHeight;
+
+        lines.forEach((line, index) => {
+            const textWidth = Math.ceil(ctx.measureText(line).width);
+            const boxWidth = textWidth + (paddingX * 2);
+            const boxX = Math.round((width - boxWidth) / 2);
+            const y = boxY + paddingY + fontSize + (index * lineHeight);
+            const rowY = boxY + (index * lineHeight);
+
+            if (backgroundMode === 'box') {
+                ctx.fillStyle = bgColor;
+                ctx.globalAlpha = bgOpacity;
+                ctx.fillRect(boxX, rowY, boxWidth, lineHeight + (index === lines.length - 1 ? paddingY : 0));
+                ctx.globalAlpha = 1;
+            }
+
+            ctx.lineWidth = backgroundMode === 'shadow-only'
+                ? Math.max(1, Math.round(fontSize * 0.12))
+                : Math.max(1, Math.round(fontSize * 0.08));
+            ctx.strokeStyle = '#000000';
+            ctx.fillStyle = textColor;
+            ctx.textAlign = 'center';
+            ctx.strokeText(line, width / 2, y);
+            ctx.fillText(line, width / 2, y);
+        });
+    },
+    async buildSubtitleStylePreviewImage({ videoPath, previewTime, previewText, styleOptions }) {
+        const frameBase64 = await window.api.extractFrameBase64({
+            videoPath,
+            time: previewTime || 0
+        });
+        const image = await this.loadImageFromBase64(frameBase64);
+
+        const maxWidth = 640;
+        const scale = image.width > maxWidth ? (maxWidth / image.width) : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        this.drawSubtitlePreviewOnCanvas(ctx, canvas.width, canvas.height, previewText, styleOptions);
+
+        return canvas.toDataURL('image/jpeg', 0.78).split(',')[1];
+    },
+    async buildSubtitleStyleAiReviewImages({ videoPath, previewTime, previewText, styleOptions }) {
+        const images = [];
+
+        try {
+            const rawFrameBase64 = await window.api.extractFrameBase64({
+                videoPath,
+                time: previewTime || 0
+            });
+
+            if (rawFrameBase64) {
+                images.push({
+                    mimeType: 'image/jpeg',
+                    data: rawFrameBase64
+                });
+
+                const image = await this.loadImageFromBase64(rawFrameBase64);
+                const maxWidth = 640;
+                const scale = image.width > maxWidth ? (maxWidth / image.width) : 1;
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(image.width * scale));
+                canvas.height = Math.max(1, Math.round(image.height * scale));
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                this.drawSubtitlePreviewOnCanvas(ctx, canvas.width, canvas.height, previewText, styleOptions);
+
+                images.push({
+                    mimeType: 'image/jpeg',
+                    data: canvas.toDataURL('image/jpeg', 0.78).split(',')[1]
+                });
+            }
+        } catch (error) {
+            console.warn('[SubtitleStyleAI] Frame pair could not be prepared from file:', error);
+        }
+
+        if (images.length === 0) {
+            const rawCurrentFrame = this.buildCurrentVideoFramePreview();
+            const compositedCurrentFrame = this.buildSubtitlePreviewFromCurrentVideo(previewText, styleOptions);
+
+            if (rawCurrentFrame) {
+                images.push({
+                    mimeType: 'image/jpeg',
+                    data: rawCurrentFrame
+                });
+            }
+
+            if (compositedCurrentFrame) {
+                images.push({
+                    mimeType: 'image/jpeg',
+                    data: compositedCurrentFrame
+                });
+            }
+        }
+
+        return images.length > 0 ? images : null;
+    },
+    isAiCapacityErrorMessage(message) {
+        const normalized = String(message || '').toLowerCase();
+        return normalized.includes('high demand')
+            || normalized.includes('try again later')
+            || normalized.includes('exceeded your current quota')
+            || normalized.includes('check your plan and billing')
+            || normalized.includes('rate-limits')
+            || normalized.includes('rate limit')
+            || normalized.includes('resource exhausted')
+            || normalized.includes('429')
+            || normalized.includes('503');
+    },
+    async buildSubtitleStyleAiReviewVariants({ videoPath, previewTime, previewText, styleOptions, basePrompt }) {
+        const variants = [];
+
+        const pairImages = await this.buildSubtitleStyleAiReviewImages({
+            videoPath,
+            previewTime,
+            previewText,
+            styleOptions
+        });
+
+        if (Array.isArray(pairImages) && pairImages.length >= 2) {
+            variants.push({
+                imageBase64: pairImages,
+                prompt: `${basePrompt}\n\nBu istekte iki görsel gönderildi. İlk görsel videonun ham karesi, ikinci görsel ise aynı kare üzerine seçilen altyazı stilinin yerleştirilmiş önizlemesidir. Yorumu bu iki görseli karşılaştırarak yap. Özellikle altyazının videodaki önemli detayları kapatıp kapatmadığına, arka planla kontrastına ve okunabilirliğine bak.`
+            });
+        }
+
+        let singlePreview = null;
+        try {
+            singlePreview = await this.buildSubtitleStylePreviewImage({
+                videoPath,
+                previewTime,
+                previewText,
+                styleOptions
+            });
+        } catch (error) {
+            console.warn('[SubtitleStyleAI] Single preview image could not be prepared from file:', error);
+        }
+
+        if (!singlePreview) {
+            singlePreview = this.buildSubtitlePreviewFromCurrentVideo(previewText, styleOptions);
+        }
+
+        if (singlePreview) {
+            variants.push({
+                imageBase64: singlePreview,
+                prompt: `${basePrompt}\n\nBu istekte gönderilen görsel, videonun gerçek bir karesi üzerine seçilen altyazı stilinin yerleştirilmiş önizlemesidir. Değerlendirmeyi öncelikle bu görsele göre yap.`
+            });
+        }
+
+        variants.push({
+            imageBase64: null,
+            prompt: `${basePrompt}\n\nGörsel erişimin sınırlıysa yalnızca verilen altyazı ayarlarına göre en güvenli okunabilirlik yorumunu yap ve bunu açıkça belirt.`
+        });
+
+        return variants;
+    },
+    buildAiPositioningReviewPrompt({ videoW, videoH, x, y, effectiveW, effectiveH, extraInfo }) {
+        const lang = this.getCurrentAiLanguageName();
+        if (this.getCurrentAiLocale() === 'tr') {
+            return `Sana iki görsel gönderiyorum (veya tek).
+            1. Görsel: Videonun ham karesi. (Çözünürlük: ${videoW}x${videoH})
+            2. Görsel (varsa): Videonun üzerine eklemek istediğim transparan arka planlı görsel/logo/yazı.
+
+            Ben bu ikinci görseli, birinci görselin üzerine şu koordinatlara yerleştireceğim:
+            Konum: (${x}, ${y}) piksel (Sol üst köşe 0,0).
+            Hedef Boyut: ${effectiveW} x ${effectiveH}.
+
+            ${extraInfo}
+
+            Lütfen bu iki görselin birleşmiş halini zihninde canlandır ve şu maddeleri kullanım amacına göre değerlendir:
+
+            Eğer bu bir LOGO/FİLGRAN ise:
+            - Köşelere veya boş alanlara yerleşmiş mi?
+            - Önemli bir detayı (yüz, mevcut yazı, ana obje) kapatıyor mu?
+            - Yeterince okunabilir mi?
+
+            Eğer bu bir ARKA PLAN GÖRSELİ ise (tam ekran veya büyük):
+            - En boy oranı videoya uyuyor mu? (Kenarlarda boşluk kalır mı?)
+            - Üzerine binecek diğer öğeler (varsa) ile renk uyumu nasıl?
+
+            Eğer bu SERBEST BİR GÖRSEL (resim içinde resim) ise:
+            - Videonun akışını ve kompozisyonunu bozuyor mu?
+            - Estetik olarak dengeli duruyor mu?
+
+            Sonuç olarak: Konum ve boyut sence uygun mu? Eğer değilse, piksel koordinatı veya boyut olarak ne önerirsin?
+
+            Yanıtının tamamını yalnızca Türkçe ver.
+
+            ÖNEMLİ: Eğer görsel çok büyükse, orantısızsa veya boyutlandırma gerekiyorsa, lütfen yanıtının sonuna ayrıca JSON formatında bir öneri ekle:
+            \`\`\`json
+            { "suggestion": { "width": 300, "height": -1 } }
+            \`\`\``;
+        }
+
+        return `I am sending you two images (or one image).
+        1. Image: The raw frame of the video. (Resolution: ${videoW}x${videoH})
+        2. Image (if present): A transparent-background image/logo/text that I want to place on top of the video.
+
+        I plan to place the second image over the first one at these coordinates:
+        Position: (${x}, ${y}) pixels (top-left corner is 0,0).
+        Target size: ${effectiveW} x ${effectiveH}.
+
+        ${extraInfo}
+
+        Please imagine the combined result of these visuals and evaluate it based on the intended use:
+
+        If this is a LOGO/WATERMARK:
+        - Is it placed in a corner or an empty area?
+        - Does it cover an important detail such as a face, existing text, or the main object?
+        - Is it readable enough?
+
+        If this is a BACKGROUND IMAGE (full screen or large):
+        - Does its aspect ratio fit the video? (Would there be empty borders?)
+        - How well does it match the colors of any other elements that may appear on top?
+
+        If this is a FREE-FLOATING IMAGE (picture in picture):
+        - Does it disrupt the flow or composition of the video?
+        - Does it look aesthetically balanced?
+
+        Final assessment: Is the position and size appropriate? If not, what pixel coordinates or size would you recommend?
+
+        Write your full answer only in ${lang}.
+
+        IMPORTANT: If the image is too large, disproportionate, or needs resizing, append a JSON suggestion at the end of the answer:
+        \`\`\`json
+        { "suggestion": { "width": 300, "height": -1 } }
+        \`\`\``;
+    },
+    buildAiPlacementSuggestionsPrompt({ videoW, videoH, overlayBase64 }) {
+        const lang = this.getCurrentAiLanguageName();
+        let prompt;
+        if (this.getCurrentAiLocale() === 'tr') {
+            prompt = `
+            Bu video karesini analiz etmeni istiyorum. Videonun üzerine ek bir görsel (resim içinde resim, logo veya metin kutusu) eklemek istiyorum.
+            Video Çözünürlüğü: ${videoW}x${videoH}
+            `;
+
+            if (overlayBase64) {
+                prompt += `
+                Sana ayrıca 2. görsel olarak, eklemek istediğim içeriğin (logo/resim/yazı) bir örneğini gönderdim.
+                Lütfen bu 2. görselin içeriğini, rengini ve şeklini dikkate alarak;
+                Videonun kompozisyonunu bozmayacak, estetik duracak ve önemli detayları kapatmayacak en uygun 3 alanı ve her alan için ideal boyutları öner.
+                Önerdiğin boyutlar (w, h), görselin orijinal en-boy oranını korumalıdır.
+                `;
+
+                if (this.wizardState.sourceType === 'text') {
+                    prompt += `
+                    Ayrıca bu bir YAZI katmanıdır. Ekleneceği alandaki arka plan rengine göre, okunabilirliği en yüksek olacak yazı rengini ve gerekirse arka planını seç.
+                    Mevcut renk seçenekleri:
+                    - textColor: "white", "black", "yellow", "red"
+                    - bgColor: "transparent", "black", "white" (yalnızca okunabilirlik çok kötüyse black/white seç, yoksa transparent kalsın)
+                    `;
+                }
+            } else {
+                prompt += `
+                Lütfen videodaki meşgul olmayan, boş veya dikkat dağıtmayacak en uygun 3 alanı tespit et.
+                Bu alanlar yüzleri, önemli metinleri veya ana objeleri kapatmamalı.
+                `;
+            }
+
+            prompt += `
+            JSON içindeki "label" ve "description" alanlarını yalnızca Türkçe yaz.
+            Lütfen yanıtını sadece aşağıdaki JSON formatında ver:
+            \`\`\`json
+            [
+              { "label": "Sol Üst", "x": 50, "y": 50, "w": 150, "h": 50, "textColor": "white", "bgColor": "transparent", "description": "..." },
+              { "label": "Sağ Alt", "x": 1200, "y": 900, "w": 600, "h": 150, "textColor": "white", "bgColor": "black", "description": "..." }
+            ]
+            \`\`\`
+            `;
+            return prompt;
+        }
+
+        prompt = `
+        I want you to analyze this video frame. I plan to add an extra visual element on top of the video, such as a picture-in-picture image, logo, or text box.
+        Video resolution: ${videoW}x${videoH}
+        `;
+
+        if (overlayBase64) {
+            prompt += `
+            I also sent a second image that represents the content I want to add (logo/image/text).
+            Please consider that second image's content, colors, and shape, then suggest the best 3 placement areas and ideal dimensions for each one.
+            The suggested dimensions (w, h) should preserve the original aspect ratio of the overlay.
+            `;
+
+            if (this.wizardState.sourceType === 'text') {
+                prompt += `
+                This is also a TEXT layer. Based on the background color of the target area, choose the text color and, if necessary, a background color that will maximize readability.
+                Available color options:
+                - textColor: "white", "black", "yellow", "red"
+                - bgColor: "transparent", "black", "white" (choose black/white only if readability would otherwise be very poor; otherwise keep transparent)
+                `;
+            }
+        } else {
+            prompt += `
+            Please identify the best 3 areas in the video that are unoccupied, empty, or least distracting.
+            These areas must not cover faces, important text, or the main subject.
+            `;
+        }
+
+        prompt += `
+        Write the "label" and "description" values only in ${lang}.
+        Return your answer only in the following JSON format:
+        \`\`\`json
+        [
+          { "label": "Top Left", "x": 50, "y": 50, "w": 150, "h": 50, "textColor": "white", "bgColor": "transparent", "description": "..." },
+          { "label": "Bottom Right", "x": 1200, "y": 900, "w": 600, "h": 150, "textColor": "white", "bgColor": "black", "description": "..." }
+        ]
+        \`\`\`
+        `;
+        return prompt;
+    },
+    getAiChatLabel(type) {
+        const labels = {
+            question: this.t('runtime.dialogs.ai_question_label', 'Question'),
+            answer: this.t('runtime.dialogs.ai_answer_label', 'AI')
+        };
+        return labels[type] || '';
+    },
 
     /**
      * Modülü başlat
      */
     init() {
+        this.speedDialog = document.getElementById('speed-dialog');
+        this.speedSuccessDialog = document.getElementById('speed-success-dialog');
         this.gotoDialog = document.getElementById('goto-dialog');
         this.rangeDialog = document.getElementById('range-dialog');
         this.textDialog = document.getElementById('text-dialog');
@@ -57,10 +548,12 @@ const Dialogs = {
         this.geminiApiKeyDialog = document.getElementById('gemini-api-key-dialog');
         this.accessibleConfirmDialog = document.getElementById('accessible-confirm-dialog');
         this.imageWizardDialog = document.getElementById('image-wizard-dialog');
+        this.selectionQueueDialog = document.getElementById('selection-queue-dialog');
         this.transitionLibraryDialog = document.getElementById('transition-library-dialog');
         this.transitionListDialog = document.getElementById('transition-list-dialog');
         this.subtitleTtsDialog = document.getElementById('subtitle-tts-options-dialog');
         this.subtitleActionDialog = document.getElementById('subtitle-action-dialog'); // YENİ
+        this.subtitleStyleDialog = document.getElementById('subtitle-style-dialog');
         this.videoLayerWizardDialog = document.getElementById('video-layer-wizard-dialog'); // VIDEO LAYER
         this.ctaLibraryDialog = document.getElementById('cta-library-dialog'); // CTA LIBRARY
 
@@ -68,7 +561,11 @@ const Dialogs = {
 
         // Erişilebilir onay diyaloğu için callback
         this.accessibleConfirmResolve = null;
+        this.accessibleConfirmCancelValue = false;
+        this.subtitleActionResolve = null;
         this.subtitleTtsResolve = null;
+        this.subtitleStyleResolve = null;
+        this.subtitleStylePreviewContext = null;
 
         // --- Otomatik Klavye Yönetimi ---
         const allDialogs = [
@@ -77,8 +574,10 @@ const Dialogs = {
             this.shortcutsDialog, this.aiDialog, this.videoPropertiesDialog,
             this.videoMismatchDialog, this.silenceParamsDialog, this.silenceListDialog,
             this.aiDescriptionDialog, this.geminiApiKeyDialog, this.accessibleConfirmDialog,
-            this.imageWizardDialog, this.transitionLibraryDialog, this.transitionListDialog,
-            this.subtitleTtsDialog, this.videoLayerWizardDialog, this.ctaLibraryDialog
+            this.imageWizardDialog, this.selectionQueueDialog, this.transitionLibraryDialog, this.transitionListDialog,
+            this.subtitleActionDialog, this.subtitleTtsDialog, this.subtitleStyleDialog,
+            this.videoLayerWizardDialog, this.ctaLibraryDialog,
+            this.speedDialog
         ];
         allDialogs.forEach(d => {
             if (d) {
@@ -99,6 +598,7 @@ const Dialogs = {
         this.setupAudioEditorEventListeners();
         this.setupTextOverlayEventListeners();
         this.setupImageWizardEventListeners();
+        this.setupSelectionQueueEventListeners();
         this.setupTransitionEventListeners();
         this.setupSilenceEventListeners();
         this.setupAIEventListeners();
@@ -106,6 +606,7 @@ const Dialogs = {
         this.setupAccessibleConfirmEventListeners();
         this.setupSubtitleTtsEventListeners();
         this.setupCtaLibraryEventListeners();
+        this.setupSpeedEventListeners();
     },
 
     /**
@@ -178,7 +679,25 @@ const Dialogs = {
                     App.hasChanges = true;
                 }
 
-                Accessibility.announce(`${selectedAsset.name} zaman çizelgesine eklendi. Video oynatıldığında ${startTime.toFixed(1)} saniyede görünecek.`);
+                // Insertion Queue'ya ekle
+                if (window.InsertionQueue) {
+                    InsertionQueue.addItem('overlay', {
+                        timelineOverlayId: result.id,
+                        overlayId: selectedAsset.id,
+                        overlayName: selectedAsset.name,
+                        position: position,
+                        scale: scale,
+                        opacity: opacity,
+                        duration: duration,
+                        fade: fade,
+                        description: description,
+                        sound: sound,
+                        startTime: startTime,
+                        internalAsset: selectedAsset
+                    });
+                }
+
+                Accessibility.announce(`${selectedAsset.name} zaman çizelgesine eklendi ve ekleme listesine dahil edildi. Video oynatıldığında ${startTime.toFixed(1)} saniyede görünecek.`);
             } else {
                 console.error('CtaOverlayPreview not defined');
             }
@@ -199,10 +718,19 @@ const Dialogs = {
 
         this.ctaLibraryDialog.showModal();
 
-        // İlk kategoriye odaklan
+        // İlk açılışta eğer seçili eleman yoksa veya "all" seçiliyse, onu vurgula
         setTimeout(() => {
-            const firstCat = document.querySelector('#cta-categories-list li');
-            if (firstCat) firstCat.focus();
+            const list = document.getElementById('cta-categories-list');
+            if (list) {
+                const selected = list.querySelector('li.selected') || list.querySelector('li');
+                if (selected) {
+                    // Diğerlerinin tabindex'ini -1 yap
+                    Array.from(list.querySelectorAll('li')).forEach(li => li.setAttribute('tabindex', '-1'));
+                    selected.classList.add('selected');
+                    selected.setAttribute('tabindex', '0');
+                    selected.focus();
+                }
+            }
         }, 100);
 
         Accessibility.announce('CTA Kütüphanesi açıldı. Kategori seçmek için aşağı yukarı ok tuşlarını kullanın.');
@@ -354,9 +882,191 @@ const Dialogs = {
     },
 
     /**
+     * Hız Değiştirme diyaloğunu göster
+     */
+    showSpeedDialog() {
+        if (!Selection.hasSelection()) {
+            Accessibility.alert(this.t('runtime.dialogs.speed_select_area_first', 'Please select the area whose speed you want to change first.'));
+            return;
+        }
+
+        const input = document.getElementById('speed-multiplier');
+        input.value = "1.0";
+        document.getElementById('speed-distortion-warning').classList.add('hidden');
+        document.getElementById('speed-distortion-warning').classList.add('hidden');
+        document.getElementById('speed-mute-audio').checked = false;
+
+        const bgAudioCheckbox = document.getElementById('speed-add-bg-audio');
+        const bgAudioContainer = document.getElementById('speed-bg-audio-container');
+        const bgAudioPathSpan = document.getElementById('speed-bg-audio-path');
+
+        if (bgAudioCheckbox) bgAudioCheckbox.checked = false;
+        if (bgAudioContainer) bgAudioContainer.classList.add('hidden');
+        if (bgAudioPathSpan) {
+            bgAudioPathSpan.textContent = this.t('dialog.speed.no_bg_audio', 'No file selected');
+            bgAudioPathSpan.dataset.path = '';
+        }
+
+        this.speedDialog.showModal();
+        input.focus();
+        Accessibility.announce(this.t('runtime.dialogs.speed_dialog_opened', 'Speed change dialog opened. Current playback speed is 1.0x.'));
+    },
+
+    setupSpeedEventListeners() {
+        const confirmBtn = document.getElementById('speed-confirm');
+        const cancelBtn = document.getElementById('speed-cancel');
+        const multiplierInput = document.getElementById('speed-multiplier');
+        const warning = document.getElementById('speed-distortion-warning');
+        const muteCheckbox = document.getElementById('speed-mute-audio');
+
+        if (multiplierInput) {
+            multiplierInput.addEventListener('input', () => {
+                const val = parseFloat(multiplierInput.value);
+                if (val > 2.0 && val < 50.0) {
+                    warning.classList.remove('hidden');
+                } else {
+                    warning.classList.add('hidden');
+                }
+            });
+        }
+
+        const bgAudioCheckbox = document.getElementById('speed-add-bg-audio');
+        const bgAudioContainer = document.getElementById('speed-bg-audio-container');
+        const browseBgAudioBtn = document.getElementById('speed-browse-bg-audio');
+        const bgAudioPathSpan = document.getElementById('speed-bg-audio-path');
+
+        const handleBrowse = async (e) => {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            try {
+                const result = await window.api.openFileDialog({
+                    properties: ['openFile'],
+                    filters: [
+                        { name: 'Ses Dosyaları', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'aac'] }
+                    ]
+                });
+
+                if (result && !result.canceled && result.filePaths && result.filePaths.length > 0) {
+                    const filePath = result.filePaths[0];
+                    const filename = filePath.split(/[/\\]/).pop();
+                    bgAudioPathSpan.textContent = filename;
+                    bgAudioPathSpan.dataset.path = filePath;
+                    Accessibility.announce(`${filename} seçildi. Uyqula diyerek işlemi tamamlayabilirsiniz.`);
+                } else if (e && e.type === 'change' && bgAudioCheckbox) {
+                    // Checkbox ile açılıp da iptal edildiyse, checkbox'ı geri kapat
+                    bgAudioCheckbox.checked = false;
+                    bgAudioContainer.classList.add('hidden');
+                    Accessibility.announce('Dosya seçimi iptal edildi. Fon sesi eklenmeyecek.');
+                }
+            } catch (err) {
+                console.error("Fon Sesi Seçimi Hatası:", err);
+            }
+        };
+
+        if (bgAudioCheckbox && bgAudioContainer) {
+            bgAudioCheckbox.addEventListener('change', (e) => {
+                if (bgAudioCheckbox.checked) {
+                    bgAudioContainer.classList.remove('hidden');
+                    muteCheckbox.checked = true; // Sesi kapatmak önerilir
+                    Accessibility.announce('Fon sesi ekleme aktif. Lütfen bir dosya seçin.');
+                    handleBrowse(e);
+                } else {
+                    bgAudioContainer.classList.add('hidden');
+                    Accessibility.announce('Fon sesi ekleme iptal edildi.');
+                }
+            });
+        }
+
+        if (browseBgAudioBtn) {
+            browseBgAudioBtn.addEventListener('click', handleBrowse);
+            browseBgAudioBtn.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    handleBrowse(e);
+                }
+            });
+        }
+
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', () => {
+                try {
+                    let multiplier = parseFloat(multiplierInput.value);
+                    if (isNaN(multiplier) || multiplier <= 0 || multiplier > 10.0) {
+                        multiplier = 1.0;
+                    }
+                    const mute = muteCheckbox.checked;
+
+                    let bgAudioPath = null;
+                    const bgAudioCheckbox = document.getElementById('speed-add-bg-audio');
+                    const bgAudioPathSpan = document.getElementById('speed-bg-audio-path');
+
+                    if (bgAudioCheckbox && bgAudioCheckbox.checked && bgAudioPathSpan && bgAudioPathSpan.dataset.path) {
+                        bgAudioPath = bgAudioPathSpan.dataset.path;
+                    }
+
+                    // Timeline'a bildirelim
+                    const sel = Selection.getSelection();
+                    if (sel) {
+                        Timeline.applySpeedToRange(sel.start, sel.end, multiplier, mute, bgAudioPath);
+                        App.hasChanges = true;
+
+                        try {
+                            if (typeof App !== 'undefined' && App.updateAfterEdit) {
+                                App.updateAfterEdit();
+                            }
+                        } catch (appErr) {
+                            console.error("App.updateAfterEdit Error:", appErr);
+                        }
+
+                        const newDur = Timeline.getTotalDuration();
+                        const msg = this.t('runtime.dialogs.speed_applied_success', 'Congratulations. The speed was applied successfully at {multiplier}x. The new total video duration is {duration}.', {
+                            multiplier,
+                            duration: Accessibility.formatTimeForSpeech(newDur)
+                        });
+
+                        // İşlemi bitir ve mesajı oku
+                        this.speedDialog.close();
+                        try { Selection.clear(); } catch (se) { }
+                        Accessibility.announceImmediate(msg);
+
+                        if (typeof VideoPlayer !== 'undefined' && VideoPlayer.video) {
+                            VideoPlayer.video.focus();
+                        }
+                    } else {
+                        Accessibility.alert(this.t('runtime.dialogs.speed_selection_missing', 'Warning: A valid selection could not be found.'));
+                        this.speedDialog.close();
+                    }
+                } catch (err) {
+                    console.error("Speed Dialog Confirm Error:", err);
+                    Accessibility.alert(this.t('runtime.common.error', 'Error: {error}', { error: err.message }));
+                    this.speedDialog.close();
+                }
+            });
+        }
+
+        // Enter tuşu desteğini elle ekleyelim (form'u sildiğimiz için)
+        if (this.speedDialog) {
+            this.speedDialog.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {
+                    e.preventDefault();
+                    if (confirmBtn) confirmBtn.click();
+                }
+            });
+        }
+
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                this.speedDialog.close();
+            });
+        }
+    },
+
+    /**
      * Metin ekle diyaloğunu göster
      */
     showTextDialog() {
+        window.i18nHelper?.translateDOM();
         document.getElementById('text-content-input').value = '';
         document.getElementById('text-font-size').value = '24';
         document.getElementById('text-position').value = 'bottom';
@@ -364,7 +1074,7 @@ const Dialogs = {
 
         this.textDialog.showModal();
         document.getElementById('text-content-input').focus();
-        Accessibility.announce('Metin ekle diyaloğu açıldı');
+        Accessibility.announce(this.t('runtime.dialogs.simple_text_dialog_opened', 'Insert text dialog opened.'));
     },
 
     /**
@@ -1036,7 +1746,7 @@ const Dialogs = {
             this.renderMacShortcuts();
         }
         this.shortcutsDialog.showModal();
-        Accessibility.announce('Klavye kısayolları diyaloğu açıldı');
+        Accessibility.announce(this.t('runtime.dialogs.shortcuts_opened', 'Keyboard shortcuts dialog opened'));
     },
 
     /**
@@ -1066,10 +1776,23 @@ const Dialogs = {
             let template = [];
 
             if (itemType === 'insertion') {
-                template = [
-                    { label: 'Düzenle', click: 'edit-insertion', id: parseInt(id) },
-                    { label: 'Sil', click: 'delete-insertion', id: parseInt(id) }
-                ];
+                const queueItem = InsertionQueue.getItem(parseInt(id));
+                if (queueItem && (queueItem.type === 'transition' || queueItem.type === 'overlay')) {
+                    template = [
+                        { label: 'Sil', click: 'delete-insertion', id: parseInt(id) },
+                        { label: '1 saniye ileri', click: 'move-forward-insertion', id: parseInt(id) },
+                        { label: '1 saniye geri', click: 'move-backward-insertion', id: parseInt(id) }
+                    ];
+                } else if (queueItem && queueItem.type === 'object') {
+                    template = [
+                        { label: 'Sil', click: 'delete-insertion', id: parseInt(id) }
+                    ];
+                } else {
+                    template = [
+                        { label: 'Düzenle', click: 'edit-insertion', id: parseInt(id) },
+                        { label: 'Sil', click: 'delete-insertion', id: parseInt(id) }
+                    ];
+                }
             } else if (itemType === 'silence') {
                 const idx = parseInt(item.dataset.index); // index kullan
                 template = [
@@ -1237,9 +1960,73 @@ const Dialogs = {
                 });
             }
         } else if (action === 'delete-insertion') {
+            const item = InsertionQueue.getItem(id);
+            if (item) {
+                if (item.type === 'transition' && window.Transitions && item.options.id) {
+                    window.Transitions.remove(item.options.id);
+                } else if (item.type === 'overlay' && window.CtaOverlayPreview && item.options.timelineOverlayId) {
+                    window.CtaOverlayPreview.removeOverlay(item.options.timelineOverlayId);
+                }
+            }
             InsertionQueue.removeItem(id);
             this.updateInsertionQueueList();
             Accessibility.announce('Öğe silindi');
+        } else if (action === 'move-forward-insertion') {
+            const item = InsertionQueue.getItem(id);
+            if (item) {
+                const current = (item.options.time !== undefined) ? item.options.time : (item.options.startTime || 0);
+                const newStartTime = current + 1;
+                InsertionQueue.updateItem(id, { time: newStartTime, startTime: newStartTime });
+
+                // Senkronizasyon
+                if (item.type === 'transition' && window.Transitions && item.options.id) {
+                    const trans = window.Transitions.getAppliedTransitions().find(t => t.id === item.options.id);
+                    if (trans) {
+                        trans.time = newStartTime;
+                        if (window.Transitions.sortTransitions) window.Transitions.sortTransitions();
+                        if (window.Transitions.onTransitionsListChanged) window.Transitions.onTransitionsListChanged(window.Transitions.appliedTransitions);
+                    }
+                }
+                if (item.type === 'overlay' && window.CtaOverlayPreview && item.options.timelineOverlayId) {
+                    const ov = window.CtaOverlayPreview.getTimelineOverlays().find(o => o.id === item.options.timelineOverlayId);
+                    if (ov) {
+                        const dur = ov.endTime - ov.startTime;
+                        ov.startTime = newStartTime;
+                        ov.endTime = newStartTime + dur;
+                    }
+                }
+
+                this.updateInsertionQueueList();
+                Accessibility.announce('Öğe 1 saniye ileri alındı');
+            }
+        } else if (action === 'move-backward-insertion') {
+            const item = InsertionQueue.getItem(id);
+            if (item) {
+                const current = (item.options.time !== undefined) ? item.options.time : (item.options.startTime || 0);
+                const newStartTime = current >= 1 ? current - 1 : 0;
+                InsertionQueue.updateItem(id, { time: newStartTime, startTime: newStartTime });
+
+                // Senkronizasyon
+                if (item.type === 'transition' && window.Transitions && item.options.id) {
+                    const trans = window.Transitions.getAppliedTransitions().find(t => t.id === item.options.id);
+                    if (trans) {
+                        trans.time = newStartTime;
+                        if (window.Transitions.sortTransitions) window.Transitions.sortTransitions();
+                        if (window.Transitions.onTransitionsListChanged) window.Transitions.onTransitionsListChanged(window.Transitions.appliedTransitions);
+                    }
+                }
+                if (item.type === 'overlay' && window.CtaOverlayPreview && item.options.timelineOverlayId) {
+                    const ov = window.CtaOverlayPreview.getTimelineOverlays().find(o => o.id === item.options.timelineOverlayId);
+                    if (ov) {
+                        const dur = ov.endTime - ov.startTime;
+                        ov.startTime = newStartTime;
+                        ov.endTime = newStartTime + dur;
+                    }
+                }
+
+                this.updateInsertionQueueList();
+                Accessibility.announce('Öğe 1 saniye geri alındı');
+            }
         }
 
         // Silence List
@@ -1292,7 +2079,7 @@ const Dialogs = {
      */
     showAIDialog() {
         if (!Selection.hasSelection()) {
-            Accessibility.alert('Önce bir alan seçmelisiniz');
+            Accessibility.alert(this.t('runtime.dialogs.select_area_before_ai', 'You must select an area first.'));
             return;
         }
 
@@ -1303,7 +2090,7 @@ const Dialogs = {
         document.getElementById('ai-answer').classList.add('hidden');
 
         this.aiDialog.showModal();
-        Accessibility.announce('Akıllı seçim kontrolü diyaloğu açıldı. Analiz yapılıyor.');
+        Accessibility.announce(this.t('runtime.dialogs.ai_selection_check_opened', 'Intelligent selection check dialog opened. Analysis is running.'));
 
         // AI analizini başlat
         this.startAIAnalysis();
@@ -1328,7 +2115,7 @@ const Dialogs = {
             // Öneriyi sakla
             this.aiSuggestion = suggestion;
 
-            Accessibility.announce(`AI analizi tamamlandı: ${suggestion.text}`);
+            Accessibility.announce(this.t('runtime.dialogs.mock_ai_analysis_complete', 'AI analysis completed: {text}', { text: suggestion.text }));
         }, 2000);
     },
 
@@ -1338,17 +2125,17 @@ const Dialogs = {
     generateMockAISuggestion(selection) {
         const options = [
             {
-                text: 'Seçimin başlangıcını 0.5 saniye geri almayı öneriyorum. Bu nokta daha doğal bir geçiş sağlar.',
+                text: this.t('runtime.dialogs.mock_ai_suggestion_start', 'I recommend moving the selection start back by 0.5 seconds. This creates a more natural transition.'),
                 adjustStart: -0.5,
                 adjustEnd: 0
             },
             {
-                text: 'Seçimin sonunu 1 saniye ileri almayı öneriyorum. Sahne bu noktada daha temiz bitiyor.',
+                text: this.t('runtime.dialogs.mock_ai_suggestion_end', 'I recommend moving the selection end forward by 1 second. The scene ends more cleanly there.'),
                 adjustStart: 0,
                 adjustEnd: 1
             },
             {
-                text: 'Seçim uygun görünüyor. Mevcut sınırlar temiz geçiş noktalarına denk geliyor.',
+                text: this.t('runtime.dialogs.mock_ai_suggestion_ok', 'The selection looks appropriate. The current boundaries align with clean transition points.'),
                 adjustStart: 0,
                 adjustEnd: 0
             }
@@ -1363,19 +2150,19 @@ const Dialogs = {
     async askAI(question) {
         const answerEl = document.getElementById('ai-answer');
         answerEl.classList.remove('hidden');
-        answerEl.textContent = 'Yanıt bekleniyor...';
+        answerEl.textContent = this.t('runtime.dialogs.mock_ai_answer_waiting', 'Waiting for response...');
 
         // Mock yanıt (gerçek implementasyon için Gemini API)
         setTimeout(() => {
             const answers = [
-                'Evet, bu nokta temiz bir sahne geçişi gibi görünüyor.',
-                'Bu bölümde hareket var, kesim için ideal olmayabilir.',
-                'Seçimin sonundaki kare daha uygun bir kesim noktası olabilir.'
+                this.t('runtime.dialogs.mock_ai_answer_yes', 'Yes, this point looks like a clean scene transition.'),
+                this.t('runtime.dialogs.mock_ai_answer_motion', 'There is motion in this section, so it may not be ideal for a cut.'),
+                this.t('runtime.dialogs.mock_ai_answer_better_end', 'The frame at the end of the selection may be a better cut point.')
             ];
 
             const answer = answers[Math.floor(Math.random() * answers.length)];
             answerEl.textContent = answer;
-            Accessibility.announce(`AI yanıtı: ${answer}`);
+            Accessibility.announce(this.t('runtime.dialogs.mock_ai_answer_announce', 'AI response: {answer}', { answer }));
         }, 1500);
     },
 
@@ -1392,7 +2179,7 @@ const Dialogs = {
         const newEnd = selection.end + (this.aiSuggestion.adjustEnd || 0);
 
         Selection.setSelection(newStart, newEnd);
-        Accessibility.announce('AI önerisi uygulandı');
+        Accessibility.announce(this.t('runtime.dialogs.mock_ai_suggestion_applied', 'AI suggestion applied.'));
     },
 
     /**
@@ -1487,7 +2274,7 @@ const Dialogs = {
     updateEstimatedSize() {
         const qualityPreset = document.getElementById('prop-quality-preset').value;
         const resolutionValue = document.getElementById('prop-resolution').value;
-        
+
         // Çözünürlük faktörünü hesapla
         let targetPixels;
         if (resolutionValue === 'original' && this.originalVideoProps) {
@@ -1504,9 +2291,9 @@ const Dialogs = {
         }
 
         // Orijinal video piksel sayısı
-        const originalPixels = this.originalVideoProps ? 
+        const originalPixels = this.originalVideoProps ?
             (this.originalVideoProps.width * this.originalVideoProps.height) : (1920 * 1080);
-        
+
         // Çözünürlük oranı
         const resolutionRatio = targetPixels / originalPixels;
 
@@ -1540,7 +2327,7 @@ const Dialogs = {
 
         // Orijinal dosya boyutunu referans al
         const originalSize = this.originalVideoProps?.size || 0;
-        
+
         if (originalSize > 0) {
             // Orijinal boyutu referans alarak hesapla
             const estimatedBytes = originalSize * resolutionRatio * multiplier * efficiency;
@@ -1597,8 +2384,8 @@ const Dialogs = {
 
         // Dosya kaydetme diyaloğu
         const result = await window.api.showSaveDialog({
-            title: 'Videoyu Farklı Kaydet',
-            defaultPath: 'donusturulen_video.mp4',
+            title: this.t('dialog.video_properties.save_as_title', 'Save Video As'),
+            defaultPath: this.t('dialog.video_properties.default_save_name', 'converted_video.mp4'),
             filters: [
                 { name: 'MP4 Video', extensions: ['mp4'] },
                 { name: 'WebM Video', extensions: ['webm'] },
@@ -1610,26 +2397,35 @@ const Dialogs = {
             return;
         }
 
+        let outputPath = result.filePath;
+        if (!/\.[a-z0-9]+$/i.test(outputPath)) {
+            outputPath += '.mp4';
+        }
+
         this.videoPropertiesDialog.close();
-        App.showProgress('Video dönüştürülüyor...');
+        App.showProgress(this.t('dialog.video_properties.converting_progress', 'Converting video'));
 
         try {
             const convertResult = await window.api.convertVideo({
                 inputPath: VideoPlayer.currentFilePath,
-                outputPath: result.filePath,
+                outputPath,
                 options
             });
 
             App.hideProgress();
 
             if (convertResult.success) {
-                Accessibility.announce('Video başarıyla dönüştürüldü');
+                Accessibility.announce(this.t('dialog.video_properties.convert_success', 'Video was converted successfully'));
             } else {
-                Accessibility.alert(`Dönüştürme hatası: ${convertResult.error}`);
+                Accessibility.alert(this.t('dialog.video_properties.convert_error', 'Conversion error: {error}', {
+                    error: convertResult.error
+                }));
             }
         } catch (error) {
             App.hideProgress();
-            Accessibility.alert(`Dönüştürme hatası: ${error.message}`);
+            Accessibility.alert(this.t('dialog.video_properties.convert_error', 'Conversion error: {error}', {
+                error: error.message
+            }));
         }
     },
 
@@ -1688,6 +2484,8 @@ const Dialogs = {
             return;
         }
 
+        window.i18nHelper?.translateDOM();
+
         // Alanları sıfırla
         document.getElementById('text-overlay-content').value = '';
         document.getElementById('text-overlay-font').value = 'arial';
@@ -1715,7 +2513,7 @@ const Dialogs = {
             const result = await window.api.getTtsVoices();
             if (result.success && result.voices) {
                 const voiceSelect = document.getElementById('text-overlay-tts-voice');
-                voiceSelect.innerHTML = '<option value="">Varsayılan</option>';
+                voiceSelect.innerHTML = `<option value="">${this.t('dialog.text_overlay.default', 'Default')}</option>`;
                 result.voices.forEach(voice => {
                     const option = document.createElement('option');
                     option.value = voice;
@@ -1729,7 +2527,7 @@ const Dialogs = {
 
         this.textOverlayDialog.showModal();
         document.getElementById('text-overlay-content').focus();
-        Accessibility.announce('Yazı ekle diyaloğu açıldı');
+        Accessibility.announce(this.t('runtime.dialogs.text_overlay_dialog_opened', 'Text overlay dialog opened.'));
     },
 
     /**
@@ -1753,7 +2551,7 @@ const Dialogs = {
         wholeVideoCheckbox?.addEventListener('change', () => {
             durationInput.disabled = wholeVideoCheckbox.checked;
             if (wholeVideoCheckbox.checked) {
-                Accessibility.announce('Tüm video boyunca gösterilecek');
+                Accessibility.announce(this.t('runtime.dialogs.text_overlay_whole_video_enabled', 'Text will be shown for the whole video.'));
             }
         });
 
@@ -1809,6 +2607,8 @@ const Dialogs = {
                 fontColor: document.getElementById('text-overlay-color').value,
                 background: document.getElementById('text-overlay-bg').value,
                 position: document.getElementById('text-overlay-position').value,
+                customX: parseInt(document.getElementById('posX')?.value) || 0,
+                customY: parseInt(document.getElementById('posY')?.value) || 0,
                 transition: document.getElementById('text-overlay-transition').value,
                 duration: wholeVideoCheckbox.checked ? 'whole' : parseInt(durationInput.value),
                 startTime: VideoPlayer.getCurrentTime(),
@@ -1926,8 +2726,221 @@ const Dialogs = {
         const summary = InsertionQueue.getSummary();
         const instructions = InsertionQueue.isEmpty()
             ? ''
-            : ' Ok tuşlarıyla öğeler arasında gezinin. Düzenlemek için Enter, silmek için Delete tuşuna basın.';
+            : ' Listedeki bir öğeyi düzenlemek için sağ oka basın. Listeye geri dönmek için sol oka basın.';
         Accessibility.announce(`Ekleme listesi açıldı. ${summary}.${instructions}`);
+    },
+
+    showSelectionQueueDialog() {
+        const dialog = this.selectionQueueDialog || document.getElementById('selection-queue-dialog');
+        if (!dialog) {
+            console.error('Seçim listesi diyaloğu bulunamadı');
+            return;
+        }
+
+        this.updateSelectionQueueList();
+        dialog.showModal();
+
+        setTimeout(() => {
+            const target = document.querySelector('#selection-queue-list [data-index="0"]')
+                || document.getElementById('selection-queue-close');
+            target?.focus?.();
+        }, 40);
+
+        const count = Array.isArray(window.App?.verticalClipQueue) ? window.App.verticalClipQueue.length : 0;
+        Accessibility.announce(count > 0
+            ? this.t('runtime.selection_queue.opened', 'Seçim listesi açıldı. Toplam {count} öğe var.', { count: String(count) })
+            : this.t('runtime.selection_queue.empty', 'Seçim listesi şu anda boş.'));
+    },
+
+    updateSelectionQueueList() {
+        const list = document.getElementById('selection-queue-list');
+        const emptyBox = document.getElementById('selection-queue-empty');
+        const contentBox = document.getElementById('selection-queue-content');
+        const previewBtn = document.getElementById('selection-queue-preview');
+        const removeBtn = document.getElementById('selection-queue-remove');
+        const moveUpBtn = document.getElementById('selection-queue-move-up');
+        const moveDownBtn = document.getElementById('selection-queue-move-down');
+        const mergeBtn = document.getElementById('selection-queue-merge');
+        const verticalBtn = document.getElementById('selection-queue-vertical');
+        const clearBtn = document.getElementById('selection-queue-clear');
+
+        if (!list) {
+            return;
+        }
+
+        const items = Array.isArray(window.App?.verticalClipQueue) ? window.App.verticalClipQueue : [];
+        const selectedIndex = Number.isInteger(this.selectionQueueSelectedIndex) ? this.selectionQueueSelectedIndex : -1;
+        const safeSelectedIndex = (selectedIndex >= 0 && selectedIndex < items.length) ? selectedIndex : (items.length > 0 ? 0 : -1);
+        this.selectionQueueSelectedIndex = safeSelectedIndex;
+
+        if (emptyBox) emptyBox.hidden = items.length > 0;
+        if (contentBox) contentBox.hidden = items.length === 0;
+
+        list.innerHTML = '';
+
+        items.forEach((item, index) => {
+            const li = document.createElement('li');
+            li.className = 'selection-queue-item insertion-queue-item';
+            li.setAttribute('role', 'option');
+            li.dataset.index = String(index);
+            li.tabIndex = index === safeSelectedIndex ? 0 : -1;
+            li.setAttribute('aria-selected', index === safeSelectedIndex ? 'true' : 'false');
+            li.textContent = item.label || this.t('runtime.app.selection_item_label', 'Seçim {index}', {
+                index: String(index + 1)
+            });
+            li.setAttribute('aria-label', this.t('dialog.selection_queue.item_aria', '{index}. öğe: {label}', {
+                index: String(index + 1),
+                label: li.textContent
+            }));
+            if (index === safeSelectedIndex) {
+                li.classList.add('selected');
+            }
+            list.appendChild(li);
+        });
+
+        const hasSelection = safeSelectedIndex >= 0;
+        if (previewBtn) previewBtn.disabled = !hasSelection;
+        if (removeBtn) removeBtn.disabled = !hasSelection;
+        if (moveUpBtn) moveUpBtn.disabled = !hasSelection || safeSelectedIndex <= 0;
+        if (moveDownBtn) moveDownBtn.disabled = !hasSelection || safeSelectedIndex === items.length - 1;
+        if (mergeBtn) mergeBtn.disabled = items.length === 0;
+        if (verticalBtn) verticalBtn.disabled = items.length === 0;
+        if (clearBtn) clearBtn.disabled = items.length === 0;
+    },
+
+    selectSelectionQueueIndex(index, shouldFocus = false) {
+        this.selectionQueueSelectedIndex = index;
+        this.updateSelectionQueueList();
+
+        if (!shouldFocus) {
+            return;
+        }
+
+        const list = document.getElementById('selection-queue-list');
+        const item = list?.querySelector(`[data-index="${index}"]`);
+        if (item) {
+            item.focus();
+            Accessibility.announce(item.getAttribute('aria-label') || item.textContent);
+        }
+    },
+
+    setupSelectionQueueEventListeners() {
+        const dialog = this.selectionQueueDialog;
+        const list = document.getElementById('selection-queue-list');
+        if (!dialog || !list || this.selectionQueueSetupDone) {
+            return;
+        }
+        this.selectionQueueSetupDone = true;
+
+        list.addEventListener('click', (event) => {
+            const item = event.target.closest('[data-index]');
+            if (!item) {
+                return;
+            }
+            this.selectSelectionQueueIndex(parseInt(item.dataset.index, 10), false);
+        });
+
+        list.addEventListener('dblclick', () => {
+            if (Number.isInteger(this.selectionQueueSelectedIndex) && this.selectionQueueSelectedIndex >= 0) {
+                window.App?.previewVerticalClipQueueItem?.(this.selectionQueueSelectedIndex);
+            }
+        });
+
+        list.addEventListener('keydown', (event) => {
+            const items = Array.from(list.querySelectorAll('[data-index]'));
+            if (items.length === 0) {
+                return;
+            }
+
+            const currentIndex = Number.isInteger(this.selectionQueueSelectedIndex) && this.selectionQueueSelectedIndex >= 0
+                ? this.selectionQueueSelectedIndex
+                : 0;
+
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                this.selectSelectionQueueIndex(Math.min(items.length - 1, currentIndex + 1), true);
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                this.selectSelectionQueueIndex(Math.max(0, currentIndex - 1), true);
+            } else if (event.key === 'Delete') {
+                event.preventDefault();
+                document.getElementById('selection-queue-remove')?.click();
+            } else if (event.altKey && event.key.toLowerCase() === 'p') {
+                event.preventDefault();
+                document.getElementById('selection-queue-preview')?.click();
+            } else if (event.altKey && event.key === 'ArrowUp') {
+                event.preventDefault();
+                document.getElementById('selection-queue-move-up')?.click();
+            } else if (event.altKey && event.key === 'ArrowDown') {
+                event.preventDefault();
+                document.getElementById('selection-queue-move-down')?.click();
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                document.getElementById('selection-queue-preview')?.click();
+            }
+        });
+
+        document.getElementById('selection-queue-preview')?.addEventListener('click', () => {
+            window.App?.suppressPlaybackShortcuts?.();
+            if (Number.isInteger(this.selectionQueueSelectedIndex) && this.selectionQueueSelectedIndex >= 0) {
+                window.App?.previewVerticalClipQueueItem?.(this.selectionQueueSelectedIndex);
+            }
+        });
+
+        document.getElementById('selection-queue-remove')?.addEventListener('click', () => {
+            window.App?.suppressPlaybackShortcuts?.();
+            if (!Number.isInteger(this.selectionQueueSelectedIndex) || this.selectionQueueSelectedIndex < 0) {
+                return;
+            }
+            const nextIndex = window.App?.removeVerticalClipQueueItem?.(this.selectionQueueSelectedIndex);
+            this.selectSelectionQueueIndex(nextIndex, true);
+        });
+
+        document.getElementById('selection-queue-move-up')?.addEventListener('click', () => {
+            window.App?.suppressPlaybackShortcuts?.();
+            if (!Number.isInteger(this.selectionQueueSelectedIndex) || this.selectionQueueSelectedIndex < 0) {
+                return;
+            }
+            const nextIndex = window.App?.moveVerticalClipQueueItem?.(this.selectionQueueSelectedIndex, -1);
+            this.selectSelectionQueueIndex(nextIndex, true);
+        });
+
+        document.getElementById('selection-queue-move-down')?.addEventListener('click', () => {
+            window.App?.suppressPlaybackShortcuts?.();
+            if (!Number.isInteger(this.selectionQueueSelectedIndex) || this.selectionQueueSelectedIndex < 0) {
+                return;
+            }
+            const nextIndex = window.App?.moveVerticalClipQueueItem?.(this.selectionQueueSelectedIndex, 1);
+            this.selectSelectionQueueIndex(nextIndex, true);
+        });
+
+        document.getElementById('selection-queue-merge')?.addEventListener('click', async () => {
+            window.App?.suppressPlaybackShortcuts?.();
+            dialog.close();
+            await window.App?.mergeVerticalClipQueue?.();
+        });
+
+        document.getElementById('selection-queue-vertical')?.addEventListener('click', () => {
+            window.App?.suppressPlaybackShortcuts?.();
+            dialog.close();
+            window.App?.openVerticalWizardFromQueue?.();
+        });
+
+        document.getElementById('selection-queue-clear')?.addEventListener('click', () => {
+            window.App?.suppressPlaybackShortcuts?.();
+            window.App?.clearVerticalClipQueue?.();
+            this.selectionQueueSelectedIndex = -1;
+            this.updateSelectionQueueList();
+        });
+
+        document.getElementById('selection-queue-close')?.addEventListener('click', () => {
+            window.App?.suppressPlaybackShortcuts?.();
+            dialog.close();
+        });
+
+        dialog.addEventListener('close', () => {
+            this.selectionQueueSelectedIndex = -1;
+        });
     },
 
     /**
@@ -1996,6 +3009,17 @@ const Dialogs = {
                 label = `${typeLabel}: ${sourceLabel}, `;
                 label += `konum (${item.options.x}, ${item.options.y}), `;
                 label += `süre: ${timingLabel}`;
+            } else if (item.type === 'transition') {
+                const tName = item.options.transitionName || item.options.transitionId || 'Geçiş';
+                label = `Aktif geçiş: ${tName} ${Utils.formatTime(item.options.time || 0)} konumunda`;
+            } else if (item.type === 'overlay') {
+                const oName = item.options.overlayName || item.options.overlayId || 'Overlay';
+                label = `Overlay: ${oName} ${Utils.formatTime(item.options.time || item.options.startTime || 0)} konumunda`;
+            } else if (item.type === 'object') {
+                const oSource = item.options.objectName || 'Nesne';
+                const oAction = item.options.actionType || 'İşlem';
+                const oTime = (item.options.durationMode === 'whole' || item.options.durationMode === 'full') ? 'tüm klip boyunca' : (Utils.formatTime(item.options.startTime || 0) + ' / ' + Utils.formatTime(item.options.endTime || 0));
+                label = `Nesne: ${oSource}. İşlem türü: ${oAction}. Zaman aralığı: ${oTime}`;
             }
 
             // Butonlar için kısa açıklama
@@ -2008,6 +3032,12 @@ const Dialogs = {
                 const typeLabel = item.options.imageType === 'watermark' ? 'Filigran' :
                     item.options.imageType === 'overlay' ? 'Serbest Görsel' : 'Arka Plan';
                 shortDesc = `görsel eklemesi: ${typeLabel}`;
+            } else if (item.type === 'transition') {
+                shortDesc = `geçiş eklemesi`;
+            } else if (item.type === 'overlay') {
+                shortDesc = `overlay eklemesi`;
+            } else if (item.type === 'object') {
+                shortDesc = `nesne işlemi eklemesi`;
             }
 
             li.innerHTML = `
@@ -2037,7 +3067,6 @@ const Dialogs = {
     setupInsertionQueueEventListeners() {
         const dialog = document.getElementById('insertion-queue-dialog');
         const list = document.getElementById('insertion-queue-list');
-        const closeBtn = document.getElementById('insertion-queue-close');
 
         // Önceki listener'ları temizle
         const newList = list.cloneNode(true);
@@ -2099,39 +3128,7 @@ const Dialogs = {
 
                 // Burası liste navigasyonu. Sol ok listede bir şey yapmıyor şimdilik.
             } else if (e.key === 'Tab') {
-                // Tab navigasyonu: öğe -> düzenle -> sil -> sonraki öğe
-                if (focusedElement.classList.contains('insertion-queue-item')) {
-                    // Liste öğesinden düzenle butonuna
-                    e.preventDefault();
-                    const editBtn = focusedElement.querySelector('.edit-btn');
-                    if (editBtn) {
-                        editBtn.focus();
-                        Accessibility.announce(editBtn.getAttribute('aria-label'));
-                    }
-                } else if (focusedElement.classList.contains('edit-btn')) {
-                    // Düzenle'den sil butonuna
-                    e.preventDefault();
-                    const parentItem = focusedElement.closest('.insertion-queue-item');
-                    const deleteBtn = parentItem?.querySelector('.delete-btn');
-                    if (deleteBtn) {
-                        deleteBtn.focus();
-                        Accessibility.announce(deleteBtn.getAttribute('aria-label'));
-                    }
-                } else if (focusedElement.classList.contains('delete-btn')) {
-                    // Sil'den sonraki öğeye veya dialog butonlarına
-                    // Shift+Tab değilse varsayılan davranışa izin ver
-                    if (!e.shiftKey) {
-                        // Bir sonraki liste öğesine git
-                        const parentItem = focusedElement.closest('.insertion-queue-item');
-                        const itemIndex = Array.from(items).indexOf(parentItem);
-                        if (itemIndex < items.length - 1) {
-                            e.preventDefault();
-                            items[itemIndex + 1].focus();
-                            Accessibility.announce(items[itemIndex + 1].getAttribute('aria-label'));
-                        }
-                        // Son öğedeyse Tab'ın dialog butonlarına gitmesine izin ver
-                    }
-                }
+                // Varsayılan Tab geçişine bırak. Böylece tümünü videoya uygula düğmesine geçiş yapar.
             } else if (e.key === 'Delete') {
                 // Delete ile sil
                 const parentItem = focusedElement.closest('.insertion-queue-item');
@@ -2186,24 +3183,37 @@ const Dialogs = {
         });
 
         // Tümünü Uygula
-        const newApplyBtn = document.getElementById('insertion-queue-apply-all');
-        newApplyBtn?.addEventListener('click', async () => {
-            dialog.close();
-            await App.applyAllInsertions();
-        });
+        const applyBtnElem = document.getElementById('insertion-queue-apply-all');
+        if (applyBtnElem) {
+            const newBtn = applyBtnElem.cloneNode(true);
+            applyBtnElem.parentNode.replaceChild(newBtn, applyBtnElem);
+            newBtn.addEventListener('click', async () => {
+                dialog.close();
+                await App.applyAllInsertions();
+            });
+        }
 
         // Listeyi Temizle
-        const newClearBtn = document.getElementById('insertion-queue-clear');
-        newClearBtn?.addEventListener('click', () => {
-            InsertionQueue.clear();
-            this.updateInsertionQueueList();
-            Accessibility.announce('Ekleme listesi temizlendi');
-        });
+        const clearBtnElem = document.getElementById('insertion-queue-clear');
+        if (clearBtnElem) {
+            const newBtn = clearBtnElem.cloneNode(true);
+            clearBtnElem.parentNode.replaceChild(newBtn, clearBtnElem);
+            newBtn.addEventListener('click', () => {
+                InsertionQueue.clear();
+                this.updateInsertionQueueList();
+                Accessibility.announce('Ekleme listesi temizlendi');
+            });
+        }
 
         // Kapat
-        closeBtn?.addEventListener('click', () => {
-            dialog.close();
-        });
+        const closeBtnElem = document.getElementById('insertion-queue-close');
+        if (closeBtnElem) {
+            const newBtn = closeBtnElem.cloneNode(true);
+            closeBtnElem.parentNode.replaceChild(newBtn, closeBtnElem);
+            newBtn.addEventListener('click', () => {
+                dialog.close();
+            });
+        }
     },
 
     /**
@@ -2260,7 +3270,6 @@ const Dialogs = {
 
         this.silenceListDialog?.addEventListener('close', () => {
             this.stopSilencePreview();
-            console.log('Sessizlik listesi kapatıldı, önizleme durduruldu.');
         });
     },
 
@@ -2284,7 +3293,15 @@ const Dialogs = {
         const threshold = parseInt(document.getElementById('silence-threshold').value) || -30;
 
         this.silenceParamsDialog.close();
-        App.showProgress('Sessiz alanlar analiz ediliyor...');
+        App.showProgress(this.t('runtime.dialogs.silence_analysis_in_progress', 'Silent sections are being analyzed...'));
+
+        // Progress dinleyicisi ekle
+        const progressHandler = (data) => {
+            if (data.operation === 'detect-silence') {
+                App.updateProgress(this.t('runtime.dialogs.silence_analysis_progress', 'Silence analysis'), data.percent);
+            }
+        };
+        window.api.onFfmpegProgress(progressHandler);
 
         try {
             const result = await window.api.detectSilence({
@@ -2293,17 +3310,19 @@ const Dialogs = {
                 threshold: threshold
             });
 
+            window.api.offFfmpegProgress(progressHandler);
             App.hideProgress();
 
             if (result.success) {
                 this.detectedSilences = result.data || [];
                 this.showSilenceListDialog();
             } else {
-                Accessibility.alert(`Analiz hatası: ${result.error}`);
+                Accessibility.alert(this.t('runtime.dialogs.analysis_error', 'Analysis error: {error}', { error: result.error }));
             }
         } catch (error) {
+            window.api.offFfmpegProgress(progressHandler);
             App.hideProgress();
-            Accessibility.alert(`Beklenmedik hata: ${error.message}`);
+            Accessibility.alert(this.t('runtime.dialogs.unexpected_error', 'Unexpected error: {error}', { error: error.message }));
         }
     },
 
@@ -2316,13 +3335,13 @@ const Dialogs = {
 
         const count = this.detectedSilences.length;
         if (count > 0) {
-            Accessibility.announce(`${count} adet sessiz alan bulundu. Ok tuşlarıyla gezinebilirsiniz.`);
+            Accessibility.announce(this.t('runtime.dialogs.silence_found_announce', `${count} adet sessiz alan bulundu. Ok tuşlarıyla gezinebilirsiniz.`, { count }));
             setTimeout(() => {
                 const firstItem = document.querySelector('#silence-intervals-list li');
                 if (firstItem) firstItem.focus();
             }, 100);
         } else {
-            Accessibility.announce('Hiç sessiz alan bulunamadı.');
+            Accessibility.announce(this.t('runtime.dialogs.no_silence_found', 'Hiç sessiz alan bulunamadı.'));
         }
     },
 
@@ -2352,13 +3371,13 @@ const Dialogs = {
             const durText = Utils.formatTime(s.duration);
 
             li.textContent = `${index + 1}. ${startText} - ${endText} (${durText})`;
-            li.setAttribute('aria-label', `${index + 1}. alan. Başlangıç ${startText}, bitiş ${endText}. Süre ${durText}`);
+            li.setAttribute('aria-label', this.t('runtime.dialogs.silence_item_aria', `${index + 1}. alan. Başlangıç ${startText}, bitiş ${endText}. Süre ${durText}`, { index: index + 1, start: startText, end: endText, duration: durText }));
 
             list.appendChild(li);
             totalTime += s.duration;
         });
 
-        countText.textContent = `${this.detectedSilences.length} alan bulundu.`;
+        countText.textContent = this.t('runtime.dialogs.silence_count_found', `${this.detectedSilences.length} alan bulundu.`, { count: this.detectedSilences.length });
         totalCount.textContent = this.detectedSilences.length;
         totalDuration.textContent = Utils.formatTime(totalTime);
 
@@ -2543,8 +3562,12 @@ const Dialogs = {
         }, 0);
 
         const confirmed = await window.api.showConfirm({
-            title: 'Tümünü Sil',
-            message: `${this.detectedSilences.length} sessiz alan bulundu. ${paddingMs}ms koruma payı ile yaklaşık ${Utils.formatTime(totalTime)} süre silinecek. Emin misiniz?`
+            title: this.t('dialog.silence_list.delete_all_title', 'Delete All Silent Sections'),
+            message: this.t('dialog.silence_list.delete_all_message', '{count} silent sections were found. With a protection padding of {padding} ms, approximately {duration} will be deleted. Are you sure?', {
+                count: this.detectedSilences.length,
+                padding: paddingMs,
+                duration: Utils.formatTime(totalTime)
+            })
         });
 
         if (confirmed) {
@@ -2631,7 +3654,7 @@ const Dialogs = {
         const apiKey = apiData.apiKey;
         if (!apiKey) {
             this.showGeminiApiKeyDialog();
-            Accessibility.announce('Gemini API anahtarı eksik. Lütfen önce anahtarınızı girin.');
+            Accessibility.announce(this.t('runtime.dialogs.gemini_key_missing_announce', 'Gemini API key is missing. Please enter your key first.'));
             return;
         }
         this.currentAiApiKey = apiKey;
@@ -2641,14 +3664,15 @@ const Dialogs = {
 
         // UI elementlerini hazırla
         const chatContainer = document.getElementById('ai-description-chat');
-        chatContainer.innerHTML = '<p class="status-loading">Video klibi hazırlanıyor ve analiz ediliyor...</p>';
+        chatContainer.innerHTML = `<p class="status-loading">${this.t('runtime.dialogs.ai_preparing_clip', 'Video klibi hazırlanıyor ve analiz ediliyor...')}</p>`;
         document.getElementById('ai-question-group').style.display = 'none';
         this.aiChatHistory = [];
 
-        Accessibility.announce('Video klibi hazırlanıyor ve yapay zeka tarafından analiz ediliyor. Lütfen bekleyin.');
+        Accessibility.announce(this.t('runtime.dialogs.ai_preparing_clip_announce', 'Video klibi hazırlanıyor ve yapay zeka tarafından analiz ediliyor. Lütfen bekleyin.'));
 
         try {
-            const prompt = "Lütfen gönderdiğim bu klibi görme engelli birine en anlaşılır olacak biçimde kısaca betimle. Bu betimlemeye gönderilen bölümde herhangi bir alt veya üst yazı, filgran, resim, logo veya ek bir şey varsa onu da dahil et. Ayrıca seçili bölümde herhangi bir video geçişi görürsen belirt. Bu tarz yazı görsel benzeri şeyleri kullanıcı eklemiş olabilir. O nedenle özellikle görünür olup olmadıkları, okunabilirlikleri konusunda da bilgi ver.";
+            const currentLangName = this.getCurrentAiLanguageName();
+            const prompt = window.i18nHelper.t('ai.describe_current_position', { time: startTime, lang: currentLangName }) || `Lütfen gönderdiğim bu klibi görme engelli birine en anlaşılır olacak biçimde kısaca betimle. Çıktı dili: ${currentLangName}`;
 
             // `geminiDescribeSelection` IPC handler'ı sunucu tarafında kesme, yükleme ve analiz işlemlerini yönetir
             const responseText = await window.api.geminiDescribeSelection({
@@ -2656,7 +3680,8 @@ const Dialogs = {
                 model: this.currentAiModel,
                 startTime: startTime,
                 endTime: startTime + duration,
-                prompt: prompt
+                prompt: prompt,
+                systemInstruction: this.getAiSystemInstruction()
             });
 
             // Sonucu Göster
@@ -2668,12 +3693,12 @@ const Dialogs = {
             document.getElementById('ai-question-group').style.display = 'block';
             document.getElementById('ai-question-input').focus();
 
-            Accessibility.announce('Betimleme hazır: ' + responseText);
+            Accessibility.announce(this.t('runtime.dialogs.description_ready', 'Description ready: {response}', { response: responseText }));
 
         } catch (error) {
             console.error('AI Description Error:', error);
-            chatContainer.innerHTML = `<p style="color: #ff4444;">Hata: ${error.message}</p>`;
-            Accessibility.announceError('Betimleme işlemi başarısız oldu: ' + error.message);
+            chatContainer.innerHTML = `<p style="color: #ff4444;">${this.t('runtime.common.error', 'Hata: {error}', { error: error.message })}</p>`;
+            Accessibility.announceError(this.t('runtime.dialogs.description_failed', 'Betimleme işlemi başarısız oldu: {error}', { error: error.message }));
         }
     },
 
@@ -2687,7 +3712,7 @@ const Dialogs = {
         const apiData = await window.api.getGeminiApiData();
         const apiKey = apiData.apiKey;
         if (!apiKey) {
-            Accessibility.alert('Hata: Gemini API anahtarı bulunamadı. Lütfen ayarlardan API anahtarınızı girin.');
+            Accessibility.alert(this.t('runtime.dialogs.gemini_key_missing', 'Hata: Gemini API anahtarı bulunamadı. Lütfen ayarlardan API anahtarınızı girin.'));
             return;
         }
         this.currentAiApiKey = apiKey;
@@ -2695,28 +3720,30 @@ const Dialogs = {
 
         const selection = Selection.getSelection();
         if (!selection || selection.start === selection.end) {
-            Accessibility.alert('Lütfen önce bir alan seçin.');
+            Accessibility.alert(this.t('runtime.dialogs.select_area_first', 'Lütfen önce bir alan seçin.'));
             return;
         }
 
         // Diyaloğu hazırla
         const chatContainer = document.getElementById('ai-description-chat');
-        chatContainer.innerHTML = '<p>Yapay zeka analiz ediyor, lütfen bekleyin...</p>';
+        chatContainer.innerHTML = `<p>${this.t('dialog.ai_description.waiting', 'Yapay zeka analiz ediyor, lütfen bekleyin...')}</p>`;
         document.getElementById('ai-question-group').style.display = 'none';
         this.aiChatHistory = [];
 
         this.aiDescriptionDialog.showModal();
-        Accessibility.announce('Yapay zeka seçili alanı analiz ediyor. Lütfen bekleyin.');
+        Accessibility.announce(this.t('runtime.dialogs.ai_analyzing_selection', 'Yapay zeka seçili alanı analiz ediyor. Lütfen bekleyin.'));
 
         try {
-            const prompt = "Sen bir görme engelliler için video betimleme asistanısın. Gönderilen kareleri (video kesitini) analiz et ve buradaki olayları, mekanları ve kişileri bir görme engellinin anlayabileceği şekilde, kare kare (zaman akışına göre) çok uzun olmayacak şekilde betimle. Yanıtın sonuna kullanıcıya bir sorusu olup olmadığını sor.";
+            const currentLangName = this.getCurrentAiLanguageName();
+            const prompt = window.i18nHelper.t('ai.prompt_describe_selection', { start: selection.start, end: selection.end, lang: currentLangName }) || `Sen bir görme engelliler için video betimleme asistanısın. Gönderilen kareleri (video kesitini) analiz et ve buradaki olayları, mekanları ve kişileri betimle. Çıktı dili: ${currentLangName}`;
 
             const response = await window.api.geminiDescribeSelection({
                 apiKey: apiKey,
                 model: this.currentAiModel,
                 startTime: selection.start,
                 endTime: selection.end,
-                prompt: prompt
+                prompt: prompt,
+                systemInstruction: this.getAiSystemInstruction()
             });
 
             // Yanıtı ekle
@@ -2727,11 +3754,11 @@ const Dialogs = {
             document.getElementById('ai-question-group').style.display = 'block';
             document.getElementById('ai-question-input').focus();
 
-            Accessibility.alert('Analiz tamamlandı. ' + response);
+            Accessibility.alert(this.t('runtime.dialogs.analysis_completed', 'Analiz tamamlandı. {response}', { response }));
 
         } catch (error) {
-            chatContainer.innerHTML = `<p style="color: #ff4444;">Hata: ${error.message}</p>`;
-            Accessibility.announceError('Analiz sırasında bir hata oluştu: ' + error.message);
+            chatContainer.innerHTML = `<p style="color: #ff4444;">${this.t('runtime.common.error', 'Hata: {error}', { error: error.message })}</p>`;
+            Accessibility.announceError(this.t('runtime.dialogs.analysis_failed', 'Analiz sırasında bir hata oluştu: {error}', { error: error.message }));
         }
     },
 
@@ -2755,26 +3782,32 @@ const Dialogs = {
         userMsgDiv.style.borderBottom = '1px solid #333';
         userMsgDiv.style.paddingBottom = '10px';
         userMsgDiv.style.marginBottom = '10px';
-        userMsgDiv.innerHTML = `<strong>Soru:</strong> <p>${question}</p>`;
+        userMsgDiv.innerHTML = `<strong>${this.getAiChatLabel('question')}:</strong> <p>${question}</p>`;
         chatContainer.appendChild(userMsgDiv);
 
         input.value = '';
-        Accessibility.announce('Soru gönderildi, yanıt bekleniyor.');
+        Accessibility.announce(this.t('runtime.dialogs.question_sent', 'Soru gönderildi, yanıt bekleniyor.'));
 
         // Loading göster
         const loadingDiv = document.createElement('div');
         loadingDiv.id = 'ai-loading';
-        loadingDiv.innerHTML = '<p>AI yanıtlıyor...</p>';
+        loadingDiv.innerHTML = `<p>${this.t('runtime.dialogs.ai_answering', 'AI yanıtlıyor...')}</p>`;
         chatContainer.appendChild(loadingDiv);
         // chatContainer.scrollTop = chatContainer.scrollHeight; // Tek içerik olduğu için gerek yok
 
         try {
+            const localizedPrompt = this.buildAiFollowupPrompt(question);
             const response = await window.api.geminiVisionRequest({
                 apiKey: this.currentAiApiKey,
                 model: this.currentAiModel,
-                prompt: question,
-                history: this.aiChatHistory
+                prompt: localizedPrompt,
+                history: this.aiChatHistory,
+                systemInstruction: this.getAiSystemInstruction()
             });
+
+            if (!response?.success) {
+                throw new Error(response?.error || this.t('runtime.dialogs.ai_empty_response', 'AI returned an empty response.'));
+            }
 
             // Loading'i kaldır
             loadingDiv.remove();
@@ -2783,31 +3816,24 @@ const Dialogs = {
             const aiMsgDiv = document.createElement('div');
             aiMsgDiv.className = 'ai-response';
             aiMsgDiv.style.color = '#4CAF50';
-            let responseText = response;
-            if (typeof response === 'object') {
-                try {
-                    responseText = response.text || response.content || JSON.stringify(response);
-                } catch (e) {
-                    responseText = String(response);
-                }
-            }
-            aiMsgDiv.innerHTML = `<strong>AI:</strong> ${Utils.markdownToHtml(responseText)}`;
+            const responseText = response.text || '';
+            aiMsgDiv.innerHTML = `<strong>${this.getAiChatLabel('answer')}:</strong> ${Utils.markdownToHtml(responseText)}`;
             chatContainer.appendChild(aiMsgDiv);
 
             this.aiChatHistory.push({ role: 'user', content: question });
-            this.aiChatHistory.push({ role: 'assistant', content: response });
+            this.aiChatHistory.push({ role: 'assistant', content: responseText });
 
             // Ekran okuyucuya odaklanmak için
             aiMsgDiv.setAttribute('tabindex', '-1');
             aiMsgDiv.focus();
 
-            Accessibility.alert(response);
+            Accessibility.alert(responseText);
 
         } catch (error) {
             loadingDiv.remove();
             const errorDiv = document.createElement('div');
             errorDiv.style.color = '#ff4444';
-            errorDiv.textContent = 'Hata: ' + error.message;
+            errorDiv.textContent = this.t('runtime.common.error', 'Hata: {error}', { error: error.message });
             chatContainer.appendChild(errorDiv);
         }
     },
@@ -2823,16 +3849,16 @@ const Dialogs = {
             const model = modelSelect ? modelSelect.value : 'gemini-2.5-flash';
 
             if (!apiKey) {
-                Accessibility.alert('Lütfen bir API anahtarı girin.');
+                Accessibility.alert(this.t('runtime.dialogs.enter_api_key', 'Please enter an API key.'));
                 return;
             }
 
             const result = await window.api.saveGeminiApiKey({ apiKey, model });
             if (result.success) {
-                Accessibility.announce('API anahtarı ve model tercihi başarıyla kaydedildi.');
+                Accessibility.announce(this.t('runtime.dialogs.api_key_saved', 'API key and model preference were saved successfully.'));
                 this.geminiApiKeyDialog.close();
             } else {
-                Accessibility.alert('Kaydedilirken bir hata oluştu: ' + result.error);
+                Accessibility.alert(this.t('runtime.dialogs.api_key_save_failed', 'An error occurred while saving: {error}', { error: result.error }));
             }
         });
 
@@ -2844,7 +3870,9 @@ const Dialogs = {
         document.getElementById('gemini-api-key-show')?.addEventListener('change', (e) => {
             const input = document.getElementById('gemini-api-key-input');
             input.type = e.target.checked ? 'text' : 'password';
-            Accessibility.announce(e.target.checked ? 'Anahtar gösteriliyor' : 'Anahtar gizlendi');
+            Accessibility.announce(e.target.checked
+                ? this.t('runtime.dialogs.api_key_visible', 'Key is now visible.')
+                : this.t('runtime.dialogs.api_key_hidden', 'Key is now hidden.'));
         });
     },
 
@@ -2863,10 +3891,10 @@ const Dialogs = {
 
         if (apiData.apiKey) {
             input.value = apiData.apiKey;
-            Accessibility.announce('API anahtarı girme diyaloğu açıldı. Mevcut bir anahtarınız var.');
+            Accessibility.announce(this.t('runtime.dialogs.api_key_dialog_opened_existing', 'API key dialog opened. An existing key is already available.'));
         } else {
             input.value = '';
-            Accessibility.announce('API anahtarı girme diyaloğu açıldı. Lütfen anahtarınızı yapıştırın.');
+            Accessibility.announce(this.t('runtime.dialogs.api_key_dialog_opened_empty', 'API key dialog opened. Please paste your key.'));
         }
 
         if (modelSelect && apiData.model) {
@@ -2886,30 +3914,11 @@ const Dialogs = {
      * Erişilebilir onay diyaloğu event listener'larını kur
      */
     setupAccessibleConfirmEventListeners() {
-        const yesBtn = document.getElementById('accessible-confirm-yes');
-        const noBtn = document.getElementById('accessible-confirm-no');
-
-        yesBtn?.addEventListener('click', () => {
-            if (this.accessibleConfirmResolve) {
-                this.accessibleConfirmResolve(true);
-                this.accessibleConfirmResolve = null;
-            }
-            this.accessibleConfirmDialog.close();
-        });
-
-        noBtn?.addEventListener('click', () => {
-            if (this.accessibleConfirmResolve) {
-                this.accessibleConfirmResolve(false);
-                this.accessibleConfirmResolve = null;
-            }
-            this.accessibleConfirmDialog.close();
-        });
-
         // ESC tuşu ile kapatma
         this.accessibleConfirmDialog?.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 if (this.accessibleConfirmResolve) {
-                    this.accessibleConfirmResolve(false);
+                    this.accessibleConfirmResolve(this.accessibleConfirmCancelValue);
                     this.accessibleConfirmResolve = null;
                 }
             }
@@ -2923,22 +3932,82 @@ const Dialogs = {
      * @returns {Promise<boolean>} - Kullanıcı seçimi
      */
     showAccessibleConfirm(title, message) {
+        return this.showAccessibleChoice({
+            title,
+            message,
+            buttons: [
+                this.t('dialog.confirm.yes', 'Evet'),
+                this.t('dialog.confirm.no', 'Hayır')
+            ],
+            cancelValue: false
+        }).then(result => result === 0);
+    },
+
+    /**
+     * Erişilebilir çok seçenekli onay diyaloğunu göster
+     * @param {{title: string, message: string, buttons: string[], cancelValue?: any, focusIndex?: number}} options
+     * @returns {Promise<number|any>}
+     */
+    showAccessibleChoice({ title, message, buttons = [], cancelValue = null, focusIndex = 0, details = '', detailsLabel = '' }) {
         return new Promise((resolve) => {
             this.accessibleConfirmResolve = resolve;
+            this.accessibleConfirmCancelValue = cancelValue;
+
+            const yesBtn = document.getElementById('accessible-confirm-yes');
+            const noBtn = document.getElementById('accessible-confirm-no');
+            const cancelBtn = document.getElementById('accessible-confirm-cancel');
+            const buttonEls = [yesBtn, noBtn, cancelBtn];
+            const detailsGroup = document.getElementById('accessible-confirm-details-group');
+            const detailsLabelEl = document.getElementById('accessible-confirm-details-label');
+            const detailsContainer = document.getElementById('accessible-confirm-details');
 
             // Başlık ve mesajı ayarla
             document.getElementById('accessible-confirm-title').textContent = title;
             document.getElementById('accessible-confirm-message').textContent = message;
+            if (detailsGroup && detailsLabelEl && detailsContainer) {
+                const hasDetails = String(details || '').trim().length > 0;
+                detailsGroup.hidden = !hasDetails;
+                detailsLabelEl.textContent = detailsLabel || this.t('dialog.confirm.details_label', 'Details');
+                detailsContainer.textContent = hasDetails ? String(details).trim() : '';
+            }
+
+            buttonEls.forEach((button, index) => {
+                if (!button) return;
+                if (index < buttons.length) {
+                    button.textContent = buttons[index];
+                    button.hidden = false;
+                    button.dataset.resultIndex = String(index);
+                    button.onclick = () => {
+                        window.App?.suppressPlaybackShortcuts?.();
+                        if (this.accessibleConfirmResolve) {
+                            this.accessibleConfirmResolve(index);
+                            this.accessibleConfirmResolve = null;
+                        }
+                        this.accessibleConfirmDialog.close();
+                    };
+                } else {
+                    button.hidden = true;
+                    button.dataset.resultIndex = '';
+                    button.onclick = null;
+                }
+            });
 
             // Diyaloğu aç
             this.accessibleConfirmDialog.showModal();
 
-            // Mesajı ekran okuyucu ile oku
-            Accessibility.announce(`${title}. ${message}. Evet veya Hayır seçin.`);
+            const spokenParts = [title, message];
+            if (String(details || '').trim()) {
+                spokenParts.push(String(details).trim());
+            }
+            if (buttons.length > 0) {
+                spokenParts.push(buttons.join(', '));
+            }
+            Accessibility.announceImmediate(spokenParts.filter(Boolean).join('. '));
 
             // İlk butona odaklan
             setTimeout(() => {
-                document.getElementById('accessible-confirm-yes').focus();
+                const targetButton = buttonEls[focusIndex] || buttonEls.find(button => button && !button.hidden);
+                targetButton?.focus();
             }, 100);
         });
     },
@@ -3106,19 +4175,20 @@ const Dialogs = {
         document.getElementById('img-height').value = -1;
         document.getElementById('img-opacity').value = 1;
         document.getElementById('img-opacity-val').textContent = '%100';
-        document.getElementById('selected-image-filename').textContent = 'Dosya seçilmedi';
+        document.getElementById('selected-image-filename').textContent = this.t('runtime.dialogs.no_file_selected', 'Dosya seçilmedi');
 
         // İlk adıma git
         this.updateWizardStep(1);
 
         this.imageWizardDialog.showModal();
-        Accessibility.announce('Görsel Ekleme Sihirbazı açıldı. Adım 1: Görsel Türünü Seçin.');
+        Accessibility.announce(this.t('runtime.dialogs.image_wizard_opened', 'Görsel Ekleme Sihirbazı açıldı. Adım 1: Görsel Türünü Seçin.'));
 
         // İlk seçeneğe odaklan
         document.querySelector('input[name="image-type"]:checked').focus();
     },
 
     updateWizardStep(step) {
+        window.i18nHelper?.translateDOM();
         // Hide all steps
         document.querySelectorAll('.wizard-step').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.wizard-steps .step').forEach(el => el.classList.remove('active'));
@@ -3143,13 +4213,22 @@ const Dialogs = {
         }
 
         // Accessibility announcements
-        const stepTitles = [
-            'Tür Seçimi',
-            'Kaynak Seçimi',
-            'Konum ve Ayarlar',
-            'Zamanlama'
+        const stepTitleKeys = [
+            'dialog.image_wizard.step_1_title',
+            'dialog.image_wizard.step_2_title',
+            'dialog.image_wizard.step_3_title',
+            'dialog.image_wizard.step_4_title'
         ];
-        Accessibility.announce(`Adım ${step}: ${stepTitles[step - 1]}`);
+        const stepTitleFallbacks = [
+            'Step 1: Choose Image Type',
+            'Step 2: Image Source',
+            'Step 3: Position and Size',
+            'Step 4: Timing'
+        ];
+        Accessibility.announce(this.t('runtime.video_layer.step_announce', 'Step {step}: {title}', {
+            step,
+            title: this.t(stepTitleKeys[step - 1], stepTitleFallbacks[step - 1])
+        }));
 
         // Auto-focus first interactive element in the new step to improve navigation flow
         setTimeout(() => {
@@ -3244,8 +4323,8 @@ const Dialogs = {
             suggestBtn.id = 'btn-ai-suggest-areas';
             suggestBtn.type = 'button';
             suggestBtn.className = 'action-button';
-            suggestBtn.innerText = 'Uygun Alan Öner';
-            suggestBtn.title = 'Yapay zeka ile videodaki boş alanları bul';
+            suggestBtn.innerText = this.t('runtime.dialogs.ai_suggest_areas_button', 'Suggest Suitable Areas');
+            suggestBtn.title = this.t('runtime.dialogs.ai_suggest_areas_title', 'Find empty areas in the video with AI');
             suggestBtn.style.marginRight = '10px';
             suggestBtn.style.backgroundColor = '#2E7D32'; // Darker green
             suggestBtn.style.color = 'white';
@@ -3265,7 +4344,7 @@ const Dialogs = {
                     await self.askAiForSuggestions();
                 } catch (err) {
                     console.error('AI Suggest Click Error:', err);
-                    Accessibility.alert('Hata: ' + err.message);
+                    Accessibility.alert(this.t('runtime.common.error', 'Error: {error}', { error: err.message }));
                 }
             });
         }
@@ -3277,8 +4356,8 @@ const Dialogs = {
             previewBtn.id = 'btn-preview-pos';
             previewBtn.type = 'button';
             previewBtn.className = 'action-button';
-            previewBtn.innerHTML = '<i class="fas fa-eye"></i> Önizle (Alt+P)';
-            previewBtn.title = 'Konumu görsel ve işitsel olarak önizle';
+            previewBtn.innerHTML = `<i class="fas fa-eye"></i> ${this.t('runtime.dialogs.preview_alt_p', 'Önizle (Alt+P)')}`;
+            previewBtn.title = this.t('runtime.dialogs.preview_position_title', 'Konumu görsel ve işitsel olarak önizle');
             previewBtn.style.marginLeft = '10px';
             previewBtn.style.backgroundColor = '#1976D2'; // Blue
             previewBtn.style.color = 'white';
@@ -4285,14 +5364,14 @@ const Dialogs = {
 
         const feedbackBox = document.getElementById('ai-pos-feedback');
         feedbackBox.classList.remove('hidden');
-        feedbackBox.innerHTML = '<p>Yapay zeka analiz ediyor, lütfen bekleyin...</p>';
-        Accessibility.announce('Yapay zeka görseli analiz ediyor...');
+        feedbackBox.innerHTML = `<p>${this.t('runtime.dialogs.ai_overlay_review_loading', 'AI is analyzing the visual placement, please wait...')}</p>`;
+        Accessibility.announce(this.t('runtime.dialogs.ai_overlay_review_announce', 'AI is analyzing the visual placement.'));
 
         // API Key Check
         const apiData = await window.api.getGeminiApiData();
         if (!apiData.apiKey) {
-            feedbackBox.innerHTML = '<p style="color:red">API anahtarı eksik.</p>';
-            Accessibility.alert('Önce ayarlardan Gemini API anahtarını girmelisiniz.');
+            feedbackBox.innerHTML = `<p style="color:red">${this.t('runtime.dialogs.api_key_missing_short', 'API key is missing.')}</p>`;
+            Accessibility.alert(this.t('runtime.dialogs.gemini_key_required', 'You must enter the Gemini API key in settings first.'));
             return;
         }
 
@@ -4311,7 +5390,7 @@ const Dialogs = {
 
             if (!frameResult) throw new Error('Kare verisi boş.');
 
-            Accessibility.announce('Kare işleniyor...');
+            Accessibility.announce(this.t('runtime.dialogs.ai_processing_frame', 'Processing frame...'));
 
             // --- Multi-Image AI Analysis Strategy ---
             // Kullanıcının isteği üzerine: Ham video karesi ve Filgran görselini AYRI AYRI gönderiyoruz.
@@ -4367,44 +5446,22 @@ const Dialogs = {
             const effectiveW = w === -1 ? videoW : w;
             const effectiveH = h === -1 ? "(Otomatik/Orjinal)" : h;
 
-            const prompt = `Sana iki görsel gönderiyorum (veya tek).
-            1. Görsel: Videonun ham karesi. (Çözünürlük: ${videoW}x${videoH})
-            2. Görsel (varsa): Videonun üzerine eklemek istediğim transparan arka planlı görsel/logo/yazı.
-
-            Ben bu ikinci görseli, birinci görselin üzerine şu koordinatlara yerleştireceğim:
-            Konum: (${x}, ${y}) piksel (Sol üst köşe 0,0).
-            Hedef Boyut: ${effectiveW} x ${effectiveH}.
-            
-            ${extraInfo}
-
-            Lütfen bu iki görselin birleşmiş halini zihninde canlandır ve şu maddeleri kullanım amacına göre değerlendir:
-
-            Eğer bu bir LOGO/FİLGRAN ise:
-            - Köşelere veya boş alanlara yerleşmiş mi?
-            - Önemli bir detayı (yüz, mevcut yazı, ana obje) kapatıyor mu?
-            - Yeterince okunabilir mi?
-
-            Eğer bu bir ARKA PLAN GÖRSELİ ise (tam ekran veya büyük):
-            - En boy oranı videoya uyuyor mu? (Kenarlarda boşluk kalır mı?)
-            - Üzerine binecek diğer öğeler (varsa) ile renk uyumu nasıl?
-            
-            Eğer bu SERBEST BİR GÖRSEL (resim içinde resim) ise:
-            - Videonun akışını ve kompozisyonunu bozuyor mu?
-            - Estetik olarak dengeli duruyor mu?
-
-            Sonuç olarak: Konum ve boyut sence uygun mu? Eğer değilse, piksel koordinatı veya boyut olarak ne önerirsin?
-
-            ÖNEMLİ: Eğer görsel çok büyükse, orantısızsa veya boyutlandırma gerekiyorsa, lütfen yanıtının sonuna ayrıca JSON formatında bir öneri ekle:
-            \`\`\`json
-            { "suggestion": { "width": 300, "height": -1 } }
-            \`\`\`
-            `;
+            const prompt = this.buildAiPositioningReviewPrompt({
+                videoW,
+                videoH,
+                x,
+                y,
+                effectiveW,
+                effectiveH,
+                extraInfo
+            });
 
             const response = await window.api.geminiVisionRequest({
                 apiKey: apiData.apiKey,
                 model: apiData.model || 'gemini-2.5-flash',
                 imageBase64: imagesToSend,
-                prompt: prompt
+                prompt: prompt,
+                systemInstruction: this.getAiSystemInstruction('json')
             });
 
             if (response.success) {
@@ -4413,7 +5470,7 @@ const Dialogs = {
                         <p style="margin-bottom:10px;">${response.text.replace(/\n/g, '<br>')}</p>
                     </div>
                 `;
-                Accessibility.announce('Yapay zeka yanıt verdi. Detaylar kutuda.');
+                Accessibility.announce(this.t('runtime.dialogs.ai_response_ready', 'AI responded. Details are in the box.'));
 
                 // Parse Suggestion
                 const jsonMatch = response.text.match(/```json\s*(\{.*?\})\s*```/s);
@@ -4424,7 +5481,7 @@ const Dialogs = {
                             const btnId = `btn-apply-suggest-${Date.now()}`;
                             const applyBtn = document.createElement('button');
                             applyBtn.id = btnId;
-                            applyBtn.textContent = 'Önerilen Boyutu Uygula';
+                            applyBtn.textContent = this.t('runtime.dialogs.apply_suggested_size', 'Apply Suggested Size');
                             applyBtn.className = 'btn-secondary small';
                             applyBtn.style.marginTop = '10px';
 
@@ -4441,7 +5498,7 @@ const Dialogs = {
                                 document.getElementById('img-width').dispatchEvent(new Event('input'));
                                 document.getElementById('img-height').dispatchEvent(new Event('input'));
 
-                                Accessibility.announce('Önerilen boyutlar uygulandı.');
+                                Accessibility.announce(this.t('runtime.dialogs.suggested_size_applied', 'Suggested dimensions were applied.'));
                                 applyBtn.remove();
                             };
                             feedbackBox.querySelector('div').appendChild(applyBtn);
@@ -4449,39 +5506,39 @@ const Dialogs = {
                     } catch (e) { console.error('JSON Parse Error', e); }
                 }
             } else {
-                const errMsg = response.error || 'Bilinmeyen bir hata oluştu.';
-                feedbackBox.innerHTML = `<p style="color:red">Hata: ${errMsg}</p>`;
-                Accessibility.alert('Yapay zeka yanıt veremedi: ' + errMsg);
+                const errMsg = response.error || this.t('runtime.dialogs.unknown_error', 'An unknown error occurred.');
+                feedbackBox.innerHTML = `<p style="color:red">${this.t('runtime.common.error', 'Error: {error}', { error: errMsg })}</p>`;
+                Accessibility.alert(this.t('runtime.dialogs.ai_response_failed', 'AI could not respond: {error}', { error: errMsg }));
             }
 
         } catch (error) {
             console.error('AI Position Error:', error);
-            document.getElementById('ai-pos-feedback').innerHTML = `<p style="color:red">Hata: ${error.message}</p>`;
-            Accessibility.alert('Hata oluştu: ' + error.message);
+            document.getElementById('ai-pos-feedback').innerHTML = `<p style="color:red">${this.t('runtime.common.error', 'Error: {error}', { error: error.message })}</p>`;
+            Accessibility.alert(this.t('runtime.dialogs.ai_operation_failed', 'An error occurred: {error}', { error: error.message }));
         }
     },
 
     async askAiForSuggestions() {
         if (!VideoPlayer.hasVideo()) {
-            Accessibility.alert('Önce bir video yüklemelisiniz.');
+            Accessibility.alert(this.t('runtime.dialogs.load_video_first', 'You must load a video first.'));
             return;
         }
 
         const feedbackBox = document.getElementById('ai-pos-feedback');
         feedbackBox.classList.remove('hidden');
         feedbackBox.style.display = 'block'; // Ensure visibility
-        feedbackBox.innerHTML = '<p>Yapay zeka uygun alanları tarıyor...</p>';
+        feedbackBox.innerHTML = `<p>${this.t('runtime.dialogs.ai_searching_areas', 'AI is searching for suitable areas...')}</p>`;
 
         // Delay announce slightly to ensure it's not interrupted by button click speech
         setTimeout(() => {
-            Accessibility.announce('Yapay zeka videodaki uygun boşlukları arıyor...');
+            Accessibility.announce(this.t('runtime.dialogs.ai_searching_areas_announce', 'AI is searching for suitable empty areas in the video.'));
         }, 250);
 
         // Get API Key from Main Process (Source of Truth)
         const apiData = await window.api.getGeminiApiData();
         if (!apiData || !apiData.apiKey) {
-            feedbackBox.innerHTML = '<p style="color:red">API anahtarı eksik.</p>';
-            Accessibility.alert('Önce ayarlardan Gemini API anahtarını girmelisiniz.');
+            feedbackBox.innerHTML = `<p style="color:red">${this.t('runtime.dialogs.api_key_missing_short', 'API key is missing.')}</p>`;
+            Accessibility.alert(this.t('runtime.dialogs.gemini_key_required', 'You must enter the Gemini API key in settings first.'));
             return;
         }
 
@@ -4530,43 +5587,11 @@ const Dialogs = {
             const videoW = videoEl.videoWidth;
             const videoH = videoEl.videoHeight;
 
-            let prompt = `
-            Bu video karesini analiz etmeni istiyorum. Videonun üzerine ek bir görsel (resim içinde resim, logo veya metin kutusu) eklemek istiyorum.
-            Video Çözünürlüğü: ${videoW}x${videoH}
-            `;
-
-            if (overlayBase64) {
-                prompt += `
-                Sana ayrıca 2. görsel olarak, eklemek istediğim içeriğin (logo/resim/yazı) bir örneğini gönderdim.
-                Lütfen bu 2. görselin içeriğini, rengini ve şeklini dikkate alarak;
-                Videonun kompozisyonunu bozmayacak, estetik duracak ve önemli detayları kapatmayacak en uygun 3 alanı ve her alan için İDEAL BOYUTLARI öner.
-                Önerdiğin boyutlar (w, h), görselin orjinal en-boy oranını (aspect ratio) korumalıdır.
-                `;
-
-                if (this.wizardState.sourceType === 'text') {
-                    prompt += `
-                    Ayrıca bu bir YAZI (TEXT) katmanıdır. Ekleneceği alandaki arka plan rengine göre, okunabilirliği EN YÜKSEK olacak yazı rengini ve gerekirse arka planını seç.
-                    Mevcut renk seçenekleri:
-                    - textColor: "white", "black", "yellow", "red"
-                    - bgColor: "transparent", "black", "white" (sadece okunabilirlik çok kötüyse black/white seç, yoksa transparent kalsın)
-                    `;
-                }
-            } else {
-                prompt += `
-                Lütfen videodaki "MEŞGUL OLMAYAN", "BOŞ" veya "DİKKAT DAĞITMAYACAK" en uygun 3 alanı tespit et.
-                Bu alanlar yüzleri, önemli metinleri veya ana objeleri kapatmamalı.
-                `;
-            }
-
-            prompt += `
-            Lütfen yanıtını SADECE aşağıdaki JSON formatında ver (başka açıklama yapma):
-            \`\`\`json
-            [
-              { "label": "Sol Üst", "x": 50, "y": 50, "w": 150, "h": 50, "textColor": "white", "bgColor": "transparent", "description": "..." },
-              { "label": "Sağ Alt", "x": 1200, "y": 900, "w": 600, "h": 150, "textColor": "white", "bgColor": "black", "description": "..." }
-            ]
-            \`\`\`
-            `;
+            const prompt = this.buildAiPlacementSuggestionsPrompt({
+                videoW,
+                videoH,
+                overlayBase64
+            });
 
             console.log('Sending AI Suggestion Request:', { model: apiData.model, promptLength: prompt.length, imagesCount: imagesToSend.length });
 
@@ -4574,13 +5599,14 @@ const Dialogs = {
                 apiKey: apiData.apiKey,
                 model: apiData.model || 'gemini-2.5-flash',
                 imageBase64: imagesToSend,
-                prompt: prompt
+                prompt: prompt,
+                systemInstruction: this.getAiSystemInstruction('json')
             });
 
             console.log('AI Response:', response);
 
             if (!response) {
-                throw new Error('Yapay zeka servisinden boş yanıt döndü.');
+                throw new Error(this.t('runtime.dialogs.ai_empty_response_service', 'AI service returned an empty response.'));
             }
 
             if (response.success) {
@@ -4588,7 +5614,7 @@ const Dialogs = {
                 if (jsonMatch) {
                     try {
                         const suggestions = JSON.parse(jsonMatch[1]);
-                        feedbackBox.innerHTML = '<p>Önerilen Alanlar:</p><div id="ai-suggestions-list" style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;"></div>';
+                        feedbackBox.innerHTML = `<p>${this.t('runtime.dialogs.ai_suggested_areas_title', 'Suggested Areas:')}</p><div id="ai-suggestions-list" style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;"></div>`;
                         const list = document.getElementById('ai-suggestions-list');
 
                         // Check if any suggestions have color changes to inform user generally
@@ -4598,7 +5624,7 @@ const Dialogs = {
                             note.style.fontSize = '0.9em';
                             note.style.fontStyle = 'italic';
                             note.style.color = '#FFC107'; // Amber
-                            note.textContent = 'Not: Bazı öneriler okunabilirliği artırmak için yazı/arka plan rengini değiştirebilir.';
+                            note.textContent = this.t('runtime.dialogs.ai_color_suggestion_note', 'Note: Some suggestions may change text/background colors to improve readability.');
                             feedbackBox.appendChild(note);
                         }
 
@@ -4654,7 +5680,7 @@ const Dialogs = {
 
                                     if (styleChanged) {
                                         // Regenerate the text image with new styles
-                                        Accessibility.announce('Stil güncelleniyor...');
+                                        Accessibility.announce(this.t('runtime.dialogs.ai_style_updating', 'Updating style...'));
                                         try {
                                             const newPath = await this.generateTextImageFile();
                                             if (newPath) {
@@ -4673,8 +5699,8 @@ const Dialogs = {
 
                                 // Delay to ensure screen reader announces it
                                 setTimeout(() => {
-                                    let fullMsg = `${sug.label} önerisi uygulandı.`;
-                                    if (styleChanged) fullMsg += ` Okunabilirlik için renkler güncellendi.`;
+                                    let fullMsg = this.t('runtime.dialogs.ai_suggestion_applied', '{label} suggestion applied.', { label: sug.label });
+                                    if (styleChanged) fullMsg += ` ${this.t('runtime.dialogs.ai_colors_updated', 'Colors were updated for readability.')}`;
                                     Accessibility.alert(fullMsg);
                                 }, 250);
 
@@ -4686,24 +5712,24 @@ const Dialogs = {
                             };
                             list.appendChild(btn);
                         });
-                        Accessibility.announce(`${suggestions.length} adet uygun alan bulundu. Listeden seçebilirsiniz.`);
+                        Accessibility.announce(this.t('runtime.dialogs.ai_found_suggestions', '{count} suitable areas found. You can choose from the list.', { count: suggestions.length }));
                     } catch (e) {
-                        feedbackBox.innerHTML = `<p>Öneriler ayrıştırılamadı: ${e.message}</p>`;
+                        feedbackBox.innerHTML = `<p>${this.t('runtime.dialogs.ai_suggestions_parse_failed', 'Suggestions could not be parsed: {error}', { error: e.message })}</p>`;
                     }
                 } else {
                     feedbackBox.innerHTML = `<p>${response.text}</p>`;
                 }
             } else {
-                const errMsg = response.error || 'Bilinmeyen bir hata oluştu.';
-                feedbackBox.innerHTML = `<p style="color:red">Hata: ${errMsg}</p>`;
-                Accessibility.alert('Yapay zeka servisi hata verdi: ' + errMsg);
+                const errMsg = response.error || this.t('runtime.dialogs.unknown_error', 'An unknown error occurred.');
+                feedbackBox.innerHTML = `<p style="color:red">${this.t('runtime.common.error', 'Error: {error}', { error: errMsg })}</p>`;
+                Accessibility.alert(this.t('runtime.dialogs.ai_service_failed', 'AI service returned an error: {error}', { error: errMsg }));
             }
 
         } catch (err) {
             console.error('AI Critical Error:', err);
             const msg = err.message || err.toString() || 'Tanımsız hata';
-            document.getElementById('ai-pos-feedback').innerHTML = `<p style="color:red; word-break:break-all">Kritik Hata: ${msg}</p>`;
-            Accessibility.alert('İşlem sırasında bir hata oluştu: ' + msg);
+            document.getElementById('ai-pos-feedback').innerHTML = `<p style="color:red; word-break:break-all">${this.t('runtime.dialogs.critical_error', 'Critical error: {error}', { error: msg })}</p>`;
+            Accessibility.alert(this.t('runtime.dialogs.ai_operation_failed', 'An error occurred: {error}', { error: msg }));
         }
     },
 
@@ -4875,7 +5901,7 @@ const Dialogs = {
             document.getElementById('transition-search').focus();
         }, 100);
 
-        Accessibility.announce('Geçiş Kütüphanesi açıldı. Bir geçiş türü seçin.');
+        Accessibility.announce(this.t('runtime.transition.library_opened', 'Transition Library opened. Select a transition type.'));
     },
 
     /**
@@ -4929,18 +5955,18 @@ const Dialogs = {
                 li.setAttribute('aria-selected', this.selectedTransitionId === t.id ? 'true' : 'false');
 
                 const extendsBadge = t.extendsDuration
-                    ? '<span class="badge warning">Süre uzatır</span>'
+                    ? `<span class="badge warning">${this.t('runtime.transition.extends_duration_badge', 'Extends duration')}</span>`
                     : '';
 
                 li.innerHTML = `
                     <span class="transition-name">${t.name}</span>
                     <span class="transition-desc">${t.description}</span>
-                    <span class="transition-meta">Varsayılan: ${t.defaultDuration}sn ${extendsBadge}</span>
+                    <span class="transition-meta">${this.t('runtime.transition.default_duration', 'Default: {duration}s', { duration: t.defaultDuration })} ${extendsBadge}</span>
                 `;
 
                 li.setAttribute('aria-label',
-                    `${t.name}. ${t.description}. Varsayılan süre ${t.defaultDuration} saniye.` +
-                    (t.extendsDuration ? ' Video süresini uzatır.' : '')
+                    `${t.name}. ${t.description}. ${this.t('runtime.transition.default_duration_aria', 'Default duration {duration} seconds.', { duration: t.defaultDuration })}` +
+                    (t.extendsDuration ? ` ${this.t('runtime.transition.extends_duration_aria', 'Extends the video duration.')}` : '')
                 );
 
                 if (this.selectedTransitionId === t.id) {
@@ -4953,7 +5979,7 @@ const Dialogs = {
 
         if (filtered.length === 0) {
             const emptyLi = document.createElement('li');
-            emptyLi.textContent = 'Sonuç bulunamadı';
+            emptyLi.textContent = this.t('runtime.transition.no_results', 'No results found');
             emptyLi.setAttribute('role', 'presentation');
             list.appendChild(emptyLi);
         }
@@ -4971,11 +5997,18 @@ const Dialogs = {
             const duration = document.getElementById('transition-duration')?.value || trans.defaultDuration;
             const useSfx = document.getElementById('transition-use-sfx')?.checked;
 
-            infoEl.textContent = `Seçili geçiş: ${trans.name}. Süre: ${duration} saniye.` +
-                (useSfx ? ' Ses açık.' : ' Ses kapalı.') +
-                (trans.extendsDuration ? ' Video süresini uzatır.' : '');
+            infoEl.textContent = this.t('runtime.transition.selected_info', 'Selected transition: {name}. Duration: {duration} seconds. {audio} {extends}', {
+                name: trans.name,
+                duration,
+                audio: useSfx
+                    ? this.t('runtime.transition.audio_on', 'Audio on.')
+                    : this.t('runtime.transition.audio_off', 'Audio off.'),
+                extends: trans.extendsDuration
+                    ? this.t('runtime.transition.extends_duration_sentence', 'Extends the video duration.')
+                    : ''
+            }).trim();
         } else {
-            infoEl.textContent = 'Geçiş seçilmedi';
+            infoEl.textContent = this.t('runtime.transition.none_selected', 'No transition selected');
         }
     },
 
@@ -4984,13 +6017,13 @@ const Dialogs = {
      */
     async previewSelectedTransition() {
         if (!this.selectedTransitionId) {
-            Accessibility.announce('Önce bir geçiş seçin');
+            Accessibility.announce(this.t('runtime.transition.select_first', 'Select a transition first'));
             return;
         }
 
         const trans = Transitions.getTransitionType(this.selectedTransitionId);
         if (!trans) {
-            Accessibility.announce('Geçiş bulunamadı');
+            Accessibility.announce(this.t('runtime.transition.not_found', 'Transition not found'));
             return;
         }
 
@@ -4998,8 +6031,14 @@ const Dialogs = {
         const useSfx = document.getElementById('transition-use-sfx')?.checked;
 
         // Erişilebilirlik duyurusu
-        const sfxLabel = useSfx ? 'Ses efekti ile' : 'Ses kapalı';
-        Accessibility.announce(`Önizleme: ${trans.name}. Süre ${duration} saniye. ${sfxLabel}.`);
+        const sfxLabel = useSfx
+            ? this.t('runtime.transition.with_sound_effect', 'With sound effect')
+            : this.t('runtime.transition.audio_off_short', 'Audio off');
+        Accessibility.announce(this.t('runtime.transition.preview_announce', 'Preview: {name}. Duration {duration} seconds. {sfx}.', {
+            name: trans.name,
+            duration,
+            sfx: sfxLabel
+        }));
 
         // Ses efekti çal
         // Ses efekti çal
@@ -5047,7 +6086,7 @@ const Dialogs = {
         this.transitionListDialog.showModal();
 
         const count = Transitions.getCount();
-        Accessibility.announce(`Uygulanmış Geçişler. ${count} geçiş var.`);
+        Accessibility.announce(this.t('runtime.transition.applied_list_opened', 'Applied Transitions. {count} transitions found.', { count }));
     },
 
     /**
@@ -5074,10 +6113,12 @@ const Dialogs = {
             li.setAttribute('tabindex', index === 0 ? '0' : '-1');
             li.setAttribute('aria-selected', 'false');
 
-            const label = `${Utils.formatTime(t.time)} - ${t.transitionName} (${t.duration}sn)`;
+            const localizedTransition = Transitions.getTransitionType(t.transitionId);
+            const transitionName = localizedTransition?.name || t.transitionName;
+            const label = `${Utils.formatTime(t.time)} - ${transitionName} (${t.duration}s)`;
             li.innerHTML = `<span class="transition-time">${Utils.formatTime(t.time)}</span>
-                            <span class="transition-type">${t.transitionName}</span>
-                            <span class="transition-duration">${t.duration}sn</span>`;
+                            <span class="transition-type">${transitionName}</span>
+                            <span class="transition-duration">${t.duration}s</span>`;
 
             li.setAttribute('aria-label', label);
             list.appendChild(li);
@@ -5131,7 +6172,9 @@ const Dialogs = {
                     }
 
                     this.updateTransitionActiveInfo();
-                    Accessibility.announce(`${trans?.name || 'Geçiş'} seçildi`);
+                    Accessibility.announce(this.t('runtime.transition.selected', '{name} selected', {
+                        name: trans?.name || this.t('runtime.transition.generic_name', 'Transition')
+                    }));
                 }
             });
 
@@ -5168,20 +6211,20 @@ const Dialogs = {
             // Özel Ses Efekti Seç butonu
             document.getElementById('btn-select-transition-sfx')?.addEventListener('click', async () => {
                 const result = await window.api.openFileDialog({
-                    title: 'Özel Ses Efekti Seç',
-                    filters: [{ name: 'Ses Dosyaları', extensions: ['wav', 'mp3', 'ogg'] }],
+                    title: this.t('runtime.transition.select_custom_sfx_title', 'Select Custom Sound Effect'),
+                    filters: [{ name: this.t('runtime.transition.audio_files', 'Audio Files'), extensions: ['wav', 'mp3', 'ogg'] }],
                     properties: ['openFile']
                 });
 
                 if (result && !result.canceled && result.filePaths.length > 0) {
                     const filePath = result.filePaths[0];
                     document.getElementById('transition-custom-sfx').value = filePath;
-                    Accessibility.announce(`Ses dosyası seçildi: ${filePath.split(/[\\/]/).pop()}`);
+                    Accessibility.announce(this.t('runtime.transition.audio_file_selected', 'Audio file selected: {file}', { file: filePath.split(/[\\/]/).pop() }));
 
                     // Süre kontrolü uyarısı
                     const duration = parseFloat(document.getElementById('transition-duration').value) || 0.5;
                     // Not: Ses süresi kontrolü için backend metadata gerekebilir ama şimdilik sadece uyarı verelim
-                    Accessibility.announce("Not: Eğer ses dosyası geçiş süresinden uzunsa otomatik olarak kesilecektir.");
+                    Accessibility.announce(this.t('runtime.transition.audio_trim_note', 'Note: If the audio file is longer than the transition duration, it will be trimmed automatically.'));
                 }
             });
 
@@ -5313,7 +6356,7 @@ const Dialogs = {
                         Accessibility.announce(`${Utils.formatTime(transition.time)} konumuna gidildi`);
                     }
                 } else {
-                    Accessibility.announce('Önce bir geçiş seçin');
+                    Accessibility.announce(this.t('runtime.transition.select_first', 'Select a transition first'));
                 }
             });
 
@@ -5325,7 +6368,7 @@ const Dialogs = {
                     Transitions.remove(id);
                     this.updateAppliedTransitionList();
                 } else {
-                    Accessibility.announce('Önce bir geçiş seçin');
+                    Accessibility.announce(this.t('runtime.transition.select_first', 'Select a transition first'));
                 }
             });
 
@@ -5333,13 +6376,13 @@ const Dialogs = {
             document.getElementById('btn-transition-clear-all')?.addEventListener('click', async () => {
                 const count = Transitions.getCount();
                 if (count === 0) {
-                    Accessibility.announce('Silinecek geçiş yok');
+                    Accessibility.announce(this.t('runtime.transition.nothing_to_delete', 'There is no transition to delete'));
                     return;
                 }
 
                 const confirmed = await this.showAccessibleConfirm(
-                    `${count} geçiş silinecek. Emin misiniz?`,
-                    'Tüm Geçişleri Sil'
+                    this.t('runtime.transition.clear_all_confirm', '{count} transitions will be deleted. Are you sure?', { count }),
+                    this.t('runtime.transition.clear_all_title', 'Delete All Transitions')
                 );
 
                 if (confirmed) {
@@ -5366,10 +6409,40 @@ const Dialogs = {
         const actionDialog = this.subtitleActionDialog;
         const actionConfirm = document.getElementById('sub-action-confirm');
         const actionCancel = document.getElementById('sub-action-cancel');
+        const styleDialog = this.subtitleStyleDialog;
+        const styleTextColor = document.getElementById('subtitle-style-text-color-select');
+        const backgroundModeSelect = document.getElementById('subtitle-style-background-mode');
+        const styleBgColor = document.getElementById('subtitle-style-bg-color-select');
+        const styleBgOpacity = document.getElementById('subtitle-style-bg-opacity');
+        const styleBgOpacityVal = document.getElementById('subtitle-style-bg-opacity-val');
+        const styleBgColorGroup = document.getElementById('subtitle-style-bg-color-group');
+        const styleBgOpacityGroup = document.getElementById('subtitle-style-bg-opacity-group');
+        const styleSizeScale = document.getElementById('subtitle-style-size-scale');
+        const styleSizeScaleVal = document.getElementById('subtitle-style-size-scale-val');
+        const styleAiReviewBtn = document.getElementById('subtitle-style-ai-review');
+        const styleAiFeedback = document.getElementById('subtitle-style-ai-feedback');
+        const styleConfirm = document.getElementById('subtitle-style-confirm');
+        const styleCancel = document.getElementById('subtitle-style-cancel');
+
+        const syncBackgroundModeUi = () => {
+            const useBox = (backgroundModeSelect?.value || 'box') === 'box';
+            if (styleBgColor) styleBgColor.disabled = !useBox;
+            if (styleBgOpacity) styleBgOpacity.disabled = !useBox;
+            if (styleBgColorGroup) styleBgColorGroup.style.opacity = useBox ? '1' : '0.55';
+            if (styleBgOpacityGroup) styleBgOpacityGroup.style.opacity = useBox ? '1' : '0.55';
+        };
+
+        const getSubtitleStyleOptions = () => ({
+            textColor: styleTextColor?.value || '#ffffff',
+            backgroundMode: backgroundModeSelect?.value || 'box',
+            backgroundColor: styleBgColor?.value || '#000000',
+            backgroundOpacity: Number(styleBgOpacity?.value || 5),
+            sizeScale: Number(styleSizeScale?.value || 50)
+        });
 
         if (actionDialog && !this.actionDialogSetupDone) {
             actionConfirm?.addEventListener('click', () => {
-                const selected = document.querySelector('input[name="sub-action"]:checked').value;
+                const selected = actionDialog.querySelector('input[name="sub-action"]:checked')?.value || 'tts-only';
                 if (this.subtitleActionResolve) {
                     this.subtitleActionResolve(selected);
                     this.subtitleActionResolve = null;
@@ -5392,6 +6465,143 @@ const Dialogs = {
                 }
             });
             this.actionDialogSetupDone = true;
+        }
+
+        if (styleDialog && !this.subtitleStyleDialogSetupDone) {
+            backgroundModeSelect?.addEventListener('change', syncBackgroundModeUi);
+            styleBgOpacity?.addEventListener('input', () => {
+                if (styleBgOpacityVal) styleBgOpacityVal.textContent = `%${styleBgOpacity.value}`;
+            });
+            styleSizeScale?.addEventListener('input', () => {
+                if (styleSizeScaleVal) styleSizeScaleVal.textContent = `%${styleSizeScale.value}`;
+            });
+            styleAiReviewBtn?.addEventListener('click', async () => {
+                Accessibility.announce(this.t('dialog.subtitle_style.ai_review_loading', 'Yapay zeka altyazı ayarlarını inceliyor...'));
+                if (styleAiReviewBtn) {
+                    styleAiReviewBtn.disabled = true;
+                }
+                if (styleAiFeedback) {
+                    styleAiFeedback.value = this.t('dialog.subtitle_style.ai_review_loading', 'Yapay zeka altyazı ayarlarını inceliyor...');
+                }
+                try {
+                    const apiData = await window.api.getGeminiApiData();
+                    if (!apiData?.apiKey) {
+                        if (styleAiFeedback) {
+                            styleAiFeedback.value = this.t('dialog.subtitle_style.ai_review_missing_key', 'Gemini API anahtarı ayarlı değil.');
+                            styleAiFeedback.focus();
+                        }
+                        Accessibility.alert(this.t('dialog.subtitle_style.ai_review_missing_key', 'Gemini API anahtarı ayarlı değil.'));
+                        return;
+                    }
+                    const currentStyleOptions = getSubtitleStyleOptions();
+                    let prompt = this.t(
+                        'dialog.subtitle_style.ai_review_prompt',
+                        'Sen erişilebilir video altyazıları konusunda uzman bir yardımcı asistansın. Şu altyazı ayarlarını kısaca değerlendir: yazı rengi {textColor}, arka plan rengi {backgroundColor}, arka plan opaklığı yüzde {backgroundOpacity}, yazı boyutu yüzde {sizeScale}. En fazla 3 kısa cümleyle okunabilirlik yorumu ver ve gerekirse küçük bir öneri söyle.',
+                        {
+                            textColor: currentStyleOptions.textColor,
+                            backgroundColor: currentStyleOptions.backgroundColor,
+                            backgroundOpacity: currentStyleOptions.backgroundOpacity,
+                            sizeScale: currentStyleOptions.sizeScale
+                        }
+                    );
+                    let imageBase64 = null;
+                    let requestVariants = [{
+                        imageBase64: null,
+                        prompt
+                    }];
+                    if (this.subtitleStylePreviewContext?.videoPath && this.subtitleStylePreviewContext?.previewText) {
+                        try {
+                            requestVariants = await this.buildSubtitleStyleAiReviewVariants({
+                                videoPath: this.subtitleStylePreviewContext.videoPath,
+                                previewTime: this.subtitleStylePreviewContext.previewTime || 0,
+                                previewText: this.subtitleStylePreviewContext.previewText,
+                                styleOptions: currentStyleOptions,
+                                basePrompt: prompt
+                            });
+                        } catch (previewError) {
+                            console.warn('[SubtitleStyleAI] Preview image could not be prepared:', previewError);
+                            requestVariants = [{
+                                imageBase64: null,
+                                prompt: `${prompt}\n\nGörsel önizleme hazırlanamadı. Yalnızca verilen altyazı ayarlarına göre kısa ve güvenli bir okunabilirlik değerlendirmesi yap.`
+                            }];
+                            if (styleAiFeedback) {
+                                styleAiFeedback.value = this.t(
+                                    'dialog.subtitle_style.ai_review_preview_failed',
+                                    'Görsel önizleme hazırlanamadı, değerlendirme yalnızca seçilen ayarlara göre yapılacak.'
+                                );
+                            }
+                        }
+                    }
+                    let response = null;
+                    let lastAiError = null;
+                    for (let i = 0; i < requestVariants.length; i++) {
+                        const variant = requestVariants[i];
+                        imageBase64 = variant.imageBase64;
+                        response = await window.api.geminiVisionRequest({
+                            apiKey: apiData.apiKey,
+                            model: apiData.model,
+                            imageBase64,
+                            prompt: variant.prompt
+                        });
+
+                        if (response?.success) {
+                            break;
+                        }
+
+                        lastAiError = response?.error || this.t('runtime.app.unknown_error', 'Bilinmeyen hata');
+                        const canFallback = i < requestVariants.length - 1 && this.isAiCapacityErrorMessage(lastAiError);
+                        if (!canFallback) {
+                            break;
+                        }
+                    }
+                    if (styleAiFeedback) {
+                        styleAiFeedback.value = response?.success
+                            ? (response.text || this.t('dialog.subtitle_style.ai_review_empty', 'Yapay zekadan yorum alınamadı.'))
+                            : this.t('dialog.subtitle_style.ai_review_failed', 'Yapay zeka yorumu alınamadı: {error}', {
+                                error: lastAiError || response?.error || this.t('runtime.app.unknown_error', 'Bilinmeyen hata')
+                            });
+                        styleAiFeedback.focus();
+                    }
+                    Accessibility.announce(
+                        response?.success
+                            ? this.t('dialog.subtitle_style.ai_review_ready', 'Yapay zeka yorumu hazır.')
+                            : this.t('dialog.subtitle_style.ai_review_failed_short', 'Yapay zeka yorumu alınamadı.')
+                    );
+                } catch (error) {
+                    if (styleAiFeedback) {
+                        styleAiFeedback.value = this.t('dialog.subtitle_style.ai_review_failed', 'Yapay zeka yorumu alınamadı: {error}', {
+                            error: error.message || String(error)
+                        });
+                        styleAiFeedback.focus();
+                    }
+                    Accessibility.alert(this.t('dialog.subtitle_style.ai_review_failed_short', 'Yapay zeka yorumu alınamadı.'));
+                } finally {
+                    if (styleAiReviewBtn) {
+                        styleAiReviewBtn.disabled = false;
+                    }
+                }
+            });
+            styleConfirm?.addEventListener('click', () => {
+                if (this.subtitleStyleResolve) {
+                    this.subtitleStyleResolve(getSubtitleStyleOptions());
+                    this.subtitleStyleResolve = null;
+                }
+                styleDialog.close();
+            });
+            styleCancel?.addEventListener('click', () => {
+                if (this.subtitleStyleResolve) {
+                    this.subtitleStyleResolve('cancel');
+                    this.subtitleStyleResolve = null;
+                }
+                styleDialog.close();
+            });
+            styleDialog.addEventListener('close', () => {
+                if (this.subtitleStyleResolve) {
+                    this.subtitleStyleResolve('cancel');
+                    this.subtitleStyleResolve = null;
+                }
+            });
+            this.subtitleStyleDialogSetupDone = true;
         }
 
         // --- TTS Options Dialog Listeners ---
@@ -5429,7 +6639,7 @@ const Dialogs = {
             const speed = parseFloat(speedInput.value) / 100;
             const volume = parseInt(volumeInput.value);
 
-            Accessibility.announce('Önizleme hazırlanıyor...');
+            Accessibility.announce(this.t('runtime.subtitle.preview_preparing', 'Preparing preview...'));
             previewBtn.disabled = true;
 
             try {
@@ -5450,14 +6660,16 @@ const Dialogs = {
                         const path = result.wavPath || result.audioPath;
                         const audio = new Audio(path);
                         await audio.play();
-                        Accessibility.announce('Önizleme çalınıyor');
+                        Accessibility.announce(this.t('runtime.subtitle.preview_playing', 'Preview is playing'));
                     }
                 } else {
-                    Accessibility.announceError('Önizleme oluşturulamadı: ' + (result.error || 'Bilinmeyen hata'));
+                    Accessibility.announceError(this.t('runtime.subtitle.preview_failed', 'Preview could not be created: {error}', {
+                        error: result.error || this.t('runtime.subtitle.unknown_error', 'Unknown error')
+                    }));
                 }
             } catch (e) {
                 console.error(e);
-                Accessibility.announceError('Hata: ' + e.message);
+                Accessibility.announceError(this.t('runtime.common.error', 'Error: {error}', { error: e.message }));
             } finally {
                 previewBtn.disabled = false;
             }
@@ -5466,11 +6678,16 @@ const Dialogs = {
         // Onay
         confirmBtn?.addEventListener('click', () => {
             if (this.subtitleTtsResolve) {
+                const voiceVal = voiceSelect ? voiceSelect.value : '';
+                const speedVal = speedInput ? parseFloat(speedInput.value) / 100 : 1.0;
+                const volumeVal = volumeInput ? parseInt(volumeInput.value) : 100;
+                const origVolVal = originalVolumeInput ? (parseInt(originalVolumeInput.value) / 100) : 0.2; // Varsayılan 0.2
+
                 this.subtitleTtsResolve({
-                    voice: voiceSelect.value,
-                    speed: parseFloat(speedInput.value) / 100,
-                    volume: parseInt(volumeInput.value),
-                    originalVolume: parseInt(originalVolumeInput.value) / 100, // YENİ: 0.0 - 1.0 arası
+                    voice: voiceVal,
+                    speed: speedVal,
+                    volume: volumeVal,
+                    originalVolume: origVolVal,
                     confirmed: true
                 });
                 this.subtitleTtsResolve = null;
@@ -5501,13 +6718,14 @@ const Dialogs = {
      */
     async showSubtitleTtsOptionsDialog(previewText) {
         document.getElementById('subtitle-preview-text').textContent = previewText;
+        window.i18nHelper?.translateDOM?.(this.subtitleTtsDialog);
 
         // Sesleri yükle
         const voiceSelect = document.getElementById('subtitle-tts-voice');
         if (voiceSelect && voiceSelect.options.length <= 1) {
             const result = await window.api.getTtsVoices();
             if (result.success) {
-                voiceSelect.innerHTML = '<option value="">Varsayılan</option>';
+                voiceSelect.innerHTML = `<option value="">${this.t('dialog.subtitle_tts.default_voice', 'Default')}</option>`;
                 result.voices.forEach(v => {
                     const opt = document.createElement('option');
                     opt.value = v;
@@ -5518,7 +6736,7 @@ const Dialogs = {
         }
 
         this.subtitleTtsDialog.showModal();
-        Accessibility.announce('Altyazı seslendirme seçenekleri açıldı. Video ses seviyesini buradan ayarlayabilirsiniz.');
+        Accessibility.announce(this.t('runtime.subtitle.tts_dialog_opened', 'Speech settings opened. You can adjust the original video volume here.'));
 
         // Button focus
         document.getElementById('subtitle-tts-confirm')?.focus();
@@ -5531,9 +6749,11 @@ const Dialogs = {
     /**
      * Altyazı işlem diyaloğunu göster
      */
-    showSubtitleActionDialog() {
+    showSubtitleActionDialog(previewContext = null) {
+        this.subtitleStylePreviewContext = previewContext || null;
+        window.i18nHelper?.translateDOM?.(this.subtitleActionDialog);
         this.subtitleActionDialog.showModal();
-        Accessibility.announce('Altyazı işlemi seçimi. Lütfen bir seçenek belirleyin.');
+        Accessibility.announce(this.t('runtime.subtitle.action_dialog_opened', 'Subtitle action selection. Please choose an option.'));
 
         // İlk radyoya odaklan
         const firstRadio = this.subtitleActionDialog.querySelector('input[type="radio"]');
@@ -5544,6 +6764,52 @@ const Dialogs = {
         });
     },
 
+    showSubtitleStyleDialog(previewContext = null, initialStyleOptions = null) {
+        this.subtitleStylePreviewContext = previewContext || null;
+        window.i18nHelper?.translateDOM?.(this.subtitleStyleDialog);
+
+        const resolvedStyleOptions = {
+            textColor: initialStyleOptions?.textColor || '#FFFFFF',
+            backgroundMode: initialStyleOptions?.backgroundMode || 'box',
+            backgroundColor: initialStyleOptions?.backgroundColor || '#000000',
+            backgroundOpacity: Number(initialStyleOptions?.backgroundOpacity ?? 5),
+            sizeScale: Number(initialStyleOptions?.sizeScale ?? 50)
+        };
+
+        const styleTextColor = document.getElementById('subtitle-style-text-color-select');
+        const backgroundModeSelect = document.getElementById('subtitle-style-background-mode');
+        const styleBgColor = document.getElementById('subtitle-style-bg-color-select');
+        const styleBgOpacity = document.getElementById('subtitle-style-bg-opacity');
+        const styleBgOpacityVal = document.getElementById('subtitle-style-bg-opacity-val');
+        const styleBgColorGroup = document.getElementById('subtitle-style-bg-color-group');
+        const styleBgOpacityGroup = document.getElementById('subtitle-style-bg-opacity-group');
+        const styleSizeScale = document.getElementById('subtitle-style-size-scale');
+        const styleSizeScaleVal = document.getElementById('subtitle-style-size-scale-val');
+        const styleAiFeedback = document.getElementById('subtitle-style-ai-feedback');
+
+        if (styleTextColor) styleTextColor.value = resolvedStyleOptions.textColor.toUpperCase();
+        if (backgroundModeSelect) backgroundModeSelect.value = resolvedStyleOptions.backgroundMode;
+        if (styleBgColor) styleBgColor.value = resolvedStyleOptions.backgroundColor.toUpperCase();
+        if (styleBgOpacity) styleBgOpacity.value = String(resolvedStyleOptions.backgroundOpacity);
+        if (styleBgOpacityVal) styleBgOpacityVal.textContent = `%${resolvedStyleOptions.backgroundOpacity}`;
+        if (styleSizeScale) styleSizeScale.value = String(resolvedStyleOptions.sizeScale);
+        if (styleSizeScaleVal) styleSizeScaleVal.textContent = `%${resolvedStyleOptions.sizeScale}`;
+        if (styleAiFeedback) styleAiFeedback.value = '';
+        const useBox = resolvedStyleOptions.backgroundMode === 'box';
+        if (styleBgColor) styleBgColor.disabled = !useBox;
+        if (styleBgOpacity) styleBgOpacity.disabled = !useBox;
+        if (styleBgColorGroup) styleBgColorGroup.style.opacity = useBox ? '1' : '0.55';
+        if (styleBgOpacityGroup) styleBgOpacityGroup.style.opacity = useBox ? '1' : '0.55';
+
+        this.subtitleStyleDialog.showModal();
+        Accessibility.announce(this.t('runtime.subtitle.style_dialog_opened', 'Altyazı görünüm ayarları açıldı.'));
+        styleTextColor?.focus();
+
+        return new Promise((resolve) => {
+            this.subtitleStyleResolve = resolve;
+        });
+    },
+
     // ==========================================
     // YARDIM / KULLANIM KILAVUZU
     // ==========================================
@@ -5551,6 +6817,8 @@ const Dialogs = {
     helpTopics: [
         {
             id: 'intro',
+            titleKey: 'help.intro.title',
+            contentKey: 'help.intro.content',
             title: 'Giriş',
             content: `
                 <h3>Engelsiz Video Düzenleyicisi'ne Hoş Geldiniz</h3>
@@ -5560,6 +6828,8 @@ const Dialogs = {
         },
         {
             id: 'menu-bar',
+            titleKey: 'help.menu_bar.title',
+            contentKey: 'help.menu_bar.content',
             title: 'Menü Çubuğu Tanıtımı',
             content: `
                 <h3>Menü Çubuğu</h3>
@@ -5579,6 +6849,8 @@ const Dialogs = {
         },
         {
             id: 'api-key',
+            titleKey: 'help.api_key.title',
+            contentKey: 'help.api_key.content',
             title: 'Gemini API Anahtarı Girme',
             content: `
                 <h3>Gemini API Anahtarı Nasıl Girilir?</h3>
@@ -5594,6 +6866,8 @@ const Dialogs = {
         },
         {
             id: 'location-desc',
+            titleKey: 'help.location_desc.title',
+            contentKey: 'help.location_desc.content',
             title: 'Bulunduğun Konumu Betimle',
             content: `
                 <h3>Anlık Sahne Betimlemesi</h3>
@@ -5607,6 +6881,8 @@ const Dialogs = {
         },
         {
             id: 'smart-selection',
+            titleKey: 'help.smart_selection.title',
+            contentKey: 'help.smart_selection.content',
             title: 'Akıllı Seçim',
             content: `
                 <h3>Akıllı Seçim Nedir?</h3>
@@ -5620,6 +6896,8 @@ const Dialogs = {
         },
         {
             id: 'selection-desc',
+            titleKey: 'help.selection_desc.title',
+            contentKey: 'help.selection_desc.content',
             title: 'Seçimi Betimle',
             content: `
                 <h3>Seçili Alanı Betimle</h3>
@@ -5633,6 +6911,8 @@ const Dialogs = {
         },
         {
             id: 'new-project',
+            titleKey: 'help.new_project.title',
+            contentKey: 'help.new_project.content',
             title: 'Yeni Slayt/Video Projesi',
             content: `
                 <h3>Yeni Proje Oluşturma</h3>
@@ -5645,6 +6925,8 @@ const Dialogs = {
         },
         {
             id: 'save-options',
+            titleKey: 'help.save_options.title',
+            contentKey: 'help.save_options.content',
             title: 'Kaydetme Seçenekleri',
             content: `
                 <h3>Projeyi ve Videoyu Kaydetme</h3>
@@ -5657,6 +6939,8 @@ const Dialogs = {
         },
         {
             id: 'select-delete',
+            titleKey: 'help.select_delete.title',
+            contentKey: 'help.select_delete.content',
             title: 'Seçim ve Silme',
             content: `
                 <h3>Seçim Yapma</h3>
@@ -5670,12 +6954,14 @@ const Dialogs = {
         },
         {
             id: 'playback',
+            titleKey: 'help.playback.title',
+            contentKey: 'help.playback.content',
             title: 'Oynatma İşlemleri',
             content: `
                 <h3>Temel Kontroller</h3>
                 <ul>
                     <li><strong>Boşluk (Space):</strong> Oynat/Duraklat (Duraklatınca başa döner - önizleme modu).</li>
-                    <li><strong>Enter:</strong> Duraklat ve imleci o noktada bırak (Kesim için ideal).</li>
+                    <li><strong>Enter:</strong> Oynuyorsa o noktada duraklatır ve imleci bırakır; duruyorsa aynı noktadan devam eder.</li>
                     <li><strong>Ctrl + Space:</strong> Olduğu yerde duraklat.</li>
                     <li><strong>Shift + Space:</strong> Sadece seçili alanı oynat.</li>
                     <li><strong>Sağ/Sol Ok:</strong> Ufak adımlarla ileri/geri sar (dururken ses önizlemesi yapar).</li>
@@ -5684,6 +6970,8 @@ const Dialogs = {
         },
         {
             id: 'add-text',
+            titleKey: 'help.add_text.title',
+            contentKey: 'help.add_text.content',
             title: 'Metin Ekleme',
             content: `
                 <h3>Videoya Yazı Ekleme</h3>
@@ -5697,6 +6985,8 @@ const Dialogs = {
         },
         {
             id: 'add-audio',
+            titleKey: 'help.add_audio.title',
+            contentKey: 'help.add_audio.content',
             title: 'Ses Ekleme',
             content: `
                 <h3>Ek Ses / Müzik Ekleme</h3>
@@ -5710,6 +7000,8 @@ const Dialogs = {
         },
         {
             id: 'add-image',
+            titleKey: 'help.add_image.title',
+            contentKey: 'help.add_image.content',
             title: 'Görsel/Logo Ekleme',
             content: `
                 <h3>Görsel Ekleme Sihirbazı</h3>
@@ -5723,7 +7015,115 @@ const Dialogs = {
             `
         },
         {
+            id: 'recording-wizard',
+            titleKey: 'help.recording_wizard.title',
+            contentKey: 'help.recording_wizard.content',
+            title: 'Erişilebilir Kayıt Sihirbazı',
+            content: `
+                <h3>Erişilebilir Kayıt Sihirbazı</h3>
+                <p>OBS Studio ile ekran, pencere, mikrofon ve kamera kaydı almak için bu sihirbazı kullanabilirsiniz.</p>
+                <ol>
+                    <li><strong>Dosya &gt; Referans Sesle Video Kaydet</strong> veya <strong>Erişilebilir Kayıt</strong> menüsünden sihirbazı açın.</li>
+                    <li>Önce OBS bağlantısını test edin ve ekran ya da pencere kaynağını seçin.</li>
+                    <li>İsterseniz kamera overlay ve sistem sesi ekleyin.</li>
+                    <li>Ön ayarlarla düzeni kurun, gerekirse yapay zekadan konum önerisi alın.</li>
+                    <li>Son adımda kaydı başlatın, duraklatın ve bitince kayıt klasörüne ulaşın.</li>
+                </ol>
+            `
+        },
+        {
+            id: 'zoom-recording',
+            titleKey: 'help.zoom_recording.title',
+            contentKey: 'help.zoom_recording.content',
+            title: 'Zoom Kaydı İçin İpuçları',
+            content: `
+                <h3>Zoom Penceresini Daha Temiz Kaydetme</h3>
+                <p>Zoom genellikle pencere kaydında daha temiz sonuç verir; ancak toplantı görünümü doğru ayarlanmazsa gereksiz katılımcı kutuları veya boş video alanları görünebilir.</p>
+                <ol>
+                    <li>Zoom toplantısını ayrı bir pencere olarak açık tutun.</li>
+                    <li>Mümkünse <strong>Speaker View</strong> veya en sade toplantı düzenini seçin.</li>
+                    <li>Toplantıda kamerası kapalı bir katılımcı varsa, sağ alt gibi alanlarda boş ya da kamera kapalı kutusu görünebilir. Bu durumda Zoom içindeki görünümü sadeleştirin.</li>
+                    <li>Kayıt başlamadan önce sohbet, katılımcılar ve benzeri yan panellerin kapalı olduğundan emin olun.</li>
+                    <li>Sonucu doğrulamak için kısa bir test kaydı alın ve gerekirse pencere düzenini yeniden kurun.</li>
+                </ol>
+                <p><strong>Öneri:</strong> Zoom penceresi temiz görünüyorsa EVD tarafında genelde ekstra bir işlem gerekmez; asıl önemli olan Zoom içindeki toplantı düzenidir.</p>
+            `
+        },
+        {
+            id: 'meet-recording',
+            titleKey: 'help.meet_recording.title',
+            contentKey: 'help.meet_recording.content',
+            title: 'Google Meet Kaydı İçin İpuçları',
+            content: `
+                <h3>Google Meet Penceresini Daha Temiz Kaydetme</h3>
+                <p>Google Meet web tarayıcısı içinde çalıştığı için, kayıt alınırken yalnızca konuşmacılar değil tarayıcı ve Meet arayüzünün bazı kısımları da görünebilir. Bu yüzden kayıt öncesi pencereyi hazırlamak daha önemlidir.</p>
+                <ol>
+                    <li>Meet'i mümkünse ayrı bir tarayıcı penceresinde açın.</li>
+                    <li>Toplantı başlamadan önce ayarlar, sohbet, katılımcılar ve benzeri panelleri kapatın.</li>
+                    <li>Tarayıcıyı önce büyütün, mümkünse ardından <strong>F11</strong> ile tam ekrana alın.</li>
+                    <li>Fareyi hareket ettirmeden birkaç saniye bekleyin; böylece alt kontrol çubuğu çoğu zaman kaybolur.</li>
+                    <li>Kayıt sırasında yeni bir pencere ya da ayar kutusu açmayın; bunlar doğrudan kayda girebilir.</li>
+                </ol>
+                <p><strong>Önemli not:</strong> Meet kontrol çubuğu ve bazı pencere öğeleri Meet içeriğinin bir parçası gibi davrandığı için, pencere kaydında görünmeleri normal olabilir. En temiz sonuç için kayıt öncesi görünümü sadeleştirmek gerekir.</p>
+            `
+        },
+        {
+            id: 'vertical-video',
+            titleKey: 'help.vertical_video.title',
+            contentKey: 'help.vertical_video.content',
+            title: 'Dikey Video (Shorts/Reels) Oluşturma',
+            content: `
+                <h3>Dikey Video Oluşturma</h3>
+                <p>Yatay bir videoyu Shorts, Reels veya TikTok için hızlıca 9:16 formata dönüştürmek istediğinizde bu araç işinizi kolaylaştırır.</p>
+                <ol>
+                    <li><strong>Ekle &gt; Dikey Video (Shorts/Reels) Oluştur</strong> menüsünü açın.</li>
+                    <li>Kaynak videoyu seçin ve çıktı klasörünü belirleyin.</li>
+                    <li>Kırpma, bulanık arka plan veya letterbox yöntemlerinden size uygun olanı seçin.</li>
+                    <li>İsterseniz yapay zekadan sahneye en uygun çerçeve önerisini alın.</li>
+                <li>Ön izleme yapın ve sonucu oluşturarak yeni dikey videoyu kaydedin.</li>
+                </ol>
+            `
+        },
+        {
+            id: 'selection-list',
+            titleKey: 'help.selection_list.title',
+            contentKey: 'help.selection_list.content',
+            title: 'Seçim Listesi',
+            content: `
+                <h3>Birden Fazla Seçimi Toplayıp Sonra İşleme</h3>
+                <p>Uzun bir videodan birden fazla bölümü ayırmak, sıralamak ve sonra topluca işlemek istediğinizde seçim listesi en pratik yoldur.</p>
+                <ol>
+                    <li>Önce videoda bir alan seçin.</li>
+                    <li><strong>Ekle &gt; Seçili Alanı Seçim Listesine Ekle</strong> komutunu kullanın.</li>
+                    <li>Seçimi temizleyip başka aralıklar seçin ve aynı şekilde listeye eklemeye devam edin.</li>
+                    <li><strong>Ekle &gt; Seçim Listesi</strong> penceresini açın.</li>
+                    <li>Listede öğeleri dinleyin, silin, yukarı veya aşağı taşıyın.</li>
+                    <li>İsterseniz tüm listeyi tek klipte birleştirin, isterseniz seçim listesinden dikey videolar üretin.</li>
+                </ol>
+            `
+        },
+        {
+            id: 'live-effects-panel',
+            titleKey: 'help.live_effects_panel.title',
+            contentKey: 'help.live_effects_panel.content',
+            title: 'Canlı Efekt Paneli',
+            content: `
+                <h3>Kayıt ve Yayın İçin Efekt Bankası</h3>
+                <p>Canlı Efekt Paneli, kayıt veya yayın sırasında hızlıca çalacağınız sesleri, videoları ve isteğe bağlı görselleri önceden hazırlamanızı sağlar.</p>
+                <ol>
+                    <li><strong>Erişilebilir Video Kaydı &gt; Canlı Efekt Paneli</strong> komutunu açın.</li>
+                    <li>Bir profil seçin ya da yeni profil oluşturun.</li>
+                    <li>Slotlara ses veya video dosyaları ekleyin. Ses slotlarına isterseniz görsel de bağlayın.</li>
+                    <li>Başlangıç ve bitiş efekti olarak kullanılacak slotları belirleyin.</li>
+                    <li>Kayıt sihirbazında canlı efekt katmanını açın ve efektleri oturum sırasında çalın.</li>
+                    <li>Panel içinde hızlı gezinim için <strong>Alt+R</strong>, <strong>Alt+1-0</strong>, <strong>Alt+P</strong> ve <strong>Alt+Ctrl+P</strong> kısayollarını kullanabilirsiniz.</li>
+                </ol>
+            `
+        },
+        {
             id: 'transitions',
+            titleKey: 'help.transitions.title',
+            contentKey: 'help.transitions.content',
             title: 'Geçiş Efekti Ekleme',
             content: `
                 <h3>Geçişler</h3>
@@ -5738,6 +7138,8 @@ const Dialogs = {
         },
         {
             id: 'subtitles',
+            titleKey: 'help.subtitles.title',
+            contentKey: 'help.subtitles.content',
             title: 'Altyazı Ekleme',
             content: `
                 <h3>Altyazı İşlemleri</h3>
@@ -5757,6 +7159,8 @@ const Dialogs = {
         },
         {
             id: 'insertion-list',
+            titleKey: 'help.insertion_list.title',
+            contentKey: 'help.insertion_list.content',
             title: 'Ekleme Listesi (Kuyruk)',
             content: `
                 <h3>Toplu İşlemler</h3>
@@ -5780,7 +7184,7 @@ const Dialogs = {
         if (window.Keyboard) window.Keyboard.setEnabled(false);
 
         this.helpDialog.showModal();
-        Accessibility.announce('Kullanım Kılavuzu açıldı. Konular arasında yön tuşları ile gezinebilirsiniz.');
+        Accessibility.announce(this.t('runtime.help.dialog_opened', 'User Guide opened. Navigate topics with the arrow keys.'));
 
         // İlk konuya odaklan
         setTimeout(() => {
@@ -5799,8 +7203,9 @@ const Dialogs = {
         list.innerHTML = '';
 
         this.helpTopics.forEach((topic, index) => {
+            const localized = this.getHelpTopicLocalized(topic);
             const li = document.createElement('li');
-            li.textContent = topic.title;
+            li.textContent = localized.title;
             li.setAttribute('role', 'option');
             li.setAttribute('tabindex', index === 0 ? '0' : '-1');
             li.setAttribute('data-id', topic.id);
@@ -5830,7 +7235,8 @@ const Dialogs = {
      */
     displayHelpTopic(topic, activeLi) {
         const contentArea = document.getElementById('help-content-area');
-        contentArea.innerHTML = topic.content;
+        const localized = this.getHelpTopicLocalized(topic);
+        contentArea.innerHTML = localized.content;
 
         // Liste görünümü güncelle
         const items = document.querySelectorAll('#help-topics-list li');
@@ -5845,7 +7251,7 @@ const Dialogs = {
         activeLi.setAttribute('tabindex', '0');
         activeLi.focus();
 
-        Accessibility.announce(`${topic.title} başlığı görüntülendi. İçeriği okumak için Tab tuşuna basın.`);
+        Accessibility.announce(this.t('runtime.help.topic_opened', '{title} topic displayed. Press Tab to read the content.', { title: localized.title }));
     },
 
     /**
@@ -5937,7 +7343,8 @@ const Dialogs = {
 
         sortedCategories.forEach((cat, index) => {
             const li = document.createElement('li');
-            li.textContent = cat;
+            const localizedCategory = Keyboard.getLocalizedCategory(cat);
+            li.textContent = localizedCategory;
             li.setAttribute('role', 'option');
             li.setAttribute('tabindex', index === 0 ? '0' : '-1');
             li.style.padding = '10px';
@@ -5956,7 +7363,9 @@ const Dialogs = {
                 li.setAttribute('aria-selected', 'true');
 
                 this.populateKeyboardShortcuts(cat);
-                Accessibility.announce(`${cat} kategorisi seçildi.`);
+                Accessibility.announce(this.t('runtime.dialogs.keyboard_category_selected', '{category} category selected.', {
+                    category: localizedCategory
+                }));
             });
 
             // Klavye
@@ -5984,7 +7393,7 @@ const Dialogs = {
                     const firstItem = contentList.querySelector('li');
                     if (firstItem) {
                         firstItem.focus();
-                        Accessibility.announce('Kısayol listesine geçildi');
+                        Accessibility.announce(this.t('runtime.dialogs.keyboard_shortcut_list_entered', 'Shortcut list entered'));
                     }
                 }
             });
@@ -6005,9 +7414,10 @@ const Dialogs = {
         // Bu kategorideki aksiyonları bul
         const categoryActions = Object.entries(actions)
             .filter(([_, def]) => def.category === category)
-            .sort((a, b) => a[1].label.localeCompare(b[1].label));
+            .sort((a, b) => Keyboard.getLocalizedActionLabel(a[0], a[1].label).localeCompare(Keyboard.getLocalizedActionLabel(b[0], b[1].label)));
 
         categoryActions.forEach(([actionId, def]) => {
+            const localizedLabel = Keyboard.getLocalizedActionLabel(actionId, def.label);
             const li = document.createElement('li');
             li.className = 'shortcut-item';
             li.setAttribute('role', 'option');
@@ -6036,18 +7446,21 @@ const Dialogs = {
                 }
             }
 
-            const shortcutText = displayShortcut || 'Kısayol Yok';
+            const shortcutText = displayShortcut || this.t('runtime.dialogs.no_shortcut', 'No shortcut');
             const shortcutStyle = displayShortcut ? 'background:#333; color:#fff;' : 'background:transparent; color:#888; font-style:italic;';
 
             li.innerHTML = `
-                <span class="action-label" style="font-weight:bold;">${def.label}</span>
+                <span class="action-label" style="font-weight:bold;">${localizedLabel}</span>
                 <span class="shortcut-key" style="font-family:monospace; padding:2px 6px; border-radius:3px; ${shortcutStyle}">${shortcutText}</span>
             `;
 
             // Focus ve Hover
             li.addEventListener('focus', () => {
                 li.style.backgroundColor = '#333';
-                Accessibility.announce(`${def.label}, Kısayol: ${displayShortcut || 'Yok'}`);
+                Accessibility.announce(this.t('runtime.dialogs.keyboard_shortcut_focus', '{label}, Shortcut: {shortcut}', {
+                    label: localizedLabel,
+                    shortcut: displayShortcut || this.t('runtime.dialogs.no_shortcut', 'No shortcut')
+                }));
             });
             li.addEventListener('blur', () => li.style.backgroundColor = 'transparent');
             li.addEventListener('mouseenter', () => li.focus());
@@ -6067,7 +7480,7 @@ const Dialogs = {
                     const activeCat = document.querySelector('#keyboard-categories-list li[aria-selected="true"]');
                     if (activeCat) {
                         activeCat.focus();
-                        Accessibility.announce('Kategorilere dönüldü');
+                        Accessibility.announce(this.t('runtime.dialogs.keyboard_categories_returned', 'Returned to categories'));
                     }
                 } else if (e.key === 'ArrowRight') {
                     e.preventDefault();
@@ -6327,6 +7740,7 @@ const Dialogs = {
     async showVideoLayerWizard(layerVideoPath) {
         const dialog = document.getElementById('video-layer-wizard-dialog');
         if (!dialog) return;
+        window.i18nHelper?.translateDOM?.(dialog);
 
         // Klavye kısayollarını devre dışı bırak
         if (window.Keyboard) window.Keyboard.setEnabled(false);
@@ -6412,7 +7826,7 @@ const Dialogs = {
         this.setupVideoLayerWizardEventListeners();
 
         dialog.showModal();
-        Accessibility.announce('Video Katmanı Ekleme Sihirbazı açıldı. Adım 1: Yerleşim modunu seçin.');
+        Accessibility.announce(this.t('runtime.video_layer.wizard_opened', 'Video Layer Wizard opened. Step 1: Select a layout mode.'));
 
         // İlk seçeneğe odaklan
         document.querySelector('input[name="vl-mode"]:checked')?.focus();
@@ -6453,8 +7867,24 @@ const Dialogs = {
         }
 
         // Adıma göre focus ve duyuru
-        const stepTitles = ['Yerleşim Modu Seçimi', 'Konum ve Boyut Ayarları', 'Ses Kontrolü', 'Senkronizasyon İnce Ayarı', 'Zamanlama'];
-        Accessibility.announce(`Adım ${step}: ${stepTitles[step - 1]}`);
+        const stepTitles = [
+            this.t('runtime.video_layer.step_1', 'Layout Mode Selection'),
+            this.t('runtime.video_layer.step_2', 'Position and Size Settings'),
+            this.t('runtime.video_layer.step_3', 'Audio Control'),
+            this.t('runtime.video_layer.step_4', 'Synchronization Fine Tuning'),
+            this.t('runtime.video_layer.step_5', 'Timing')
+        ];
+        let announceText = this.t('runtime.video_layer.step_announce', 'Step {step}: {title}', {
+            step,
+            title: stepTitles[step - 1]
+        });
+
+        // Step 4 için özel hatırlatma (Kullanıcı İsteği)
+        if (step === 4) {
+            announceText += ` ${this.t('runtime.video_layer.step_4_help', 'Use K to play, J and L to seek. Move the layer video with Alt+Shift+Arrow for 100 ms, Alt+Arrow for 10 ms, and Ctrl+Arrow for 1 ms fine adjustment.')}`;
+        }
+
+        Accessibility.announce(announceText);
 
         // Adıma göre ilk elemana odaklan
         setTimeout(() => {
@@ -6542,8 +7972,9 @@ const Dialogs = {
             if (volumeGroup) {
                 volumeGroup.style.opacity = this.videoLayerState.layerMuted ? '0.5' : '1';
             }
-            const announcement = this.videoLayerState.layerMuted ?
-                'Video katmanı sesi kapatıldı.' : 'Video katmanı sesi açıldı.';
+            const announcement = this.videoLayerState.layerMuted
+                ? this.t('runtime.video_layer.layer_audio_muted', 'Layer video audio muted.')
+                : this.t('runtime.video_layer.layer_audio_unmuted', 'Layer video audio unmuted.');
             Accessibility.announce(announcement);
         });
 
@@ -6618,7 +8049,11 @@ const Dialogs = {
                     document.getElementById('vl-pos-y').value = y;
                 }
 
-                Accessibility.announce(`Boyut %${percent}: ${newWidth}x${newHeight} piksel`);
+                Accessibility.announce(this.t('runtime.video_layer.size_changed', 'Size %{percent}: {width}x{height} pixels', {
+                    percent,
+                    width: newWidth,
+                    height: newHeight
+                }));
             });
         }
 
@@ -6636,14 +8071,14 @@ const Dialogs = {
             const currentTime = VideoPlayer.getCurrentTime();
             document.getElementById('vl-start-time').value = currentTime.toFixed(1);
             this.videoLayerState.startTime = currentTime;
-            Accessibility.announce(`Başlangıç: ${Utils.formatTime(currentTime)}`);
+            Accessibility.announce(this.t('runtime.video_layer.start_time_set', 'Start: {time}', { time: Utils.formatTime(currentTime) }));
         });
 
         document.getElementById('btn-vl-end-current')?.addEventListener('click', () => {
             const currentTime = VideoPlayer.getCurrentTime();
             document.getElementById('vl-end-time').value = currentTime.toFixed(1);
             this.videoLayerState.endTime = currentTime;
-            Accessibility.announce(`Bitiş: ${Utils.formatTime(currentTime)}`);
+            Accessibility.announce(this.t('runtime.video_layer.end_time_set', 'End: {time}', { time: Utils.formatTime(currentTime) }));
         });
 
         // Zaman inputları
@@ -6727,7 +8162,7 @@ const Dialogs = {
                 document.getElementById('vl-size-percent').value = 12.5;
                 document.getElementById('vl-size-percent-value').textContent = '%12.5';
                 document.getElementById('vl-layer-mute').value = 'mute';
-                Accessibility.announce('İşaret dili modu seçildi. Sağ alt, yüzde on iki buçuk, ses kapalı.');
+                Accessibility.announce(this.t('runtime.video_layer.mode_sign_language', 'Sign language mode selected. Bottom right, twelve and a half percent, audio muted.'));
                 break;
 
             case 'split-screen':
@@ -6738,7 +8173,7 @@ const Dialogs = {
                 document.getElementById('vl-size-percent').value = 50;
                 document.getElementById('vl-size-percent-value').textContent = '%50';
                 document.getElementById('vl-layer-mute').value = 'unmute';
-                Accessibility.announce('Split screen modu seçildi. Sol yarı, yüzde elli.');
+                Accessibility.announce(this.t('runtime.video_layer.mode_split_screen', 'Split screen mode selected. Left half, fifty percent.'));
                 break;
 
             case 'camera-corner':
@@ -6749,11 +8184,11 @@ const Dialogs = {
                 document.getElementById('vl-size-percent').value = 15;
                 document.getElementById('vl-size-percent-value').textContent = '%15';
                 document.getElementById('vl-layer-mute').value = 'unmute';
-                Accessibility.announce('Kamera köşede modu seçildi. Sağ üst, yüzde on beş.');
+                Accessibility.announce(this.t('runtime.video_layer.mode_camera_corner', 'Camera in corner mode selected. Top right, fifteen percent.'));
                 break;
 
             case 'custom':
-                Accessibility.announce('Serbest yerleşim modu seçildi. Konum ve boyutu kendiniz belirleyin.');
+                Accessibility.announce(this.t('runtime.video_layer.mode_custom', 'Custom layout mode selected. Set the position and size yourself.'));
                 break;
         }
 
@@ -6809,18 +8244,20 @@ const Dialogs = {
         document.getElementById('vl-pos-y').value = y;
 
         const positionNames = {
-            'top-left': 'Sol Üst',
-            'top-center': 'Üst Orta',
-            'top-right': 'Sağ Üst',
-            'center-left': 'Sol Orta',
-            'center': 'Merkez',
-            'center-right': 'Sağ Orta',
-            'bottom-left': 'Sol Alt',
-            'bottom-center': 'Alt Orta',
-            'bottom-right': 'Sağ Alt'
+            'top-left': this.t('runtime.video_layer.position_top_left', 'Top Left'),
+            'top-center': this.t('runtime.video_layer.position_top_center', 'Top Center'),
+            'top-right': this.t('runtime.video_layer.position_top_right', 'Top Right'),
+            'center-left': this.t('runtime.video_layer.position_center_left', 'Center Left'),
+            'center': this.t('runtime.video_layer.position_center', 'Center'),
+            'center-right': this.t('runtime.video_layer.position_center_right', 'Center Right'),
+            'bottom-left': this.t('runtime.video_layer.position_bottom_left', 'Bottom Left'),
+            'bottom-center': this.t('runtime.video_layer.position_bottom_center', 'Bottom Center'),
+            'bottom-right': this.t('runtime.video_layer.position_bottom_right', 'Bottom Right')
         };
 
-        Accessibility.announce(`Video katmanı konumu ${positionNames[preset]} olarak güncellendi.`);
+        Accessibility.announce(this.t('runtime.video_layer.position_updated', 'Video layer position updated to {position}.', {
+            position: positionNames[preset]
+        }));
     },
 
     /**
@@ -6857,44 +8294,55 @@ const Dialogs = {
     updateVideoLayerSummary() {
         const state = this.videoLayerState;
         const modeNames = {
-            'sign-language': 'İşaret Dili',
-            'split-screen': 'Split Screen',
-            'camera-corner': 'Kamera Köşede',
-            'custom': 'Serbest Yerleşim'
+            'sign-language': this.t('runtime.video_layer.summary_mode_sign_language', 'Sign Language'),
+            'split-screen': this.t('runtime.video_layer.summary_mode_split_screen', 'Split Screen'),
+            'camera-corner': this.t('runtime.video_layer.summary_mode_camera_corner', 'Camera Corner'),
+            'custom': this.t('runtime.video_layer.summary_mode_custom', 'Custom Layout')
         };
 
         const positionPreset = document.getElementById('vl-position-preset').value;
         const positionNames = {
-            'top-left': 'Sol Üst',
-            'top-center': 'Üst Orta',
-            'top-right': 'Sağ Üst',
-            'center-left': 'Sol Orta',
-            'center': 'Merkez',
-            'center-right': 'Sağ Orta',
-            'bottom-left': 'Sol Alt',
-            'bottom-center': 'Alt Orta',
-            'bottom-right': 'Sağ Alt',
-            'custom': 'Özel'
+            'top-left': this.t('runtime.video_layer.position_top_left', 'Top Left'),
+            'top-center': this.t('runtime.video_layer.position_top_center', 'Top Center'),
+            'top-right': this.t('runtime.video_layer.position_top_right', 'Top Right'),
+            'center-left': this.t('runtime.video_layer.position_center_left', 'Center Left'),
+            'center': this.t('runtime.video_layer.position_center', 'Center'),
+            'center-right': this.t('runtime.video_layer.position_center_right', 'Center Right'),
+            'bottom-left': this.t('runtime.video_layer.position_bottom_left', 'Bottom Left'),
+            'bottom-center': this.t('runtime.video_layer.position_bottom_center', 'Bottom Center'),
+            'bottom-right': this.t('runtime.video_layer.position_bottom_right', 'Bottom Right'),
+            'custom': this.t('runtime.video_layer.position_custom', 'Custom')
         };
 
-        const soundStatus = state.layerMuted ? 'ses kapalı' : `ses %${state.layerVolume}`;
+        const soundStatus = state.layerMuted
+            ? this.t('runtime.video_layer.summary_sound_muted', 'audio muted')
+            : this.t('runtime.video_layer.summary_sound_level', 'audio %{volume}', { volume: state.layerVolume });
 
         let timingText = '';
         switch (state.timingMode) {
             case 'whole':
-                timingText = 'Tüm video boyunca';
+                timingText = this.t('runtime.video_layer.timing_whole', 'For the whole video');
                 break;
             case 'from-current':
-                timingText = `${Utils.formatTime(VideoPlayer.getCurrentTime())}\'den itibaren`;
+                timingText = this.t('runtime.video_layer.timing_from_current', 'From {time}', { time: Utils.formatTime(VideoPlayer.getCurrentTime()) });
                 break;
             case 'manual':
                 const start = parseFloat(document.getElementById('vl-start-time').value) || 0;
                 const end = parseFloat(document.getElementById('vl-end-time').value) || 0;
-                timingText = `${Utils.formatTime(start)} - ${Utils.formatTime(end)}`;
+                timingText = this.t('runtime.video_layer.timing_manual', '{start} - {end}', {
+                    start: Utils.formatTime(start),
+                    end: Utils.formatTime(end)
+                });
                 break;
         }
 
-        const summary = `${modeNames[state.mode]} modu. ${positionNames[positionPreset]}, %${state.sizePercent}, ${soundStatus}. ${timingText}.`;
+        const summary = this.t('runtime.video_layer.summary_text', '{mode} mode. {position}, %{size}, {sound}. {timing}.', {
+            mode: modeNames[state.mode],
+            position: positionNames[positionPreset],
+            size: state.sizePercent,
+            sound: soundStatus,
+            timing: timingText
+        });
         document.getElementById('vl-summary-text').textContent = summary;
     },
 
@@ -6904,8 +8352,8 @@ const Dialogs = {
     async getVideoLayerAiSuggestion() {
         const feedbackEl = document.getElementById('vl-ai-feedback');
         feedbackEl.classList.remove('hidden');
-        feedbackEl.textContent = 'AI analiz yapıyor, lütfen bekleyin...';
-        Accessibility.announce('AI analiz yapıyor, lütfen bekleyin.');
+        feedbackEl.textContent = this.t('runtime.video_layer.ai_loading', 'AI is analyzing, please wait...');
+        Accessibility.announce(this.t('runtime.video_layer.ai_loading', 'AI is analyzing, please wait...'));
 
         try {
             const result = await window.api.getVideoLayerAiSuggestion({
@@ -6917,26 +8365,61 @@ const Dialogs = {
 
             if (result.success && result.suggestions && result.suggestions.length > 0) {
                 const suggestion = result.suggestions[0];
+                const suggestionPosition = suggestion.positionKey
+                    ? this.t(suggestion.positionKey, suggestion.positionFallback || suggestion.position || '')
+                    : suggestion.position;
+                const suggestionReason = suggestion.reasonKey
+                    ? this.t(suggestion.reasonKey, suggestion.reasonFallback || suggestion.reason || '')
+                    : suggestion.reason;
 
                 // Öneriyi uygula
                 this.videoLayerState.position = { x: suggestion.x, y: suggestion.y };
                 this.videoLayerState.size = { width: suggestion.width, height: suggestion.height };
+
+                // Preset'i custom yap ki diğer ayarlar bozmasın ve manuel alanları göster
+                const presetSelect = document.getElementById('vl-position-preset');
+                if (presetSelect) {
+                    presetSelect.value = 'custom';
+                }
+                const manualPosDiv = document.getElementById('vl-manual-position');
+                if (manualPosDiv) {
+                    manualPosDiv.classList.remove('hidden');
+                }
+
+                // Slider'ı da güncellemeye çalış (yaklaşık)
+                const mainW = this.videoLayerState.mainResolution.width;
+                if (mainW > 0) {
+                    const newPercent = Math.round((suggestion.width / mainW) * 100 * 2) / 2; // 0.5 step
+                    const slider = document.getElementById('vl-size-percent');
+                    const sliderVal = document.getElementById('vl-size-percent-value');
+                    if (slider && sliderVal) {
+                        slider.value = newPercent;
+                        sliderVal.textContent = `%${newPercent}`;
+                        this.videoLayerState.sizePercent = newPercent;
+                    }
+                }
 
                 document.getElementById('vl-pos-x').value = suggestion.x;
                 document.getElementById('vl-pos-y').value = suggestion.y;
                 document.getElementById('vl-width').value = suggestion.width;
                 document.getElementById('vl-height').value = suggestion.height;
 
-                feedbackEl.textContent = `Öneri: ${suggestion.position}. ${suggestion.reason}`;
-                Accessibility.announce(`Birinci öneri: ${suggestion.position}. ${suggestion.reason}`);
+                feedbackEl.textContent = this.t('runtime.video_layer.ai_suggestion', 'Suggestion: {position}. {reason}', {
+                    position: suggestionPosition,
+                    reason: suggestionReason
+                });
+                Accessibility.announce(this.t('runtime.video_layer.ai_first_suggestion', 'First suggestion: {position}. {reason}', {
+                    position: suggestionPosition,
+                    reason: suggestionReason
+                }));
             } else {
-                feedbackEl.textContent = 'AI önerisi alınamadı.';
-                Accessibility.announce('AI önerisi alınamadı.');
+                feedbackEl.textContent = this.t('runtime.video_layer.ai_suggestion_failed', 'AI suggestion could not be retrieved.');
+                Accessibility.announce(this.t('runtime.video_layer.ai_suggestion_failed', 'AI suggestion could not be retrieved.'));
             }
         } catch (error) {
             console.error('AI öneri hatası:', error);
-            feedbackEl.textContent = 'AI öneri alınırken hata oluştu.';
-            Accessibility.announce('AI öneri alınırken hata oluştu.');
+            feedbackEl.textContent = this.t('runtime.video_layer.ai_suggestion_error', 'An error occurred while retrieving the AI suggestion.');
+            Accessibility.announce(this.t('runtime.video_layer.ai_suggestion_error', 'An error occurred while retrieving the AI suggestion.'));
         }
     },
 
@@ -6949,7 +8432,12 @@ const Dialogs = {
         const { width, height } = state.size;
         const { x, y } = state.position;
 
-        Accessibility.announce(`Önizleme: Video katmanı ${x},${y} konumunda, ${width}x${height} boyutunda görünecek.`);
+        Accessibility.announce(this.t('runtime.video_layer.preview_position', 'Preview: The video layer will appear at position {x},{y} with size {width}x{height}.', {
+            x,
+            y,
+            width,
+            height
+        }));
     },
 
     // Ses Önizleme için geçici audio elementleri
@@ -6977,8 +8465,8 @@ const Dialogs = {
         this._audioPreviewPlaying = true; // Set to true to allow cancellation via stop
 
         statusEl.classList.remove('hidden');
-        statusEl.textContent = 'Sesler hazırlanıyor...';
-        Accessibility.announce('Ses önizleme hazırlanıyor, lütfen bekleyin.');
+        statusEl.textContent = this.t('runtime.video_layer.audio_preparing', 'Preparing audio...');
+        Accessibility.announce(this.t('runtime.video_layer.audio_preview_preparing', 'Preparing audio preview, please wait.'));
 
         try {
             // Audio elementlerini oluştur
@@ -7002,28 +8490,28 @@ const Dialogs = {
             if (!this._audioPreviewPlaying) return;
 
             // Ana video sesini çıkar
-            statusEl.textContent = 'Ana video sesi çıkarılıyor...';
+            statusEl.textContent = this.t('runtime.video_layer.extracting_main_audio', 'Extracting main video audio...');
             const mainResult = await window.api.extractAudio({
                 inputPath: App.currentFilePath,
                 outputPath: mainAudioPath
             });
 
             if (!mainResult.success) {
-                throw new Error('Ana video sesi çıkarılamadı');
+                throw new Error(this.t('runtime.video_layer.extract_main_audio_failed', 'Main video audio could not be extracted'));
             }
 
             // Cancellation Check
             if (!this._audioPreviewPlaying) return;
 
             // Katman video sesini çıkar
-            statusEl.textContent = 'Katman video sesi çıkarılıyor...';
+            statusEl.textContent = this.t('runtime.video_layer.extracting_layer_audio', 'Extracting layer video audio...');
             const layerResult = await window.api.extractAudio({
                 inputPath: state.layerVideoPath,
                 outputPath: layerAudioPath
             });
 
             if (!layerResult.success) {
-                throw new Error('Katman video sesi çıkarılamadı');
+                throw new Error(this.t('runtime.video_layer.extract_layer_audio_failed', 'Layer video audio could not be extracted'));
             }
 
             // Cancellation Check
@@ -7038,7 +8526,7 @@ const Dialogs = {
             layerAudio.volume = state.layerMuted ? 0 : Math.min(1, state.layerVolume / 100);
 
             // Yüklenmeyi bekle
-            statusEl.textContent = 'Sesler yükleniyor...';
+            statusEl.textContent = this.t('runtime.video_layer.loading_audio', 'Loading audio...');
             await Promise.all([
                 new Promise(resolve => { mainAudio.oncanplay = resolve; mainAudio.load(); }),
                 new Promise(resolve => { layerAudio.oncanplay = resolve; layerAudio.load(); })
@@ -7048,8 +8536,8 @@ const Dialogs = {
             if (!this._audioPreviewPlaying) return;
 
             // Oynat
-            statusEl.textContent = 'Önizleme çalıyor... (Durdurmak için tekrar basın)';
-            btn.innerHTML = '<span class="icon">⏹</span> Durdur';
+            statusEl.textContent = this.t('runtime.video_layer.preview_playing', 'Preview is playing... (Press again to stop)');
+            btn.innerHTML = `<span class="icon">⏹</span> ${this.t('runtime.video_layer.stop_button', 'Stop')}`;
             // this._audioPreviewPlaying = true; // Already set
 
             mainAudio.currentTime = 0;
@@ -7057,7 +8545,12 @@ const Dialogs = {
             mainAudio.play();
             layerAudio.play();
 
-            Accessibility.announce(`Ses önizleme başladı. Ana video %${state.mainVolume}, katman ${state.layerMuted ? 'sessiz' : '%' + state.layerVolume}`);
+            Accessibility.announce(this.t('runtime.video_layer.audio_preview_started', 'Audio preview started. Main video %{mainVolume}, layer {layerVolume}', {
+                mainVolume: state.mainVolume,
+                layerVolume: state.layerMuted
+                    ? this.t('runtime.video_layer.layer_silent', 'silent')
+                    : `%${state.layerVolume}`
+            }));
 
             // Bittiğinde temizle
             mainAudio.onended = () => {
@@ -7066,8 +8559,8 @@ const Dialogs = {
 
         } catch (error) {
             console.error('Ses önizleme hatası:', error);
-            statusEl.textContent = 'Hata: ' + error.message;
-            Accessibility.announceError('Ses önizleme hatası');
+            statusEl.textContent = this.t('runtime.common.error', 'Error: {error}', { error: error.message });
+            Accessibility.announceError(this.t('runtime.video_layer.audio_preview_error', 'Audio preview error'));
             this._audioPreviewPlaying = false;
         } finally {
             this._audioPreviewLoading = false;
@@ -7091,14 +8584,14 @@ const Dialogs = {
         const btn = document.getElementById('btn-vl-audio-preview');
 
         if (statusEl) {
-            statusEl.textContent = 'Önizleme durduruldu.';
+            statusEl.textContent = this.t('runtime.video_layer.preview_stopped', 'Preview stopped.');
             setTimeout(() => statusEl.classList.add('hidden'), 2000);
         }
         if (btn) {
-            btn.innerHTML = '<span class="icon">🔊</span> Ses Önizleme (Alt+P)';
+            btn.innerHTML = `<span class="icon">🔊</span> ${this.t('runtime.video_layer.audio_preview_button', 'Audio Preview (Alt+P)')}`;
         }
 
-        Accessibility.announce('Ses önizleme durduruldu.');
+        Accessibility.announce(this.t('runtime.video_layer.audio_preview_stopped', 'Audio preview stopped.'));
     },
 
     // =====================================
@@ -7149,8 +8642,8 @@ const Dialogs = {
         mainVideo.load();
 
         // Sesleri çıkar ve yükle
-        Accessibility.announce('Sesler hazırlanıyor, lütfen bekleyin...');
-        document.getElementById('vl-sync-status').textContent = 'Sesler çıkarılıyor...';
+        Accessibility.announce(this.t('runtime.video_layer.sync_preparing_audio', 'Preparing audio, please wait...'));
+        document.getElementById('vl-sync-status').textContent = this.t('runtime.video_layer.sync_extracting_audio', 'Extracting audio...');
 
         try {
             // Ana video sesini çıkar
@@ -7177,13 +8670,13 @@ const Dialogs = {
                 layerAudio.load();
             }
 
-            document.getElementById('vl-sync-status').textContent = 'Hazır. Oynatmak için Space tuşuna basın.';
-            Accessibility.announce('Senkronizasyon motoruçalışır. Dinleme modunu Ayrık olarak değiştirin ve kulaklık takın.');
+            document.getElementById('vl-sync-status').textContent = this.t('runtime.video_layer.sync_ready_press_space', 'Ready. Press Space to play.');
+            Accessibility.announce(this.t('runtime.video_layer.sync_ready_split_mode_hint', 'Synchronization engine is ready. Switch listening mode to Split and wear headphones.'));
 
         } catch (error) {
             console.error('Ses çıkarma hatası:', error);
-            document.getElementById('vl-sync-status').textContent = 'Ses çıkarma hatası: ' + error.message;
-            Accessibility.announceError('Ses çıkarma hatası');
+            document.getElementById('vl-sync-status').textContent = this.t('runtime.video_layer.sync_extract_error', 'Audio extraction error: {error}', { error: error.message });
+            Accessibility.announceError(this.t('runtime.video_layer.sync_extract_error_short', 'Audio extraction error'));
         }
 
         // Web Audio API ile panning
@@ -7248,12 +8741,12 @@ const Dialogs = {
             // Ana video: Sol, Katman: Sağ
             this.vlSyncState.mainPanner.pan.value = -1;
             this.vlSyncState.layerPanner.pan.value = 1;
-            Accessibility.announce('Ayrık mod: Ana video solda, katman video sağda.');
+            Accessibility.announce(this.t('runtime.video_layer.channel_split_announce', 'Split mode: main video on the left, layer video on the right.'));
         } else {
             // Merkez
             this.vlSyncState.mainPanner.pan.value = 0;
             this.vlSyncState.layerPanner.pan.value = 0;
-            Accessibility.announce('Merkezi mod: Her iki ses merkezde.');
+            Accessibility.announce(this.t('runtime.video_layer.channel_center_announce', 'Center mode: both audio sources are centered.'));
         }
     },
 
@@ -7302,16 +8795,16 @@ const Dialogs = {
             await mainVideo.play();
             mainAudio.play();
             layerAudio.play();
-            playBtn.innerHTML = '<span class="icon">⏸</span> Duraklat (Space)';
+            playBtn.innerHTML = `<span class="icon">⏸</span> ${this.t('dialog.video_layer_wizard.sync_pause', 'Pause (Space)')}`;
             this.vlSyncState.isPlaying = true;
-            Accessibility.announce('Oynatılıyor');
+            Accessibility.announce(this.t('runtime.video_layer.sync_playing', 'Playing'));
         } else {
             mainVideo.pause();
             mainAudio.pause();
             layerAudio.pause();
-            playBtn.innerHTML = '<span class="icon">▶</span> Oynat (Space)';
+            playBtn.innerHTML = `<span class="icon">▶</span> ${this.t('dialog.video_layer_wizard.sync_play', 'Play (Space/K)')}`;
             this.vlSyncState.isPlaying = false;
-            Accessibility.announce('Duraklatıldı');
+            Accessibility.announce(this.t('runtime.video_layer.sync_paused', 'Paused'));
         }
     },
 
@@ -7323,7 +8816,9 @@ const Dialogs = {
         this.videoLayerState.syncOffset = this.vlSyncState.offsetMs;
 
         document.getElementById('vl-sync-offset').value = `${this.vlSyncState.offsetMs} ms`;
-        Accessibility.announce(`Offset ${this.vlSyncState.offsetMs} milisaniye`);
+        Accessibility.announce(this.t('runtime.video_layer.offset_announce', 'Offset {offset} milliseconds', {
+            offset: this.vlSyncState.offsetMs
+        }));
 
         // ZORLA senkronize et (çalıyor veya duraklatılmış olsa bile)
         this.syncVLAudio(true);
@@ -7354,13 +8849,13 @@ const Dialogs = {
         this.vlSyncState.loopEnabled = false;
         const loopBtn = document.getElementById('btn-vl-sync-loop');
         if (loopBtn) {
-            loopBtn.textContent = 'Loop: Kapalı (O)';
+            loopBtn.textContent = this.t('dialog.video_layer_wizard.loop_off', 'Loop: Off (O)');
             loopBtn.style.background = '';
         }
 
-        playBtn.innerHTML = '<span class="icon">▶</span> Oynat (Space)';
+        playBtn.innerHTML = `<span class="icon">▶</span> ${this.t('dialog.video_layer_wizard.sync_play', 'Play (Space/K)')}`;
         this.vlSyncState.isPlaying = false;
-        Accessibility.announce('Durduruldu ve başa alındı.');
+        Accessibility.announce(this.t('runtime.video_layer.sync_stopped_reset', 'Stopped and returned to the beginning.'));
     },
 
     /**
@@ -7377,8 +8872,14 @@ const Dialogs = {
         // Ses de senkronize et
         this.syncVLAudio(true);
 
-        const direction = seconds > 0 ? 'İleri' : 'Geri';
-        Accessibility.announce(`${direction} ${Math.abs(seconds)} saniye. ${Utils.formatTime(newTime)}`);
+        const direction = seconds > 0
+            ? this.t('runtime.video_layer.seek_forward', 'Forward')
+            : this.t('runtime.video_layer.seek_backward', 'Backward');
+        Accessibility.announce(this.t('runtime.video_layer.seek_announce', '{direction} {seconds} seconds. {time}', {
+            direction,
+            seconds: Math.abs(seconds),
+            time: Utils.formatTime(newTime)
+        }));
     },
 
     /**
@@ -7467,13 +8968,13 @@ const Dialogs = {
             const btn = document.getElementById('btn-vl-sync-loop');
             if (this.vlSyncState.loopEnabled) {
                 this.vlSyncState.loopStart = mainVideo?.currentTime || 0;
-                btn.textContent = 'Loop: AÇIK (2sn)';
+                btn.textContent = this.t('dialog.video_layer_wizard.loop_on', 'Loop: ON (2s)');
                 btn.style.background = '#0078d4';
-                Accessibility.announce('Loop aktif. Şu anki konumdan 2 saniye döngü.');
+                Accessibility.announce(this.t('runtime.video_layer.loop_enabled', 'Loop enabled. Two-second loop from the current position.'));
             } else {
-                btn.textContent = 'Loop: Kapalı (O)';
+                btn.textContent = this.t('dialog.video_layer_wizard.loop_off', 'Loop: Off (O)');
                 btn.style.background = '';
-                Accessibility.announce('Loop kapatıldı.');
+                Accessibility.announce(this.t('runtime.video_layer.loop_disabled', 'Loop disabled.'));
             }
         });
 
@@ -7885,15 +9386,15 @@ const Dialogs = {
         // Önce kayıt yerini sor
         const originalFilename = App.currentFilePath ? App.currentFilePath.split(/[/\\]/).pop().replace(/\.[^.]+$/, '') : 'video';
         const saveResult = await window.api.showSaveDialog({
-            title: 'Video Katmanını Kaydet',
+            title: this.t('runtime.video_layer.save_dialog_title', 'Save Video Layer'),
             defaultPath: `${originalFilename}_katmanli.mp4`,
             filters: [
-                { name: 'Video Dosyaları', extensions: ['mp4'] }
+                { name: this.t('runtime.app.video_files_filter', 'Video Files'), extensions: ['mp4'] }
             ]
         });
 
         if (saveResult.canceled || !saveResult.filePath) {
-            Accessibility.announce('Video katmanı ekleme iptal edildi.');
+            Accessibility.announce(this.t('runtime.video_layer.save_cancelled', 'Video layer insertion was cancelled.'));
             if (window.Keyboard) window.Keyboard.setEnabled(true);
             return;
         }
@@ -7901,8 +9402,8 @@ const Dialogs = {
         const outputPath = saveResult.filePath;
 
         // İlerleme göster
-        App.showProgress('Video katmanı ekleniyor...');
-        Accessibility.announce('Video katmanı ekleniyor, lütfen bekleyin.');
+        App.showProgress(this.t('runtime.video_layer.processing', 'Adding video layer...'));
+        Accessibility.announce(this.t('runtime.video_layer.processing_announce', 'Adding video layer, please wait.'));
 
         // Konum değerlerini kontrol et - eğer varsayılan ise yeniden hesapla
         if (state.position.x === 0 && state.position.y === 0) {
@@ -7948,21 +9449,26 @@ const Dialogs = {
                 App.hasChanges = false; // Zaten kaydedildi
 
                 const modeNames = {
-                    'sign-language': 'İşaret dili',
-                    'split-screen': 'Split screen',
-                    'camera-corner': 'Kamera köşede',
-                    'custom': 'Serbest yerleşim'
+                    'sign-language': this.t('runtime.video_layer.summary_mode_sign_language', 'Sign Language'),
+                    'split-screen': this.t('runtime.video_layer.summary_mode_split_screen', 'Split Screen'),
+                    'camera-corner': this.t('runtime.video_layer.summary_mode_camera_corner', 'Camera Corner'),
+                    'custom': this.t('runtime.video_layer.summary_mode_custom', 'Custom Layout')
                 };
 
                 const filename = outputPath.split(/[/\\]/).pop();
-                Accessibility.announce(`${modeNames[state.mode]} video katmanı eklendi ve ${filename} olarak kaydedildi.`);
+                Accessibility.announce(this.t('runtime.video_layer.saved_success', '{mode} video layer was added and saved as {filename}.', {
+                    mode: modeNames[state.mode],
+                    filename
+                }));
             } else {
-                Accessibility.announceError('Video katmanı eklenirken hata oluştu: ' + result.error);
+                Accessibility.announceError(this.t('runtime.video_layer.save_failed', 'An error occurred while adding the video layer: {error}', {
+                    error: result.error
+                }));
             }
         } catch (error) {
             App.hideProgress();
             console.error('Video katmanı ekleme hatası:', error);
-            Accessibility.announceError('Video katmanı eklenirken hata oluştu.');
+            Accessibility.announceError(this.t('runtime.video_layer.save_failed_generic', 'An error occurred while adding the video layer.'));
         }
 
         if (window.Keyboard) window.Keyboard.setEnabled(true);

@@ -24,7 +24,7 @@ const StatusBar = {
      */
     update(operation, percent) {
         if (this.statusText) {
-            this.statusText.textContent = operation || 'Hazır';
+            this.statusText.textContent = operation || (window.i18nHelper ? window.i18nHelper.t('player.status_ready') : 'Hazır');
         }
 
         if (this.percentText) {
@@ -56,7 +56,7 @@ const StatusBar = {
      * Durumu temizle
      */
     clear() {
-        this.update('Hazır');
+        this.update(window.i18nHelper ? window.i18nHelper.t('player.status_ready') : 'Hazır');
         if (this.logText) this.logText.textContent = '';
     }
 };

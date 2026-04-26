@@ -6,6 +6,173 @@
 const Keyboard = {
     isEnabled: true,
 
+    t(key, fallback, params = {}) {
+        if (!window.i18nHelper) return fallback;
+        const value = window.i18nHelper.t(key, params);
+        return value && !value.startsWith('[') ? value : fallback;
+    },
+
+    getApplyTransitionBindings() {
+        return this.getCurrentLanguage().startsWith('tr') ? ['ş', 'Ş'] : ['t', 'T'];
+    },
+
+    getCurrentLanguage() {
+        return (window.i18nHelper?.getCurrentLanguage?.() || document.documentElement.lang || 'tr').toLowerCase();
+    },
+
+    getLocalizedCategory(category) {
+        if (category === 'Kayıt Global Kısayolları') {
+            return this.t('dialog.keyboard_manager.category_recording_global', 'Recording Global Shortcuts');
+        }
+        const lang = this.getCurrentLanguage();
+        const labels = {
+            'Dosya': { tr: 'Dosya', en: 'File' },
+            'Düzenleme': { tr: 'Düzenleme', en: 'Edit' },
+            'Oynatma': { tr: 'Oynatma', en: 'Playback' },
+            'Navigasyon': { tr: 'Navigasyon', en: 'Navigation' },
+            'İşaretçiler': { tr: 'İşaretçiler', en: 'Markers' },
+            'Seçim': { tr: 'Seçim', en: 'Selection' },
+            'Araçlar': { tr: 'Araçlar', en: 'Tools' },
+            'Yapay Zeka': { tr: 'Yapay Zeka', en: 'AI' },
+            'Yardım': { tr: 'Yardım', en: 'Help' },
+            'Genel': { tr: 'Genel', en: 'General' },
+            'Ekle': { tr: 'Ekle', en: 'Insert' },
+            'Erişilebilir Kayıt': { tr: 'Erişilebilir Kayıt', en: 'Accessible Recording' },
+            'Görünüm': { tr: 'Görünüm', en: 'View' }
+        };
+        return labels[category]?.[lang.startsWith('en') ? 'en' : 'tr'] || category;
+    },
+
+    getLocalizedActionLabel(actionId, fallbackLabel) {
+        const translated = this.t(`dialog.keyboard_manager.actions.${actionId}`, '');
+        if (translated) {
+            return translated;
+        }
+        const lang = this.getCurrentLanguage();
+        const labels = {
+            newProject: { tr: 'Yeni Proje', en: 'New Project' },
+            openProject: { tr: 'Proje Aç (.kve)', en: 'Open Project (.kve)' },
+            saveProject: { tr: 'Projeyi Kaydet (.kve)', en: 'Save Project (.kve)' },
+            openVideo: { tr: 'Video Aç', en: 'Open Video' },
+            saveVideo: { tr: 'Videoyu Kaydet/Dışa Aktar', en: 'Save or Export Video' },
+            saveAs: { tr: 'Farklı Kaydet', en: 'Save As' },
+            closeFile: { tr: 'Dosyayı Kapat', en: 'Close File' },
+            tabNext: { tr: 'Sonraki Sekme', en: 'Next Tab' },
+            tabPrev: { tr: 'Önceki Sekme', en: 'Previous Tab' },
+            closeTab: { tr: 'Sekmeyi Kapat', en: 'Close Tab' },
+            exitApp: { tr: 'Çıkış', en: 'Exit' },
+            undo: { tr: 'Geri Al', en: 'Undo' },
+            redo: { tr: 'Yinele', en: 'Redo' },
+            cut: { tr: 'Kes', en: 'Cut' },
+            copy: { tr: 'Kopyala', en: 'Copy' },
+            paste: { tr: 'Yapıştır', en: 'Paste' },
+            delete: { tr: 'Sil', en: 'Delete' },
+            selectAll: { tr: 'Tümünü Seç', en: 'Select All' },
+            addMarker: { tr: 'İşaretçi Ekle', en: 'Add Marker' },
+            applyTransition: { tr: 'Varsayılan Geçiş Ekle', en: 'Add Default Transition' },
+            transitionLib: { tr: 'Geçiş Kütüphanesi', en: 'Transition Library' },
+            applyAllTrans: { tr: 'Tümüne Geçiş Uygula', en: 'Apply Transitions to All' },
+            changeSpeed: { tr: 'Seçili Alanın Hızını Değiştir', en: 'Change Speed of Selected Area' },
+            togglePlay: { tr: 'Oynat/Duraklat', en: 'Play/Pause' },
+            playSelection: { tr: 'Seçimi Oynat', en: 'Play Selection' },
+            playCutPreview: { tr: 'Kesim Önizleme (Seçimsiz)', en: 'Preview Cut (No Selection)' },
+            pauseAt: { tr: 'Duraklat (İmleçsiz)', en: 'Pause at Position' },
+            pauseAndSet: { tr: 'Duraklat ve Konumla', en: 'Pause and Set Cursor' },
+            skipSilence: { tr: 'Sessizliği Atla', en: 'Skip Silence' },
+            scrubRight: { tr: 'İleri (İnce)', en: 'Seek Forward (Fine)' },
+            scrubLeft: { tr: 'Geri (İnce)', en: 'Seek Backward (Fine)' },
+            scrubRight30: { tr: '30 Saniye İleri', en: 'Forward 30 Seconds' },
+            scrubLeft30: { tr: '30 Saniye Geri', en: 'Backward 30 Seconds' },
+            scrubRight5m: { tr: '5 Dakika İleri', en: 'Forward 5 Minutes' },
+            scrubLeft5m: { tr: '5 Dakika Geri', en: 'Backward 5 Minutes' },
+            seekF5: { tr: '5 Saniye İleri', en: 'Forward 5 Seconds' },
+            seekB5: { tr: '5 Saniye Geri', en: 'Backward 5 Seconds' },
+            goToStart: { tr: 'Başa Git', en: 'Go to Start' },
+            goToEnd: { tr: 'Sona Git', en: 'Go to End' },
+            goToMiddle: { tr: 'Ortaya Git', en: 'Go to Middle' },
+            goToBeforeEnd: { tr: 'Sondan 30sn Önce', en: 'Go to 30 Seconds Before End' },
+            goToTime: { tr: 'Zaman Koduna Git', en: 'Go to Timecode' },
+            markerNext: { tr: 'Sonraki İşaretçi', en: 'Next Marker' },
+            markerPrev: { tr: 'Önceki İşaretçi', en: 'Previous Marker' },
+            changeFineTune: { tr: 'İnce Ayar Değiştir', en: 'Change Fine-Tune Step' },
+            sensIncr: { tr: 'Sarma Adımını Küçült', en: 'Decrease Seek Step' },
+            sensDecr: { tr: 'Sarma Adımını Büyüt', en: 'Increase Seek Step' },
+            deleteMarker: { tr: 'İşaretçi Sil', en: 'Delete Marker' },
+            clearAllMarkers: { tr: 'Tüm İşaretçileri Temizle', en: 'Clear All Markers' },
+            markerList: { tr: 'İşaretçi Listesi', en: 'Marker List' },
+            selectRight: { tr: 'Sağa Seçim (1sn)', en: 'Select Right (1s)' },
+            selectLeft: { tr: 'Sola Seçim (1sn)', en: 'Select Left (1s)' },
+            selectToStart: { tr: 'Başa Kadar Seç', en: 'Select to Start' },
+            selectToEnd: { tr: 'Sona Kadar Seç', en: 'Select to End' },
+            selectRange: { tr: 'Aralık Seç Diyaloğu', en: 'Range Selection Dialog' },
+            clearSelection: { tr: 'Seçimi Temizle / İptal', en: 'Clear Selection / Cancel' },
+            selectBetweenRight: { tr: 'İşaretçiler Arası Sağa', en: 'Select Right Between Markers' },
+            selectBetweenLeft: { tr: 'İşaretçiler Arası Sola', en: 'Select Left Between Markers' },
+            selectToMarkerRight: { tr: 'İşaretçiye Kadar Sağa', en: 'Select Right to Marker' },
+            selectToMarkerLeft: { tr: 'İşaretçiye Kadar Sola', en: 'Select Left to Marker' },
+            insertList: { tr: 'Ekleme Listesi / Kuyruk', en: 'Insertion Queue' },
+            objectAnalysis: { tr: 'Nesne Analizi', en: 'Object Analysis' },
+            listSilences: { tr: 'Boşlukları Listele', en: 'List Silent Sections' },
+            describeSelection: { tr: 'Seçimi Betimle', en: 'Describe Selection' },
+            describePosition: { tr: 'Konumu Betimle', en: 'Describe Current Position' },
+            smartSelection: { tr: 'Akıllı Seçim', en: 'Smart Selection' },
+            shortcuts: { tr: 'Kısayollar Listesi', en: 'Shortcut List' },
+            help: { tr: 'Kullanım Kılavuzu', en: 'User Guide' },
+            keyboardManager: { tr: 'Klavye Yöneticisi', en: 'Keyboard Manager' },
+            sendFeedback: { tr: 'Geri Bildirim Gönder', en: 'Send Feedback' },
+            contextMenu: { tr: 'Bağlam Menüsü', en: 'Context Menu' },
+            contextMenuAlt: { tr: 'Bağlam Menüsü (Alt)', en: 'Context Menu (Alt)' },
+            announceCurrentTime: { tr: 'Mevcut Zamanı Oku', en: 'Read Current Time' },
+            exportVideoOnly: { tr: 'Dışa Aktar: Sadece Video (Sessiz)', en: 'Export: Video Only (Muted)' },
+            exportAudioOnly: { tr: 'Dışa Aktar: Sadece Ses (.mp3)', en: 'Export: Audio Only (.mp3)' },
+            syncAudio: { tr: 'Harici Sesi Senkronla (A)', en: 'Sync External Audio (A)' },
+            recordReference: { tr: 'Referans Sesle Kayıt (B)', en: 'Record with Reference Audio (B)' },
+            videoProperties: { tr: 'Video Özellikleri', en: 'Video Properties' },
+            insertVideo: { tr: 'Video Ekle (Birleştir)', en: 'Insert Video (Merge)' },
+            insertAudio: { tr: 'Ses Ekle / Dublaj', en: 'Insert Audio / Voiceover' },
+            insertImage: { tr: 'Resim / Slayt Ekle', en: 'Insert Image / Slide' },
+            insertText: { tr: 'Metin / Başlık Ekle', en: 'Insert Text / Title' },
+            openCtaLibrary: { tr: 'CTA / Overlay Kütüphanesi', en: 'CTA / Overlay Library' },
+            insertVideoLayer: { tr: 'Video Katmanı (PiP)', en: 'Insert Video Layer (PiP)' },
+            insertSubtitle: { tr: 'Altyazı Ekle (.srt)', en: 'Insert Subtitle (.srt)' },
+            createShorts: { tr: 'Dikey Video (Shorts/Reels) Oluştur', en: 'Create Vertical Video (Shorts/Reels)' },
+            createShortsFromSelection: { tr: 'Seçili Alanı Dikey Videoya Dönüştür', en: 'Create Vertical Video from Selection' },
+            addSelectionToQueue: { tr: 'Seçili Alanı Seçim Listesine Ekle', en: 'Add Selected Range to Selection List' },
+            openSelectionQueue: { tr: 'Seçim Listesi', en: 'Selection List' },
+            mergeSelectionQueue: { tr: 'Seçim Listesini Tek Klipte Birleştir', en: 'Merge Selection List into One Clip' },
+            createShortsFromQueue: { tr: 'Seçim Listesini Dikey Videoya Dönüştür', en: 'Convert Selection List to Vertical Video' },
+            clearSelectionQueue: { tr: 'Seçim Listesini Temizle', en: 'Clear Selection List' },
+            openRecordingWizard: { tr: 'Kayıt Sihirbazı', en: 'Recording Wizard' },
+            openRecordingInterview: { tr: 'Tam Ekran Çevrim Dışı Önayar', en: 'Fullscreen Offline Preset' },
+            openRecordingOfflineZoom: { tr: 'Zoom Çevrim Dışı Önayar', en: 'Zoom Offline Preset' },
+            openRecordingOfflineMeet: { tr: 'Google Meet Çevrim Dışı Önayar', en: 'Google Meet Offline Preset' },
+            openRecordingOfflineTeams: { tr: 'Microsoft Teams Çevrim Dışı Önayar', en: 'Microsoft Teams Offline Preset' },
+            openRecordingBroadcast: { tr: 'Tam Ekran Canlı Yayın', en: 'Fullscreen Live Broadcast' },
+            openRecordingBroadcastZoom: { tr: 'Zoom Canlı Yayın', en: 'Zoom Live Broadcast' },
+            openRecordingBroadcastMeet: { tr: 'Google Meet Canlı Yayın', en: 'Google Meet Live Broadcast' },
+            openRecordingBroadcastTeams: { tr: 'Microsoft Teams Canlı Yayın', en: 'Microsoft Teams Live Broadcast' },
+            openRecordingBroadcastChatWatch: { tr: 'YouTube Sohbetini İzle', en: 'Watch YouTube Chat' },
+            openLiveEffectsPanel: { tr: 'Canlı Efekt Paneli', en: 'Live Effects Panel' },
+            resumeActiveBroadcastWizard: { tr: 'Etkin Canlı Yayına Geri Dön', en: 'Return to Active Live Broadcast' },
+            recordingGlobalStartStop: { tr: 'Global: Kaydı veya Yayını Başlat/Durdur', en: 'Global: Start/Stop Recording or Broadcast' },
+            recordingGlobalPauseResume: { tr: 'Global: Kaydı Duraklat/Devam Ettir', en: 'Global: Pause/Resume Recording' },
+            recordingGlobalToggleSystemAudio: { tr: 'Global: Sistem Sesini Aç/Kapat', en: 'Global: Toggle System Audio' },
+            recordingGlobalToggleMicrophone: { tr: 'Global: Mikrofonu Aç/Kapat', en: 'Global: Toggle Microphone' },
+            recordingGlobalToggleLiveEffects: { tr: 'Global: Canlı Efekt Katmanını Aç/Kapat', en: 'Global: Toggle Live Effects Layer' },
+            recordingGlobalFullscreenCamera: { tr: 'Global: Kamerayı Tam Ekran Yap', en: 'Global: Make Camera Fullscreen' },
+            recordingGlobalRestoreLayout: { tr: 'Global: Önceki Düzeni Geri Yükle', en: 'Global: Restore Previous Layout' },
+            recordingGlobalHideScreen: { tr: 'Global: Ekranı Gizle veya Geri Aç', en: 'Global: Hide or Restore Screen' },
+            recordingGlobalPreviousWindow: { tr: 'Global: Önceki Pencere', en: 'Global: Previous Window' },
+            recordingGlobalNextWindow: { tr: 'Global: Sonraki Pencere', en: 'Global: Next Window' },
+            recordingGlobalWindowList: { tr: 'Global: Pencere Listesini Aç', en: 'Global: Open Window List' },
+            zoomIn: { tr: 'Yakınlaştır (Timeline)', en: 'Zoom In (Timeline)' },
+            zoomOut: { tr: 'Uzaklaştır (Timeline)', en: 'Zoom Out (Timeline)' },
+            resetZoom: { tr: 'Yakınlaştırmayı Sıfırla', en: 'Reset Zoom' },
+            rotateVideo: { tr: 'Videoyu Döndür (90°)', en: 'Rotate Video (90°)' }
+        };
+        return labels[actionId]?.[lang.startsWith('en') ? 'en' : 'tr'] || fallbackLabel;
+    },
+
     // Varsayılan Kısayol Tanımları
     // Mod: Ctrl (Win) veya Cmd (Mac)
     // Ctrl: Her zaman Ctrl
@@ -34,9 +201,10 @@ const Keyboard = {
         'delete': { default: ['Delete', 'Mod+D'], category: 'Düzenleme', label: 'Sil' },
         'selectAll': { default: 'Mod+A', category: 'Düzenleme', label: 'Tümünü Seç' },
         'addMarker': { default: 'M', category: 'İşaretçiler', label: 'İşaretçi Ekle' },
-        'applyTransition': { default: ['ş', 'Ş'], category: 'Düzenleme', label: 'Varsayılan Geçiş Ekle' },
+        'applyTransition': { default: null, category: 'Düzenleme', label: 'Varsayılan Geçiş Ekle' },
         'transitionLib': { default: 'Mod+Shift+T', category: 'Düzenleme', label: 'Geçiş Kütüphanesi' },
         'applyAllTrans': { default: 'Mod+T', category: 'Düzenleme', label: 'Tümüne Geçiş Uygula' },
+        'changeSpeed': { default: 'Mod+Shift+H', category: 'Düzenleme', label: 'Seçili Alanın Hızını Değiştir' },
 
         // --- Oynatma (Playback) ---
         'togglePlay': { default: 'Space', category: 'Oynatma', label: 'Oynat/Duraklat' },
@@ -98,6 +266,7 @@ const Keyboard = {
         'shortcuts': { default: 'F1', category: 'Yardım', label: 'Kısayollar Listesi' },
         'help': { default: 'F2', category: 'Yardım', label: 'Kullanım Kılavuzu' },
         'keyboardManager': { default: 'Mod+K', category: 'Yardım', label: 'Klavye Yöneticisi' },
+        'sendFeedback': { default: 'F3', category: 'Yardım', label: 'Geri Bildirim Gönder' },
 
         // --- Genel (General) ---
         'contextMenu': { default: ['ContextMenu', 'Shift+F10'], category: 'Genel', label: 'Bağlam Menüsü' },
@@ -117,6 +286,38 @@ const Keyboard = {
         'openCtaLibrary': { default: 'Mod+Shift+K', category: 'Ekle', label: 'CTA / Overlay Kütüphanesi' },
         'insertVideoLayer': { default: 'Ctrl+Shift+V', category: 'Ekle', label: 'Video Katmanı (PiP)' },
         'insertSubtitle': { default: null, category: 'Ekle', label: 'Altyazı Ekle (.srt)' },
+        'createShorts': { default: null, category: 'Ekle', label: 'Dikey Video (Shorts/Reels) Oluştur' },
+        'createShortsFromSelection': { default: null, category: 'Ekle', label: 'Seçili Alanı Dikey Videoya Dönüştür' },
+        'addSelectionToQueue': { default: null, category: 'Ekle', label: 'Seçili Alanı Seçim Listesine Ekle' },
+        'openSelectionQueue': { default: null, category: 'Ekle', label: 'Seçim Listesi' },
+        'mergeSelectionQueue': { default: null, category: 'Ekle', label: 'Seçim Listesini Tek Klipte Birleştir' },
+        'createShortsFromQueue': { default: null, category: 'Ekle', label: 'Seçim Listesini Dikey Videoya Dönüştür' },
+        'clearSelectionQueue': { default: null, category: 'Ekle', label: 'Seçim Listesini Temizle' },
+
+        // --- Erişilebilir Kayıt (Accessible Recording) ---
+        'openRecordingWizard': { default: 'Mod+Shift+R', category: 'Erişilebilir Kayıt', label: 'Kayıt Sihirbazı' },
+        'openRecordingInterview': { default: null, category: 'Erişilebilir Kayıt', label: 'Tam Ekran Çevrim Dışı Önayar' },
+        'openRecordingOfflineZoom': { default: null, category: 'Erişilebilir Kayıt', label: 'Zoom Çevrim Dışı Önayar' },
+        'openRecordingOfflineMeet': { default: null, category: 'Erişilebilir Kayıt', label: 'Google Meet Çevrim Dışı Önayar' },
+        'openRecordingOfflineTeams': { default: null, category: 'Erişilebilir Kayıt', label: 'Microsoft Teams Çevrim Dışı Önayar' },
+        'openRecordingBroadcast': { default: null, category: 'Erişilebilir Kayıt', label: 'Tam Ekran Canlı Yayın' },
+        'openRecordingBroadcastZoom': { default: null, category: 'Erişilebilir Kayıt', label: 'Zoom Canlı Yayın' },
+        'openRecordingBroadcastMeet': { default: null, category: 'Erişilebilir Kayıt', label: 'Google Meet Canlı Yayın' },
+        'openRecordingBroadcastTeams': { default: null, category: 'Erişilebilir Kayıt', label: 'Microsoft Teams Canlı Yayın' },
+        'openRecordingBroadcastChatWatch': { default: null, category: 'Erişilebilir Kayıt', label: 'YouTube Sohbetini İzle' },
+        'openLiveEffectsPanel': { default: null, category: 'Erişilebilir Kayıt', label: 'Canlı Efekt Paneli' },
+        'resumeActiveBroadcastWizard': { default: null, category: 'Erişilebilir Kayıt', label: 'Etkin Canlı Yayına Geri Dön' },
+        'recordingGlobalStartStop': { default: 'Alt+Ctrl+R', category: 'Kayıt Global Kısayolları', label: 'Global: Kaydı veya Yayını Başlat/Durdur' },
+        'recordingGlobalPauseResume': { default: 'Alt+Ctrl+P', category: 'Kayıt Global Kısayolları', label: 'Global: Kaydı Duraklat/Devam Ettir' },
+        'recordingGlobalToggleSystemAudio': { default: 'Alt+Ctrl+H', category: 'Kayıt Global Kısayolları', label: 'Global: Sistem Sesini Aç/Kapat' },
+        'recordingGlobalToggleMicrophone': { default: 'Alt+Ctrl+M', category: 'Kayıt Global Kısayolları', label: 'Global: Mikrofonu Aç/Kapat' },
+        'recordingGlobalToggleLiveEffects': { default: 'Alt+Ctrl+Space', category: 'Kayıt Global Kısayolları', label: 'Global: Canlı Efekt Katmanını Aç/Kapat' },
+        'recordingGlobalFullscreenCamera': { default: 'Alt+Ctrl+K', category: 'Kayıt Global Kısayolları', label: 'Global: Kamerayı Tam Ekran Yap' },
+        'recordingGlobalRestoreLayout': { default: 'Alt+Ctrl+J', category: 'Kayıt Global Kısayolları', label: 'Global: Önceki Düzeni Geri Yükle' },
+        'recordingGlobalHideScreen': { default: 'Alt+Ctrl+L', category: 'Kayıt Global Kısayolları', label: 'Global: Ekranı Gizle veya Geri Aç' },
+        'recordingGlobalPreviousWindow': { default: 'Alt+Ctrl+U', category: 'Kayıt Global Kısayolları', label: 'Global: Önceki Pencere' },
+        'recordingGlobalNextWindow': { default: 'Alt+Ctrl+O', category: 'Kayıt Global Kısayolları', label: 'Global: Sonraki Pencere' },
+        'recordingGlobalWindowList': { default: 'Alt+Ctrl+I', category: 'Kayıt Global Kısayolları', label: 'Global: Pencere Listesini Aç' },
         'zoomIn': { default: null, category: 'Görünüm', label: 'Yakınlaştır (Timeline)' },
         'zoomOut': { default: null, category: 'Görünüm', label: 'Uzaklaştır (Timeline)' },
         'resetZoom': { default: null, category: 'Görünüm', label: 'Yakınlaştırmayı Sıfırla' },
@@ -153,7 +354,10 @@ const Keyboard = {
 
         // Kullanıcı override var mı?
         // userKeymap[actionId] undefined ise default'u kullan
-        const bindings = this.userKeymap[actionId] !== undefined ? this.userKeymap[actionId] : def.default;
+        const defaultBindings = actionId === 'applyTransition'
+            ? this.getApplyTransitionBindings()
+            : def.default;
+        const bindings = this.userKeymap[actionId] !== undefined ? this.userKeymap[actionId] : defaultBindings;
 
         // Binding tek string olabilir veya array olabilir
         const bindingList = Array.isArray(bindings) ? bindings : [bindings];
@@ -198,6 +402,15 @@ const Keyboard = {
         if (key === 'space') return e.key === ' ';
         if (key === 'plus') return e.key === '+';
 
+        // Letter/digit accelerators are more reliable via KeyboardEvent.code,
+        // especially for Ctrl/Shift combinations that Chromium may localize oddly.
+        if (/^[a-z]$/.test(key)) {
+            return e.code === `Key${key.toUpperCase()}` || e.key.toLowerCase() === key;
+        }
+        if (/^[0-9]$/.test(key)) {
+            return e.code === `Digit${key}` || e.key === key;
+        }
+
         // e.key genellikle case-sensitive (ör. 'a' veya 'A'). 
         // Ancak Shift basılıyken 'A' gelir, shift yokken 'a' gelir.
         // Bizim logic'te shift modifier olarak zaten kontrol ediliyor.
@@ -239,11 +452,31 @@ const Keyboard = {
         const target = e.target;
         const dialogOpen = this.isDialogOpen();
         const inputFocused = this.isInputFocused(target);
+        const modKeyPressed = navigator.userAgent.includes('Mac') ? e.metaKey : e.ctrlKey;
+
+        // Hard fallback for Transition Library.
+        // Some environments or stale user keymap overrides can swallow Ctrl+Shift+T,
+        // while the menu accelerator alone may not reliably reach the renderer.
+        if (modKeyPressed && e.shiftKey && !e.altKey && e.code === 'KeyT') {
+            if (!dialogOpen && !inputFocused) {
+                Dialogs.showTransitionLibraryDialog();
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            return;
+        }
 
         // --- Diyalog/Input Engelleme Kuralları ---
         // Bu kurallar, diyaloğa veya input'a odaklıyken video kontrollerinin çalışmasını engeller
         // ancak Copy/Paste gibi temel kısayollara izin verir.
         if (dialogOpen || inputFocused) {
+            // Diyalog açıkken Enter ve Space her zaman diyaloğun doğal etkileşimine bırakılmalı.
+            // Özellikle erişilebilir onay kutularında odak bazen butonun içindeki alt öğelerde kalabildiği için
+            // sadece target.tagName === BUTTON kontrolü yeterli olmuyor.
+            if (dialogOpen && (e.key === 'Enter' || e.key === ' ')) {
+                return;
+            }
+
             // Escape her zaman geçmeli ki diyaloğu kapatabilsin (aşağıda check ediliyor)
             if (e.key === 'Escape') {
                 // Fall throw
@@ -261,7 +494,11 @@ const Keyboard = {
                 // Input içinde space basınca scroll olmasın veya video oynamasın
                 if (e.key === ' ' || e.key === 'Enter') {
                     // Eğer odaklanılan eleman butonsa, enter/space işlesin (bırakalım browser click yapsın)
-                    if (target.tagName === 'BUTTON' || (target.tagName === 'INPUT' && target.type === 'button') || target.getAttribute('role') === 'button') {
+                    const activatesLikeButton = target.tagName === 'BUTTON' ||
+                        (target.tagName === 'INPUT' && target.type === 'button') ||
+                        target.getAttribute('role') === 'button' ||
+                        !!target.closest('button,[role="button"]');
+                    if (activatesLikeButton) {
                         return;
                     }
                     e.stopImmediatePropagation();
@@ -295,6 +532,7 @@ const Keyboard = {
         if (this.check('keyboardManager', e)) { Dialogs.showKeyboardManagerDialog(); handled = true; } // YENİ
         else if (this.check('shortcuts', e)) { Dialogs.showShortcutsDialog(); handled = true; }
         else if (this.check('help', e)) { Dialogs.showHelpDialog(); handled = true; }
+        else if (this.check('sendFeedback', e)) { window.App?.openFeedbackDraft?.(); handled = true; }
         else if (this.check('contextMenu', e) || this.check('contextMenuAlt', e)) { this.showContextMenu(); handled = true; }
         else if (this.check('announceCurrentTime', e)) {
             const time = VideoPlayer.getTimelineTime();
@@ -339,19 +577,23 @@ const Keyboard = {
         else if (this.check('markerPrev', e)) { Markers.goToPrevious(); handled = true; }
         else if (this.check('sensIncr', e)) {
             const n = Settings.decreaseNavigationStep();
-            Accessibility.announce(`Hassasiyet artırıldı: ${Utils.formatTimeForSpeech(n)}`);
+            Accessibility.announce(Accessibility.t('runtime.keyboard.sensitivity_increased', 'Sensitivity increased: {duration}', {
+                duration: Utils.formatTimeForSpeech(n)
+            }));
             handled = true;
         }
         else if (this.check('sensDecr', e)) {
             const n = Settings.increaseNavigationStep();
-            Accessibility.announce(`Hassasiyet azaltıldı: ${Utils.formatTimeForSpeech(n)}`);
+            Accessibility.announce(Accessibility.t('runtime.keyboard.sensitivity_decreased', 'Sensitivity decreased: {duration}', {
+                duration: Utils.formatTimeForSpeech(n)
+            }));
             handled = true;
         }
 
         // Oynatma
         else if (this.check('togglePlay', e)) { VideoPlayer.togglePlay(); handled = true; }
         else if (this.check('pauseAt', e)) { VideoPlayer.pauseAtCurrentPosition(); handled = true; }
-        else if (this.check('pauseAndSet', e)) { VideoPlayer.pauseAtCurrentPosition(); handled = true; }
+        else if (this.check('pauseAndSet', e)) { VideoPlayer.togglePauseAtCurrentPosition(); handled = true; }
         else if (this.check('playSelection', e)) { VideoPlayer.playSelection(); handled = true; }
         else if (this.check('playCutPreview', e)) { VideoPlayer.playCutPreview(); handled = true; }
 
@@ -367,6 +609,7 @@ const Keyboard = {
         else if (this.check('paste', e)) { App.paste(); handled = true; }
         else if (this.check('undo', e)) { App.undo(); handled = true; }
         else if (this.check('redo', e)) { App.redo(); handled = true; }
+        else if (this.check('changeSpeed', e)) { Dialogs.showSpeedDialog(); handled = true; }
         else if (this.check('deleteMarker', e)) { Markers.removeAtCurrentTime(); handled = true; }
         else if (this.check('clearAllMarkers', e)) {
             Dialogs.showAccessibleConfirm('Onay', 'Tüm işaretçiler silinsin mi?').then(confirmed => {
@@ -428,8 +671,8 @@ const Keyboard = {
             if (VideoPlayer.hasVideo()) {
                 // Video seçim dialogunu aç
                 window.api.openFileDialog({
-                    title: 'Video Katmanı Seç (Picture-in-Picture)',
-                    filters: [{ name: 'Video Dosyaları', extensions: ['mp4', 'wmv', 'avi', 'mkv', 'mov', 'webm'] }],
+                    title: window.i18nHelper?.t('dialog.video_layer_wizard.open_file_title') || 'Select Video Layer (Picture-in-Picture)',
+                    filters: [{ name: window.i18nHelper?.t('runtime.app.video_files_filter') || 'Video Files', extensions: ['mp4', 'wmv', 'avi', 'mkv', 'mov', 'webm'] }],
                     properties: ['openFile']
                 }).then(result => {
                     if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
@@ -448,6 +691,86 @@ const Keyboard = {
             } else {
                 Accessibility.alert('Önce bir video açın.');
             }
+            handled = true;
+        }
+        else if (this.check('createShorts', e)) {
+            if (VideoPlayer.hasVideo()) {
+                window.api.openVerticalWizard();
+            } else {
+                Accessibility.alert('Önce bir video açın.');
+            }
+            handled = true;
+        }
+        else if (this.check('createShortsFromSelection', e)) {
+            App.openVerticalWizardFromSelection();
+            handled = true;
+        }
+        else if (this.check('addSelectionToQueue', e)) {
+            App.addSelectionToVerticalQueue();
+            handled = true;
+        }
+        else if (this.check('openSelectionQueue', e)) {
+            App.openSelectionQueueDialog();
+            handled = true;
+        }
+        else if (this.check('mergeSelectionQueue', e)) {
+            App.mergeVerticalClipQueue();
+            handled = true;
+        }
+        else if (this.check('createShortsFromQueue', e)) {
+            App.openVerticalWizardFromQueue();
+            handled = true;
+        }
+        else if (this.check('clearSelectionQueue', e)) {
+            App.clearVerticalClipQueue();
+            handled = true;
+        }
+        else if (this.check('openRecordingWizard', e)) {
+            window.api.openRecordingWizard();
+            handled = true;
+        }
+        else if (this.check('openRecordingInterview', e)) {
+            window.api.openRecordingWizard({ launchProfile: 'interview' });
+            handled = true;
+        }
+        else if (this.check('openRecordingOfflineZoom', e)) {
+            window.api.openRecordingWizard({ launchProfile: 'offline-zoom' });
+            handled = true;
+        }
+        else if (this.check('openRecordingOfflineMeet', e)) {
+            window.api.openRecordingWizard({ launchProfile: 'offline-meet' });
+            handled = true;
+        }
+        else if (this.check('openRecordingOfflineTeams', e)) {
+            window.api.openRecordingWizard({ launchProfile: 'offline-teams' });
+            handled = true;
+        }
+        else if (this.check('openRecordingBroadcast', e)) {
+            window.api.openRecordingWizard({ launchProfile: 'broadcast' });
+            handled = true;
+        }
+        else if (this.check('openRecordingBroadcastZoom', e)) {
+            window.api.openRecordingWizard({ launchProfile: 'broadcast-zoom' });
+            handled = true;
+        }
+        else if (this.check('openRecordingBroadcastMeet', e)) {
+            window.api.openRecordingWizard({ launchProfile: 'broadcast-meet' });
+            handled = true;
+        }
+        else if (this.check('openRecordingBroadcastTeams', e)) {
+            window.api.openRecordingWizard({ launchProfile: 'broadcast-teams' });
+            handled = true;
+        }
+        else if (this.check('openRecordingBroadcastChatWatch', e)) {
+            window.api.openRecordingWizard({ launchProfile: 'broadcast-chat-watch' });
+            handled = true;
+        }
+        else if (this.check('openLiveEffectsPanel', e)) {
+            window.api.openLiveEffectsPanel();
+            handled = true;
+        }
+        else if (this.check('resumeActiveBroadcastWizard', e)) {
+            window.api.resumeActiveRecordingWizard();
             handled = true;
         }
 
@@ -541,6 +864,9 @@ const Keyboard = {
 
     getActionShortcut(actionId) {
         if (this.userKeymap[actionId]) return this.userKeymap[actionId];
+        if (actionId === 'applyTransition') {
+            return this.getApplyTransitionBindings();
+        }
         return this.ACTIONS[actionId]?.default;
     }
 };

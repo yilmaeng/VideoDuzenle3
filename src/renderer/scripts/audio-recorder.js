@@ -26,6 +26,12 @@ const AudioRecorder = {
     isPaused: false,
     markers: [],
 
+    t(key, fallback, params = {}) {
+        if (!window.i18nHelper) return fallback;
+        const value = window.i18nHelper.t(key, params);
+        return value && !value.startsWith('[') ? value : fallback;
+    },
+
     init() {
         this.dialog = document.getElementById('audio-recorder-dialog');
         this.player = document.getElementById('recorder-preview-player');
@@ -50,8 +56,8 @@ const AudioRecorder = {
         this.updateUI('initial');
         this.updateTimer('00:00');
 
-        document.getElementById('recorder-status').textContent = 'Kayıt Bekleniyor';
-        document.getElementById('recorder-markers-info').textContent = '0 İşaretçi';
+        document.getElementById('recorder-status').textContent = this.t('runtime.audio_recorder.status_waiting', 'Kayıt Bekleniyor');
+        document.getElementById('recorder-markers-info').textContent = this.t('runtime.audio_recorder.marker_count', '0 İşaretçi', { count: 0 });
     },
 
     async initDevices() {
@@ -71,7 +77,9 @@ const AudioRecorder = {
             audioInputs.forEach((device, index) => {
                 const option = document.createElement('option');
                 option.value = device.deviceId;
-                option.textContent = device.label || `Mikrofon ${index + 1}`;
+                option.textContent = device.label || this.t('runtime.audio_recorder.microphone_label', 'Mikrofon {index}', {
+                    index: index + 1
+                });
                 select.appendChild(option);
             });
 
@@ -115,7 +123,7 @@ const AudioRecorder = {
 
         const permitted = await this.initDevices();
         if (!permitted) {
-            Accessibility.alert('Mikrofon erişim izni verilemedi veya mikrofon bulunamadı.');
+            Accessibility.alert(this.t('runtime.audio_recorder.microphone_access_failed', 'Mikrofon erişim izni verilemedi veya mikrofon bulunamadı.'));
             return;
         }
 
@@ -131,8 +139,12 @@ const AudioRecorder = {
         }
 
         // Mikrofon seçildiyse onu duyur
-        const micName = select.options[select.selectedIndex]?.text || 'Varsayılan';
-        Accessibility.announce(`Ses kayıt penceresi açıldı. Aktif mikrofon: ${micName}. Kayıt için R, durdurmak için S tuşuna basın.`);
+        const micName = select.options[select.selectedIndex]?.text || this.t('runtime.audio_recorder.default_microphone', 'Varsayılan');
+        Accessibility.announce(this.t(
+            'runtime.audio_recorder.dialog_opened',
+            'Ses kayıt penceresi açıldı. Aktif mikrofon: {micName}. Kayıt için R, durdurmak için S tuşuna basın.',
+            { micName }
+        ));
     },
 
     /**
@@ -179,7 +191,7 @@ const AudioRecorder = {
                     // Check if valid data
                     if (this.audioChunks.length === 0) {
                         console.error('Kayıt verisi boş!');
-                        Accessibility.alert('Kayıt yapılamadı: Veri boş.');
+                        Accessibility.alert(this.t('runtime.audio_recorder.empty_recording', 'Kayıt yapılamadı: Veri boş.'));
                         return;
                     }
 
@@ -197,7 +209,7 @@ const AudioRecorder = {
                     if (this.tempFilePath) {
                         this.player.src = this.tempFilePath;
                         this.updateUI('recorded');
-                        Accessibility.announce('Kayıt tamamlandı. Dinlemek için K tuşuna basın.');
+                        Accessibility.announce(this.t('runtime.audio_recorder.recording_complete', 'Kayıt tamamlandı. Dinlemek için K tuşuna basın.'));
                     }
 
                     // Stream'i kapat
@@ -218,7 +230,9 @@ const AudioRecorder = {
 
             } catch (err) {
                 console.error('Recording start error:', err);
-                Accessibility.alert('Kayıt başlatılamadı: ' + err.message);
+                Accessibility.alert(this.t('runtime.audio_recorder.recording_start_failed', 'Kayıt başlatılamadı: {error}', {
+                    error: err.message
+                }));
             }
         } else {
             // Pause / Resume
@@ -226,15 +240,15 @@ const AudioRecorder = {
                 this.mediaRecorder.pause();
                 this.isPaused = true;
                 clearInterval(this.timerInterval);
-                document.getElementById('recorder-status').textContent = 'Duraklatıldı (Devam için R)';
-                Accessibility.announce('Kayıt duraklatıldı.');
+            document.getElementById('recorder-status').textContent = this.t('runtime.audio_recorder.status_paused', 'Duraklatıldı (Devam için R)');
+            Accessibility.announce(this.t('runtime.audio_recorder.recording_paused', 'Kayıt duraklatıldı.'));
             } else if (this.mediaRecorder.state === 'paused') {
                 this.mediaRecorder.resume();
                 this.isPaused = false;
                 this.startTime = Date.now() - (this.elapsedTime || 0); // Adjust time
                 this.timerInterval = setInterval(() => this.updateRecordingTimer(), 100);
-                document.getElementById('recorder-status').textContent = 'Kaydediliyor...';
-                Accessibility.announce('Kayıt devam ediyor.');
+            document.getElementById('recorder-status').textContent = this.t('runtime.audio_recorder.status_recording', 'Kaydediliyor...');
+            Accessibility.announce(this.t('runtime.audio_recorder.recording_resumed', 'Kayıt devam ediyor.'));
             }
         }
     },
@@ -245,7 +259,7 @@ const AudioRecorder = {
             this.mediaRecorder.stop();
             this.isRecording = false;
             this.isPaused = false;
-            document.getElementById('recorder-status').textContent = 'İşleniyor...';
+            document.getElementById('recorder-status').textContent = this.t('runtime.audio_recorder.status_processing', 'İşleniyor...');
 
             // Kayıt bitiş BİP sesi (Kalın)
             this.playBeep(440, 0.4);
@@ -269,10 +283,12 @@ const AudioRecorder = {
             }
         } catch (err) {
             console.error('Save temp error:', err);
-            Accessibility.alert('Kayıt dosyası oluşturulamadı: ' + err.message);
+            Accessibility.alert(this.t('runtime.audio_recorder.temp_file_failed', 'Kayıt dosyası oluşturulamadı: {error}', {
+                error: err.message
+            }));
             // UI'ı resetle ki kullanıcı tekrar deneyebilsin
             this.updateUI('initial');
-            document.getElementById('recorder-status').textContent = 'Hata Oluştu';
+            document.getElementById('recorder-status').textContent = this.t('runtime.audio_recorder.status_error', 'Hata Oluştu');
         }
     },
 
@@ -299,7 +315,7 @@ const AudioRecorder = {
         switch (state) {
             case 'initial': // Boş
                 recBtn.disabled = false;
-                recBtn.textContent = 'Kaydet (R)';
+                recBtn.textContent = this.t('runtime.audio_recorder.record_button', 'Kaydet (R)');
                 recBtn.classList.remove('recording', 'paused');
                 stopBtn.disabled = true;
                 playBtn.disabled = true;
@@ -308,7 +324,7 @@ const AudioRecorder = {
                 nextBtn.disabled = true;
                 break;
             case 'recording': // Kayıt sürüyor
-                recBtn.textContent = 'Duraklat (R)';
+                recBtn.textContent = this.t('runtime.audio_recorder.pause_button', 'Duraklat (R)');
                 recBtn.classList.add('recording');
                 recBtn.classList.remove('paused');
                 stopBtn.disabled = false;
@@ -318,14 +334,14 @@ const AudioRecorder = {
                 nextBtn.disabled = true;
                 break;
             case 'recorded': // Kayıt bitti, dosya var
-                recBtn.textContent = 'Yeniden Kaydet (R)'; // Overwrite logic handles "New Record"
+                recBtn.textContent = this.t('runtime.audio_recorder.rerecord_button', 'Yeniden Kaydet (R)'); // Overwrite logic handles "New Record"
                 recBtn.classList.remove('recording', 'paused');
                 stopBtn.disabled = true;
                 playBtn.disabled = false;
                 editBtn.disabled = false;
                 resetBtn.disabled = false;
                 nextBtn.disabled = false;
-                document.getElementById('recorder-status').textContent = 'Kayıt Hazır';
+                document.getElementById('recorder-status').textContent = this.t('runtime.audio_recorder.status_ready', 'Kayıt Hazır');
                 break;
         }
     },
@@ -336,24 +352,26 @@ const AudioRecorder = {
 
         if (this.player.paused) {
             this.player.play();
-            Accessibility.announce('Oynatılıyor');
+            Accessibility.announce(this.t('runtime.audio_recorder.playing', 'Oynatılıyor'));
         } else {
             this.player.pause();
-            Accessibility.announce('Duraklatıldı');
+            Accessibility.announce(this.t('runtime.audio_recorder.paused', 'Duraklatıldı'));
         }
     },
 
     seekPreview(seconds) {
         if (!this.player || !this.player.duration) return;
         this.player.currentTime = Math.min(Math.max(0, this.player.currentTime + seconds), this.player.duration);
-        Accessibility.announce(`Konum: ${Utils.formatTime(this.player.currentTime)}`);
+        Accessibility.announce(this.t('runtime.audio_recorder.position', 'Konum: {time}', {
+            time: Utils.formatTime(this.player.currentTime)
+        }));
     },
 
     stopPreview() {
         if (!this.player) return;
         this.player.pause();
         this.player.currentTime = 0;
-        Accessibility.announce('Durduruldu, başa dönüldü.');
+        Accessibility.announce(this.t('runtime.audio_recorder.stopped_reset', 'Durduruldu, başa dönüldü.'));
     },
 
     addMarker() {
@@ -367,17 +385,21 @@ const AudioRecorder = {
         }
 
         this.updateMarkerInfo();
-        Accessibility.announce(`İşaretçi eklendi: ${Utils.formatTime(time)}`);
+        Accessibility.announce(this.t('runtime.audio_recorder.marker_added', 'İşaretçi eklendi: {time}', {
+            time: Utils.formatTime(time)
+        }));
     },
 
     updateMarkerInfo() {
         const count = this.markers.length;
-        let text = `${count} İşaretçi`;
+        let text = this.t('runtime.audio_recorder.marker_count', '{count} İşaretçi', { count });
         if (count === 2) {
             const start = Math.min(this.markers[0], this.markers[1]);
             const end = Math.max(this.markers[0], this.markers[1]);
             const dur = end - start;
-            text += ` (Seçili Alan: ${dur.toFixed(1)} sn)`;
+            text += this.t('runtime.audio_recorder.selected_region_duration', ' (Seçili Alan: {duration} sn)', {
+                duration: dur.toFixed(1)
+            });
         }
         document.getElementById('recorder-markers-info').textContent = text;
     },
@@ -387,9 +409,9 @@ const AudioRecorder = {
         // Basit bir custom menu veya Electron context menu
         // Renderer'dan main'e "show-context-menu" gönderilir
         const menuTemplate = [
-            { label: 'Seçili Bölgeyi Sil (İki işaretçi arası)', click: 'rec-delete-selected', id: 'del-sel' },
-            { label: 'Konumdan Başa Kadar Sil', click: 'rec-delete-start', id: 'del-start' },
-            { label: 'Konumdan Sona Kadar Sil', click: 'rec-delete-end', id: 'del-end' }
+            { label: this.t('runtime.audio_recorder.menu_delete_selected', 'Seçili Bölgeyi Sil (İki işaretçi arası)'), click: 'rec-delete-selected', id: 'del-sel' },
+            { label: this.t('runtime.audio_recorder.menu_delete_start', 'Konumdan Başa Kadar Sil'), click: 'rec-delete-start', id: 'del-start' },
+            { label: this.t('runtime.audio_recorder.menu_delete_end', 'Konumdan Sona Kadar Sil'), click: 'rec-delete-end', id: 'del-end' }
         ];
 
         window.api.send('show-context-menu', menuTemplate);
@@ -397,7 +419,7 @@ const AudioRecorder = {
 
     async handleEditCommand(command) {
         if (!this.tempFilePath) {
-            Accessibility.alert('Düzenlenecek kayıt yok.');
+            Accessibility.alert(this.t('runtime.audio_recorder.no_recording_to_edit', 'Düzenlenecek kayıt yok.'));
             return;
         }
 
@@ -408,7 +430,7 @@ const AudioRecorder = {
 
         if (command === 'rec-delete-selected') {
             if (this.markers.length < 2) {
-                Accessibility.alert('Seçili bölge yok. Lütfen M harfi ile oynarken iki işaretçi koyun.');
+                Accessibility.alert(this.t('runtime.audio_recorder.no_selected_region', 'Seçili bölge yok. Lütfen M harfi ile oynarken iki işaretçi koyun.'));
                 return;
             }
             const m1 = this.markers[0];
@@ -425,7 +447,7 @@ const AudioRecorder = {
         if (regionsToRemove.length === 0) return;
 
         // İşleme başlıyor
-        document.getElementById('recorder-status').textContent = 'Düzenleniyor...';
+        document.getElementById('recorder-status').textContent = this.t('runtime.audio_recorder.status_editing', 'Düzenleniyor...');
 
         try {
             // Main process'e ffmpeg ile kesme işlemini yolla
@@ -453,7 +475,7 @@ const AudioRecorder = {
             }
 
             if (parts.length === 0) {
-                Accessibility.alert('Tüm ses silinemez. Sıfırlamayı kullanın.');
+            Accessibility.alert(this.t('runtime.audio_recorder.cannot_delete_all_audio', 'Tüm ses silinemez. Sıfırlamayı kullanın.'));
                 return;
             }
 
@@ -510,12 +532,14 @@ const AudioRecorder = {
             this.player.load(); // Explicit load
             this.markers = []; // Markerları sıfırla
             this.updateMarkerInfo();
-            Accessibility.announce('Düzenleme tamamlandı.');
-            document.getElementById('recorder-status').textContent = 'Düzenlendi';
+        Accessibility.announce(this.t('runtime.audio_recorder.edit_complete', 'Düzenleme tamamlandı.'));
+        document.getElementById('recorder-status').textContent = this.t('runtime.audio_recorder.status_edited', 'Düzenlendi');
 
         } catch (err) {
             console.error('Edit error:', err);
-            Accessibility.alert('Düzenleme hatası: ' + err.message);
+        Accessibility.alert(this.t('runtime.audio_recorder.edit_error', 'Düzenleme hatası: {error}', {
+            error: err.message
+        }));
         }
     },
 
@@ -551,7 +575,7 @@ const AudioRecorder = {
         document.getElementById('rec-reset-btn').addEventListener('click', () => {
             this.stopRecording();
             this.resetState();
-            Accessibility.announce('Kayıt silindi.');
+        Accessibility.announce(this.t('runtime.audio_recorder.recording_deleted', 'Kayıt silindi.'));
             document.getElementById('rec-record-btn').focus();
         });
         document.getElementById('rec-cancel-btn').addEventListener('click', () => {

@@ -18,6 +18,7 @@ const Markers = {
     init() {
         this.updateMarkerList();
         this.updateMarkerCount();
+        this.renderTimelineMarkers();
     },
 
     /**
@@ -44,6 +45,7 @@ const Markers = {
         this.sortMarkers();
         this.updateMarkerList();
         this.updateMarkerCount();
+        this.renderTimelineMarkers(time);
 
         Accessibility.announceMarker('added', time, this.markers.length);
 
@@ -80,6 +82,7 @@ const Markers = {
 
         this.updateMarkerList();
         this.updateMarkerCount();
+        this.renderTimelineMarkers();
 
         Accessibility.announceMarker('removed', marker.time, this.markers.length);
 
@@ -138,6 +141,7 @@ const Markers = {
             this.sortMarkers();
             this.updateMarkerList();
             this.updateMarkerCount();
+            this.renderTimelineMarkers();
 
             console.log(`Markers: Timeline silme işlemi sonrası işaretçiler güncellendi.`);
             if (this.onMarkersChanged) {
@@ -156,6 +160,7 @@ const Markers = {
 
         this.updateMarkerList();
         this.updateMarkerCount();
+        this.renderTimelineMarkers();
 
         Accessibility.announce(`${count} işaretçi silindi`);
 
@@ -269,7 +274,7 @@ const Markers = {
             console.log('Markers: İşaretçi yok, boş mesajı ekleniyor.');
             const emptyLi = document.createElement('li');
             emptyLi.className = 'empty-message';
-            emptyLi.textContent = 'Henüz işaretçi yok';
+            emptyLi.textContent = window.i18nHelper ? window.i18nHelper.t('player.no_markers') : 'Henüz işaretçi yok';
             list.appendChild(emptyLi);
             return;
         }
@@ -280,6 +285,7 @@ const Markers = {
             li.setAttribute('role', 'option');
             li.setAttribute('tabindex', '0');
             li.setAttribute('data-marker-id', marker.id);
+            li.setAttribute('aria-selected', 'false');
             li.textContent = `${Utils.formatTime(marker.time)} - ${marker.label}`;
 
             // Tıklama ile git - seekToTimelineTime farklı kaynakları destekler
@@ -312,8 +318,63 @@ const Markers = {
     updateMarkerCount() {
         const countEl = document.getElementById('marker-count');
         if (countEl) {
-            countEl.textContent = `İşaretçi: ${this.markers.length}`;
+            countEl.textContent = window.i18nHelper ? window.i18nHelper.t('player.marker_count', { count: this.markers.length }) : `İşaretçi: ${this.markers.length}`;
         }
+    },
+
+    /**
+     * Timeline uzerindeki marker gorunumunu guncelle
+     * @param {number|null} activeTime
+     */
+    renderTimelineMarkers(activeTime = null) {
+        const layer = document.getElementById('timeline-marker-layer');
+        if (!layer) return;
+
+        layer.innerHTML = '';
+
+        const duration = typeof Timeline !== 'undefined' && Timeline.getVisualDuration
+            ? Timeline.getVisualDuration()
+            : (typeof VideoPlayer !== 'undefined' && VideoPlayer.getDuration ? VideoPlayer.getDuration() : 0);
+
+        if (!duration || this.markers.length === 0) {
+            return;
+        }
+
+        this.markers.forEach((marker) => {
+            const tick = document.createElement('div');
+            tick.className = 'timeline-marker-tick';
+            tick.dataset.markerId = marker.id;
+            tick.style.left = `${(marker.time / duration) * 100}%`;
+
+            if (typeof activeTime === 'number' && Math.abs(marker.time - activeTime) <= 0.15) {
+                tick.classList.add('is-active');
+            }
+
+            layer.appendChild(tick);
+        });
+
+        this.highlightMarkerListItem(activeTime);
+    },
+
+    /**
+     * Marker listesindeki aktif ogeyi vurgula
+     * @param {number|null} activeTime
+     */
+    highlightMarkerListItem(activeTime = null) {
+        const items = document.querySelectorAll('#marker-list li[data-marker-id]');
+        if (!items.length) return;
+
+        let activeMarkerId = null;
+        if (typeof activeTime === 'number') {
+            const closest = this.findClosest(activeTime, 0.2);
+            activeMarkerId = closest ? closest.id : null;
+        }
+
+        items.forEach((item) => {
+            const isActive = !!activeMarkerId && item.getAttribute('data-marker-id') === activeMarkerId;
+            item.classList.toggle('selected', isActive);
+            item.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
     },
 
     /**
@@ -350,11 +411,13 @@ const Markers = {
         // UI güncellemesi
         this.updateMarkerList();
         this.updateMarkerCount();
+        this.renderTimelineMarkers();
 
         // Garanti olsun diye gecikmeli tekrar güncelle
         setTimeout(() => {
             this.updateMarkerList();
             this.updateMarkerCount();
+            this.renderTimelineMarkers();
             console.log('Markers: UI güncellendi (gecikmeli).');
         }, 100);
 

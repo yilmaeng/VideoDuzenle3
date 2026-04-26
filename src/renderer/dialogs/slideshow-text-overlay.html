@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yazı Ekle - Slideshow</title>
+    <title data-i18n="dialog.slideshow_text_overlay.window_title">Add Text - Slideshow</title>
     <style>
         * {
             box-sizing: border-box;
@@ -288,129 +288,128 @@
 <body>
     <div id="live-region" aria-live="assertive" aria-atomic="true"></div>
 
-    <h2>Yazı Ekle</h2>
+    <h2 data-i18n="dialog.slideshow_text_overlay.title_add">Add Text</h2>
 
     <div class="scroll-content">
         <!-- Yazı metni -->
         <div class="form-group">
-            <label for="text-content">Yazı İçeriği</label>
-            <textarea id="text-content" rows="3" placeholder="Eklenecek yazıyı girin..." autofocus></textarea>
+            <label for="text-content" data-i18n="dialog.text_overlay_window.content">Text:</label>
+            <textarea id="text-content" rows="3" placeholder="Eklenecek yazıyı girin..." data-i18n-placeholder="dialog.text_overlay_window.content_placeholder" autofocus></textarea>
         </div>
 
         <!-- Hangi resimlerde gösterilecek -->
         <div class="form-group">
-            <label>Gösterileceği Resimler</label>
-            <button class="select-all-btn" id="select-all-btn" type="button">Tümünü Seç</button>
-            <div class="image-selection" id="image-selection" role="group" aria-label="Resim seçimi">
-                <p style="color: #666; font-size: 13px;">Resim listesi yükleniyor...</p>
+            <label data-i18n="dialog.slideshow_text_overlay.target_images">Images to Show On</label>
+            <button class="select-all-btn" id="select-all-btn" type="button" data-i18n="dialog.slideshow_text_overlay.select_all">Select All</button>
+            <div class="image-selection" id="image-selection" role="group" aria-label="Resim seçimi" data-i18n-aria="dialog.slideshow_text_overlay.image_selection_aria">
+                <p style="color: #666; font-size: 13px;" data-i18n="dialog.slideshow_text_overlay.loading_images">Loading image list...</p>
             </div>
-            <p class="hint">Yazının gösterileceği resimleri seçin. En az bir resim seçmelisiniz.</p>
+            <p class="hint" data-i18n="dialog.slideshow_text_overlay.target_images_hint">Choose the images where this text should appear. You must select at least one image.</p>
         </div>
 
         <!-- Stil ayarları -->
         <div class="row">
             <div class="form-group">
-                <label for="font-size">Yazı Boyutu</label>
+                <label for="font-size" data-i18n="dialog.text_overlay_window.size">Size:</label>
                 <select id="font-size">
-                    <option value="24">Küçük (24px)</option>
-                    <option value="36">Orta (36px)</option>
-                    <option value="48" selected>Büyük (48px)</option>
-                    <option value="64">Çok Büyük (64px)</option>
+                    <option value="24" data-i18n="dialog.slideshow_text_overlay.font_small">Small (24px)</option>
+                    <option value="36" data-i18n="dialog.slideshow_text_overlay.font_medium">Medium (36px)</option>
+                    <option value="48" selected data-i18n="dialog.slideshow_text_overlay.font_large">Large (48px)</option>
+                    <option value="64" data-i18n="dialog.slideshow_text_overlay.font_xlarge">Very Large (64px)</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="position">Konum</label>
+                <label for="position" data-i18n="dialog.text_overlay_window.position">Position:</label>
                 <select id="position">
-                    <option value="top-left">Sol Üst</option>
-                    <option value="top-center">Üst Orta</option>
-                    <option value="top-right">Sağ Üst</option>
-                    <option value="middle-left">Sol Orta</option>
-                    <option value="center">Tam Orta</option>
-                    <option value="middle-right">Sağ Orta</option>
-                    <option value="bottom-left">Sol Alt</option>
-                    <option value="bottom-center" selected>Alt Orta</option>
-                    <option value="bottom-right">Sağ Alt</option>
+                    <option value="top-left" data-i18n="dialog.text_overlay_window.pos_top_left">Top Left</option>
+                    <option value="top-center" data-i18n="dialog.text_overlay_window.pos_top_center">Top Center</option>
+                    <option value="top-right" data-i18n="dialog.text_overlay_window.pos_top_right">Top Right</option>
+                    <option value="middle-left" data-i18n="dialog.text_overlay_window.pos_middle_left">Middle Left</option>
+                    <option value="center" data-i18n="dialog.text_overlay_window.pos_center">Center</option>
+                    <option value="middle-right" data-i18n="dialog.text_overlay_window.pos_middle_right">Middle Right</option>
+                    <option value="bottom-left" data-i18n="dialog.text_overlay_window.pos_bottom_left">Bottom Left</option>
+                    <option value="bottom-center" selected data-i18n="dialog.text_overlay_window.pos_bottom_center">Bottom Center</option>
+                    <option value="bottom-right" data-i18n="dialog.text_overlay_window.pos_bottom_right">Bottom Right</option>
                 </select>
             </div>
         </div>
 
         <div class="row">
             <div class="form-group">
-                <label for="font-color">Yazı Rengi</label>
+                <label for="font-color" data-i18n="dialog.text_overlay_window.color">Text Color:</label>
                 <select id="font-color">
-                    <option value="white" selected>Beyaz</option>
-                    <option value="black">Siyah</option>
-                    <option value="yellow">Sarı</option>
-                    <option value="red">Kırmızı</option>
-                    <option value="blue">Mavi</option>
-                    <option value="green">Yeşil</option>
+                    <option value="white" selected data-i18n="dialog.color.white">White</option>
+                    <option value="black" data-i18n="dialog.color.black">Black</option>
+                    <option value="yellow" data-i18n="dialog.color.yellow">Yellow</option>
+                    <option value="red" data-i18n="dialog.color.red">Red</option>
+                    <option value="blue" data-i18n="dialog.color.blue">Blue</option>
+                    <option value="green" data-i18n="dialog.color.green">Green</option>
                 </select>
             </div>
             <div class="form-group">
+                <label for="background" data-i18n="dialog.text_overlay_window.background">Background:</label>
                 <select id="background">
-                    <option value="black" selected>Siyah (yarı saydam)</option>
-                    <option value="white">Beyaz (yarı saydam)</option>
-                    <option value="none">Yok</option>
+                    <option value="black" selected data-i18n="dialog.text_overlay_window.bg_black_transparent">Black (Semi-transparent)</option>
+                    <option value="white" data-i18n="dialog.text_overlay_window.bg_white_transparent">White (Semi-transparent)</option>
+                    <option value="none" data-i18n="dialog.text_overlay_window.bg_none">None (Transparent)</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="shadow">Gölge</label>
+                <label for="shadow" data-i18n="dialog.text_overlay_window.shadow">Shadow:</label>
                 <select id="shadow">
-                    <option value="none" selected>Yok</option>
-                    <option value="small">Hafif</option>
-                    <option value="medium">Orta</option>
-                    <option value="large">Güçlü</option>
+                    <option value="none" selected data-i18n="dialog.text_overlay_window.shadow_none">None</option>
+                    <option value="small" data-i18n="dialog.text_overlay_window.shadow_small">Light</option>
+                    <option value="medium" data-i18n="dialog.text_overlay_window.shadow_medium">Medium</option>
+                    <option value="large" data-i18n="dialog.text_overlay_window.shadow_large">Strong</option>
                 </select>
             </div>
         </div>
 
         <!-- Önizleme -->
         <div class="form-group">
-            <label>Önizleme</label>
+            <label data-i18n="dialog.slideshow_text_overlay.preview">Preview</label>
             <div class="preview-box">
                 <span id="preview-text" class="preview-text"
                     style="color: white; background: rgba(0,0,0,0.5); font-size: 48px;">
-                    Örnek Yazı
+                    <span data-i18n="dialog.slideshow_text_overlay.sample_text">Sample Text</span>
                 </span>
             </div>
         </div>
 
         <!-- Yapay Zeka Geri Bildirimi -->
         <div class="ai-section">
-            <h3>Yapay Zeka Geri Bildirimi</h3>
+            <h3 data-i18n="dialog.text_overlay_window.ai_section">AI Feedback</h3>
 
             <!-- Model Seçimi -->
             <div class="form-group">
-                <label for="gemini-model">Gemini Modeli:</label>
+                <label for="gemini-model" data-i18n="dialog.text_overlay_window.gemini_model">Gemini Model:</label>
                 <select id="gemini-model">
-                    <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Önerilen)</option>
-                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                    <option value="gemini-1.5-flash">Gemini 1.5 Flash (Kota Dostu)</option>
+                    <option value="gemini-2.5-flash" selected data-i18n="dialog.text_overlay_window.model_flash">Gemini 2.5 Flash (Recommended)</option>
+                    <option value="gemini-2.5-pro" data-i18n="dialog.text_overlay_window.model_pro">Gemini 2.5 Pro</option>
+                    <option value="gemini-1.5-flash" data-i18n="dialog.text_overlay_window.model_flash_legacy">Gemini 1.5 Flash (Budget Friendly)</option>
                 </select>
             </div>
 
             <!-- API Anahtarı (ilk kullanımda gösterilir) -->
             <div id="api-key-section" class="form-group" style="display: none;">
-                <label for="gemini-api-key">Gemini API Anahtarı:</label>
-                <input type="password" id="gemini-api-key" placeholder="API anahtarınızı girin">
+                <label for="gemini-api-key" data-i18n="dialog.text_overlay_window.api_key">Gemini API Key:</label>
+                <input type="password" id="gemini-api-key" placeholder="API anahtarınızı girin" data-i18n-placeholder="dialog.text_overlay_window.api_key_placeholder">
                 <div class="checkbox-group" style="margin-top: 5px;">
                     <input type="checkbox" id="save-api-key" checked>
-                    <label for="save-api-key">Bu anahtarı kaydet</label>
+                    <label for="save-api-key" data-i18n="dialog.text_overlay_window.save_api_key">Save this key</label>
                 </div>
             </div>
 
             <!-- AI Butonları -->
             <div class="ai-buttons">
-                <button type="button" id="ai-feedback-btn" class="secondary">Mevcut Durumu Yorumla</button>
-                <button type="button" id="ai-suggest-btn" class="secondary" style="background-color: #2b5d2b;">Stil ve
-                    Konum Öner</button>
-                <button type="button" id="change-api-key-btn" class="secondary" style="font-size: 12px;">API
-                    Anahtarı</button>
+                <button type="button" id="ai-feedback-btn" class="secondary" data-i18n="dialog.text_overlay_window.ai_feedback">Comment on Current State</button>
+                <button type="button" id="ai-suggest-btn" class="secondary" style="background-color: #2b5d2b;" data-i18n="dialog.text_overlay_window.ai_suggest">Suggest Style and Position</button>
+                <button type="button" id="change-api-key-btn" class="secondary" style="font-size: 12px;" data-i18n="dialog.text_overlay_window.api_key_button">API Key</button>
             </div>
 
             <!-- AI Yanıt Alanı -->
             <div id="ai-response-section" class="form-group" style="display: none;">
-                <label for="ai-response">Yapay Zeka Yanıtı:</label>
+                <label for="ai-response" data-i18n="dialog.text_overlay_window.ai_response">AI Response:</label>
                 <!-- Analiz edilen görüntü önizlemesi -->
                 <div id="ai-preview-container" style="display: none; margin-bottom: 10px; text-align: center;"></div>
                 <textarea id="ai-response" readonly rows="5"></textarea>
@@ -420,27 +419,91 @@
 
                 <!-- Takip Sorusu -->
                 <div class="followup-section">
-                    <label for="followup-question">Ek Soru:</label>
-                    <input type="text" id="followup-question" placeholder="Sorunuzu yazın...">
+                    <label for="followup-question" data-i18n="dialog.text_overlay_window.followup">Ask a Follow-up:</label>
+                    <input type="text" id="followup-question" placeholder="Sorunuzu yazın..." data-i18n-placeholder="dialog.text_overlay_window.followup_placeholder">
                     <button type="button" id="ask-followup-btn" class="secondary"
-                        style="padding: 8px 12px;">Sor</button>
+                        style="padding: 8px 12px;" data-i18n="dialog.text_overlay_window.ask">Ask</button>
                 </div>
             </div>
 
             <!-- Yükleniyor göstergesi -->
             <div id="ai-loading" style="display: none;">
-                <p>Yapay zeka yanıtı bekleniyor...</p>
+                <p data-i18n="dialog.text_overlay_window.ai_loading">Waiting for AI response...</p>
             </div>
         </div>
     </div>
 
     <div class="buttons">
-        <button class="secondary" id="cancel-btn">İptal</button>
-        <button class="primary" id="add-btn" disabled>Ekle</button>
+        <button class="secondary" id="cancel-btn" data-i18n="dialog.cancel">Cancel</button>
+        <button class="primary" id="add-btn" disabled data-i18n="dialog.text_overlay_window.add_to_list">Add to List</button>
     </div>
 
     <script>
         const { ipcRenderer } = require('electron');
+        let currentLang = 'tr';
+        let i18nCache = {};
+
+        function getPathValue(obj, key) {
+            return key.split('.').reduce((acc, part) => (acc && acc[part] !== undefined ? acc[part] : null), obj);
+        }
+
+        function t(key, fallback = key, params = {}) {
+            const template = getPathValue(i18nCache, key) ?? fallback;
+            return Object.entries(params).reduce((text, [name, value]) => (
+                String(text).replace(new RegExp(`{${name}}`, 'g'), value)
+            ), template);
+        }
+
+        function translateDocument(root = document) {
+            const textEls = Array.from((root === document ? document : root).querySelectorAll?.('[data-i18n]') || []);
+            if (root !== document && root?.hasAttribute?.('data-i18n')) textEls.unshift(root);
+            textEls.forEach((el) => {
+                const value = t(el.getAttribute('data-i18n'), null);
+                if (value) el.textContent = value;
+            });
+            const placeholderEls = Array.from((root === document ? document : root).querySelectorAll?.('[data-i18n-placeholder]') || []);
+            if (root !== document && root?.hasAttribute?.('data-i18n-placeholder')) placeholderEls.unshift(root);
+            placeholderEls.forEach((el) => {
+                const value = t(el.getAttribute('data-i18n-placeholder'), null);
+                if (value) el.setAttribute('placeholder', value);
+            });
+            const ariaEls = Array.from((root === document ? document : root).querySelectorAll?.('[data-i18n-aria]') || []);
+            if (root !== document && root?.hasAttribute?.('data-i18n-aria')) ariaEls.unshift(root);
+            ariaEls.forEach((el) => {
+                const value = t(el.getAttribute('data-i18n-aria'), null);
+                if (value) el.setAttribute('aria-label', value);
+            });
+            const titleEl = document.querySelector('title[data-i18n]');
+            if (titleEl) {
+                const value = t(titleEl.getAttribute('data-i18n'), null);
+                if (value) document.title = value;
+            }
+            document.documentElement.lang = currentLang;
+        }
+
+        async function initI18n() {
+            currentLang = await ipcRenderer.invoke('i18n-get-language');
+            i18nCache = await ipcRenderer.invoke('i18n-get-all');
+            translateDocument();
+            ipcRenderer.on('language-changed', async (_event, lang) => {
+                currentLang = lang;
+                i18nCache = await ipcRenderer.invoke('i18n-get-all');
+                translateDocument();
+                updatePreview();
+            });
+        }
+
+        function getCurrentAiLanguageName() {
+            const names = { tr: 'Turkish', en: 'English', de: 'German', es: 'Spanish', fr: 'French' };
+            return names[currentLang] || 'English';
+        }
+
+        function getAiSystemInstruction(mode = 'default') {
+            const lang = getCurrentAiLanguageName();
+            return mode === 'json'
+                ? `Respond only in ${lang}. If JSON output is requested, keep all JSON keys and schema exactly as requested while writing any free text values in ${lang}.`
+                : `Respond only in ${lang}. Keep the same response language in follow-up answers.`;
+        }
 
         // DOM elemanları
         const textContent = document.getElementById('text-content');
@@ -469,7 +532,7 @@
         // Resim listesini render et
         function renderImageSelection() {
             if (imageList.length === 0) {
-                imageSelection.innerHTML = '<p style="color: #888; font-size: 13px;">Henüz resim eklenmemiş.</p>';
+                imageSelection.innerHTML = `<p style="color: #888; font-size: 13px;">${t('dialog.slideshow_text_overlay.no_images', 'No images have been added yet.')}</p>`;
                 return;
             }
 
@@ -539,18 +602,22 @@
                         });
                     }, 100);
 
-                    addBtn.textContent = 'Güncelle';
+                    addBtn.textContent = t('dialog.text_overlay_window.update', 'Update');
                     addBtn.disabled = false;
-                    document.querySelector('h2').textContent = 'Yazı Düzenle';
+                    document.querySelector('h2').textContent = t('dialog.slideshow_text_overlay.title_edit', 'Edit Text');
                     updatePreview();
 
-                    announce(`Yazı düzenleme diyaloğu açıldı. ${imageList.length} resim mevcut.`);
+                    announce(t('runtime.slideshow_text_overlay.edit_opened', 'Text edit dialog opened. {count} images are available.', {
+                        count: imageList.length
+                    }));
                 } else {
-                    announce(`Yazı ekleme diyaloğu açıldı. ${imageList.length} resim mevcut. Yazı içeriğini girin.`);
+                    announce(t('runtime.slideshow_text_overlay.add_opened_with_images', 'Text add dialog opened. {count} images are available. Enter the text content.', {
+                        count: imageList.length
+                    }));
                 }
             } else {
-                imageSelection.innerHTML = '<p style="color: #888; font-size: 13px;">Henüz resim eklenmemiş.</p>';
-                announce('Yazı ekleme diyaloğu açıldı. Yazı içeriğini girin.');
+                imageSelection.innerHTML = `<p style="color: #888; font-size: 13px;">${t('dialog.slideshow_text_overlay.no_images', 'No images have been added yet.')}</p>`;
+                announce(t('runtime.slideshow_text_overlay.add_opened', 'Text add dialog opened. Enter the text content.'));
             }
             textContent.focus();
         });
@@ -573,8 +640,9 @@
 
         // Önizleme güncelle
         function updatePreview() {
-            const text = textContent.value.trim() || 'Örnek Yazı';
-            previewText.textContent = text;
+            const text = textContent.value.trim() || t('dialog.slideshow_text_overlay.sample_text', 'Sample Text');
+            // Yeni satırları <br> etiketine çevirerek önizlemede doğru görünmesini sağla
+            previewText.innerHTML = text.replace(/\n/g, '<br>');
             previewText.style.fontSize = fontSize.value + 'px';
             previewText.style.color = fontColor.value;
 
@@ -608,9 +676,13 @@
                 cb.checked = !allChecked;
             });
 
-            selectAllBtn.textContent = allChecked ? 'Tümünü Seç' : 'Tümünü Kaldır';
+            selectAllBtn.textContent = allChecked
+                ? t('dialog.slideshow_text_overlay.select_all', 'Select All')
+                : t('dialog.slideshow_text_overlay.clear_all', 'Clear All');
             validateForm(); // Buton durumunu güncelle
-            announce(allChecked ? 'Tüm seçimler kaldırıldı.' : 'Tüm resimler seçildi.');
+            announce(allChecked
+                ? t('runtime.slideshow_text_overlay.all_cleared', 'All selections were cleared.')
+                : t('runtime.slideshow_text_overlay.all_selected', 'All images were selected.'));
         });
 
         // Ekle/Güncelle
@@ -651,7 +723,8 @@
 
         // Sayfa yüklendiğinde
         window.addEventListener('load', () => {
-            announce('Yazı ekleme diyaloğu açıldı.');
+            initI18n();
+            announce(t('runtime.slideshow_text_overlay.add_opened_short', 'Text add dialog opened.'));
         });
 
         // === YAPAY ZEKA GERİ BİLDİRİMİ ===
@@ -698,14 +771,14 @@
         async function getAiFeedback(customPrompt = null) {
             const formData = collectFormData();
             if (!formData.text) {
-                alert('Lütfen önce bir yazı girin');
+                alert(t('dialog.text_overlay_window.enter_text_first', 'Please enter text first.'));
                 textContent.focus();
                 return;
             }
 
             const selectedImages = getSelectedImagePaths();
             if (selectedImages.length === 0) {
-                alert('Lütfen en az bir resim seçin veya resim ekleyin');
+                alert(t('dialog.slideshow_text_overlay.select_image_first', 'Please select at least one image or add images.'));
                 return;
             }
 
@@ -714,7 +787,7 @@
             if (!apiKey) {
                 const keyInput = document.getElementById('gemini-api-key');
                 if (!keyInput.value.trim()) {
-                    alert('Lütfen Gemini API anahtarınızı girin');
+                    alert(t('dialog.text_overlay_window.enter_api_key', 'Please enter your Gemini API key.'));
                     keyInput.focus();
                     return;
                 }
@@ -730,7 +803,7 @@
             // Yükleniyor göster
             document.getElementById('ai-loading').style.display = 'block';
             document.getElementById('ai-feedback-btn').disabled = true;
-            announce('Yapay zeka yanıtı bekleniyor...');
+            announce(t('dialog.text_overlay_window.ai_loading', 'Waiting for AI response...'));
 
             try {
                 // İlk seçili resmi base64'e çevir
@@ -738,31 +811,64 @@
                 const imageBase64 = await ipcRenderer.invoke('get-image-base64', firstImagePath);
 
                 // Prompt hazırla
-                const defaultPrompt = `Görme engelli bir kullanıcıyım ve slideshow videoma bir yazı ekledim. 
+                const aiLang = getCurrentAiLanguageName();
+                const defaultPrompt = currentLang === 'tr'
+                    ? `Görme engelli bir kullanıcıyım ve slideshow videoma bir yazı ekledim.
 
 Yazı bilgileri:
-- Metin: "${formData.text}"
-- Boyut: ${formData.fontSize}px
-- Yazı rengi: ${formData.fontColor}
-- Arka plan: ${formData.background === 'black' ? 'Siyah (yarı saydam)' : formData.background === 'white' ? 'Beyaz (yarı saydam)' : 'Yok'}
-- Konum: ${formData.position === 'top' ? 'Üst' : formData.position === 'center' ? 'Orta' : 'Alt'}
-
-Bu yazıyı ${selectedImages.length} resimde göstereceğim. Sana bunlardan birini paylaştım.
-
-Bana yazıyı eklediğim resmi kısaca betimlemeni istiyorum. Sonrasında da eklediğim yazı boyut, konum ve renk açısından yeterince görünür mü, resim ile uyumlu mu bilgi vermeni bekliyorum. Eğer yazının resimle daha uyumlu olması için önerilerin varsa bunları da duymak istiyorum.`;
-
-                const prompt = customPrompt || defaultPrompt;
-
-                // Takip sorusuysa güncel form bilgilerini de ekle
-                const finalPrompt = customPrompt
-                    ? `Güncel yazı ayarları:
-- Metin: "${formData.text}"
+- Metin: "${formData.text.replace(/\n/g, '\\n')}" (Not: \\n kısımları kullanıcının metni satırlara böldüğü yerlerdir)
 - Boyut: ${formData.fontSize}px
 - Yazı rengi: ${formData.fontColor}
 - Arka plan: ${formData.background}
 - Konum: ${formData.position}
 
+Bu yazıyı ${selectedImages.length} resimde göstereceğim. Sana bunlardan birini paylaştım.
+
+Bana resmi kısaca betimle. Sonrasında eklediğim yazının boyutu, konumu ve uzunluğu bakımından bu görsele uygun olup olmadığını analiz et. Ekrana tam sığıyor mu, dışarı taşıyor mu, okunabilir mi bunları net şekilde açıkla. Gerekirse daha okunaklı olması için öneriler ver.
+
+Yanıtının tamamını yalnızca Türkçe ver.`
+                    : `I am a blind user and I added a text overlay to my slideshow video.
+
+Text settings:
+- Text: "${formData.text.replace(/\n/g, '\\n')}" (Note: \\n shows where the user split the text into lines)
+- Size: ${formData.fontSize}px
+- Text color: ${formData.fontColor}
+- Background: ${formData.background}
+- Position: ${formData.position}
+
+I will show this text on ${selectedImages.length} images. I shared one of them with you.
+
+Briefly describe the image where I placed the text. Then analyze whether the text size, position, and length fit that image well. Clearly explain whether it fully fits on screen, overflows, and stays readable. If needed, suggest improvements for better readability.
+
+Write the full answer only in ${aiLang}.`;
+
+                const prompt = customPrompt || defaultPrompt;
+
+                // Takip sorusuysa güncel form bilgilerini de ekle
+                const finalPrompt = customPrompt
+                    ? (currentLang === 'tr'
+                        ? `Güncel yazı ayarları:
+- Metin: "${formData.text.replace(/\n/g, '\\n')}" (Not: \\n kısımları kullanıcının metni satırlara böldüğü yerlerdir)
+- Boyut: ${formData.fontSize}px
+- Yazı rengi: ${formData.fontColor}
+- Arka plan: ${formData.background}
+- Konum: ${formData.position}
+
+(ÖNEMLİ: Yanıt verirken bu güncel ayarlarla metnin ekrana tam sığıp sığmadığını ve taşıp taşmadığını da her zaman analiz ederek görüşünü belirt.)
+
 Kullanıcının ek sorusu: ${customPrompt}`
+                        : `Current text settings:
+- Text: "${formData.text.replace(/\n/g, '\\n')}" (Note: \\n shows where the user split the text into lines)
+- Size: ${formData.fontSize}px
+- Text color: ${formData.fontColor}
+- Background: ${formData.background}
+- Position: ${formData.position}
+
+Important: always evaluate whether the text fully fits on screen with these current settings and whether it overflows.
+
+User follow-up question: ${customPrompt}
+
+Write the full answer only in ${aiLang}.`)
                     : prompt;
 
                 // Konuşma geçmişine ekle
@@ -777,11 +883,12 @@ Kullanıcının ek sorusu: ${customPrompt}`
                     model: selectedModel,
                     imageBase64: imageBase64,
                     prompt: finalPrompt,
-                    history: conversationHistory.slice(0, -1)
+                    history: conversationHistory.slice(0, -1),
+                    systemInstruction: getAiSystemInstruction()
                 });
 
                 if (!result.success) {
-                    throw new Error(result.error || 'Bilinmeyen hata');
+                    throw new Error(result.error || t('runtime.slideshow_text_overlay.unknown_error', 'Unknown error'));
                 }
 
                 const response = result.text;
@@ -798,15 +905,15 @@ Kullanıcının ek sorusu: ${customPrompt}`
                 const liveRegion = document.getElementById('ai-live-region');
                 liveRegion.textContent = '';
                 setTimeout(() => {
-                    liveRegion.textContent = 'Yapay zeka yanıtı: ' + response;
+                    liveRegion.textContent = t('dialog.text_overlay_window.ai_response_announce', 'AI response: {response}', { response });
                 }, 100);
 
                 // Yanıt alanına odaklan
                 responseArea.focus();
 
             } catch (error) {
-                alert('Yapay zeka hatası: ' + error.message);
-                announce('Yapay zeka hatası: ' + error.message);
+                alert(t('dialog.text_overlay_window.ai_error', 'AI error: {error}', { error: error.message }));
+                announce(t('dialog.text_overlay_window.ai_error', 'AI error: {error}', { error: error.message }));
             } finally {
                 document.getElementById('ai-loading').style.display = 'none';
                 document.getElementById('ai-feedback-btn').disabled = false;
@@ -818,14 +925,14 @@ Kullanıcının ek sorusu: ${customPrompt}`
         async function getAiStyleSuggestion() {
             const formData = collectFormData();
             if (!formData.text) {
-                alert('Lütfen önce bir yazı girin');
+                alert(t('dialog.text_overlay_window.enter_text_first', 'Please enter text first.'));
                 textContent.focus();
                 return;
             }
 
             const selectedImages = getSelectedImagePaths();
             if (selectedImages.length === 0) {
-                alert('Lütfen en az bir resim seçin veya resim ekleyin');
+                alert(t('dialog.slideshow_text_overlay.select_image_first', 'Please select at least one image or add images.'));
                 return;
             }
 
@@ -834,7 +941,7 @@ Kullanıcının ek sorusu: ${customPrompt}`
             if (!apiKey) {
                 const keyInput = document.getElementById('gemini-api-key');
                 if (!keyInput.value.trim()) {
-                    alert('Lütfen Gemini API anahtarınızı girin');
+                    alert(t('dialog.text_overlay_window.enter_api_key', 'Please enter your Gemini API key.'));
                     keyInput.focus();
                     return;
                 }
@@ -849,7 +956,7 @@ Kullanıcının ek sorusu: ${customPrompt}`
             document.getElementById('ai-loading').style.display = 'block';
             document.getElementById('ai-suggest-btn').disabled = true;
             document.getElementById('ai-feedback-btn').disabled = true;
-            announce('Yapay zeka önerisi alınıyor...');
+            announce(t('runtime.slideshow_text_overlay.ai_suggestion_loading', 'AI suggestion is being generated...'));
 
             try {
                 // İlk seçili resmi base64'e çevir
@@ -857,19 +964,34 @@ Kullanıcının ek sorusu: ${customPrompt}`
                 const imageBase64 = await ipcRenderer.invoke('get-image-base64', firstImagePath);
 
                 // Prompt
-                const prompt = `Görüntüyü ve şu metni analiz et: "${formData.text}".
-                    Metnin bu görsel üzerinde en okunaklı, estetik ve görsel olarak uygun şekilde konumlandırılması ve biçimlendirilmesi için önerilerde bulun.
-                    Yazının arka planda yeterince görünür ve okunabilir olup olmayacağını özellikle değerlendir.
+                const aiLang = getCurrentAiLanguageName();
+                const prompt = currentLang === 'tr'
+                    ? `Görüntüyü ve şu metni analiz et: "${formData.text.replace(/\n/g, '\\n')}" (Not: \\n kısımları kullanıcının metni satırlara böldüğü yerlerdir).
+Metnin bu görsel üzerinde en okunaklı, estetik ve görsel olarak uygun şekilde konumlandırılması ve biçimlendirilmesi için önerilerde bulun.
+Yazının arka planda yeterince görünür ve okunabilir olup olmayacağını özellikle değerlendir.
 
-                    Yanıtı SADECE aşağıdaki JSON formatında döndür (başka hiçbir metin veya markdown formatı ekleme):
-                    {
-                      "position": "top-left, top-center, top-right, middle-left, center, middle-right, bottom-left, bottom-center, bottom-right bunlardan biri",
-                      "fontSize": sayı (24, 36, 48 veya 64 seçeneklerinden en uygunu),
-                      "fontColor": "white, black, yellow, red, blue, green bunlardan biri",
-                      "backgroundColor": "none, black, white bunlardan biri",
-                      "shadow": "none, small, medium, large bunlardan biri",
-                      "reason": "kısa açıklama (neden bu seçimi yaptın)"
-                    }`;
+Yanıtı SADECE aşağıdaki JSON formatında döndür:
+{
+  "position": "top-left, top-center, top-right, middle-left, center, middle-right, bottom-left, bottom-center, bottom-right",
+  "fontSize": 24 | 36 | 48 | 64,
+  "fontColor": "white | black | yellow | red | blue | green",
+  "backgroundColor": "none | black | white",
+  "shadow": "none | small | medium | large",
+  "reason": "kısa açıklama"
+}`
+                    : `Analyze the image and this text: "${formData.text.replace(/\n/g, '\\n')}" (Note: \\n shows where the user split the text into lines).
+Suggest the most readable, aesthetic, and visually appropriate placement and styling for the text on this image.
+Pay special attention to whether the text will stay visible and readable against the background.
+
+Return ONLY this JSON format:
+{
+  "position": "top-left, top-center, top-right, middle-left, center, middle-right, bottom-left, bottom-center, bottom-right",
+  "fontSize": 24 | 36 | 48 | 64,
+  "fontColor": "white | black | yellow | red | blue | green",
+  "backgroundColor": "none | black | white",
+  "shadow": "none | small | medium | large",
+  "reason": "short explanation in ${aiLang}"
+}`;
 
                 const selectedModel = document.getElementById('gemini-model').value;
 
@@ -878,7 +1000,8 @@ Kullanıcının ek sorusu: ${customPrompt}`
                     model: selectedModel,
                     imageBase64: imageBase64,
                     prompt: prompt,
-                    history: []
+                    history: [],
+                    systemInstruction: getAiSystemInstruction('json')
                 });
 
                 if (!result.success) {
@@ -891,8 +1014,8 @@ Kullanıcının ek sorusu: ${customPrompt}`
                     let cleanedText = result.text.replace(/```json/g, '').replace(/```/g, '').trim();
                     suggestion = JSON.parse(cleanedText);
                 } catch (e) {
-                    console.error('JSON parse hatası:', e);
-                    throw new Error('Yapay zeka geçerli bir format üretmedi. Lütfen tekrar deneyin.');
+                    console.error('JSON parse error:', e);
+                    throw new Error(t('runtime.slideshow_text_overlay.invalid_json', 'AI did not return a valid format. Please try again.'));
                 }
 
                 // Önerileri uygula
@@ -906,7 +1029,14 @@ Kullanıcının ek sorusu: ${customPrompt}`
 
                     updatePreview();
 
-                    const message = `Öneri uygulandı:\nKonum: ${suggestion.position}\nBoyut: ${suggestion.fontSize}px\nRenk: ${suggestion.fontColor}\nArka Plan: ${suggestion.backgroundColor}\nGölge: ${suggestion.shadow || 'Yok'}\n\nNeden: ${suggestion.reason || 'Görsel analize dayalı en uygun ayarlar seçildi.'}`;
+                    const message = t('runtime.slideshow_text_overlay.suggestion_applied', 'Suggestion applied:\nPosition: {position}\nSize: {size}px\nColor: {color}\nBackground: {background}\nShadow: {shadow}\n\nReason: {reason}', {
+                        position: suggestion.position,
+                        size: suggestion.fontSize,
+                        color: suggestion.fontColor,
+                        background: suggestion.backgroundColor,
+                        shadow: suggestion.shadow || t('dialog.text_overlay_window.shadow_none', 'None'),
+                        reason: suggestion.reason || t('dialog.text_overlay_window.default_suggestion_reason', 'The most suitable settings were selected based on visual analysis.')
+                    });
 
                     document.getElementById('ai-response-section').style.display = 'block';
                     document.getElementById('ai-response').value = message;
@@ -922,8 +1052,8 @@ Kullanıcının ek sorusu: ${customPrompt}`
                 }
 
             } catch (error) {
-                alert('Öneri alınamadı: ' + error.message);
-                announce('Hata: ' + error.message);
+                alert(t('dialog.text_overlay_window.suggestion_failed', 'Suggestion could not be received: {error}', { error: error.message }));
+                announce(t('dialog.text_overlay_window.ai_error', 'AI error: {error}', { error: error.message }));
             } finally {
                 document.getElementById('ai-loading').style.display = 'none';
                 document.getElementById('ai-suggest-btn').disabled = false;

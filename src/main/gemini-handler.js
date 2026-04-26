@@ -13,6 +13,22 @@ const CONFIG_DIR = path.join(require('os').homedir(), '.korcul-video-editor');
 const API_KEY_FILE = path.join(CONFIG_DIR, 'gemini-api-key.enc');
 const AI_MODEL_FILE = path.join(CONFIG_DIR, 'ai-model.txt');
 
+function normalizeAiModel(model) {
+    const trimmedModel = typeof model === 'string' ? model.trim() : '';
+
+    if (!trimmedModel) {
+        return 'gemini-2.5-flash';
+    }
+
+    // Gemini 2.0 Flash free-tier requests now fail for some users with zero quota.
+    // Upgrade stale saved preferences transparently to the recommended model.
+    if (trimmedModel === 'gemini-2.0-flash') {
+        return 'gemini-2.5-flash';
+    }
+
+    return trimmedModel;
+}
+
 /**
  * API anahtarını kaydet (basit obfuscation)
  */
@@ -29,7 +45,8 @@ function saveApiKey(apiKey) {
  * AI modelini kaydet
  */
 function saveAiModel(model) {
-    fs.writeFileSync(AI_MODEL_FILE, model || 'gemini-2.5-flash', 'utf8');
+    const normalizedModel = normalizeAiModel(model);
+    fs.writeFileSync(AI_MODEL_FILE, normalizedModel, 'utf8');
 }
 
 /**
@@ -39,7 +56,15 @@ function getAiModel() {
     if (!fs.existsSync(AI_MODEL_FILE)) {
         return 'gemini-2.5-flash';
     }
-    return fs.readFileSync(AI_MODEL_FILE, 'utf8') || 'gemini-2.5-flash';
+
+    const savedModel = fs.readFileSync(AI_MODEL_FILE, 'utf8');
+    const normalizedModel = normalizeAiModel(savedModel);
+
+    if (normalizedModel !== savedModel) {
+        saveAiModel(normalizedModel);
+    }
+
+    return normalizedModel;
 }
 
 /**
@@ -151,14 +176,11 @@ async function waitForFileActive(apiKey, fileUri) {
  * Gemini Vision API isteği gönder
  * @param {string} model - Kullanılacak model (gemini-2.5-flash, gemini-1.5-flash, vs.)
  */
-async function sendGeminiRequest(apiKey, model, imageBase64, prompt, history = []) {
+async function sendGeminiRequest(apiKey, model, imageBase64, prompt, history = [], systemInstruction = '') {
     return new Promise((resolve, reject) => {
-        // Hata raporlarına göre 1.5-flash v1beta'da bulunamıyor, 2.0-flash kota aşımı veriyor.
-        // Sadece 2.5-flash'ın stabil çalıştığı doğrulandı.
-        // Bu yüzden gelen istek ne olursa olsun (model parametresi) 2.5-flash'a zorluyoruz.
-        const modelName = 'gemini-2.5-flash';
+        const modelName = normalizeAiModel(model);
 
-        console.log(`Gemini Modeli Zorlandı: ${modelName} (İstenen: ${model})`);
+        console.log(`Gemini İsteği Başlıyor - Kullanılan Model: ${modelName}`);
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
@@ -210,7 +232,7 @@ async function sendGeminiRequest(apiKey, model, imageBase64, prompt, history = [
             parts: parts
         });
 
-        const requestBody = JSON.stringify({
+        const requestPayload = {
             contents: contents,
             generationConfig: {
                 temperature: 0.7,
@@ -218,7 +240,15 @@ async function sendGeminiRequest(apiKey, model, imageBase64, prompt, history = [
                 topP: 0.95,
                 maxOutputTokens: 8192
             }
-        });
+        };
+
+        if (systemInstruction) {
+            requestPayload.systemInstruction = {
+                parts: [{ text: systemInstruction }]
+            };
+        }
+
+        const requestBody = JSON.stringify(requestPayload);
 
         const urlObj = new URL(url);
         const options = {
@@ -272,6 +302,40 @@ async function sendGeminiRequest(apiKey, model, imageBase64, prompt, history = [
     });
 }
 
+function isRetryableGeminiError(error) {
+    const message = String(error?.message || error || '').toLowerCase();
+    return message.includes('high demand')
+        || message.includes('try again later')
+        || message.includes('rate limit')
+        || message.includes('resource exhausted')
+        || message.includes('temporarily unavailable')
+        || message.includes('unavailable')
+        || message.includes('429')
+        || message.includes('503');
+}
+
+async function sendGeminiRequestWithRetry(apiKey, model, imageBase64, prompt, history = [], systemInstruction = '', maxRetries = 2) {
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await sendGeminiRequest(apiKey, model, imageBase64, prompt, history, systemInstruction);
+        } catch (error) {
+            lastError = error;
+
+            if (attempt === maxRetries || !isRetryableGeminiError(error)) {
+                throw error;
+            }
+
+            const waitMs = 1200 * (attempt + 1);
+            console.warn(`Gemini geçici hata nedeniyle tekrar deneniyor (${attempt + 1}/${maxRetries}):`, error.message);
+            await new Promise(resolve => setTimeout(resolve, waitMs));
+        }
+    }
+
+    throw lastError || new Error('Gemini isteği tamamlanamadı.');
+}
+
 /**
  * IPC handler'larını kur
  */
@@ -312,8 +376,18 @@ function setupGeminiHandlers(mainWindow) {
                 throw new Error('Video yolu parametresi eksik.');
             }
 
-            // Kareyi çıkar
-            await ffmpegHandler.extractFrame(videoPath, tempFile, time);
+            // Kareyi çıkar (Resize to 800px width to reduce payload and avoid quota issues)
+            // Note: We use a custom ffmpeg command here to ensure resizing without affecting shared extractFrame
+            await new Promise((resolve, reject) => {
+                const ffmpeg = require('fluent-ffmpeg');
+                ffmpeg(videoPath)
+                    .seekInput(time)
+                    .outputOptions(['-vframes 1', '-vf scale=800:-1']) // Resize to 800w
+                    .output(tempFile)
+                    .on('end', resolve)
+                    .on('error', reject)
+                    .run();
+            });
 
             // Base64'e çevir
             const imageBuffer = fs.readFileSync(tempFile);
@@ -333,7 +407,7 @@ function setupGeminiHandlers(mainWindow) {
     });
 
     // Seçimi betimle (Video klip analizi)
-    ipcMain.handle('gemini-describe-selection', async (event, { apiKey, model, startTime, endTime, prompt }) => {
+    ipcMain.handle('gemini-describe-selection', async (event, { apiKey, model, startTime, endTime, prompt, systemInstruction }) => {
         const tempVideoFile = path.join(require('os').tmpdir(), `ai_clip_${Date.now()}.mp4`);
         let fileData = null;
 
@@ -346,7 +420,7 @@ function setupGeminiHandlers(mainWindow) {
 
             if (!videoPath) throw new Error('Video yolu alınamadı');
 
-            await ffmpegHandler.cutVideoClip(videoPath, tempVideoFile, startTime, endTime - startTime);
+            await ffmpegHandler.cutVideoClip(videoPath, tempVideoFile, startTime, endTime);
 
             // Dosyanın oluştuğunu kontrol et
             if (!fs.existsSync(tempVideoFile)) {
@@ -366,7 +440,7 @@ function setupGeminiHandlers(mainWindow) {
                 ]
             }];
 
-            const aiResponse = await sendGeminiRequestBatch(apiKey, model || 'gemini-2.5-flash', contents);
+            const aiResponse = await sendGeminiRequestBatchWithRetry(apiKey, model || 'gemini-2.5-flash', contents, systemInstruction);
 
             // Temizlik
             if (fs.existsSync(tempVideoFile)) fs.unlinkSync(tempVideoFile);
@@ -380,9 +454,9 @@ function setupGeminiHandlers(mainWindow) {
     });
 
     // Gemini Vision isteği
-    ipcMain.handle('gemini-vision-request', async (event, { apiKey, model, imageBase64, prompt, history }) => {
+    ipcMain.handle('gemini-vision-request', async (event, { apiKey, model, imageBase64, prompt, history, systemInstruction }) => {
         try {
-            const text = await sendGeminiRequest(apiKey, model, imageBase64, prompt, history);
+            const text = await sendGeminiRequestWithRetry(apiKey, model, imageBase64, prompt, history, systemInstruction);
             return { success: true, text: text };
         } catch (error) {
             console.error('Gemini Vision Hatası:', error);
@@ -395,15 +469,14 @@ function setupGeminiHandlers(mainWindow) {
 /**
  * Grup içerikli Gemini isteği gönder
  */
-async function sendGeminiRequestBatch(apiKey, model, contents) {
+async function sendGeminiRequestBatch(apiKey, model, contents, systemInstruction = '') {
     return new Promise((resolve, reject) => {
-        // Batch isteklerde de sadece 2.5-flash modelini kullan
-        const modelName = 'gemini-2.5-flash';
-        console.log(`Gemini Batch Modeli Zorlandı: ${modelName} (İstenen: ${model})`);
+        const modelName = normalizeAiModel(model);
+        console.log(`Gemini Batch İsteği Başlıyor - Kullanılan Model: ${modelName}`);
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
-        const requestBody = JSON.stringify({
+        const requestPayload = {
             contents: contents,
             generationConfig: {
                 temperature: 0.7,
@@ -411,7 +484,15 @@ async function sendGeminiRequestBatch(apiKey, model, contents) {
                 topP: 0.95,
                 maxOutputTokens: 8192
             }
-        });
+        };
+
+        if (systemInstruction) {
+            requestPayload.systemInstruction = {
+                parts: [{ text: systemInstruction }]
+            };
+        }
+
+        const requestBody = JSON.stringify(requestPayload);
 
         const urlObj = new URL(url);
         const options = {
@@ -451,8 +532,31 @@ async function sendGeminiRequestBatch(apiKey, model, contents) {
     });
 }
 
+async function sendGeminiRequestBatchWithRetry(apiKey, model, contents, systemInstruction = '', maxRetries = 2) {
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await sendGeminiRequestBatch(apiKey, model, contents, systemInstruction);
+        } catch (error) {
+            lastError = error;
+
+            if (attempt === maxRetries || !isRetryableGeminiError(error)) {
+                throw error;
+            }
+
+            const waitMs = 1200 * (attempt + 1);
+            console.warn(`Gemini batch isteği tekrar deneniyor (${attempt + 1}/${maxRetries}):`, error.message);
+            await new Promise(resolve => setTimeout(resolve, waitMs));
+        }
+    }
+
+    throw lastError || new Error('Gemini batch isteği tamamlanamadı.');
+}
+
 module.exports = {
     setupGeminiHandlers,
     saveApiKey,
-    getApiKey
+    getApiKey,
+    getAiModel
 };

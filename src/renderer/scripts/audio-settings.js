@@ -5,11 +5,23 @@
 const AudioSettings = {
     dialog: null,
     targetItem: null, // { type: 'video'|'audio', id: number|null, object: Object }
+    t(key, fallback, params = {}) {
+        if (!window.i18nHelper) return fallback;
+        const value = window.i18nHelper.t(key, params);
+        return value && !value.startsWith('[') ? value : fallback;
+    },
+
+    getNoiseRadioId(level) {
+        if (level === 'medium') return 'noise-mid';
+        return `noise-${level}`;
+    },
 
     // UI Elements
     volumeSlider: null,
     volumeValue: null,
     volumeBypass: null,
+    channelCurrent: null,
+    channelMode: null,
 
     noiseEnable: null,
     noiseControls: null,
@@ -33,6 +45,7 @@ const AudioSettings = {
     originalVolume: 1.0,
     preRenderedOriginalPath: null,
     preRenderedOriginalPathTime: null,
+    currentSourceAudioChannels: null,
 
     init() {
         this.dialog = document.getElementById('audio-settings-dialog');
@@ -42,6 +55,8 @@ const AudioSettings = {
         this.volumeSlider = document.getElementById('as-volume-slider');
         this.volumeValue = document.getElementById('as-volume-value');
         this.volumeBypass = document.getElementById('as-volume-bypass');
+        this.channelCurrent = document.getElementById('as-channel-current');
+        this.channelMode = document.getElementById('as-channel-mode');
 
         this.noiseEnable = document.getElementById('as-noise-enable');
         this.noiseControls = document.getElementById('as-noise-controls');
@@ -92,6 +107,9 @@ const AudioSettings = {
             this.volumeSlider.disabled = this.volumeBypass.checked;
             this.updatePreview();
         });
+        if (this.channelMode) {
+            this.channelMode.addEventListener('change', () => this.updatePreview());
+        }
 
         // Noise Reduction
         this.noiseEnable.addEventListener('change', () => {
@@ -112,7 +130,7 @@ const AudioSettings = {
         });
 
         // A/B Compare -> Orijinali Dinle
-        this.compareBtn.textContent = "Orj. Dinle";
+        this.compareBtn.textContent = this.t('runtime.audio_settings.listen_original', 'Orj. Dinle');
         // Eski listenerları temizlemek için clone
         const newCompare = this.compareBtn.cloneNode(true);
         this.compareBtn.parentNode.replaceChild(newCompare, this.compareBtn);
@@ -195,7 +213,72 @@ const AudioSettings = {
         this.noiseControls.setAttribute('aria-hidden', !enabled);
     },
 
-    open() {
+    getEffectiveChannelMode(data) {
+        if (data?.audioChannelMode === 'mono' || data?.audioChannelMode === 'stereo') {
+            return data.audioChannelMode;
+        }
+        if (this.currentSourceAudioChannels === 1) return 'mono';
+        if (this.currentSourceAudioChannels >= 2) return 'stereo';
+        return 'source';
+    },
+
+    getChannelLabel(modeOrCount) {
+        if (modeOrCount === 1 || modeOrCount === 'mono') {
+            return this.t('dialog.audio_settings.channel_mono', 'Mono');
+        }
+        if ((typeof modeOrCount === 'number' && modeOrCount >= 2) || modeOrCount === 'stereo') {
+            return this.t('dialog.audio_settings.channel_stereo', 'Stereo');
+        }
+        return this.t('dialog.audio_settings.channel_unknown', 'Bilinmiyor');
+    },
+
+    updateChannelAccessibilityLabel() {
+        if (!this.channelMode) return;
+
+        const currentLayout = this.getChannelLabel(this.currentSourceAudioChannels);
+        this.channelMode.setAttribute('aria-label', this.t(
+            'dialog.audio_settings.channel_mode_aria',
+            'Dönüştürme. Mevcut kanal düzeni: {value}.',
+            { value: currentLayout }
+        ));
+    },
+
+    async loadCurrentChannelInfo() {
+        this.currentSourceAudioChannels = null;
+        const sourceFile = this.targetItem?.object?.sourceFile || VideoPlayer.currentFilePath;
+
+        if (!sourceFile || !window.api?.getVideoMetadata) {
+            if (this.channelCurrent) {
+                this.channelCurrent.textContent = this.t('dialog.audio_settings.channel_current_unknown', 'Mevcut kanal düzeni belirlenemedi.');
+            }
+            this.updateChannelAccessibilityLabel();
+            return;
+        }
+
+        try {
+            const result = await window.api.getVideoMetadata(sourceFile);
+            const audioStream = result?.success && result?.data?.streams
+                ? result.data.streams.find((stream) => stream.codec_type === 'audio')
+                : null;
+            this.currentSourceAudioChannels = Number(audioStream?.channels || 0) || null;
+        } catch (error) {
+            console.warn('AudioSettings: channel metadata read failed:', error);
+        }
+
+        if (!this.channelCurrent) return;
+
+        if (this.currentSourceAudioChannels === 1 || this.currentSourceAudioChannels >= 2) {
+            this.channelCurrent.textContent = this.t('dialog.audio_settings.channel_current', 'Mevcut kanal düzeni: {value}', {
+                value: this.getChannelLabel(this.currentSourceAudioChannels)
+            });
+        } else {
+            this.channelCurrent.textContent = this.t('dialog.audio_settings.channel_current_unknown', 'Mevcut kanal düzeni belirlenemedi.');
+        }
+
+        this.updateChannelAccessibilityLabel();
+    },
+
+    async open() {
         this.identifyTarget();
         if (!this.targetItem) {
             console.error('Ses Ayarları: Hedef bulunamadı');
@@ -204,6 +287,7 @@ const AudioSettings = {
         }
 
         this.loadValues();
+        await this.loadCurrentChannelInfo();
         this.dialog.showModal();
 
         // Hemen orijinal önizlemeyi başlat
@@ -230,6 +314,12 @@ const AudioSettings = {
 
     close() {
         this.stopPreview();
+        // Video volume'ü normal oynatma seviyesine döndür
+        const videoEl = (VideoPlayer.videoElement) || (VideoPlayer.video) || document.getElementById('main-video');
+        if (videoEl) {
+            videoEl.volume = 1.0;
+            videoEl.muted = false;
+        }
         if (this._keydownHandler) {
             document.removeEventListener('keydown', this._keydownHandler);
         }
@@ -263,7 +353,7 @@ const AudioSettings = {
             };
             const title = document.getElementById('audio-settings-title');
             if (title) {
-                title.textContent = `Ses Ayarları: ${mainSegmentData.segmentIndex + 1}. Video Parçası`;
+                title.textContent = this.t('runtime.audio_settings.segment_title', `Ses Ayarları: ${mainSegmentData.segmentIndex + 1}. Video Parçası`, { index: mainSegmentData.segmentIndex + 1 });
             }
             console.log('Hedef belirlendi:', this.targetItem);
         } else {
@@ -282,18 +372,23 @@ const AudioSettings = {
         const noise = data.noiseReduction || { enabled: false, level: 'medium', custom: 50 };
         const effects = data.audioEffects || { echo: false, reverb: false, phone: false };
         const muted = !!data.isMuted;
+        const channelMode = data.audioChannelMode || 'source';
 
         // UI Doldur
         this.volumeSlider.value = vol;
         this.volumeValue.textContent = `%${vol}`;
         this.volumeBypass.checked = muted;
         this.volumeSlider.disabled = muted;
+        if (this.channelMode) {
+            this.channelMode.value = channelMode;
+        }
+        this.updateChannelAccessibilityLabel();
 
         this.noiseEnable.checked = noise.enabled;
 
         // Radio seçimi
         this.noiseRadios.forEach(r => r.checked = false);
-        const radioToCheck = document.getElementById(`noise-${noise.level}`);
+        const radioToCheck = document.getElementById(this.getNoiseRadioId(noise.level));
         if (radioToCheck) radioToCheck.checked = true;
 
         this.noiseSlider.value = noise.custom || 50;
@@ -304,6 +399,7 @@ const AudioSettings = {
         this.effectPhone.checked = effects.phone;
 
         this.updateNoiseUI();
+        this.updatePreview(); // Ses seviyesini anında videoya uygula
     },
 
     resetValues() {
@@ -311,9 +407,11 @@ const AudioSettings = {
         this.volumeValue.textContent = '%100';
         this.volumeBypass.checked = false;
         this.volumeSlider.disabled = false;
+        if (this.channelMode) this.channelMode.value = 'source';
+        this.updateChannelAccessibilityLabel();
 
         this.noiseEnable.checked = false;
-        document.getElementById('noise-medium').checked = true;
+        document.getElementById(this.getNoiseRadioId('medium')).checked = true;
         this.noiseSlider.value = 50;
 
         this.effectEcho.checked = false;
@@ -324,9 +422,10 @@ const AudioSettings = {
         this.updatePreview();
     },
 
-    apply() {
+    async apply() {
         const vol = parseInt(this.volumeSlider.value);
         const muted = this.volumeBypass.checked;
+        const selectedChannelMode = this.channelMode ? this.channelMode.value : 'source';
 
         let noiseLevel = 'medium';
         this.noiseRadios.forEach(r => { if (r.checked) noiseLevel = r.value; });
@@ -346,22 +445,55 @@ const AudioSettings = {
         Timeline.saveState(); // Değişiklik öncesi durum kaydet
         let appliedCount = 0;
 
+        const shouldWarnNoChannelChange = (segmentsToCheck = []) => {
+            if (selectedChannelMode === 'source' || !segmentsToCheck.length) {
+                return false;
+            }
+
+            const allSame = segmentsToCheck.every((seg) => {
+                const effectiveMode = (seg.audioChannelMode === 'mono' || seg.audioChannelMode === 'stereo')
+                    ? seg.audioChannelMode
+                    : this.getEffectiveChannelMode(seg);
+                return effectiveMode === selectedChannelMode;
+            });
+
+            if (allSame) {
+                Accessibility.announce(this.t('dialog.audio_settings.channel_already_same', 'Seçili kayıt zaten {value} durumda.', {
+                    value: this.getChannelLabel(selectedChannelMode)
+                }));
+                return true;
+            }
+
+            return false;
+        };
+
         // 1. Seçim var mı kontrol et (Range Selection)
         const selection = (typeof Selection !== 'undefined' && Selection.getSelection) ? Selection.getSelection() : null;
 
         if (selection) {
+            const selectedSegments = [];
             // Seçili alandaki tüm segmentlere uygula
             const segments = Timeline.segments;
             for (const seg of segments) {
                 // Kesişim kontrolü
                 if (seg.end > selection.start && seg.start < selection.end) {
-                    seg.audioVolume = vol;
-                    seg.isMuted = muted;
-                    seg.noiseReduction = { ...noiseData };
-                    seg.audioEffects = { ...effectsData };
-                    appliedCount++;
+                    selectedSegments.push(seg);
                 }
             }
+
+            if (shouldWarnNoChannelChange(selectedSegments)) {
+                return;
+            }
+
+            for (const seg of selectedSegments) {
+                seg.audioVolume = vol;
+                seg.isMuted = muted;
+                seg.noiseReduction = { ...noiseData };
+                seg.audioEffects = { ...effectsData };
+                seg.audioChannelMode = selectedChannelMode;
+                appliedCount++;
+            }
+
             if (appliedCount > 0) {
                 console.log(`Ses ayarları ${appliedCount} segmente uygulandı (Seçim Aralığı)`);
                 Accessibility.announce(`Ses ayarları seçili alandaki ${appliedCount} klibe uygulandı`);
@@ -374,10 +506,14 @@ const AudioSettings = {
         // 2. Seçim yoksa, mevcut hedef (imleç altındaki) klibe uygula
         if (this.targetItem && this.targetItem.type === 'video') {
             const seg = this.targetItem.object; // Referans
+            if (shouldWarnNoChannelChange([seg])) {
+                return;
+            }
             seg.audioVolume = vol;
             seg.isMuted = muted;
             seg.noiseReduction = { ...noiseData };
             seg.audioEffects = { ...effectsData };
+            seg.audioChannelMode = selectedChannelMode;
 
             Timeline.hasChanges = true;
             console.log('Ses ayarları uygulandı:', seg);
@@ -400,7 +536,7 @@ const AudioSettings = {
     startPreview() {
         if (this.isPreviewing) return;
         this.isPreviewing = true;
-        this.previewBtn.textContent = 'Durdur (Alt+P)';
+        this.previewBtn.textContent = this.t('runtime.audio_settings.stop_preview', 'Durdur (Alt+P)');
 
         // Video oynat
         VideoPlayer.play();
@@ -410,7 +546,7 @@ const AudioSettings = {
     stopPreview() {
         if (!this.isPreviewing) return;
         this.isPreviewing = false;
-        this.previewBtn.textContent = 'Ön İzle Başlat (Alt+P)';
+        this.previewBtn.textContent = this.t('dialog.audio_settings.preview', 'Ön İzle Başlat (Alt+P)');
 
         VideoPlayer.pause();
         // Reset preview effects appropriately handled by updatePreview in loop?
@@ -418,22 +554,25 @@ const AudioSettings = {
     },
 
     updatePreview() {
-        if (!this.isPreviewing) return;
+        // Slider değişikliklerini anında video sesine yansıt (dialog açıkken)
 
         // Anlık ayarları al
         const volSlider = parseInt(this.volumeSlider.value);
         const bypass = this.volumeBypass.checked;
-        const vol = bypass ? 0 : (volSlider / 100);
 
-        console.log(`AudioSettings: Preview Volume Target: ${vol} (Slider: ${volSlider}, Bypass: ${bypass})`);
+        // Native video preview can only reach 1.0, so we map 100% to normal loudness.
+        // Higher values are still fully applied in rendered preview/export paths.
+        const vol = bypass ? 0 : Math.min(1, volSlider / 100);
+
+        console.log(`AudioSettings: Preview Volume Slider=${volSlider}, HTMLVol=${vol.toFixed(2)}, Bypass=${bypass}`);
 
         // VideoPlayer üzerinden ses ayarla
         const videoEl = (VideoPlayer.videoElement) || (VideoPlayer.video) || document.getElementById('main-video');
 
         if (videoEl) {
             videoEl.volume = Math.min(1, Math.max(0, vol));
-            videoEl.muted = false; // Mutlaka sesi aç
-            console.log(`AudioSettings: Applied Volume: ${videoEl.volume}`);
+            videoEl.muted = false;
+            console.log(`AudioSettings: Applied video.volume=${videoEl.volume}`);
         } else {
             console.error('AudioSettings: Video elementi bulunamadı!');
         }
@@ -446,7 +585,7 @@ const AudioSettings = {
         if (isOriginal) {
             // Varsa önceden render edilmiş temiz sesi çal
             if (this.preRenderedOriginalPath) {
-                this.playRenderedAudio(this.preRenderedOriginalPath, this.compareBtn, "Orj. Dinle");
+                this.playRenderedAudio(this.preRenderedOriginalPath, this.compareBtn, this.t('runtime.audio_settings.listen_original', 'Orj. Dinle'));
             } else {
                 // Yoksa anlık bypass (fallback)
                 if (VideoPlayer.videoElement) VideoPlayer.videoElement.volume = 1.0;
@@ -467,14 +606,14 @@ const AudioSettings = {
 
         // Orijinal isteniyorsa ve hazir varsa direkt çal
         if (isOriginal && this.preRenderedOriginalPath) {
-            this.playRenderedAudio(this.preRenderedOriginalPath, this.compareBtn, "Orj. Dinle");
+            this.playRenderedAudio(this.preRenderedOriginalPath, this.compareBtn, this.t('runtime.audio_settings.listen_original', 'Orj. Dinle'));
             return;
         }
 
         const btn = isOriginal ? this.compareBtn : document.getElementById('btn-render-preview');
         if (btn) {
             btn.disabled = true;
-            btn.textContent = 'Hazırlanıyor...';
+            btn.textContent = this.t('runtime.common.preparing', 'Hazırlanıyor...');
         }
 
         try {
@@ -514,6 +653,7 @@ const AudioSettings = {
                 settings: {
                     volume: isOriginal ? 100 : vol,
                     muted: isOriginal ? false : muted,
+                    channelMode: isOriginal ? 'source' : (this.channelMode ? this.channelMode.value : 'source'),
                     noiseReduction: noise,
                     audioEffects: effects
                 }
@@ -523,16 +663,16 @@ const AudioSettings = {
                 this.playRenderedAudio(result.audioPath);
             } else {
                 console.error(result.error);
-                if (window.Accessibility) Accessibility.alert('Önizleme hatası: ' + result.error);
+                if (window.Accessibility) Accessibility.alert(this.t('runtime.audio_settings.preview_error', 'Önizleme hatası: {error}', { error: result.error }));
             }
 
         } catch (e) {
             console.error(e);
-            if (window.Accessibility) Accessibility.alert('Hata: ' + e.message);
+            if (window.Accessibility) Accessibility.alert(this.t('runtime.common.error', 'Hata: {error}', { error: e.message }));
         } finally {
             if (btn) {
                 btn.disabled = false;
-                btn.textContent = 'Efekti Dinle (5sn)';
+                btn.textContent = this.t('runtime.audio_settings.listen_effect', 'Efekti Dinle (5sn)');
             }
         }
     },
@@ -545,7 +685,7 @@ const AudioSettings = {
         const audio = new Audio('file://' + path + '?t=' + Date.now());
         audio.volume = 1.0;
 
-        if (btn) btn.textContent = 'Çalınıyor...';
+        if (btn) btn.textContent = this.t('runtime.audio_settings.playing', 'Çalınıyor...');
 
         audio.play().catch(e => {
             console.error('Audio play error:', e);
@@ -570,10 +710,10 @@ const AudioSettings = {
 
         const btn = document.createElement('button');
         btn.id = 'btn-render-preview';
-        btn.textContent = 'Efekti Dinle (5sn)';
+        btn.textContent = this.t('runtime.audio_settings.listen_effect', 'Efekti Dinle (5sn)');
         btn.className = 'btn btn-secondary';
         btn.style.marginRight = '10px';
-        btn.title = 'Ayarları render ederek 5 saniyelik gerçek önizleme dinlet';
+        btn.title = this.t('runtime.audio_settings.listen_effect_title', 'Ayarları render ederek 5 saniyelik gerçek önizleme dinlet');
 
         // Preview butonunun yanına ekle
         if (this.previewBtn && this.previewBtn.parentNode) {

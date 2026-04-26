@@ -158,11 +158,17 @@ const InsertionQueue = {
         const textCount = this.items.filter(i => i.type === 'text').length;
         const audioCount = this.items.filter(i => i.type === 'audio').length;
         const imageCount = this.items.filter(i => i.type === 'image').length;
+        const transitionCount = this.items.filter(i => i.type === 'transition').length;
+        const overlayCount = this.items.filter(i => i.type === 'overlay').length;
+        const objectCount = this.items.filter(i => i.type === 'object').length;
 
         const parts = [];
         if (textCount > 0) parts.push(`${textCount} yazı`);
         if (audioCount > 0) parts.push(`${audioCount} ses`);
         if (imageCount > 0) parts.push(`${imageCount} görsel`);
+        if (transitionCount > 0) parts.push(`${transitionCount} geçiş`);
+        if (overlayCount > 0) parts.push(`${overlayCount} overlay`);
+        if (objectCount > 0) parts.push(`${objectCount} nesne işlemi`);
 
         return `Ekleme listesi: ${parts.join(', ')}`;
     }

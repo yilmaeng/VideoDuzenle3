@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yeni Proje Oluştur</title>
+    <title data-i18n="dialog.new_project.window_title">Create New Project</title>
     <style>
         * {
             box-sizing: border-box;
@@ -214,19 +214,19 @@
 <body>
     <div id="live-region" aria-live="assertive" aria-atomic="true"></div>
 
-    <h2>Yeni Proje Oluştur</h2>
+    <h2 data-i18n="dialog.new_project.title">Create New Project</h2>
 
     <form id="new-project-form">
         <!-- Proje Türü (şimdilik sadece slideshow) -->
         <div class="form-group">
-            <div class="section-title">Proje Türü</div>
+            <div class="section-title" data-i18n="dialog.new_project.project_type">Project Type</div>
             <div class="radio-group" role="radiogroup" aria-labelledby="project-type-label">
-                <span id="project-type-label" class="sr-only">Proje türü seçimi</span>
+                <span id="project-type-label" class="sr-only" data-i18n="dialog.new_project.project_type_sr">Project type selection</span>
                 <label class="radio-option">
                     <input type="radio" name="project-type" value="slideshow" checked aria-describedby="slideshow-desc">
                     <div class="radio-label">
-                        <strong>Slideshow Projesi (Resim + Ses)</strong>
-                        <span id="slideshow-desc">Resim ve ses/müzik dosyalarını birleştirerek video oluşturun</span>
+                        <strong data-i18n="dialog.new_project.slideshow_title">Slideshow Project (Images + Audio)</strong>
+                        <span id="slideshow-desc" data-i18n="dialog.new_project.slideshow_desc">Create a video by combining image and audio or music files.</span>
                     </div>
                 </label>
             </div>
@@ -234,52 +234,95 @@
 
         <!-- Video Çıktı Oranı -->
         <div class="form-group">
-            <div class="section-title">Video Çıktı Oranı</div>
+            <div class="section-title" data-i18n="dialog.new_project.aspect_ratio">Video Output Aspect Ratio</div>
             <div class="radio-group" role="radiogroup" aria-labelledby="aspect-ratio-label">
-                <span id="aspect-ratio-label" class="sr-only">Video en-boy oranı seçimi</span>
+                <span id="aspect-ratio-label" class="sr-only" data-i18n="dialog.new_project.aspect_ratio_sr">Video aspect ratio selection</span>
 
                 <label class="radio-option">
-                    <input type="radio" name="aspect-ratio" value="16:9" aria-describedby="ratio-16-9-desc">
+                    <input type="radio" name="aspect-ratio" value="16:9" checked aria-describedby="ratio-16-9-desc">
                     <div class="radio-label">
-                        <strong>16:9 – Yatay</strong>
-                        <span id="ratio-16-9-desc">YouTube ve geleneksel videolar için önerilir</span>
+                        <strong data-i18n="dialog.new_project.ratio_16_9">16:9 - Landscape</strong>
+                        <span id="ratio-16-9-desc" data-i18n="dialog.new_project.ratio_16_9_desc">Recommended for YouTube and traditional videos</span>
                     </div>
                 </label>
 
                 <label class="radio-option">
                     <input type="radio" name="aspect-ratio" value="9:16" aria-describedby="ratio-9-16-desc">
                     <div class="radio-label">
-                        <strong>9:16 – Dikey</strong>
-                        <span id="ratio-9-16-desc">TikTok, Instagram Reels ve YouTube Shorts için önerilir</span>
+                        <strong data-i18n="dialog.new_project.ratio_9_16">9:16 - Portrait</strong>
+                        <span id="ratio-9-16-desc" data-i18n="dialog.new_project.ratio_9_16_desc">Recommended for TikTok, Instagram Reels, and YouTube Shorts</span>
                     </div>
                 </label>
             </div>
             <div class="hint" role="note">
-                <strong>Not:</strong> Lütfen bir oran seçin. Bu seçim, eklediğiniz resimlerin nasıl konumlandırılacağını
-                belirler.
+                <strong data-i18n="dialog.new_project.note_label">Note:</strong> <span data-i18n="dialog.new_project.note_text">Please choose an aspect ratio. This determines how the images you add will be positioned.</span>
             </div>
         </div>
 
         <!-- Görsel Yerleşim Varsayılanı -->
         <div class="form-group">
-            <div class="section-title">Görsel Yerleşim Ayarı</div>
+            <div class="section-title" data-i18n="dialog.new_project.fill_frame_section">Visual Layout Setting</div>
             <label class="checkbox-group">
                 <input type="checkbox" id="fill-frame" checked aria-describedby="fill-frame-desc">
                 <div class="checkbox-label">
-                    <strong>Tüm görselleri otomatik olarak çerçeveyi dolduracak şekilde yerleştir</strong>
-                    <span id="fill-frame-desc">Önerilen ayar. Gerekirse kırpma yapılır, siyah boşluklar oluşmaz.</span>
+                    <strong data-i18n="dialog.new_project.fill_frame_title">Automatically fit all visuals to fill the frame</strong>
+                    <span id="fill-frame-desc" data-i18n="dialog.new_project.fill_frame_desc">Recommended setting. Cropping is applied if needed, and no black bars are created.</span>
                 </div>
             </label>
         </div>
 
         <div class="buttons">
-            <button type="button" class="secondary" id="cancel-btn">İptal</button>
-            <button type="submit" class="primary" id="create-btn" disabled>Proje Oluştur</button>
+            <button type="button" class="secondary" id="cancel-btn" data-i18n="dialog.cancel">Cancel</button>
+            <button type="submit" class="primary" id="create-btn" data-i18n="dialog.new_project.create">Create Project</button>
         </div>
     </form>
 
     <script>
         const { ipcRenderer } = require('electron');
+        let i18nState = { lang: 'tr', cache: {} };
+
+        function getValue(obj, key) {
+            return key.split('.').reduce((acc, part) => (acc && acc[part] !== undefined ? acc[part] : null), obj);
+        }
+
+        function t(key, fallback = key, params = {}) {
+            const template = getValue(i18nState.cache, key) ?? fallback;
+            return Object.entries(params).reduce((text, [name, value]) => (
+                String(text).replace(new RegExp(`{${name}}`, 'g'), value)
+            ), template);
+        }
+
+        function translateDOM(root = document) {
+            const scope = root && root.querySelectorAll ? root : document;
+            const textEls = [];
+            if (root !== document && root?.hasAttribute?.('data-i18n')) textEls.push(root);
+            textEls.push(...scope.querySelectorAll('[data-i18n]'));
+            textEls.forEach((el) => {
+                const value = t(el.getAttribute('data-i18n'), null);
+                if (value) el.textContent = value;
+            });
+            const titleEl = document.querySelector('title[data-i18n]');
+            if (titleEl) {
+                const value = t(titleEl.getAttribute('data-i18n'), null);
+                if (value) document.title = value;
+            }
+            document.documentElement.lang = i18nState.lang;
+        }
+
+        async function initI18n() {
+            try {
+                i18nState.lang = await ipcRenderer.invoke('i18n-get-language');
+                i18nState.cache = await ipcRenderer.invoke('i18n-get-all');
+                translateDOM();
+                ipcRenderer.on('language-changed', async (_event, lang) => {
+                    i18nState.lang = lang;
+                    i18nState.cache = await ipcRenderer.invoke('i18n-get-all');
+                    translateDOM();
+                });
+            } catch (error) {
+                console.warn('New project i18n init failed:', error);
+            }
+        }
 
         // Form elemanları
         const form = document.getElementById('new-project-form');
@@ -301,8 +344,10 @@
         aspectRatioInputs.forEach(input => {
             input.addEventListener('change', () => {
                 createBtn.disabled = false;
-                const label = input.value === '16:9' ? 'Yatay 16:9' : 'Dikey 9:16';
-                announce(`${label} seçildi. Proje oluşturmak için Proje Oluştur düğmesine basın.`);
+                const label = input.value === '16:9'
+                    ? t('dialog.new_project.ratio_16_9_spoken', 'Landscape 16:9')
+                    : t('dialog.new_project.ratio_9_16_spoken', 'Portrait 9:16');
+                announce(t('runtime.new_project.ratio_selected', '{label} selected. Press Create Project to continue.', { label }));
             });
         });
 
@@ -313,7 +358,7 @@
 
             const selectedRatio = document.querySelector('input[name="aspect-ratio"]:checked');
             if (!selectedRatio) {
-                announce('Lütfen bir video çıktı oranı seçin.');
+                announce(t('runtime.new_project.select_ratio_first', 'Please select a video output aspect ratio.'));
                 aspectRatioInputs[0].focus();
                 return;
             }
@@ -345,7 +390,8 @@
 
         // Sayfa yüklendiğinde duyuru
         window.addEventListener('load', () => {
-            announce('Yeni Proje Oluştur penceresi açıldı. Lütfen bir video çıktı oranı seçin: 16:9 Yatay veya 9:16 Dikey.');
+            initI18n();
+            announce(t('runtime.new_project.opened', 'Create New Project window opened. Please choose a video output aspect ratio: 16:9 Landscape or 9:16 Portrait.'));
             // İlk radio'ya odaklan
             aspectRatioInputs[0].focus();
         });

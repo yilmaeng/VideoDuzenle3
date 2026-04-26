@@ -1,4 +1,31 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, shell } = require('electron');
+
+const ffmpegProgressCallbacks = new Set();
+let ffmpegProgressBridgeRegistered = false;
+
+function ensureFfmpegProgressBridge() {
+    if (ffmpegProgressBridgeRegistered) return;
+    ffmpegProgressBridgeRegistered = true;
+    ipcRenderer.on('ffmpeg-progress', (_event, data) => {
+        for (const callback of Array.from(ffmpegProgressCallbacks)) {
+            try {
+                callback(data);
+            } catch (error) {
+                console.error('ffmpeg-progress callback error:', error);
+            }
+        }
+    });
+}
+
+ipcRenderer.on('accessibility-dialog-announce', (_event, payload) => {
+    try {
+        window.dispatchEvent(new CustomEvent('evd-accessibility-dialog-announce', {
+            detail: payload || {}
+        }));
+    } catch (error) {
+        console.warn('Failed to dispatch accessibility dialog announcement:', error);
+    }
+});
 
 // Güvenli API'yi renderer'a aç
 contextBridge.exposeInMainWorld('api', {
@@ -6,6 +33,7 @@ contextBridge.exposeInMainWorld('api', {
     getVideoMetadata: (filePath) => ipcRenderer.invoke('get-video-metadata', filePath),
     cutVideo: (params) => ipcRenderer.invoke('cut-video', params),
     cutVideoFast: (params) => ipcRenderer.invoke('cut-video-fast', params),
+    getCutVideoFastBounds: (params) => ipcRenderer.invoke('get-cut-video-fast-bounds', params),
     cutVideoSmart: (params) => ipcRenderer.invoke('cut-video-smart', params),
     renderTimeline: (params) => ipcRenderer.invoke('render-timeline', params),
     concatVideos: (params) => ipcRenderer.invoke('concat-videos', params),
@@ -75,6 +103,9 @@ contextBridge.exposeInMainWorld('api', {
     onFileSave: (callback) => ipcRenderer.on('file-save', () => callback()),
     onFileSaveAs: (callback) => ipcRenderer.on('file-save-as', (event, filePath) => callback(filePath)),
     onFileSaveSelection: (callback) => ipcRenderer.on('file-save-selection', (event, filePath) => callback(filePath)),
+    onFileSaveSelectionRequest: (callback) => ipcRenderer.on('file-save-selection-request', () => callback()),
+    onFileSaveSelectionFastRequest: (callback) => ipcRenderer.on('file-save-selection-fast-request', () => callback()),
+    onFileSaveFast: (callback) => ipcRenderer.on('file-save-fast', (event, filePath) => callback(filePath)),
     onExportVideoOnly: (callback) => ipcRenderer.on('export-video-only', (event, filePath) => callback(filePath)),
     onExportAudioOnly: (callback) => ipcRenderer.on('export-audio-only', (event, filePath) => callback(filePath)),
 
@@ -84,6 +115,7 @@ contextBridge.exposeInMainWorld('api', {
     // Proje Yönetimi (.kve)
     onProjectSave: (callback) => ipcRenderer.on('project-save', () => callback()),
     onProjectOpen: (callback) => ipcRenderer.on('project-open', () => callback()),
+    onProjectFileOpen: (callback) => ipcRenderer.on('project-open-file', (event, filePath) => callback(filePath)),
 
     // Düzenleme olayları
     onEditUndo: (callback) => ipcRenderer.on('edit-undo', () => callback()),
@@ -99,12 +131,22 @@ contextBridge.exposeInMainWorld('api', {
     onSelectClear: (callback) => ipcRenderer.on('select-clear', () => callback()),
     onSelectRangeDialog: (callback) => ipcRenderer.on('select-range-dialog', () => callback()),
     onSelectBetweenMarkers: (callback) => ipcRenderer.on('select-between-markers', () => callback()),
+    onShowSpeedDialog: (callback) => ipcRenderer.on('show-speed-dialog', () => callback()),
     onIntelligentSelection: (callback) => ipcRenderer.on('intelligent-selection', () => callback()),
 
     // Ekleme olayları
     onInsertAudio: (callback) => ipcRenderer.on('insert-audio', (event, filePath) => callback(filePath)),
     onInsertAudioRequest: (callback) => ipcRenderer.on('insert-audio-request', () => callback()),
     onInsertVideo: (callback) => ipcRenderer.on('insert-video', (event, filePath) => callback(filePath)),
+    onVerticalVideoFromSelection: (callback) => ipcRenderer.on('vertical-video-from-selection', () => callback()),
+    onVerticalVideoQueueAddSelection: (callback) => ipcRenderer.on('vertical-video-queue-add-selection', () => callback()),
+    onVerticalVideoQueueOpen: (callback) => ipcRenderer.on('vertical-video-queue-open', () => callback()),
+    onVerticalVideoQueueClear: (callback) => ipcRenderer.on('vertical-video-queue-clear', () => callback()),
+    onSelectionQueueOpen: (callback) => ipcRenderer.on('selection-queue-open', () => callback()),
+
+    // Kayıt tamamlandıktan sonra
+    onAddToTimeline: (callback) => ipcRenderer.on('add-to-timeline', (event, filePath) => callback(filePath)),
+
     onInsertTextDialog: (callback) => ipcRenderer.on('insert-text-dialog', () => callback()),
     onInsertImages: (callback) => ipcRenderer.on('insert-images', (event, filePaths) => callback(filePaths)),
     onOpenImageWizard: (callback) => ipcRenderer.on('open-image-wizard', () => callback()),
@@ -154,14 +196,25 @@ contextBridge.exposeInMainWorld('api', {
     onShowShortcuts: (callback) => ipcRenderer.on('show-shortcuts', () => callback()),
     onShowKeyboardManager: (callback) => ipcRenderer.on('show-keyboard-manager', () => callback()),
     onShowHelp: (callback) => ipcRenderer.on('show-help', () => callback()),
+    onShowFeedback: (callback) => ipcRenderer.on('show-feedback', () => callback()),
+    onShowStartupWelcome: (callback) => ipcRenderer.on('show-startup-welcome', () => callback()),
     onShowFineTuneDialog: (callback) => ipcRenderer.on('show-fine-tune-dialog', () => callback()),
     onShowAudioSettingsDialog: (callback) => ipcRenderer.on('show-audio-settings-dialog', () => callback()),
+    createFeedbackDraft: (params) => ipcRenderer.invoke('create-feedback-draft', params),
 
     // Uygulama olayları
     setWindowTitle: (title) => ipcRenderer.send('set-window-title', title),
     onAppReady: (callback) => ipcRenderer.on('app-ready', (event, data) => callback(data)),
+    onNativeMenuState: (callback) => ipcRenderer.on('native-menu-state', (event, active) => callback(active)),
     onAccessibilityChanged: (callback) => ipcRenderer.on('accessibility-changed', (event, enabled) => callback(enabled)),
-    onFfmpegProgress: (callback) => ipcRenderer.on('ffmpeg-progress', (event, data) => callback(data)),
+    onFfmpegProgress: (callback) => {
+        ensureFfmpegProgressBridge();
+        ffmpegProgressCallbacks.add(callback);
+        return () => ffmpegProgressCallbacks.delete(callback);
+    },
+    offFfmpegProgress: (callback) => {
+        ffmpegProgressCallbacks.delete(callback);
+    },
     onFileCloseRequest: (callback) => ipcRenderer.on('file-close-request', () => callback()),
     onAppQuitRequest: (callback) => ipcRenderer.on('app-quit-request', () => callback()),
     onFileClosed: (callback) => ipcRenderer.on('file-closed', () => callback()),
@@ -181,6 +234,13 @@ contextBridge.exposeInMainWorld('api', {
 
     // Wizard/Dialog Açma
     openSyncWizard: (mode) => ipcRenderer.send('open-sync-wizard', mode),
+    openVerticalWizard: (data) => ipcRenderer.send('open-vertical-wizard', data),
+    openRecordingWizard: (options) => ipcRenderer.send('open-recording-wizard', options),
+    resumeActiveRecordingWizard: () => ipcRenderer.invoke('recording-wizard-resume-active-session'),
+    openLiveEffectsPanel: () => ipcRenderer.send('open-live-effects-panel'),
+    openExternal: (url) => shell.openExternal(url),
+    openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
+    isPortableMode: () => ipcRenderer.invoke('app-is-portable'),
 
     // Main process'e mesaj gönder
     sendCloseWindow: () => ipcRenderer.send('close-window'),
@@ -249,9 +309,30 @@ contextBridge.exposeInMainWorld('api', {
     saveTempRecording: (buffer) => ipcRenderer.invoke('save-temp-recording', buffer),
     onInsertAudioRequest: (callback) => ipcRenderer.on('insert-audio-request', () => callback()),
 
+    // Global Kısayollar
+    registerGlobalShortcut: (registration) => ipcRenderer.invoke('register-global-shortcut', registration),
+    unregisterAllGlobalShortcuts: () => ipcRenderer.invoke('unregister-all-global-shortcuts'),
+    onGlobalShortcutTriggered: (callback) => ipcRenderer.on('global-shortcut-triggered', (event, accelerator) => callback(accelerator)),
+
     // Genel Send
     send: (channel, ...args) => ipcRenderer.send(channel, ...args),
 
+    // I18n
+    i18n: {
+        t: (key, params) => ipcRenderer.invoke('i18n-t', key, params),
+        getLanguage: () => ipcRenderer.invoke('i18n-get-language'),
+        getSavedLanguage: () => ipcRenderer.invoke('i18n-get-saved-language'),
+        changeLanguage: (lang) => ipcRenderer.invoke('i18n-change-language', lang),
+        getAll: () => ipcRenderer.invoke('i18n-get-all'),
+        onLanguageChanged: (callback) => ipcRenderer.on('language-changed', (event, lang) => callback(lang))
+    },
+
     // Event dinleyicisini kaldır
-    removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
+    removeAllListeners: (channel) => {
+        if (channel === 'ffmpeg-progress') {
+            ffmpegProgressCallbacks.clear();
+            return;
+        }
+        ipcRenderer.removeAllListeners(channel);
+    }
 });

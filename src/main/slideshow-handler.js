@@ -8,11 +8,135 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { exec } = require('child_process');
+const sharp = require('sharp');
+const i18n = require('./i18n');
 
 let newProjectWindow = null;
 let slideshowEditorWindow = null;
 let currentProjectSettings = null;
 let storedMainWindow = null; // Ana pencere referansını sakla
+
+function t(key, fallback, params) {
+    const value = i18n.t(key, params);
+    return value.startsWith('[') ? fallback : value;
+}
+
+async function announceDialogForAccessibility(targetWindow, options = {}) {
+    if (!targetWindow || targetWindow.isDestroyed() || !targetWindow.webContents) {
+        return;
+    }
+
+    const payload = {
+        title: String(options.title || '').trim(),
+        message: String(options.message || '').trim(),
+        detail: String(options.detail || '').trim()
+    };
+
+    if (!payload.title && !payload.message && !payload.detail) {
+        return;
+    }
+
+    try {
+        targetWindow.webContents.send('accessibility-dialog-announce', payload);
+        await new Promise((resolve) => setTimeout(resolve, 90));
+    } catch (error) {
+        console.warn('Slideshow dialog accessibility announcement failed:', error.message);
+    }
+}
+
+async function getImageInfo(imagePath) {
+    const metadata = await sharp(imagePath).metadata();
+    const orientation = Number(metadata.orientation || 1);
+    const rawWidth = Number(metadata.width || 1920);
+    const rawHeight = Number(metadata.height || 1080);
+    const rotatesDimensions = [5, 6, 7, 8].includes(orientation);
+
+    return {
+        width: rotatesDimensions ? rawHeight : rawWidth,
+        height: rotatesDimensions ? rawWidth : rawHeight,
+        orientation
+    };
+}
+
+async function prepareSlideshowImages(images) {
+    const preparedImages = [];
+    const cleanupPaths = [];
+
+    for (const image of images) {
+        try {
+            const info = await getImageInfo(image.path);
+            const manualRotation = ((Number(image.rotation || 0) % 360) + 360) % 360;
+            const needsNormalization = info.orientation !== 1 || manualRotation !== 0;
+
+            if (!needsNormalization) {
+                preparedImages.push({
+                    ...image,
+                    width: info.width,
+                    height: info.height
+                });
+                continue;
+            }
+
+            const ext = path.extname(image.path) || '.jpg';
+            const normalizedPath = path.join(os.tmpdir(), `slideshow_norm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}${ext}`);
+
+            let pipeline = sharp(image.path).rotate();
+            if (manualRotation !== 0) {
+                pipeline = pipeline.rotate(manualRotation);
+            }
+            await pipeline.toFile(normalizedPath);
+
+            const normalizedInfo = await getImageInfo(normalizedPath);
+
+            cleanupPaths.push(normalizedPath);
+            preparedImages.push({
+                ...image,
+                path: normalizedPath,
+                width: normalizedInfo.width,
+                height: normalizedInfo.height
+            });
+        } catch (error) {
+            console.warn('[Slideshow] Image normalization skipped:', image.path, error.message);
+            preparedImages.push(image);
+        }
+    }
+
+    return {
+        images: preparedImages,
+        cleanup: () => {
+            cleanupPaths.forEach(filePath => {
+                try {
+                    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                } catch (cleanupError) {
+                    console.warn('[Slideshow] Normalized temp cleanup failed:', cleanupError.message);
+                }
+            });
+        }
+    };
+}
+
+async function prepareImageForAnalysis(imageInput) {
+    const image = typeof imageInput === 'string'
+        ? { path: imageInput, rotation: 0 }
+        : imageInput;
+
+    if (!image?.path) {
+        throw new Error('Image path is required for analysis.');
+    }
+
+    const prepared = await prepareSlideshowImages([image]);
+    const preparedImage = prepared.images[0];
+
+    if (!preparedImage?.path) {
+        prepared.cleanup();
+        throw new Error('Prepared image could not be created for analysis.');
+    }
+
+    return {
+        image: preparedImage,
+        cleanup: prepared.cleanup
+    };
+}
 
 /**
  * Slideshow handler'larını kur
@@ -74,9 +198,9 @@ function setupSlideshowHandlers(mainWindow) {
     // Resim ekleme diyaloğu
     ipcMain.on('slideshow-add-images', async () => {
         const result = await dialog.showOpenDialog(slideshowEditorWindow, {
-            title: 'Resim Dosyaları Seç',
+            title: t('dialog.slideshow_editor.select_images_title', 'Select Image Files'),
             filters: [
-                { name: 'Resim Dosyaları', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] }
+                { name: t('dialog.slideshow_editor.image_files_filter', 'Image Files'), extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] }
             ],
             properties: ['openFile', 'multiSelections']
         });
@@ -89,9 +213,9 @@ function setupSlideshowHandlers(mainWindow) {
     // Ses ekleme diyaloğu
     ipcMain.on('slideshow-add-audio', async () => {
         const result = await dialog.showOpenDialog(slideshowEditorWindow, {
-            title: 'Ses Dosyası Seç',
+            title: t('dialog.slideshow_editor.select_audio_title', 'Select Audio File'),
             filters: [
-                { name: 'Ses Dosyaları', extensions: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'] }
+                { name: t('dialog.slideshow_editor.audio_files_filter', 'Audio Files'), extensions: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'] }
             ],
             properties: ['openFile', 'multiSelections']
         });
@@ -187,30 +311,17 @@ function setupSlideshowHandlers(mainWindow) {
 
     // Resim bilgisi al
     ipcMain.handle('get-image-info', async (event, imagePath) => {
-        return new Promise((resolve, reject) => {
-            const { exec } = require('child_process');
-            let ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
-            // Portable/asar için yol düzeltmesi
-            if (ffmpegPath.includes('app.asar')) {
-                ffmpegPath = ffmpegPath.replace('app.asar', 'app.asar.unpacked');
-            }
-
-            exec(`"${ffmpegPath}" -i "${imagePath}" 2>&1`, (error, stdout, stderr) => {
-                const output = stdout + stderr;
-
-                // Çözünürlük bilgisini al
-                const sizeMatch = output.match(/(\d{2,5})x(\d{2,5})/);
-                if (sizeMatch) {
-                    resolve({
-                        width: parseInt(sizeMatch[1]),
-                        height: parseInt(sizeMatch[2])
-                    });
-                } else {
-                    // Varsayılan değerler
-                    resolve({ width: 1920, height: 1080 });
-                }
-            });
-        });
+        try {
+            const info = await getImageInfo(imagePath);
+            return {
+                width: info.width,
+                height: info.height,
+                orientation: info.orientation
+            };
+        } catch (error) {
+            console.warn('[Slideshow] get-image-info fallback used:', error.message);
+            return { width: 1920, height: 1080, orientation: 1 };
+        }
     });
 
     // Ses bilgisi al
@@ -248,8 +359,10 @@ function setupSlideshowHandlers(mainWindow) {
             const imageBuffer = fs.readFileSync(imagePath);
             return imageBuffer.toString('base64');
         } catch (error) {
-            console.error('Resim okuma hatası:', error);
-            throw new Error('Resim okunamadı: ' + error.message);
+            console.error('Image read error:', error);
+            throw new Error(t('runtime.slideshow_editor.image_read_error', 'Image could not be read: {error}', {
+                error: error.message
+            }));
         }
     });
 
@@ -257,14 +370,16 @@ function setupSlideshowHandlers(mainWindow) {
     ipcMain.handle('show-input-dialog', async (event, options) => {
         // Basit bir prompt için küçük bir pencere oluşturabiliriz
         // Şimdilik dialog.showMessageBox kullanıyoruz
-        const { response } = await dialog.showMessageBox(slideshowEditorWindow, {
+        const dialogOptions = {
             type: 'question',
             title: options.title,
             message: options.message,
-            buttons: ['Tamam', 'İptal'],
+            buttons: [t('dialog.common.ok', 'OK'), t('dialog.cancel', 'Cancel')],
             defaultId: 0,
             cancelId: 1
-        });
+        };
+        await announceDialogForAccessibility(slideshowEditorWindow, dialogOptions);
+        const { response } = await dialog.showMessageBox(slideshowEditorWindow, dialogOptions);
 
         if (response === 0) {
             return options.defaultValue; // Şimdilik varsayılan değeri döndür
@@ -274,59 +389,89 @@ function setupSlideshowHandlers(mainWindow) {
 
     // Mesaj diyaloğu
     ipcMain.handle('show-message-dialog', async (event, options) => {
-        await dialog.showMessageBox(slideshowEditorWindow, {
+        const dialogOptions = {
             type: 'info',
             title: options.title,
             message: options.message,
-            buttons: ['Tamam']
-        });
+            buttons: [t('dialog.common.ok', 'OK')]
+        };
+        await announceDialogForAccessibility(slideshowEditorWindow, dialogOptions);
+        await dialog.showMessageBox(slideshowEditorWindow, dialogOptions);
     });
 
     // AI ile resim betimleme
-    ipcMain.handle('describe-image-ai', async (event, imagePath) => {
+    ipcMain.handle('describe-image-ai', async (event, imageInput) => {
         const geminiHandler = require('./gemini-handler');
         const apiKey = geminiHandler.getApiKey();
 
         if (!apiKey) {
-            throw new Error('API anahtarı bulunamadı. Lütfen önce Yapay Zeka ayarlarından API anahtarını girin.');
+            throw new Error(t('runtime.slideshow_editor.api_key_missing', 'API key was not found. Please enter the API key in AI settings first.'));
         }
 
-        // Resmi base64'e çevir
-        const imageBuffer = fs.readFileSync(imagePath);
-        const base64 = imageBuffer.toString('base64');
+        const preparedAnalysis = await prepareImageForAnalysis(imageInput);
 
         // Gemini'ye istek gönder
-        const prompt = `Bu resmi iki şekilde betimle:
-1. KISA (en fazla 100 karakter): Resmin çok kısa bir özeti
-2. DETAYLI: Resmin detaylı bir açıklaması
+        const langMap = { tr: 'Turkish', en: 'English', de: 'German', es: 'Spanish', fr: 'French' };
+        const currentLang = i18n.getCurrentLanguage ? i18n.getCurrentLanguage() : 'tr';
+        const aiLang = langMap[currentLang] || 'English';
+        const prompt = `Describe this image in two ways and assess whether the photo orientation looks correct. Respond only in ${aiLang}.
+1. SHORT (maximum 100 characters): a very brief summary of the image
+2. DETAILED: a detailed description of the image
+3. ORIENTATION: choose exactly one of these values:
+- CORRECT
+- ROTATE_LEFT
+- ROTATE_RIGHT
+- UNCERTAIN
+4. ORIENTATION_NOTE: one short sentence for the user. If the orientation looks correct, clearly say there is no orientation problem. If the photo looks sideways, say whether they should rotate left or right. If unsure, say you are not sure.
 
-Yanıtını şu formatta ver:
-KISA: [kısa betimleme]
-DETAYLI: [detaylı betimleme]`;
+Important orientation rule:
+- ROTATE_LEFT means the app should rotate the image 90 degrees counterclockwise on screen.
+- ROTATE_RIGHT means the app should rotate the image 90 degrees clockwise on screen.
+- Choose the direction that makes people and objects appear upright in the final result.
+- If a person would become upside down after that rotation, then that direction is wrong.
+- Be conservative. If you are not confident, return UNCERTAIN instead of guessing.
+
+Return your answer in exactly this format:
+SHORT: [short description]
+DETAILED: [detailed description]
+ORIENTATION: [CORRECT/ROTATE_LEFT/ROTATE_RIGHT/UNCERTAIN]
+ORIENTATION_NOTE: [short user-facing note]`;
 
         const https = require('https');
 
         return new Promise((resolve, reject) => {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-            const requestBody = JSON.stringify({
-                contents: [{
-                    role: 'user',
-                    parts: [
-                        {
-                            inline_data: {
-                                mime_type: 'image/jpeg',
-                                data: base64
-                            }
-                        },
-                        { text: prompt }
-                    ]
-                }],
-                generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 4096  // Detaylı betimleme için artırıldı
-                }
-            });
+            let requestBody = null;
+            try {
+                const imageBuffer = fs.readFileSync(preparedAnalysis.image.path);
+                const base64 = imageBuffer.toString('base64');
+                requestBody = JSON.stringify({
+                    contents: [{
+                        role: 'user',
+                        parts: [
+                            {
+                                inline_data: {
+                                    mime_type: 'image/jpeg',
+                                    data: base64
+                                }
+                            },
+                            { text: prompt }
+                        ]
+                    }],
+                    systemInstruction: {
+                        parts: [{ text: `Reply only in ${aiLang}.` }]
+                    },
+                    generationConfig: {
+                        temperature: 0.2,
+                        maxOutputTokens: 4096  // Detaylı betimleme için artırıldı
+                    }
+                });
+            } catch (error) {
+                preparedAnalysis.cleanup();
+                reject(error);
+                return;
+            }
 
             const urlObj = new URL(url);
             const options = {
@@ -362,25 +507,48 @@ DETAYLI: [detaylı betimleme]`;
                                 .map(p => p.text)
                                 .join('');
 
-                            // Kısa ve detaylı betimlemeyi ayır
-                            const shortMatch = text.match(/KISA:\s*(.+?)(?=DETAYLI:|$)/s);
-                            const longMatch = text.match(/DETAYLI:\s*(.+)/s);
+                            // Kısa, detaylı ve yön tavsiyesini ayır
+                            const shortMatch = text.match(/(?:SHORT|KISA):\s*(.+?)(?=(?:DETAILED|DETAYLI):|$)/is);
+                            const longMatch = text.match(/(?:DETAILED|DETAYLI):\s*(.+?)(?=(?:ORIENTATION|YON|YÖN):|(?:ORIENTATION_NOTE|YON_NOTU|YÖN_NOTU):|$)/is);
+                            const orientationMatch = text.match(/(?:ORIENTATION|YON|YÖN):\s*(CORRECT|ROTATE_LEFT|ROTATE_RIGHT|UNCERTAIN)/i);
+                            const orientationNoteMatch = text.match(/(?:ORIENTATION_NOTE|YON_NOTU|YÖN_NOTU):\s*(.+)/is);
+                            const orientationStatus = orientationMatch ? orientationMatch[1].toUpperCase() : 'UNCERTAIN';
+
+                            let orientationMessage = orientationNoteMatch ? orientationNoteMatch[1].trim() : '';
+                            if (!orientationMessage) {
+                                const orientationMessageMap = {
+                                    CORRECT: t('runtime.slideshow_editor.orientation_ai_correct', 'The photo direction looks correct. There does not appear to be an orientation problem.'),
+                                    ROTATE_LEFT: t('runtime.slideshow_editor.orientation_ai_rotate_left', 'The photo looks sideways. Try rotating it left.'),
+                                    ROTATE_RIGHT: t('runtime.slideshow_editor.orientation_ai_rotate_right', 'The photo looks sideways. Try rotating it right.'),
+                                    UNCERTAIN: t('runtime.slideshow_editor.orientation_ai_uncertain', 'The photo direction is unclear. Please check it visually.')
+                                };
+                                orientationMessage = orientationMessageMap[orientationStatus] || orientationMessageMap.UNCERTAIN;
+                            }
 
                             resolve({
-                                short: shortMatch ? shortMatch[1].trim().substring(0, 100) : 'Betimleme alınamadı',
-                                long: longMatch ? longMatch[1].trim() : text
+                                short: shortMatch ? shortMatch[1].trim().substring(0, 100) : t('runtime.slideshow_editor.description_unavailable', 'Description unavailable'),
+                                long: longMatch ? longMatch[1].trim() : text,
+                                orientationStatus,
+                                orientationMessage
                             });
                         } else {
-                            reject(new Error('Geçersiz API yanıtı'));
+                            reject(new Error(t('runtime.slideshow_editor.invalid_api_response', 'Invalid API response.')));
                         }
                     } catch (error) {
-                        reject(new Error('API yanıtı işlenemedi: ' + error.message));
+                        reject(new Error(t('runtime.slideshow_editor.api_response_parse_error', 'API response could not be processed: {error}', {
+                            error: error.message
+                        })));
+                    } finally {
+                        preparedAnalysis.cleanup();
                     }
                 });
             });
 
             req.on('error', (error) => {
-                reject(new Error('Bağlantı hatası: ' + error.message));
+                preparedAnalysis.cleanup();
+                reject(new Error(t('runtime.slideshow_editor.connection_error', 'Connection error: {error}', {
+                    error: error.message
+                })));
             });
 
             req.write(requestBody);
@@ -454,17 +622,23 @@ DETAYLI: [detaylı betimleme]`;
             const missingList = missingFiles.slice(0, 5).join('\n');
             const moreCount = missingFiles.length > 5 ? `\n...ve ${missingFiles.length - 5} dosya daha` : '';
 
-            dialog.showMessageBox(slideshowEditorWindow, {
+            const dialogOptions = {
                 type: 'error',
-                title: 'Eksik Dosyalar',
-                message: `Aşağıdaki dosyalar bulunamadı:\n\n${missingList}${moreCount}\n\nDosyaları proje klasörüne (.eng dosyasının yanına) kopyalayıp tekrar deneyin.`,
-                buttons: ['Tamam']
+                title: t('dialog.slideshow_editor.missing_files_title', 'Missing Files'),
+                message: t('dialog.slideshow_editor.missing_files_message', 'The following files could not be found:\n\n{files}{more}\n\nCopy the files into the project folder (next to the .eng file) and try again.', {
+                    files: missingList,
+                    more: moreCount
+                }),
+                buttons: [t('dialog.common.ok', 'OK')]
+            };
+            announceDialogForAccessibility(slideshowEditorWindow, dialogOptions).then(() => {
+                dialog.showMessageBox(slideshowEditorWindow, dialogOptions);
             });
             return;
         }
 
         const result = await dialog.showSaveDialog(slideshowEditorWindow, {
-            title: 'Slideshow Videoyu Kaydet',
+            title: t('dialog.slideshow_editor.save_video_title', 'Save Slideshow Video'),
             filters: [
                 { name: 'MP4 Video', extensions: ['mp4'] }
             ]
@@ -475,7 +649,7 @@ DETAYLI: [detaylı betimleme]`;
             if (slideshowEditorWindow) {
                 slideshowEditorWindow.webContents.send('export-progress', {
                     status: 'started',
-                    message: 'Video oluşturuluyor... Bu işlem birkaç dakika sürebilir.'
+                    message: t('runtime.slideshow_editor.export_started', 'Creating video... This may take a few minutes.')
                 });
             }
 
@@ -499,26 +673,43 @@ DETAYLI: [detaylı betimleme]`;
                 if (slideshowEditorWindow) {
                     slideshowEditorWindow.webContents.send('export-progress', {
                         status: 'completed',
-                        message: `Video oluşturuldu (${elapsedSeconds} saniye)`
+                        message: t('runtime.slideshow_editor.export_completed', 'Video created ({seconds} seconds)', {
+                            seconds: elapsedSeconds
+                        })
+                    });
+                    slideshowEditorWindow.webContents.send('slideshow-export-result', {
+                        message: t('runtime.slideshow_editor.export_result_announce', 'The slideshow video was created successfully. Duration: {seconds} seconds.', {
+                            seconds: elapsedSeconds
+                        })
                     });
                 }
 
-                dialog.showMessageBox(slideshowEditorWindow, {
+                // Let the renderer announce the result before the native dialog steals focus.
+                await new Promise((resolve) => setTimeout(resolve, 900));
+
+                const dialogOptions = {
                     type: 'info',
-                    title: 'Başarılı',
-                    message: `Slideshow video başarıyla oluşturuldu!\n\nSüre: ${elapsedSeconds} saniye`,
-                    buttons: ['Tamam']
+                    title: t('dialog.slideshow_editor.success_title', 'Success'),
+                    message: t('dialog.slideshow_editor.video_created_message', 'The slideshow video was created successfully.\n\nDuration: {seconds} seconds', {
+                        seconds: elapsedSeconds
+                    }),
+                    buttons: [t('dialog.common.ok', 'OK')]
+                };
+                announceDialogForAccessibility(slideshowEditorWindow, dialogOptions).then(() => {
+                    dialog.showMessageBox(slideshowEditorWindow, dialogOptions);
                 });
             } catch (error) {
                 // İlerleme bildirimini kapat (hata ile)
                 if (slideshowEditorWindow) {
                     slideshowEditorWindow.webContents.send('export-progress', {
                         status: 'error',
-                        message: 'Video oluşturma hatası'
+                        message: t('runtime.slideshow_editor.export_error_status', 'Video creation error')
                     });
                 }
                 const errorMsg = error.message.length > 500 ? error.message.substring(0, 500) + '...' : error.message;
-                dialog.showErrorBox('Hata', 'Video oluşturulurken hata: ' + errorMsg);
+                dialog.showErrorBox(t('messages.error_title', 'Error'), t('runtime.slideshow_editor.video_create_error', 'An error occurred while creating the video: {error}', {
+                    error: errorMsg
+                }));
             }
         }
     });
@@ -533,16 +724,18 @@ DETAYLI: [detaylı betimleme]`;
                 const projectJSON = JSON.stringify(projectData, null, 2);
                 fs.writeFileSync(filePath, projectJSON, 'utf8');
                 slideshowEditorWindow.webContents.send('slideshow-project-saved', filePath);
-                console.log('Proje kaydedildi:', filePath);
+                console.log('Project saved:', filePath);
             } catch (error) {
-                dialog.showErrorBox('Hata', 'Proje kaydedilirken hata: ' + error.message);
+                dialog.showErrorBox(t('messages.error_title', 'Error'), t('runtime.slideshow_editor.project_save_error', 'An error occurred while saving the project: {error}', {
+                    error: error.message
+                }));
             }
         } else {
             // Yeni proje - dosya seçtir
             const result = await dialog.showSaveDialog(slideshowEditorWindow, {
-                title: 'Projeyi Kaydet',
+                title: t('dialog.slideshow_editor.save_project_title', 'Save Project'),
                 filters: [
-                    { name: 'Engelsiz Video Projesi', extensions: ['eng'] }
+                    { name: t('dialog.slideshow_editor.project_file_filter', 'Barrier-Free Video Project'), extensions: ['eng'] }
                 ]
             });
 
@@ -553,9 +746,11 @@ DETAYLI: [detaylı betimleme]`;
                     const projectJSON = JSON.stringify(projectData, null, 2);
                     fs.writeFileSync(result.filePath, projectJSON, 'utf8');
                     slideshowEditorWindow.webContents.send('slideshow-project-saved', result.filePath);
-                    console.log('Yeni proje kaydedildi:', result.filePath);
+                    console.log('New project saved:', result.filePath);
                 } catch (error) {
-                    dialog.showErrorBox('Hata', 'Proje kaydedilirken hata: ' + error.message);
+                    dialog.showErrorBox(t('messages.error_title', 'Error'), t('runtime.slideshow_editor.project_save_error', 'An error occurred while saving the project: {error}', {
+                        error: error.message
+                    }));
                 }
             }
         }
@@ -590,7 +785,9 @@ function openTextOverlayForSlideshow(mainWindow, data = {}) {
         resizable: true,
         minimizable: false,
         maximizable: false,
-        title: data.editText ? 'Yazı Düzenle - Slideshow' : 'Yazı Ekle - Slideshow',
+        title: data.editText
+            ? t('dialog.slideshow_editor.text_edit_window_title', 'Edit Text - Slideshow')
+            : t('dialog.slideshow_editor.text_add_window_title', 'Add Text - Slideshow'),
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
@@ -666,7 +863,7 @@ function openNewProjectDialog(mainWindow) {
         minimizable: false,
         maximizable: false,
         show: false,  // Başlangıçta gizli
-        title: 'Yeni Proje Oluştur',
+        title: t('dialog.new_project.window_title', 'Create New Project'),
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
@@ -704,7 +901,7 @@ function openSlideshowEditor(mainWindow, settings) {
         width: 1200,
         height: 800,
         parent: mainWindow,
-        title: 'Slideshow Düzenleyici',
+        title: t('dialog.slideshow_editor.window_title', 'Slideshow Editor'),
         show: false,  // Başlangıçta gizli, yüklendikten sonra göster
         webPreferences: {
             nodeIntegration: true,
@@ -746,6 +943,7 @@ function getFFmpegPath() {
 /**
  * Tek bir komutla video oluştur (Orijinal Fonksiyon)
  * Küçük projeler için ideal (<30 resim).
+ * Eşlenmiş ses modunu destekler (resim-ses eşleştirmesi).
  */
 async function createSlideshowVideo(projectData, outputPath, parentWindow) {
     const ffmpegPath = getFFmpegPath();
@@ -754,115 +952,288 @@ async function createSlideshowVideo(projectData, outputPath, parentWindow) {
         throw new Error(`FFmpeg bulunamadı: ${ffmpegPath}`);
     }
 
+    const prepared = await prepareSlideshowImages(projectData.images);
+    const slideshowImages = prepared.images;
+
     return new Promise((resolve, reject) => {
         const [width, height] = projectData.aspectRatio === '16:9' ? [1920, 1080] : [1080, 1920];
         const resolution = `${width}:${height}`;
 
         let currentTime = 0;
-        const imageTimings = projectData.images.map(img => {
+        const imageTimings = slideshowImages.map(img => {
             const timing = { id: img.id, start: currentTime, end: currentTime + img.duration };
             currentTime += img.duration;
             return timing;
         });
 
+        const tempFilterFiles = []; // Temizlenecek geçici dosyalar
         let cmd = `"${ffmpegPath}" -y `;
 
         // Inputları ekle
-        projectData.images.forEach(img => {
+        slideshowImages.forEach(img => {
             cmd += `-loop 1 -t ${img.duration.toFixed(3)} -i "${img.path}" `;
         });
 
-        const imageCount = projectData.images.length;
+        const imageCount = slideshowImages.length;
         const audioTracks = projectData.audioTracks || [];
         const hasAudio = audioTracks.length > 0;
 
-        // Ses dosyalarını input olarak ekle
-        audioTracks.forEach(track => {
-            cmd += `-i "${track.path}" `;
-        });
+        // Eşlenmiş ses modu kontrolü
+        const hasPairedAudio = slideshowImages.some(img => img.pairedAudioId);
 
-        const scaleFilter = projectData.fillFrame
-            ? `scale=${resolution}:force_original_aspect_ratio=increase,crop=${resolution},setsar=1`
-            : `scale=${resolution}:force_original_aspect_ratio=decrease,pad=${resolution}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
+        if (hasPairedAudio) {
+            // === EŞLENMIŞ SES MODU ===
+            // Her benzersiz eşlenmiş ses dosyasını input olarak ekle
+            const uniquePairedAudioIds = [...new Set(
+                slideshowImages
+                    .filter(img => img.pairedAudioId)
+                    .map(img => img.pairedAudioId)
+            )];
 
-        let filterComplex = '';
-        projectData.images.forEach((img, i) => {
-            filterComplex += `[${i}:v]${scaleFilter}[v${i}]; `;
-        });
+            const audioInputMap = {}; // audioId -> inputIndex
+            uniquePairedAudioIds.forEach(audioId => {
+                const audio = audioTracks.find(a => a.id === audioId);
+                if (audio && fs.existsSync(audio.path)) {
+                    const inputIdx = imageCount + Object.keys(audioInputMap).length;
+                    audioInputMap[audioId] = inputIdx;
+                    cmd += `-i "${audio.path}" `;
+                }
+            });
 
-        projectData.images.forEach((img, i) => {
-            filterComplex += `[v${i}]`;
-        });
-        filterComplex += `concat=n=${projectData.images.length}:v=1:a=0[vcoll]; `;
+            // Eşlenmemiş global sesleri de ekle
+            const pairedAudioIds = new Set(uniquePairedAudioIds);
+            const globalAudioTracks = audioTracks.filter(a => !pairedAudioIds.has(a.id));
+            const globalAudioInputStart = imageCount + Object.keys(audioInputMap).length;
+            globalAudioTracks.forEach(track => {
+                cmd += `-i "${track.path}" `;
+            });
 
-        let lastOutput = 'vcoll';
+            // Video filter complex
+            const scaleFilter = projectData.fillFrame
+                ? `scale=${resolution}:force_original_aspect_ratio=increase,crop=${resolution},setsar=1`
+                : `scale=${resolution}:force_original_aspect_ratio=decrease,pad=${resolution}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
 
-        // Text Overlays
-        if (projectData.textOverlays && projectData.textOverlays.length > 0) {
-            projectData.textOverlays.forEach((overlay, index) => {
-                overlay.targetImages.forEach((imgId, targetIdx) => {
-                    const timing = imageTimings.find(t => t.id === imgId);
+            let filterComplex = '';
+            slideshowImages.forEach((img, i) => {
+                filterComplex += `[${i}:v]${scaleFilter}[v${i}]; `;
+            });
+
+            slideshowImages.forEach((img, i) => {
+                filterComplex += `[v${i}]`;
+            });
+            filterComplex += `concat=n=${slideshowImages.length}:v=1:a=0[vcoll]; `;
+
+            let lastOutput = 'vcoll';
+
+            // Text Overlays
+            if (projectData.textOverlays && projectData.textOverlays.length > 0) {
+                projectData.textOverlays.forEach((overlay, index) => {
+                    overlay.targetImages.forEach((imgId, targetIdx) => {
+                        const timing = imageTimings.find(t => t.id === imgId);
+                        if (!timing) return;
+
+                        const fontFile = 'C\\\\:/Windows/Fonts/arial.ttf';
+                        const y = overlay.position === 'top' ? '30' : (overlay.position === 'center' ? '(h-th)/2' : 'h-th-30');
+
+                        const escapedContent = overlay.content
+                            .replace(/\\/g, '\\\\')
+                            .replace(/'/g, "'\\''")
+                            .replace(/:/g, '\\\\:')
+                            .replace(/\n/g, '');
+
+                        const startT = timing.start.toFixed(3);
+                        const isVeryLast = !imageTimings.find(t => t.start > timing.start);
+                        const endT = isVeryLast ? (timing.end + 1.0).toFixed(3) : (timing.end - 0.02).toFixed(3);
+
+                        const drawtext = `drawtext=text='${escapedContent}':fontfile='${fontFile}':fontsize=${overlay.fontSize || 48}:fontcolor=${overlay.fontColor || 'white'}:x=(w-tw)/2:y=${y}${overlay.background && overlay.background !== 'none' ? `:box=1:boxcolor=${overlay.background === 'black' ? 'black@0.5' : 'white@0.5'}:boxborderw=10` : ''}:enable='between(t,${startT},${endT})'`;
+
+                        const currentOut = `txt${index}_${targetIdx}`;
+                        filterComplex += `[${lastOutput}]${drawtext}[${currentOut}]; `;
+                        lastOutput = currentOut;
+                    });
+                });
+            }
+
+            // Eşlenmiş ses filter complex:
+            // Her ses için: eşli resimlerin zamanlamalarına göre trim + delay
+            const audioSegments = [];
+            let segIdx = 0;
+
+            uniquePairedAudioIds.forEach(audioId => {
+                const inputIdx = audioInputMap[audioId];
+                if (inputIdx === undefined) return;
+
+                const pairedImgs = slideshowImages.filter(img => img.pairedAudioId === audioId);
+                const audio = audioTracks.find(a => a.id === audioId);
+                if (!audio) return;
+
+                let audioOffset = 0;
+
+                pairedImgs.forEach(img => {
+                    const timing = imageTimings.find(t => t.id === img.id);
                     if (!timing) return;
 
-                    const fontFile = 'C\\\\:/Windows/Fonts/arial.ttf';
-                    const y = overlay.position === 'top' ? '30' : (overlay.position === 'center' ? '(h-th)/2' : 'h-th-30');
+                    const segDuration = img.duration;
+                    const segLabel = `aseg${segIdx}`;
+                    const delayMs = Math.round(timing.start * 1000);
 
-                    const escapedContent = overlay.content
-                        .replace(/\\/g, '\\\\')
-                        .replace(/'/g, "'\\\''")
-                        .replace(/:/g, '\\\\:')
-                        .replace(/\n/g, '');
+                    filterComplex += `[${inputIdx}:a]atrim=${audioOffset.toFixed(3)}:${(audioOffset + segDuration).toFixed(3)},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo`;
 
-                    const startT = timing.start.toFixed(3);
-                    const isVeryLast = !imageTimings.find(t => t.start > timing.start);
-                    const endT = isVeryLast ? (timing.end + 1.0).toFixed(3) : (timing.end - 0.02).toFixed(3);
+                    if (delayMs > 0) {
+                        filterComplex += `,adelay=${delayMs}|${delayMs}`;
+                    }
 
-                    const drawtext = `drawtext=text='${escapedContent}':fontfile='${fontFile}':fontsize=${overlay.fontSize || 48}:fontcolor=${overlay.fontColor || 'white'}:x=(w-tw)/2:y=${y}${overlay.background && overlay.background !== 'none' ? `:box=1:boxcolor=${overlay.background === 'black' ? 'black@0.5' : 'white@0.5'}:boxborderw=10` : ''}:enable='between(t,${startT},${endT})'`;
-
-                    const currentOut = `txt${index}_${targetIdx}`;
-                    filterComplex += `[${lastOutput}]${drawtext}[${currentOut}]; `;
-                    lastOutput = currentOut;
+                    filterComplex += `[${segLabel}]; `;
+                    audioSegments.push(segLabel);
+                    audioOffset += segDuration;
+                    segIdx++;
                 });
             });
-        }
 
-        filterComplex = filterComplex.trim();
-        if (filterComplex.endsWith(';')) filterComplex = filterComplex.slice(0, -1);
+            // Global ses parçaları
+            globalAudioTracks.forEach((_, i) => {
+                const gInputIdx = globalAudioInputStart + i;
+                const gLabel = `gaudio${i}`;
+                filterComplex += `[${gInputIdx}:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[${gLabel}]; `;
+                audioSegments.push(gLabel);
+            });
 
-        // Ses İşleme
-        let audioMap = '';
-
-        if (hasAudio) {
-            if (audioTracks.length === 1) {
-                // True Passthrough mode (no re-encoding)
-                const inputIdx = imageCount;
-                // No filter complex for audio, map directly from input
-                audioMap = `-map ${inputIdx}:a -c:a copy -t ${currentTime.toFixed(3)}`;
-            } else {
-                // Concat mode (Normalize to 48k)
-                let audioConcats = '';
-                audioTracks.forEach((_, i) => {
-                    const inputIdx = imageCount + i;
-                    filterComplex += `; [${inputIdx}:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[aud${i}]`;
-                    audioConcats += `[aud${i}]`;
-                });
-                filterComplex += `; ${audioConcats}concat=n=${audioTracks.length}:v=0:a=1[outa_pre]; [outa_pre]atrim=0:${currentTime.toFixed(3)},asetpts=PTS-STARTPTS[outa]`;
+            // Ses segmentlerini birleştir
+            let audioMap = '';
+            if (audioSegments.length > 0) {
+                if (audioSegments.length === 1) {
+                    filterComplex += `[${audioSegments[0]}]atrim=0:${currentTime.toFixed(3)},asetpts=PTS-STARTPTS[outa]`;
+                } else {
+                    audioSegments.forEach(seg => {
+                        filterComplex += `[${seg}]`;
+                    });
+                    // amix varsayılan olarak sesi giriş sayısına böler,
+                    // volume filtresiyle telafi ediyoruz
+                    const volBoost = audioSegments.length;
+                    filterComplex += `amix=inputs=${audioSegments.length}:duration=longest[amixed]; `;
+                    filterComplex += `[amixed]volume=${volBoost}[outa_pre]; `;
+                    filterComplex += `[outa_pre]atrim=0:${currentTime.toFixed(3)},asetpts=PTS-STARTPTS[outa]`;
+                }
                 audioMap = '-map "[outa]" -c:a aac -b:a 192k -ar 48000 -ac 2';
             }
+
+            filterComplex = filterComplex.trim();
+            if (filterComplex.endsWith(';')) filterComplex = filterComplex.slice(0, -1);
+
+            // Windows komut satırı uzunluk sınırı sorunu: filter_complex'i dosyaya yaz
+            const fcScriptPath = path.join(os.tmpdir(), `fc_paired_${Date.now()}.txt`);
+            fs.writeFileSync(fcScriptPath, filterComplex, 'utf-8');
+            tempFilterFiles.push(fcScriptPath);
+
+            cmd += `-filter_complex_script "${fcScriptPath}" -map "[${lastOutput}]" ${audioMap} -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p -r 25 "${outputPath}"`;
+
+        } else {
+            // === KLASİK MOD (eşleme yok) ===
+            audioTracks.forEach(track => {
+                cmd += `-i "${track.path}" `;
+            });
+
+            const scaleFilter = projectData.fillFrame
+                ? `scale=${resolution}:force_original_aspect_ratio=increase,crop=${resolution},setsar=1`
+                : `scale=${resolution}:force_original_aspect_ratio=decrease,pad=${resolution}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
+
+            let filterComplex = '';
+            slideshowImages.forEach((img, i) => {
+                filterComplex += `[${i}:v]${scaleFilter}[v${i}]; `;
+            });
+
+            slideshowImages.forEach((img, i) => {
+                filterComplex += `[v${i}]`;
+            });
+            filterComplex += `concat=n=${slideshowImages.length}:v=1:a=0[vcoll]; `;
+
+            let lastOutput = 'vcoll';
+
+            // Text Overlays
+            if (projectData.textOverlays && projectData.textOverlays.length > 0) {
+                projectData.textOverlays.forEach((overlay, index) => {
+                    overlay.targetImages.forEach((imgId, targetIdx) => {
+                        const timing = imageTimings.find(t => t.id === imgId);
+                        if (!timing) return;
+
+                        const fontFile = 'C\\\\:/Windows/Fonts/arial.ttf';
+                        const y = overlay.position === 'top' ? '30' : (overlay.position === 'center' ? '(h-th)/2' : 'h-th-30');
+
+                        const escapedContent = overlay.content
+                            .replace(/\\/g, '\\\\')
+                            .replace(/'/g, "'\\''")
+                            .replace(/:/g, '\\\\:')
+                            .replace(/\n/g, '');
+
+                        const startT = timing.start.toFixed(3);
+                        const isVeryLast = !imageTimings.find(t => t.start > timing.start);
+                        const endT = isVeryLast ? (timing.end + 1.0).toFixed(3) : (timing.end - 0.02).toFixed(3);
+
+                        const drawtext = `drawtext=text='${escapedContent}':fontfile='${fontFile}':fontsize=${overlay.fontSize || 48}:fontcolor=${overlay.fontColor || 'white'}:x=(w-tw)/2:y=${y}${overlay.background && overlay.background !== 'none' ? `:box=1:boxcolor=${overlay.background === 'black' ? 'black@0.5' : 'white@0.5'}:boxborderw=10` : ''}:enable='between(t,${startT},${endT})'`;
+
+                        const currentOut = `txt${index}_${targetIdx}`;
+                        filterComplex += `[${lastOutput}]${drawtext}[${currentOut}]; `;
+                        lastOutput = currentOut;
+                    });
+                });
+            }
+
+            filterComplex = filterComplex.trim();
+            if (filterComplex.endsWith(';')) filterComplex = filterComplex.slice(0, -1);
+
+            // Ses İşleme
+            let audioMap = '';
+
+            if (hasAudio) {
+                if (audioTracks.length === 1) {
+                    const inputIdx = imageCount;
+                    audioMap = `-map ${inputIdx}:a -c:a copy -t ${currentTime.toFixed(3)}`;
+                } else {
+                    let audioConcats = '';
+                    audioTracks.forEach((_, i) => {
+                        const inputIdx = imageCount + i;
+                        filterComplex += `; [${inputIdx}:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[aud${i}]`;
+                        audioConcats += `[aud${i}]`;
+                    });
+                    filterComplex += `; ${audioConcats}concat=n=${audioTracks.length}:v=0:a=1[outa_pre]; [outa_pre]atrim=0:${currentTime.toFixed(3)},asetpts=PTS-STARTPTS[outa]`;
+                    audioMap = '-map "[outa]" -c:a aac -b:a 192k -ar 48000 -ac 2';
+                }
+            }
+
+            // Windows komut satırı uzunluk sınırı sorunu: filter_complex'i dosyaya yaz
+            const fcScriptPath = path.join(os.tmpdir(), `fc_classic_${Date.now()}.txt`);
+            fs.writeFileSync(fcScriptPath, filterComplex, 'utf-8');
+            tempFilterFiles.push(fcScriptPath);
+
+            cmd += `-filter_complex_script "${fcScriptPath}" -map "[${lastOutput}]" ${audioMap} -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p -r 25 "${outputPath}"`;
         }
 
-        cmd += `-filter_complex "${filterComplex}" -map "[${lastOutput}]" ${audioMap} -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p -r 25 "${outputPath}"`;
+        console.log('--- Slideshow FFmpeg Cmd ---');
+        console.log(cmd.substring(0, 500) + '...');
 
-        // onProgress callback (Eğer parentWindow varsa)
+        // onProgress callback
         const onProgress = parentWindow ? (percent) => {
             parentWindow.webContents.send('export-progress', {
                 status: 'progress',
-                message: 'Videonuz işleniyor...',
+                message: t('runtime.slideshow_editor.processing_video', 'Your video is being processed...'),
                 percent: percent
             });
         } : null;
 
-        execCommand(cmd, outputPath, resolve, reject, { totalDuration: currentTime, onProgress });
+        execCommand(cmd, outputPath,
+            (result) => {
+                // Geçici filter dosyalarını temizle
+                tempFilterFiles.forEach(f => { try { fs.unlinkSync(f); } catch (e) { } });
+                prepared.cleanup();
+                resolve(result);
+            },
+            (err) => {
+                tempFilterFiles.forEach(f => { try { fs.unlinkSync(f); } catch (e) { } });
+                prepared.cleanup();
+                reject(err);
+            },
+            { totalDuration: currentTime, onProgress }
+        );
     });
 }
 
@@ -892,8 +1263,12 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
             if (parentWindow) {
                 const percent = Math.round((i / totalImages) * 80); // %0 - %80 arası
                 parentWindow.webContents.send('export-progress', {
-                    status: 'started',
-                    message: `Bölüm ${batchIndex + 1} oluşturuluyor (%${percent})...`
+                    status: 'progress',
+                    message: t('runtime.slideshow_editor.batch_progress', 'Processing part {current} of {total}...', {
+                        current: batchIndex + 1,
+                        total: Math.ceil(totalImages / BATCH_SIZE)
+                    }),
+                    percent
                 });
             }
 
@@ -927,10 +1302,23 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
             }
 
             // Batch Konfigürasyonu
+            // Eşlenmiş ses varsa, batch'e sadece ilgili ses parçalarını dahil et
+            const hasPairedAudio = batchImages.some(img => img.pairedAudioId);
+            let batchAudioTracks = [];
+            if (hasPairedAudio) {
+                const pairedAudioIds = [...new Set(
+                    batchImages.filter(img => img.pairedAudioId).map(img => img.pairedAudioId)
+                )];
+                batchAudioTracks = (projectData.audioTracks || []).filter(
+                    a => pairedAudioIds.includes(a.id)
+                );
+            }
+            // Global (eşlenmemiş) sesler batch'e dahil DEĞİL, final merge'de işlenecek
+
             const batchConfig = {
                 ...projectData,
                 images: batchImages,
-                audioTracks: [], // Ses yok
+                audioTracks: batchAudioTracks,
                 textOverlays: batchTextOverlays
             };
 
@@ -951,8 +1339,9 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
         // 2. Parçaları Birleştir (Concat Demuxer)
         if (parentWindow) {
             parentWindow.webContents.send('export-progress', {
-                status: 'started',
-                message: 'Parçalar birleştiriliyor (%80)...'
+                status: 'progress',
+                message: t('runtime.slideshow_editor.merging_parts_80', 'Merging parts (80%)...'),
+                percent: 80
             });
         }
 
@@ -963,8 +1352,14 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
         // Final montaj: Concat Video + Global Audio
         let cmd = `"${ffmpegPath}" -y -f concat -safe 0 -i "${concatListPath}" `;
 
-        // Sesleri ekle
-        const audioTracks = projectData.audioTracks || [];
+        // Sesleri ekle — eşlenmiş sesler batch'lerde zaten işlendi,
+        // sadece global (eşlenmemiş) sesleri final merge'e dahil et
+        const allAudioTracks = projectData.audioTracks || [];
+        const hasPairedAudio = projectData.images.some(img => img.pairedAudioId);
+        const pairedAudioIds = hasPairedAudio
+            ? new Set(projectData.images.filter(img => img.pairedAudioId).map(img => img.pairedAudioId))
+            : new Set();
+        const audioTracks = allAudioTracks.filter(a => !pairedAudioIds.has(a.id));
         const hasAudio = audioTracks.length > 0;
         audioTracks.forEach(track => {
             cmd += `-i "${track.path}" `;
@@ -978,10 +1373,33 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
         let filterComplex = '';
         let audioMap = '';
 
-        if (hasAudio) {
-            if (audioTracks.length === 1) {
+        if (hasPairedAudio && !hasAudio) {
+            // Eşlenmiş sesler batch'lerde zaten işlendi, global ses yok
+            // Video'nun sesini koru (batch'lerden gelen)
+            audioMap = '-map 0:a? -c:a copy';
+        } else if (hasAudio) {
+            if (hasPairedAudio) {
+                // Batch'lerdeki ses var + global ses var: mix lazım
+                let audioConcats = '';
+                audioTracks.forEach((_, i) => {
+                    const inputIdx = i + 1; // 0 video (concat), 1+ audio
+                    filterComplex += `[${inputIdx}:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[gaud${i}]; `;
+                    audioConcats += `[gaud${i}]`;
+                });
+                if (audioTracks.length === 1) {
+                    filterComplex += `[0:a]aformat=sample_rates=48000:channel_layouts=stereo[batchaud]; `;
+                    filterComplex += `[batchaud]${audioConcats}amix=inputs=2:duration=longest[amixed]; `;
+                    filterComplex += `[amixed]volume=2[outa_pre]; `;
+                } else {
+                    filterComplex += `${audioConcats}concat=n=${audioTracks.length}:v=0:a=1[gaud_concat]; `;
+                    filterComplex += `[0:a]aformat=sample_rates=48000:channel_layouts=stereo[batchaud]; `;
+                    filterComplex += `[batchaud][gaud_concat]amix=inputs=2:duration=longest[amixed]; `;
+                    filterComplex += `[amixed]volume=2[outa_pre]; `;
+                }
+                filterComplex += `[outa_pre]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[outa]`;
+                audioMap = '-map "[outa]" -c:a aac -b:a 192k -ar 48000 -ac 2';
+            } else if (audioTracks.length === 1) {
                 // True Passthrough mode
-                // Video Input Index: 0 (concat demuxer), Audio Input Index: 1
                 audioMap = `-map 1:a -c:a copy -t ${totalDuration.toFixed(3)}`;
             } else {
                 // Concat mode
@@ -1007,7 +1425,10 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
         let videoMap = '-map 0:v -c:v copy';
 
         if (filterComplex) {
-            cmd += `-filter_complex "${filterComplex}" ${videoMap} ${audioMap} "${outputPath}"`;
+            // Windows komut satırı uzunluk sınırı sorunu: filter_complex'i dosyaya yaz
+            const fcMergePath = path.join(tempDir, `fc_merge_${Date.now()}.txt`);
+            fs.writeFileSync(fcMergePath, filterComplex, 'utf-8');
+            cmd += `-filter_complex_script "${fcMergePath}" ${videoMap} ${audioMap} "${outputPath}"`;
         } else {
             // filterComplex yok (ya ses yok, ya da passthrough audio)
             if (hasAudio && audioMap) {
@@ -1028,7 +1449,7 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
             const globalPercent = 80 + (percent * 0.2);
             parentWindow.webContents.send('export-progress', {
                 status: 'progress',
-                message: 'Parçalar birleştiriliyor...',
+                message: t('runtime.slideshow_editor.merging_parts', 'Merging parts...'),
                 percent: Math.min(99, globalPercent) // Asla 100 deme, işlem bitince diyelim
             });
         } : null;
@@ -1069,15 +1490,15 @@ function execCommand(cmd, outputPath, resolve, reject, options = {}) {
         fs.writeFileSync(logPath, `CMD:\n${cmd}\n\n`);
     } catch (e) { }
 
-    // Cmd string'ini parçala (Basit bir parser, tırnak işaretlerine dikkat ederek)
-    // Spawn argümanlarını ayırmak exec'e göre daha karmaşık olabilir.
-    // Ancak exec yerine spawn kullanmak için shell: true yapabiliriz.
-    // Bu sayede cmd string'ini olduğu gibi verebiliriz.
+    // Windows komut satırı uzunluk sınırını aşmak için:
+    // Komutu geçici bir .bat dosyasına yazıp, onu çalıştırıyoruz.
+    // .bat dosyasının içindeki komutlarda uzunluk sınırı olmadığından
+    // binlerce karakter uzunluğunda FFmpeg komutları sorunsuz çalışır.
+    const batPath = path.join(os.tmpdir(), `ffmpeg_exec_${Date.now()}.bat`);
+    const batContent = `@echo off\r\nchcp 65001 >nul 2>&1\r\n${cmd}\r\n`;
+    fs.writeFileSync(batPath, batContent, 'utf-8');
 
-    // Windows'ta 'cmd.exe' üzerinden, Mac/Linux'ta 'sh' üzerinden
-    const child = spawn(cmd, {
-        shell: true,
-        maxBuffer: 100 * 1024 * 1024,
+    const child = spawn('cmd.exe', ['/c', batPath], {
         windowsHide: true
     });
 
@@ -1111,20 +1532,28 @@ function execCommand(cmd, outputPath, resolve, reject, options = {}) {
 
     child.on('error', (error) => {
         console.error('Spawn error:', error);
+        try { fs.unlinkSync(batPath); } catch (e) { }
         reject(error);
     });
 
     child.on('close', (code) => {
+        // Geçici bat dosyasını temizle
+        try { fs.unlinkSync(batPath); } catch (e) { }
+
         if (code === 0) {
             if (fs.existsSync(outputPath)) {
                 resolve(outputPath);
             } else {
-                reject(new Error('Çıktı dosyası oluşmadı.'));
+                reject(new Error(t('runtime.slideshow_editor.output_file_missing', 'The output file was not created.')));
             }
         } else {
-            let details = `İşlem hata kodu ile sonlandı: ${code}\nFFmpeg STDERR:\n${stderrBuffer ? stderrBuffer.slice(-1000) : 'Yok'}`;
-            try { fs.appendFileSync(logPath, `\nERROR:\n${details}`); } catch (e) { }
-            console.error('Exec hatası:', details);
+            // Hata mesajında son 2000 karakteri göster (daha fazla bağlam)
+            let details = t('runtime.slideshow_editor.process_failed_with_code', 'The process ended with error code {code}\nFFmpeg STDERR:\n{stderr}', {
+                code,
+                stderr: stderrBuffer ? stderrBuffer.slice(-2000) : t('runtime.slideshow_editor.none', 'None')
+            });
+            try { fs.appendFileSync(logPath, `\nERROR:\n${stderrBuffer}`); } catch (e) { }
+            console.error('Exec error:', details);
             reject(new Error(details));
         }
     });
@@ -1138,9 +1567,9 @@ async function openProjectFile(mainWindow, directFilePath = null) {
 
     if (!filePath) {
         const result = await dialog.showOpenDialog(mainWindow, {
-            title: 'Proje Aç',
+            title: t('messages.open_project_title', 'Open Project'),
             filters: [
-                { name: 'Engelsiz Video Projesi', extensions: ['eng'] }
+                { name: t('dialog.slideshow_editor.project_file_filter', 'Barrier-Free Video Project'), extensions: ['eng'] }
             ],
             properties: ['openFile']
         });
@@ -1167,7 +1596,9 @@ async function openProjectFile(mainWindow, directFilePath = null) {
             });
         }
     } catch (error) {
-        dialog.showErrorBox('Hata', 'Proje açılırken hata: ' + error.message);
+        dialog.showErrorBox(t('messages.error_title', 'Error'), t('runtime.slideshow_editor.project_open_error', 'An error occurred while opening the project: {error}', {
+            error: error.message
+        }));
     }
 }
 

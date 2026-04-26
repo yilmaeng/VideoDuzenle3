@@ -11,6 +11,10 @@ const Selection = {
     // Event callback'leri
     onSelectionChanged: null,
 
+    t(key, fallback, params = {}) {
+        return Accessibility.t(key, fallback, params);
+    },
+
     /**
      * Modülü başlat
      */
@@ -161,7 +165,7 @@ const Selection = {
         const markers = Markers.getAll();
 
         if (markers.length === 0) {
-            Accessibility.announce('İşaretleyici yok');
+            Accessibility.announce(this.t('runtime.selection.no_markers', 'No markers'));
             return;
         }
 
@@ -174,12 +178,10 @@ const Selection = {
                 if (nextMarker) {
                     this.end = nextMarker.time;
                     VideoPlayer.seekToTimelineTime(this.end);
-                    Accessibility.announce(`Seçim genişletildi: ${Utils.formatTime(nextMarker.time)}`);
                 } else {
                     // Son işaretleyiciden sonrası yok, sona kadar genişlet
                     this.end = duration;
                     VideoPlayer.seekToTimelineTime(this.end);
-                    Accessibility.announce('Seçim sona kadar genişletildi');
                 }
             } else {
                 // Seçim yok, mevcut konumdan sonraki işaretleyiciye seç
@@ -210,12 +212,10 @@ const Selection = {
                 if (prevMarker) {
                     this.start = prevMarker.time;
                     VideoPlayer.seekToTimelineTime(this.start);
-                    Accessibility.announce(`Seçim genişletildi: ${Utils.formatTime(prevMarker.time)}`);
                 } else {
                     // İlk işaretleyiciden öncesi yok, başa kadar genişlet
                     this.start = 0;
                     VideoPlayer.seekToTimelineTime(this.start);
-                    Accessibility.announce('Seçim başa kadar genişletildi');
                 }
             } else {
                 // Seçim yok, önceki işaretleyiciden mevcut konuma seç
@@ -272,7 +272,7 @@ const Selection = {
         const markers = Markers.getAll();
 
         if (markers.length < 2) {
-            Accessibility.announce('En az 2 işaretçi gerekli');
+            Accessibility.announce(this.t('runtime.selection.need_two_markers', 'At least 2 markers are required'));
             return;
         }
 
@@ -291,9 +291,6 @@ const Selection = {
 
         if (startMarker && endMarker) {
             this.setSelection(startMarker.time, endMarker.time);
-            Accessibility.announce(
-                `İşaretçiler arası seçildi: ${Utils.formatTime(startMarker.time)} - ${Utils.formatTime(endMarker.time)}`
-            );
         } else {
             // En yakın iki işaretçiyi seç
             if (markers.length >= 2) {
@@ -320,9 +317,13 @@ const Selection = {
         if (statusEl) {
             if (this.hasSelection()) {
                 const sel = this.getSelection();
-                statusEl.textContent = `Seçim: ${Utils.formatTime(sel.start)} - ${Utils.formatTime(sel.end)} (${Utils.formatTime(sel.duration)})`;
+                statusEl.textContent = this.t('runtime.selection.status_range', 'Selection: {start} - {end} ({duration})', {
+                    start: Utils.formatTime(sel.start),
+                    end: Utils.formatTime(sel.end),
+                    duration: Utils.formatTime(sel.duration)
+                });
             } else {
-                statusEl.textContent = 'Seçim yok';
+                statusEl.textContent = this.t('runtime.selection.status_none', 'No selection');
             }
         }
 
@@ -353,14 +354,16 @@ const Selection = {
             const currentTimelineTime = VideoPlayer.getTimelineTime();
             const alreadyAtStart = Math.abs(currentTimelineTime - selection.start) < 0.1;
             if (alreadyAtStart) {
-                Accessibility.announce('İmleç zaten seçimin solunda');
+                Accessibility.announce(this.t('runtime.selection.cursor_already_at_start', 'The cursor is already at the start of the selection'));
             } else {
                 // seekToTimelineTime doğru kaynağı bulur ve geçiş yapar
                 VideoPlayer.seekToTimelineTime(selection.start);
-                Accessibility.announce(`İmleç seçimin soluna taşındı: ${Utils.formatTime(selection.start)}`);
+                Accessibility.announce(this.t('runtime.selection.cursor_moved_to_start', 'The cursor moved to the start of the selection: {time}', {
+                    time: Utils.formatTime(selection.start)
+                }));
             }
         } else {
-            Accessibility.announce('Seçili alan yok');
+            Accessibility.announce(this.t('runtime.selection.none_selected', 'No selected area'));
         }
     },
 
@@ -374,14 +377,16 @@ const Selection = {
             const currentTimelineTime = VideoPlayer.getTimelineTime();
             const alreadyAtEnd = Math.abs(currentTimelineTime - selection.end) < 0.1;
             if (alreadyAtEnd) {
-                Accessibility.announce('İmleç zaten seçimin sağında');
+                Accessibility.announce(this.t('runtime.selection.cursor_already_at_end', 'The cursor is already at the end of the selection'));
             } else {
                 // seekToTimelineTime doğru kaynağı bulur ve geçiş yapar
                 VideoPlayer.seekToTimelineTime(selection.end);
-                Accessibility.announce(`İmleç seçimin sağına taşındı: ${Utils.formatTime(selection.end)}`);
+                Accessibility.announce(this.t('runtime.selection.cursor_moved_to_end', 'The cursor moved to the end of the selection: {time}', {
+                    time: Utils.formatTime(selection.end)
+                }));
             }
         } else {
-            Accessibility.announce('Seçili alan yok');
+            Accessibility.announce(this.t('runtime.selection.none_selected', 'No selected area'));
         }
     },
 
@@ -395,11 +400,13 @@ const Selection = {
             const endText = Utils.formatTimeForSpeech(sel.end);
             const durText = Utils.formatTimeForSpeech(sel.end - sel.start);
 
-            // "1.5" saniye yerine "1 saniye 500 milisaniye" gibi oku
-            // Ayrıca süreyi de ekle, kullanıcı aralığı bilsin
-            Accessibility.announce(`Seçim: ${startText} ile ${endText} arası. Süre: ${durText}`);
+            Accessibility.announce(this.t('runtime.selection.range_announce', 'Selection: from {start} to {end}. Duration: {duration}', {
+                start: startText,
+                end: endText,
+                duration: durText
+            }));
         } else {
-            Accessibility.announce('Seçim yok');
+            Accessibility.announce(this.t('runtime.selection.none_selected', 'No selected area'));
         }
     }
 };

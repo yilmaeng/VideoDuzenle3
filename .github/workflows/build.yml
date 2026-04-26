@@ -1,0 +1,72 @@
+name: Build Windows Release
+
+on:
+  workflow_dispatch:
+
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows
+        run: npm run build:win
+
+      - name: Upload Windows Setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: evd-windows-setup
+          path: dist/EVD-Setup-v*.exe
+          retention-days: 30
+      - name: Upload Windows Portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: evd-windows-portable
+          path: dist/EVD-Portable-v*.zip
+          retention-days: 30
+
+  create-release:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download Windows Setup
+        uses: actions/download-artifact@v4
+        with:
+          name: evd-windows-setup
+          path: release_files/
+
+      - name: Download Windows Portable
+        uses: actions/download-artifact@v4
+        with:
+          name: evd-windows-portable
+          path: release_files/
+
+      - name: Show release files
+        run: ls -la release_files/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release_files/EVD-Setup-v*.exe
+            release_files/EVD-Portable-v*.zip
+          draft: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

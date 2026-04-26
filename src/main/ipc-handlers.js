@@ -1,12 +1,173 @@
-const { ipcMain, dialog, Menu, BrowserWindow } = require('electron');
+const { ipcMain, dialog, Menu, BrowserWindow, Notification, app, shell } = require('electron');
 const ffmpegHandler = require('./ffmpeg-handler');
 const ttsHandler = require('./tts-handler');
 const mediaCompatibility = require('./media-compatibility-service');
+const liveEffectsHandler = require('./live-effects-handler');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const i18n = require('./i18n');
+const { execFile } = require('child_process');
+const logger = require('./logger');
 
 // const geminiHandler = require('./gemini-handler'); // Removed to prevent duplicate registration
+
+function t(key, fallback, params) {
+    const value = i18n.t(key, params);
+    return value.startsWith('[') ? fallback : value;
+}
+
+function sanitizeMultilineValue(value) {
+    return String(value || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .trim();
+}
+
+function buildDialogAnnouncementPayload(options = {}) {
+    return {
+        title: String(options.title || '').trim(),
+        message: String(options.message || '').trim(),
+        detail: String(options.detail || '').trim()
+    };
+}
+
+async function announceDialogForAccessibility(targetWindow, options = {}) {
+    if (!targetWindow || targetWindow.isDestroyed() || !targetWindow.webContents) {
+        return;
+    }
+
+    const payload = buildDialogAnnouncementPayload(options);
+    if (!payload.title && !payload.message && !payload.detail) {
+        return;
+    }
+
+    try {
+        targetWindow.webContents.send('accessibility-dialog-announce', payload);
+        await new Promise((resolve) => setTimeout(resolve, 90));
+    } catch (error) {
+        console.warn('Dialog accessibility announcement failed:', error.message);
+    }
+}
+
+function buildFeedbackDraftBody({ includeDiagnostics, currentFilePath }) {
+    const lines = [
+        t('feedback_mail.body.greeting', 'Merhaba,'),
+        '',
+        t('feedback_mail.body.prompt', 'Yasadiginiz durumu, beklentinizi veya onerilerinizi asagiya yazabilirsiniz.'),
+        '',
+        t('feedback_mail.body.steps_label', 'Ne yapiyordunuz?'),
+        '',
+        '',
+        t('feedback_mail.body.expected_label', 'Ne olmasini bekliyordunuz?'),
+        '',
+        '',
+        t('feedback_mail.body.actual_label', 'Ne oldu?'),
+        '',
+        ''
+    ];
+
+    if (includeDiagnostics) {
+        const diagnostics = [
+            `${t('feedback_mail.body.app_version', 'Uygulama surumu')}: ${app.getVersion()}`,
+            `${t('feedback_mail.body.platform', 'Platform')}: ${process.platform} ${os.release()} (${os.arch()})`,
+            `${t('feedback_mail.body.language', 'Uygulama dili')}: ${i18n.getCurrentLanguage()}`,
+            `${t('feedback_mail.body.timestamp', 'Tarih')}: ${new Date().toISOString()}`
+        ];
+
+        if (currentFilePath) {
+            diagnostics.push(`${t('feedback_mail.body.current_file', 'Acik dosya')}: ${currentFilePath}`);
+        }
+
+        const recentLogs = sanitizeMultilineValue(logger.getRecentLogExcerpt());
+        lines.push(
+            t('feedback_mail.body.diagnostics_heading', 'Tani bilgileri (kullanici izniyle eklendi):'),
+            diagnostics.join('\n')
+        );
+
+        if (recentLogs) {
+            lines.push(
+                '',
+                t('feedback_mail.body.log_heading', 'Son oturum log ozeti:'),
+                recentLogs
+            );
+        }
+    }
+
+    return lines.join('\n');
+}
+
+function getNativeWindowSources() {
+    if (process.platform !== 'win32') {
+        return Promise.resolve([]);
+    }
+
+    const script = `
+$code = @"
+using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public static class KveWindowProbe {
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr hWnd);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+    [DllImport("user32.dll")] public static extern IntPtr GetShellWindow();
+}
+"@
+Add-Type -TypeDefinition $code
+$windows = New-Object System.Collections.Generic.List[object]
+$shellWindow = [KveWindowProbe]::GetShellWindow()
+[KveWindowProbe]::EnumWindows({
+    param($hWnd, $lParam)
+    if ($hWnd -eq $shellWindow) { return $true }
+    if (-not [KveWindowProbe]::IsWindowVisible($hWnd)) { return $true }
+    $length = [KveWindowProbe]::GetWindowTextLength($hWnd)
+    if ($length -le 0) { return $true }
+    $builder = New-Object System.Text.StringBuilder ($length + 1)
+    [void][KveWindowProbe]::GetWindowText($hWnd, $builder, $builder.Capacity)
+    $title = $builder.ToString().Trim()
+    if ([string]::IsNullOrWhiteSpace($title)) { return $true }
+    $windows.Add([PSCustomObject]@{
+        name = $title
+        id = "native:$($hWnd.ToInt64().ToString('X'))"
+        _native = $true
+    }) | Out-Null
+    return $true
+}, [IntPtr]::Zero) | Out-Null
+$windows | ConvertTo-Json -Compress
+`;
+
+    return new Promise((resolve) => {
+        execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+            windowsHide: true,
+            timeout: 10000,
+            maxBuffer: 1024 * 1024 * 4
+        }, (error, stdout) => {
+            if (error) {
+                console.error('getNativeWindowSources error:', error.message);
+                resolve([]);
+                return;
+            }
+
+            const trimmed = String(stdout || '').trim();
+            if (!trimmed) {
+                resolve([]);
+                return;
+            }
+
+            try {
+                const parsed = JSON.parse(trimmed);
+                resolve(Array.isArray(parsed) ? parsed : [parsed]);
+            } catch (parseError) {
+                console.error('getNativeWindowSources parse error:', parseError.message);
+                resolve([]);
+            }
+        });
+    });
+}
 
 function setupIpcHandlers(mainWindow) {
     // Gemini handlers are already set up in index.js via gemini-handler module
@@ -54,11 +215,53 @@ function setupIpcHandlers(mainWindow) {
     });
 
     // TTS Önizleme
-    ipcMain.handle('preview-tts', async (event, { text, voice, speed, volume }) => {
+    ipcMain.handle('preview-tts', async (event, { text, voice, speed, volume, videoPath, startTime, duration, videoVolume }) => {
         try {
-            console.log('TTS Preview (Direct Speak):', { text, voice, speed });
-            // Doğrudan hoparlörden oku (dosya oluşturma yok)
-            await ttsHandler.speak(text, voice, speed);
+            const normalizedText = sanitizeMultilineValue(text);
+            const normalizedSpeed = Number(speed) > 0 ? Number(speed) : 1;
+            const normalizedVolume = Math.max(0, Math.min(100, Math.round(Number(volume) || 100)));
+            const normalizedVideoVolume = Math.max(0, Math.min(100, Math.round(Number(videoVolume) || 100)));
+            const trimmedVideoPath = String(videoPath || '').trim();
+            const previewStart = Math.max(0, Number(startTime) || 0);
+            const previewDuration = Math.max(1, Math.min(15, Number(duration) || 5));
+
+            if (trimmedVideoPath) {
+                const stamp = Date.now();
+                const ttsPath = path.join(os.tmpdir(), `tts_preview_${stamp}.wav`);
+                const videoAudioPath = path.join(os.tmpdir(), `tts_video_preview_${stamp}.wav`);
+                const mixedAudioPath = path.join(os.tmpdir(), `tts_mix_preview_${stamp}.wav`);
+
+                console.log('TTS Preview (Mixed):', {
+                    text: normalizedText.slice(0, 40),
+                    voice,
+                    speed: normalizedSpeed,
+                    ttsVolume: normalizedVolume,
+                    videoVolume: normalizedVideoVolume,
+                    previewStart,
+                    previewDuration
+                });
+
+                await ttsHandler.textToWav(normalizedText, voice, normalizedSpeed, ttsPath, normalizedVolume);
+                await ffmpegHandler.previewAudioSegment(trimmedVideoPath, videoAudioPath, previewStart, previewDuration, {
+                    volume: normalizedVideoVolume,
+                    muted: normalizedVideoVolume <= 0,
+                    channelMode: 'source',
+                    noiseReduction: { enabled: false },
+                    audioEffects: { echo: false, reverb: false, phone: false }
+                });
+                await ffmpegHandler.createAudioFromMix([
+                    { path: videoAudioPath, offset: 0 },
+                    { path: ttsPath, offset: 0 }
+                ], mixedAudioPath);
+
+                try { if (fs.existsSync(ttsPath)) fs.unlinkSync(ttsPath); } catch (cleanupError) { }
+                try { if (fs.existsSync(videoAudioPath)) fs.unlinkSync(videoAudioPath); } catch (cleanupError) { }
+
+                return { success: true, audioPath: mixedAudioPath };
+            }
+
+            console.log('TTS Preview (Direct Speak):', { text: normalizedText.slice(0, 40), voice, speed: normalizedSpeed });
+            await ttsHandler.speak(normalizedText, voice, normalizedSpeed);
             return { success: true, spokeDirect: true };
         } catch (error) {
             console.error('TTS Preview Error:', error);
@@ -93,11 +296,8 @@ function setupIpcHandlers(mainWindow) {
     });
 
     // Hızlı video kes (stream copy - re-encode yok)
-    ipcMain.handle('cut-video-fast', async (event, { inputPath, outputPath, startTime, endTime }) => {
+    ipcMain.handle('cut-video-fast', async (event, { inputPath, outputPath, startTime, endTime, mode }) => {
         try {
-            // Fast cut logic for audio? cutAudio usually is fast enough or use copy codec.
-            // For now, delegate to same cutAudio if audio, because cutVideoFast assumes video codec copy which might fail on some containers if stream mismatch.
-            // But let's keep cutVideoFast for video. For audio, cutAudio does generic efficient cut.
             const ext = path.extname(inputPath).toLowerCase();
             const isAudio = ['.wav', '.mp3', '.aac', '.ogg', '.m4a', '.wma'].includes(ext);
 
@@ -108,11 +308,48 @@ function setupIpcHandlers(mainWindow) {
             } else {
                 await ffmpegHandler.cutVideoFast(inputPath, outputPath, startTime, endTime, (percent) => {
                     mainWindow.webContents.send('ffmpeg-progress', { operation: 'cut-fast', percent });
-                });
+                }, { mode });
             }
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-cut-video-fast-bounds', async (event, { inputPath, startTime, endTime }) => {
+        try {
+            const bounds = await ffmpegHandler.getCutVideoFastBounds(inputPath, startTime, endTime);
+            return { success: true, ...bounds };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Remux (MKV -> MP4)
+    ipcMain.handle('ffmpeg-remux', async (event, { inputPath, targetFormat }) => {
+        try {
+            console.log(`IPC: ffmpeg-remux requested for ${inputPath} to ${targetFormat}`);
+            if (ffmpegHandler.remuxVideo) {
+                const result = await ffmpegHandler.remuxVideo(inputPath, targetFormat);
+                return result;
+            } else {
+                return { success: false, error: 'ffmpegHandler.remuxVideo not implemented' };
+            }
+        } catch (error) {
+            console.error('IPC Remux Error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Recording finished: Add to project and close dialog
+    ipcMain.on('recording-finished-add-to-project', (event, filePath) => {
+        console.log(`Adding recording to project: ${filePath}`);
+        if (mainWindow) {
+            mainWindow.webContents.send('add-to-timeline', filePath);
+            const win = BrowserWindow.fromWebContents(event.sender);
+            if (win && win !== mainWindow) {
+                win.close();
+            }
         }
     });
 
@@ -141,11 +378,22 @@ function setupIpcHandlers(mainWindow) {
 
     // Timeline'ı tek seferde render et (Filter Complex - Single Pass)
     // Bu yöntem parçalama/birleştirme hatalarını önler
-    ipcMain.handle('render-timeline', async (event, { inputPath, segments, outputPath }) => {
+    // Timeline'ı tek seferde render et (Filter Complex - Single Pass)
+    // Bu yöntem parçalama/birleştirme hatalarını önler
+    ipcMain.handle('render-timeline', async (event, { inputPath, segments, outputPath, options }) => {
         try {
-            await ffmpegHandler.renderTimeline(inputPath, segments, outputPath, (percent) => {
-                mainWindow.webContents.send('ffmpeg-progress', { operation: 'render-timeline', percent });
-            });
+            await ffmpegHandler.renderTimeline(inputPath, segments, outputPath, (progress) => {
+                const payload = typeof progress === 'number'
+                    ? { operation: 'render-timeline', percent: progress }
+                    : {
+                        operation: progress?.operation || 'render-timeline',
+                        percent: progress?.percent,
+                        current: progress?.current,
+                        total: progress?.total,
+                        stage: progress?.stage
+                    };
+                mainWindow.webContents.send('ffmpeg-progress', payload);
+            }, options);
             return { success: true };
         } catch (error) {
             console.error('Render timeline hatası:', error);
@@ -281,8 +529,8 @@ function setupIpcHandlers(mainWindow) {
             await ffmpegHandler.previewAudioSegment(videoPath, outputPath, startTime, duration, settings, (status) => {
                 if (status === 'downloading') {
                     mainWindow.webContents.send('show-info', {
-                        title: 'Yapay Zeka Modeli İndiriliyor',
-                        message: 'Gürültü temizleme için gerekli AI modeli indiriliyor. Bu işlem bir kez yapılır.'
+                        title: t('messages.ai_model_downloading_title', 'AI Model Downloading'),
+                        message: t('messages.ai_model_downloading_message', 'The AI model required for noise reduction is being downloaded. This is only done once.')
                     });
                 }
             });
@@ -308,9 +556,9 @@ function setupIpcHandlers(mainWindow) {
 
 
     // Altyazı yak
-    ipcMain.handle('burn-subtitles', async (event, { videoPath, subtitlePath, outputPath }) => {
+    ipcMain.handle('burn-subtitles', async (event, { videoPath, subtitlePath, outputPath, styleOptions } = {}) => {
         try {
-            await ffmpegHandler.burnSubtitles(videoPath, subtitlePath, outputPath, (percent) => {
+            await ffmpegHandler.burnSubtitles(videoPath, subtitlePath, outputPath, styleOptions, (percent) => {
                 mainWindow.webContents.send('ffmpeg-progress', { operation: 'burn-subtitles', percent });
             });
             return { success: true };
@@ -325,6 +573,7 @@ function setupIpcHandlers(mainWindow) {
             const {
                 videoPath, outputPath, text,
                 font, fontSize, fontColor, background, position, transition,
+                customX, customY,
                 startTime, endTime, shadow,
                 ttsEnabled, ttsVoice, ttsSpeed, ttsVolume, videoVolume
             } = params;
@@ -334,6 +583,8 @@ function setupIpcHandlers(mainWindow) {
                 fontColor,
                 background,
                 position,
+                customX,
+                customY,
                 transition,
                 startTime,
                 endTime,
@@ -455,7 +706,9 @@ function setupIpcHandlers(mainWindow) {
     // Ses mixleme (ffmpeg)spiti
     ipcMain.handle('detect-silence', async (event, { inputPath, minDuration, threshold }) => {
         try {
-            const silences = await ffmpegHandler.detectSilence(inputPath, minDuration, threshold);
+            const silences = await ffmpegHandler.detectSilence(inputPath, minDuration, threshold, (percent) => {
+                mainWindow.webContents.send('ffmpeg-progress', { operation: 'detect-silence', percent });
+            });
             return { success: true, data: silences };
         } catch (error) {
             return { success: false, error: error.message };
@@ -474,42 +727,110 @@ function setupIpcHandlers(mainWindow) {
 
     // Hata mesajı göster
     ipcMain.handle('show-error', async (event, { title, message }) => {
-        await dialog.showMessageBox(mainWindow, {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        const options = {
             type: 'error',
             title: title,
             message: message
-        });
+        };
+        await announceDialogForAccessibility(targetWindow, options);
+        await dialog.showMessageBox(targetWindow, options);
     });
 
     // Bilgi mesajı göster
     ipcMain.handle('show-info', async (event, { title, message }) => {
-        await dialog.showMessageBox(mainWindow, {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        const options = {
             type: 'info',
             title: title,
             message: message
-        });
+        };
+        await announceDialogForAccessibility(targetWindow, options);
+        await dialog.showMessageBox(targetWindow, options);
     });
 
     // Generic Message Box (Restored from Backup for Audio/Video Dialogs)
     ipcMain.handle('show-message-box', async (event, options) => {
-        const result = await dialog.showMessageBox(mainWindow, options);
+        const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        await announceDialogForAccessibility(targetWindow, options);
+        const result = await dialog.showMessageBox(targetWindow, options);
         return result;
+    });
+
+    ipcMain.handle('show-save-confirm', async (_event, { title, message }) => {
+        const options = {
+            type: 'question',
+            title,
+            message,
+            buttons: [
+                t('menu.file.save', 'Save'),
+                t('runtime.app.dont_save', 'Do Not Save'),
+                t('dialog.cancel', 'Cancel')
+            ],
+            defaultId: 0,
+            cancelId: 2,
+            noLink: true
+        };
+        await announceDialogForAccessibility(mainWindow, options);
+        const result = await dialog.showMessageBox(mainWindow, options);
+        return result.response;
     });
 
     // Onay diyaloğu (Restored)
     ipcMain.handle('show-confirm', async (event, { title, message }) => {
-        const result = await dialog.showMessageBox(mainWindow, {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        const options = {
             type: 'question',
             title: title,
             message: message,
-            buttons: ['Evet', 'Hayır'],
+            buttons: [
+                t('dialog.confirm.yes', 'Evet'),
+                t('dialog.confirm.no', 'Hayır')
+            ],
             defaultId: 0,
             cancelId: 1
-        });
+        };
+        await announceDialogForAccessibility(targetWindow, options);
+        const result = await dialog.showMessageBox(targetWindow, options);
         return result.response === 0;
     });
 
+    ipcMain.handle('create-feedback-draft', async (_event, { includeDiagnostics = false, currentFilePath = '' } = {}) => {
+        try {
+            const subject = t('feedback_mail.subject', 'EVD geri bildirim');
+            const body = buildFeedbackDraftBody({
+                includeDiagnostics,
+                currentFilePath: sanitizeMultilineValue(currentFilePath)
+            });
+            const mailtoUrl = `mailto:yilmaeng@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
+            await shell.openExternal(mailtoUrl);
+
+            return {
+                success: true,
+                includedDiagnostics: includeDiagnostics
+            };
+        } catch (error) {
+            console.error('Feedback draft oluşturulamadı:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    });
+
+
+
+    // TTS: Sesleri al
+    ipcMain.handle('get-tts-voices', async () => {
+        try {
+            const voices = await ttsHandler.getVoices();
+            return { success: true, voices };
+        } catch (error) {
+            console.error('TTS voices error:', error);
+            return { success: false, error: error.message };
+        }
+    });
 
     // TTS: Metni WAV dosyasına çevir
     ipcMain.handle('generate-tts', async (event, { text, voice, speed, outputPath, volume }) => {
@@ -781,12 +1102,68 @@ function setupIpcHandlers(mainWindow) {
         }
     });
 
+    // Open Vertical Video Wizard (Shorts/Reels) from Renderer
+    ipcMain.on('open-vertical-wizard', (event, data) => {
+        const { openVerticalWizard } = require('./dialog-windows');
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (win) {
+            openVerticalWizard(win, data || null);
+        }
+    });
+
+    // Open Accessible Recording Wizard from Renderer
+    ipcMain.on('open-recording-wizard', (event, options) => {
+        const { openRecordingWizard } = require('./dialog-windows');
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (win) {
+            openRecordingWizard(win, options || {});
+        }
+    });
+
+    ipcMain.on('open-live-effects-panel', (event) => {
+        const { openLiveEffectsPanel } = require('./dialog-windows');
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (win) {
+            openLiveEffectsPanel(win);
+        }
+    });
+
+    ipcMain.on('recording-wizard-log', (_event, payload) => {
+        const safePayload = payload && typeof payload === 'object'
+            ? payload
+            : { message: String(payload || '') };
+        console.log('[RecordingWizard]', safePayload);
+    });
+
+    ipcMain.handle('live-effects-get-state', async () => {
+        return { success: true, state: liveEffectsHandler.getState() };
+    });
+
+    ipcMain.handle('live-effects-save-profile', async (_event, profile) => {
+        return { success: true, state: liveEffectsHandler.saveProfile(profile) };
+    });
+
+    ipcMain.handle('live-effects-create-profile', async (_event, { name }) => {
+        return { success: true, state: liveEffectsHandler.createProfile(name) };
+    });
+
+    ipcMain.handle('live-effects-delete-profile', async (_event, { profileId }) => {
+        return { success: true, state: liveEffectsHandler.deleteProfile(profileId) };
+    });
+
+    ipcMain.handle('live-effects-set-active-profile', async (_event, { profileId }) => {
+        return { success: true, state: liveEffectsHandler.setActiveProfile(profileId) };
+    });
+
     // Render Sync Video
     ipcMain.handle('render-sync-video', async (event, { videoPath, audioPath, offsetMs, muteOriginal, targetOutputPath }) => {
         try {
             const path = require('path');
             // If targetOutputPath is provided, use it. Otherwise default to auto-generated.
-            const outputPath = targetOutputPath || path.join(path.dirname(videoPath), `synced_output_${Date.now()}.mp4`);
+            let outputPath = targetOutputPath || path.join(path.dirname(videoPath), `synced_output_${Date.now()}.mp4`);
+            if (outputPath && !path.extname(outputPath)) {
+                outputPath += '.mp4';
+            }
 
             await ffmpegHandler.replaceAudio(videoPath, audioPath, offsetMs, muteOriginal, outputPath, (percent) => {
                 // Optional: Send progress back?
@@ -827,12 +1204,12 @@ function setupIpcHandlers(mainWindow) {
     });
 
     // Helper for Wizard File Selection
-    ipcMain.handle('show-open-dialog', async (event, { extensions }) => {
+    ipcMain.handle('show-open-dialog', async (event, { extensions, allowMultiple = false }) => {
         const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
             filters: [
-                { name: 'Media Files', extensions: extensions || ['*'] }
+                { name: t('messages.media_files_filter', 'Media Files'), extensions: extensions || ['*'] }
             ],
-            properties: ['openFile']
+            properties: allowMultiple ? ['openFile', 'multiSelections'] : ['openFile']
         });
         return result;
     });
@@ -907,8 +1284,10 @@ function setupIpcHandlers(mainWindow) {
                         y: mainHeight - slHeight - 20,
                         width: slWidth,
                         height: slHeight,
-                        position: 'Sağ Alt',
-                        reason: 'İşaret dili için Türkiye standardı konumu (%12.5, 8\'de bir).'
+                        positionKey: 'runtime.video_layer.position_bottom_right',
+                        positionFallback: 'Bottom Right',
+                        reasonKey: 'runtime.video_layer.ai_reason_sign_language',
+                        reasonFallback: 'Standard sign-language position (12.5%, one eighth of the frame).'
                     });
                     break;
 
@@ -919,8 +1298,10 @@ function setupIpcHandlers(mainWindow) {
                         y: 0,
                         width: Math.round(mainWidth / 2),
                         height: mainHeight,
-                        position: 'Sol Yarı',
-                        reason: 'Split screen modu için sol yarı.'
+                        positionKey: 'runtime.video_layer.ai_position_left_half',
+                        positionFallback: 'Left Half',
+                        reasonKey: 'runtime.video_layer.ai_reason_split_screen',
+                        reasonFallback: 'Left half is suitable for split-screen mode.'
                     });
                     break;
 
@@ -933,8 +1314,10 @@ function setupIpcHandlers(mainWindow) {
                         y: 10,
                         width: ccWidth,
                         height: ccHeight,
-                        position: 'Sağ Üst',
-                        reason: 'Köşe kamera için ideal konum.'
+                        positionKey: 'runtime.video_layer.position_top_right',
+                        positionFallback: 'Top Right',
+                        reasonKey: 'runtime.video_layer.ai_reason_camera_corner',
+                        reasonFallback: 'Ideal position for a corner camera.'
                     });
                     break;
 
@@ -947,8 +1330,10 @@ function setupIpcHandlers(mainWindow) {
                         y: mainHeight - defHeight - 20,
                         width: defWidth,
                         height: defHeight,
-                        position: 'Alt Orta',
-                        reason: 'İçeriği kapatmayan merkezi konum.'
+                        positionKey: 'runtime.video_layer.position_bottom_center',
+                        positionFallback: 'Bottom Center',
+                        reasonKey: 'runtime.video_layer.ai_reason_default',
+                        reasonFallback: 'A centered position that is less likely to cover important content.'
                     });
             }
 
@@ -985,6 +1370,108 @@ function setupIpcHandlers(mainWindow) {
         app.quit();
     });
 
+    // Desktop Capturer Sources (Moved from Renderer to Main to avoid crash)
+    ipcMain.handle('get-desktop-sources', async (event, options) => {
+        try {
+            const { desktopCapturer } = require('electron');
+            const opts = options || { types: ['screen', 'window'] };
+            if (!opts.thumbnailSize) opts.thumbnailSize = { width: 0, height: 0 };
+            const sources = await desktopCapturer.getSources(opts);
+            return { success: true, sources };
+        } catch (error) {
+            console.error('get-desktop-sources error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-native-window-sources', async () => {
+        try {
+            const sources = await getNativeWindowSources();
+            return { success: true, sources };
+        } catch (error) {
+            console.error('get-native-window-sources error:', error);
+            return { success: false, error: error.message, sources: [] };
+        }
+    });
+
+    ipcMain.handle('show-native-notification', async (event, { title, body, silent = true } = {}) => {
+        try {
+            if (!Notification.isSupported()) {
+                console.warn('Native notification is not supported on this system.');
+                return { success: false, error: 'Native notifications are not supported on this system.' };
+            }
+
+            console.log('Showing native notification:', {
+                title: String(title || '').trim() || 'Korcul Video Editor',
+                body: String(body || '').trim(),
+                silent: !!silent
+            });
+
+            const notification = new Notification({
+                title: String(title || '').trim() || 'Korcul Video Editor',
+                body: String(body || '').trim(),
+                silent: !!silent
+            });
+
+            const senderWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+            notification.on('click', () => {
+                try {
+                    if (senderWindow) {
+                        if (senderWindow.isMinimized()) {
+                            senderWindow.restore();
+                        }
+                        senderWindow.show();
+                        senderWindow.focus();
+                    }
+                } catch (focusError) {
+                    console.warn('notification focus error:', focusError);
+                }
+            });
+
+            notification.show();
+            console.log('Native notification show() called successfully.');
+            return { success: true };
+        } catch (error) {
+            console.error('show-native-notification error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('window-is-focused', async (event) => {
+        try {
+            const senderWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+            const focusedWindow = BrowserWindow.getFocusedWindow();
+            const focused = !!(senderWindow && focusedWindow && senderWindow.id === focusedWindow.id);
+            return { success: true, focused };
+        } catch (error) {
+            return { success: false, focused: true, error: error.message };
+        }
+    });
+
+    ipcMain.handle('flash-window-attention', async (event, { durationMs = 6000 } = {}) => {
+        try {
+            const senderWindow = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+            if (!senderWindow || senderWindow.isDestroyed()) {
+                return { success: false, error: 'window_not_found' };
+            }
+
+            senderWindow.flashFrame(true);
+            setTimeout(() => {
+                try {
+                    if (!senderWindow.isDestroyed()) {
+                        senderWindow.flashFrame(false);
+                    }
+                } catch (error) {
+                    console.warn('flash-window-attention stop failed:', error);
+                }
+            }, Math.max(1000, Number(durationMs) || 6000));
+
+            return { success: true };
+        } catch (error) {
+            console.error('flash-window-attention error:', error);
+            return { success: false, error: error.message };
+        }
+    });
 }
 
 module.exports = { setupIpcHandlers };

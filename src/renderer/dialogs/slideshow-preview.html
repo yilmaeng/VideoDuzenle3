@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Video Önizleme</title>
+    <title data-i18n="dialog.slideshow_preview.window_title">Video Preview</title>
     <style>
         body {
             margin: 0;
@@ -136,29 +136,69 @@
 
 <body>
     <div id="loading-screen">
-        <div style="font-size: 24px; margin-bottom: 10px;">Yükleniyor...</div>
-        <div id="load-info">Resimler hazırlanıyor.</div>
+        <div style="font-size: 24px; margin-bottom: 10px;" data-i18n="dialog.slideshow_preview.loading">Loading...</div>
+        <div id="load-info" data-i18n="dialog.slideshow_preview.preparing_images">Preparing images.</div>
     </div>
 
     <div id="live-region" aria-live="assertive" style="position: absolute; left: -9999px;"></div>
-    <div class="status-msg" id="status-msg">Hazırlanıyor...</div>
+    <div class="status-msg" id="status-msg" data-i18n="dialog.slideshow_preview.preparing">Preparing...</div>
 
     <div class="video-container">
         <div id="canvas-area"></div>
     </div>
 
     <div class="controls">
-        <button id="play-btn" class="play-btn" disabled>Oynat</button>
+        <button id="play-btn" class="play-btn" disabled data-i18n="dialog.slideshow_preview.play">Play</button>
         <div class="progress-container" id="progress-container">
             <div class="progress-bar" id="progress-bar"></div>
         </div>
         <div class="time-display" id="time-display">00:00 / 00:00</div>
-        <button id="close-btn" class="play-btn" style="background: #444;">Kapat</button>
+        <button id="close-btn" class="play-btn" style="background: #444;" data-i18n="dialog.common.close">Close</button>
     </div>
 
     <script>
         const { ipcRenderer } = require('electron');
+        let currentLang = 'tr';
+        let i18nCache = {};
         let projectData, previewOptions, audio, isPlaying = false, currentTime = 0, duration = 0, startTime = 0, endTime = 0, imageTimings = [];
+
+        function getPathValue(obj, key) {
+            return key.split('.').reduce((acc, part) => (acc && acc[part] !== undefined ? acc[part] : null), obj);
+        }
+
+        function t(key, fallback = key, params = {}) {
+            const template = getPathValue(i18nCache, key) ?? fallback;
+            return Object.entries(params).reduce((text, [name, value]) => (
+                String(text).replace(new RegExp(`{${name}}`, 'g'), value)
+            ), template);
+        }
+
+        function translateDocument() {
+            document.querySelectorAll('[data-i18n]').forEach((el) => {
+                const value = t(el.getAttribute('data-i18n'), null);
+                if (value) el.textContent = value;
+            });
+            const titleEl = document.querySelector('title[data-i18n]');
+            if (titleEl) {
+                const value = t(titleEl.getAttribute('data-i18n'), null);
+                if (value) document.title = value;
+            }
+            document.documentElement.lang = currentLang;
+        }
+
+        async function initI18n() {
+            currentLang = await ipcRenderer.invoke('i18n-get-language');
+            i18nCache = await ipcRenderer.invoke('i18n-get-all');
+            translateDocument();
+        }
+
+        function announce(message) {
+            const live = document.getElementById('live-region');
+            live.textContent = '';
+            setTimeout(() => {
+                live.textContent = message;
+            }, 50);
+        }
 
         ipcRenderer.on('preview-init', async (event, data) => {
             projectData = data.projectData;
@@ -173,7 +213,7 @@
             const promises = projectData.images.map(img => {
                 return new Promise(res => {
                     const i = new Image();
-                    i.onload = () => { loaded++; document.getElementById('load-info').textContent = `Resimler yükleniyor: ${loaded}/${imagesToLoad}`; res(); };
+                    i.onload = () => { loaded++; document.getElementById('load-info').textContent = t('runtime.slideshow_preview.images_loading', 'Loading images: {loaded}/{total}', { loaded, total: imagesToLoad }); res(); };
                     i.onerror = res;
                     i.src = img.path;
                 });
@@ -222,13 +262,13 @@
             }
 
             document.getElementById('play-btn').disabled = false;
-            document.getElementById('status-msg').textContent = previewOptions.mode.toUpperCase() + ' Önizleme';
+            document.getElementById('status-msg').textContent = t('runtime.slideshow_preview.mode_preview', '{mode} preview', { mode: previewOptions.mode.toUpperCase() });
             updateUI();
 
             // Otomatik oynatmayı başlat
             setTimeout(() => {
                 play();
-                announce(`Önizleme otomatik başlatıldı. Durdurmak için Boşluk, kapatmak için Escape tuşuna basın.`);
+                announce(t('runtime.slideshow_preview.auto_started', 'Preview started automatically. Press Space to pause and Escape to close.'));
             }, 500);
         }
 
@@ -293,13 +333,13 @@
 
         function play() {
             if (currentTime >= duration) currentTime = 0;
-            isPlaying = true; document.getElementById('play-btn').textContent = 'Duraklat';
+            isPlaying = true; document.getElementById('play-btn').textContent = t('dialog.slideshow_preview.pause', 'Pause');
             if (audio) { audio.currentTime = startTime + currentTime; audio.play(); }
             lastTick = performance.now();
             requestAnimationFrame(tick);
         }
 
-        function pause() { isPlaying = false; document.getElementById('play-btn').textContent = 'Oynat'; if (audio) audio.pause(); }
+        function pause() { isPlaying = false; document.getElementById('play-btn').textContent = t('dialog.slideshow_preview.play', 'Play'); if (audio) audio.pause(); }
 
         document.getElementById('play-btn').onclick = () => isPlaying ? pause() : play();
         document.getElementById('close-btn').onclick = () => { if (audio) audio.pause(); window.close(); };
@@ -320,6 +360,7 @@
                 isPlaying ? pause() : play();
             }
         });
+        window.addEventListener('load', initI18n);
     </script>
 </body>
 

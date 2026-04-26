@@ -255,6 +255,7 @@ const TabManager = {
         Timeline.segments = tab.timeline.segments.map(s => ({ ...s }));
         Timeline.sourceFile = tab.timeline.sourceFile;
         Timeline.hasChanges = tab.hasChanges;
+        Timeline.renderVisuals();
 
         // Video player'ı güncelle
         if (tab.filePath && !tab.isNewProject) {
@@ -409,6 +410,8 @@ const TabManager = {
         if (metaCodec) metaCodec.textContent = '-';
         const metaSize = document.getElementById('meta-size');
         if (metaSize) metaSize.textContent = '-';
+        const metaOrientation = document.getElementById('meta-orientation');
+        if (metaOrientation) metaOrientation.textContent = '-';
 
         Accessibility.announce('Tüm sekmeler kapatıldı. Yeni dosya açmak için Ctrl+O veya yeni proje için Ctrl+N');
     },
