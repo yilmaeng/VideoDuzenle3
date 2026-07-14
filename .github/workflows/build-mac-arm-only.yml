@@ -1,11 +1,19 @@
-﻿name: Mac ARM64 Only Build (Experiment)
+name: Mac ARM64 Only Build (Experiment)
 
 on:
   workflow_dispatch:
 
 jobs:
   build-mac-arm:
-    runs-on: macos-14  # Apple Silicon runner
+    runs-on: macos-14
+    env:
+      MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+      MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+      MAC_KEYCHAIN_PASSWORD: ${{ secrets.MAC_KEYCHAIN_PASSWORD }}
+      MAC_SIGNING_IDENTITY: ${{ secrets.MAC_SIGNING_IDENTITY }}
+      APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -17,7 +25,6 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        # This uses the original package.json and package-lock.json first
         run: npm ci
 
       - name: Generate bundled YouTube OAuth client
@@ -36,6 +43,34 @@ jobs:
           );
           NODE
 
+      - name: Configure signing mode
+        run: |
+          if [ -n "$MAC_CERTIFICATE_P12_BASE64" ] && [ -n "$MAC_CERTIFICATE_PASSWORD" ] && [ -n "$MAC_KEYCHAIN_PASSWORD" ] && [ -n "$MAC_SIGNING_IDENTITY" ]; then
+            echo "EVD_MAC_SIGNING_ENABLED=1" >> "$GITHUB_ENV"
+            echo "EVD_MAC_SIGN_IDENTITY=$MAC_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+            echo "Mac signing is enabled."
+          else
+            echo "EVD_MAC_SIGNING_ENABLED=0" >> "$GITHUB_ENV"
+            echo "Mac signing secrets are incomplete; unsigned test DMG will be produced."
+          fi
+
+      - name: Import Developer ID certificate
+        run: |
+          if [ "$EVD_MAC_SIGNING_ENABLED" != "1" ]; then
+            echo "Skipping certificate import for unsigned test build."
+            exit 0
+          fi
+          CERTIFICATE_PATH="$RUNNER_TEMP/evd_developer_id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/evd-signing.keychain-db"
+          echo -n "$MAC_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$MAC_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
       - name: Prepare Mac-safe package metadata
         run: |
           node build/prepare-mac-build-config.js
@@ -46,7 +81,30 @@ jobs:
         run: |
           echo "Starting Mac ARM64 DMG build..."
           npm run build:mac:dmg 2>&1 | tee build_output.log
-          
+
+      - name: Sign, notarize, and staple DMG
+        run: |
+          DMG_PATH="$(ls dist/*.dmg | head -n 1)"
+          if [ -z "$DMG_PATH" ]; then
+            echo "No DMG was produced."
+            exit 1
+          fi
+          if [ "$EVD_MAC_SIGNING_ENABLED" != "1" ]; then
+            echo "Skipping DMG signing/notarization for unsigned test build: $DMG_PATH"
+            exit 0
+          fi
+          if [ -z "$APPLE_API_KEY_BASE64" ] || [ -z "$APPLE_API_KEY_ID" ] || [ -z "$APPLE_API_ISSUER" ]; then
+            echo "Apple notarization secrets are missing; signed app was produced but DMG was not notarized."
+            exit 1
+          fi
+          API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          echo -n "$APPLE_API_KEY_BASE64" | base64 --decode > "$API_KEY_PATH"
+          codesign --force --sign "$MAC_SIGNING_IDENTITY" "$DMG_PATH"
+          xcrun notarytool submit "$DMG_PATH" --key "$API_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
+          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          spctl --assess --type open --context context:primary-signature -vv "$DMG_PATH"
+
       - name: List Output
         run: |
           ls -R dist/

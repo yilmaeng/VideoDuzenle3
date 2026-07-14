@@ -7,6 +7,8 @@ const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 
 const asciiProductName = 'Engelsiz Video Duzenleyicisi';
 const displayProductName = 'Engelsiz Video Düzenleyicisi';
+const signingEnabled = process.env.EVD_MAC_SIGNING_ENABLED === '1';
+const signingIdentity = String(process.env.EVD_MAC_SIGN_IDENTITY || '').trim();
 
 pkg.build = pkg.build || {};
 
@@ -26,12 +28,28 @@ pkg.build.mac = {
         }
     ],
     artifactName: '${productName}-${version}-${arch}.${ext}',
+    hardenedRuntime: signingEnabled,
+    gatekeeperAssess: false,
+    entitlements: 'entitlements.mac.plist',
+    entitlementsInherit: 'entitlements.mac.plist',
     extendInfo: {
         ...((pkg.build.mac && pkg.build.mac.extendInfo) || {}),
         CFBundleDisplayName: displayProductName,
         CFBundleName: displayProductName
     }
 };
+
+if (signingEnabled) {
+    delete pkg.build.mac.type;
+    if (signingIdentity) {
+        pkg.build.mac.identity = signingIdentity;
+    } else {
+        delete pkg.build.mac.identity;
+    }
+} else {
+    pkg.build.mac.identity = null;
+    pkg.build.mac.type = 'development';
+}
 
 const extraResources = Array.isArray(pkg.build.extraResources) ? pkg.build.extraResources : [];
 pkg.build.extraResources = extraResources.filter((entry) => {
@@ -55,3 +73,5 @@ console.log('Prepared macOS build configuration:');
 console.log(`- bundle/executable name: ${asciiProductName}`);
 console.log(`- display name: ${displayProductName}`);
 console.log('- target: dmg arm64');
+console.log(`- signing: ${signingEnabled ? 'Developer ID / notarization ready' : 'disabled (unsigned test build)'}`);
+
