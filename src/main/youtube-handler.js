@@ -12,6 +12,7 @@ const CONFIG_DIR = path.join(os.homedir(), '.korcul-video-editor');
 const CLIENT_FILE = path.join(CONFIG_DIR, 'youtube-oauth-client.json');
 const TOKEN_FILE = path.join(CONFIG_DIR, 'youtube-oauth-token.json');
 const ACCOUNTS_FILE = path.join(CONFIG_DIR, 'youtube-oauth-accounts.json');
+const ACTIVE_LIVE_BROADCAST_FILE = path.join(CONFIG_DIR, 'youtube-active-live-broadcast.json');
 
 const GOOGLE_AUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -31,10 +32,22 @@ const YOUTUBE_DESKTOP_HEADERS = {
     'Sec-CH-UA-Platform': '"Windows"',
     'Upgrade-Insecure-Requests': '1'
 };
-const BUNDLED_CLIENT = {
-    clientId: String(process.env.EVD_YOUTUBE_CLIENT_ID || '').trim(),
-    clientSecret: String(process.env.EVD_YOUTUBE_CLIENT_SECRET || '').trim()
-};
+
+function loadBundledYoutubeClient() {
+    let generatedClient = {};
+    try {
+        generatedClient = require('./youtube-oauth-bundled.generated');
+    } catch (_error) {
+        generatedClient = {};
+    }
+
+    return {
+        clientId: String(process.env.EVD_YOUTUBE_OAUTH_CLIENT_ID || generatedClient.clientId || '').trim(),
+        clientSecret: String(process.env.EVD_YOUTUBE_OAUTH_CLIENT_SECRET || generatedClient.clientSecret || '').trim()
+    };
+}
+
+const BUNDLED_CLIENT = loadBundledYoutubeClient();
 const PUBLIC_CHAT_SESSION_CACHE = new Map();
 const LIVE_CHAT_STREAM_SESSION_CACHE = new Map();
 const LIVE_CHAT_STREAM_IDLE_MS = 2 * 60 * 1000;
@@ -99,6 +112,48 @@ function getYoutubeClientConfig() {
         };
     }
     return { ...BUNDLED_CLIENT };
+}
+
+function saveActiveYouTubeBroadcastSession(session = {}) {
+    const broadcastId = String(session.broadcastId || '').trim();
+    if (!broadcastId) {
+        return clearActiveYouTubeBroadcastSession();
+    }
+
+    const normalized = {
+        broadcastId,
+        title: String(session.title || '').trim(),
+        watchUrl: String(session.watchUrl || '').trim(),
+        source: String(session.source || '').trim(),
+        startedAt: session.startedAt || new Date().toISOString()
+    };
+    saveJson(ACTIVE_LIVE_BROADCAST_FILE, normalized);
+    return normalized;
+}
+
+function getActiveYouTubeBroadcastSession() {
+    const session = readJson(ACTIVE_LIVE_BROADCAST_FILE, null);
+    if (!session || !String(session.broadcastId || '').trim()) {
+        return null;
+    }
+    return {
+        broadcastId: String(session.broadcastId || '').trim(),
+        title: String(session.title || '').trim(),
+        watchUrl: String(session.watchUrl || '').trim(),
+        source: String(session.source || '').trim(),
+        startedAt: String(session.startedAt || '').trim()
+    };
+}
+
+function clearActiveYouTubeBroadcastSession() {
+    try {
+        if (fs.existsSync(ACTIVE_LIVE_BROADCAST_FILE)) {
+            fs.unlinkSync(ACTIVE_LIVE_BROADCAST_FILE);
+        }
+    } catch (error) {
+        console.warn('Could not clear active YouTube broadcast session:', error.message);
+    }
+    return null;
 }
 
 function normalizeYoutubeAccountsStore(store) {
@@ -534,6 +589,46 @@ async function transitionBroadcastIfNeeded(accessToken, broadcastId) {
     }
 
     return transitioned;
+}
+
+async function completeYouTubeBroadcastById(broadcastId) {
+    const normalizedBroadcastId = String(broadcastId || '').trim();
+    if (!normalizedBroadcastId) {
+        return null;
+    }
+
+    const accessToken = await getValidAccessToken();
+    return youtubeApiRequest({
+        accessToken,
+        path: '/liveBroadcasts/transition',
+        method: 'POST',
+        query: {
+            part: 'id,snippet,status,contentDetails',
+            broadcastStatus: 'complete',
+            id: normalizedBroadcastId
+        }
+    });
+}
+
+async function completeActiveYouTubeBroadcast() {
+    const session = getActiveYouTubeBroadcastSession();
+    if (!session?.broadcastId) {
+        return {
+            success: true,
+            completed: false,
+            broadcast: null,
+            session: null
+        };
+    }
+
+    const result = await completeYouTubeBroadcastById(session.broadcastId);
+    clearActiveYouTubeBroadcastSession();
+    return {
+        success: true,
+        completed: !!result,
+        broadcast: result ? formatBroadcastSummary(result) : null,
+        session
+    };
 }
 
 function formatBroadcastSummary(item) {
@@ -1537,6 +1632,46 @@ async function getLiveChatSessionFromVideoUrl(accessToken, inputUrl) {
     };
 }
 
+async function getLiveBroadcastVideoStats(accessToken, { broadcastId = '', videoId = '', watchUrl = '' } = {}) {
+    const normalizedVideoId = String(videoId || broadcastId || extractYouTubeVideoId(watchUrl) || '').trim();
+    if (!normalizedVideoId) {
+        throw createYoutubeHandlerError('YouTube yayin video kimligi eksik.', 'youtube_video_id_missing');
+    }
+
+    const response = await youtubeApiRequest({
+        accessToken,
+        path: '/videos',
+        query: {
+            part: 'id,snippet,statistics,liveStreamingDetails,status',
+            id: normalizedVideoId
+        }
+    });
+
+    const item = response.items?.[0] || null;
+    if (!item) {
+        throw createYoutubeHandlerError('Belirtilen YouTube videosu bulunamadı.', 'youtube_video_not_found');
+    }
+
+    const statistics = item.statistics || {};
+    const liveDetails = item.liveStreamingDetails || {};
+
+    return {
+        videoId: item.id || normalizedVideoId,
+        title: item.snippet?.title || '',
+        watchUrl: item.id ? `https://www.youtube.com/watch?v=${item.id}` : '',
+        liveBroadcastContent: item.snippet?.liveBroadcastContent || '',
+        lifeCycleStatus: item.status?.uploadStatus || '',
+        concurrentViewers: liveDetails.concurrentViewers ?? '',
+        actualStartTime: liveDetails.actualStartTime || '',
+        actualEndTime: liveDetails.actualEndTime || '',
+        scheduledStartTime: liveDetails.scheduledStartTime || '',
+        viewCount: statistics.viewCount ?? '',
+        likeCount: statistics.likeCount ?? '',
+        commentCount: statistics.commentCount ?? '',
+        updatedAt: new Date().toISOString()
+    };
+}
+
 async function listLiveChatMessages(accessToken, liveChatId, pageToken = '') {
     if (!liveChatId) {
         throw new Error('Canli sohbet kimligi eksik.');
@@ -2195,7 +2330,14 @@ function setupYouTubeHandlers() {
                 playlistResult
             };
         } catch (error) {
-            return { success: false, error: error.message };
+            return {
+                success: false,
+                error: error.message,
+                code: error.code || '',
+                reason: error.reason || '',
+                statusCode: error.statusCode || 0,
+                apiStatus: error.apiStatus || ''
+            };
         }
     });
 
@@ -2227,7 +2369,14 @@ function setupYouTubeHandlers() {
             });
             return { success: true, ...prepared, playlistResult };
         } catch (error) {
-            return { success: false, error: error.message };
+            return {
+                success: false,
+                error: error.message,
+                code: error.code || '',
+                reason: error.reason || '',
+                statusCode: error.statusCode || 0,
+                apiStatus: error.apiStatus || ''
+            };
         }
     });
 
@@ -2243,6 +2392,31 @@ function setupYouTubeHandlers() {
                 broadcast: formatBroadcastSummary(result)
             };
         } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                code: error.code || '',
+                reason: error.reason || '',
+                statusCode: error.statusCode || 0,
+                apiStatus: error.apiStatus || ''
+            };
+        }
+    });
+
+    ipcMain.handle('youtube-save-active-live-broadcast', async (_event, session = {}) => {
+        try {
+            const savedSession = saveActiveYouTubeBroadcastSession(session);
+            return { success: true, session: savedSession };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('youtube-clear-active-live-broadcast', async () => {
+        try {
+            clearActiveYouTubeBroadcastSession();
+            return { success: true };
+        } catch (error) {
             return { success: false, error: error.message };
         }
     });
@@ -2252,23 +2426,39 @@ function setupYouTubeHandlers() {
             if (!broadcastId) {
                 return { success: true };
             }
-            const accessToken = await getValidAccessToken();
-            const result = await youtubeApiRequest({
-                accessToken,
-                path: '/liveBroadcasts/transition',
-                method: 'POST',
-                query: {
-                    part: 'id,snippet,status,contentDetails',
-                    broadcastStatus: 'complete',
-                    id: broadcastId
-                }
-            });
+            const result = await completeYouTubeBroadcastById(broadcastId);
+            const activeSession = getActiveYouTubeBroadcastSession();
+            if (activeSession?.broadcastId === String(broadcastId || '').trim()) {
+                clearActiveYouTubeBroadcastSession();
+            }
             return {
                 success: true,
                 broadcast: formatBroadcastSummary(result)
             };
         } catch (error) {
-            return { success: false, error: error.message };
+            return {
+                success: false,
+                error: error.message,
+                code: error.code || '',
+                reason: error.reason || '',
+                statusCode: error.statusCode || 0,
+                apiStatus: error.apiStatus || ''
+            };
+        }
+    });
+
+    ipcMain.handle('youtube-complete-active-live-broadcast', async () => {
+        try {
+            return await completeActiveYouTubeBroadcast();
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                code: error.code || '',
+                reason: error.reason || '',
+                statusCode: error.statusCode || 0,
+                apiStatus: error.apiStatus || ''
+            };
         }
     });
 
@@ -2277,6 +2467,22 @@ function setupYouTubeHandlers() {
             const accessToken = await getValidAccessToken();
             const session = await getLiveChatSession(accessToken, String(broadcastId || '').trim());
             return { success: true, ...session };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                errorCode: error.code || '',
+                reason: error.reason || '',
+                statusCode: error.statusCode || 0
+            };
+        }
+    });
+
+    ipcMain.handle('youtube-get-live-broadcast-stats', async (_event, params = {}) => {
+        try {
+            const accessToken = await getValidAccessToken();
+            const stats = await getLiveBroadcastVideoStats(accessToken, params);
+            return { success: true, stats };
         } catch (error) {
             return {
                 success: false,
@@ -2437,5 +2643,10 @@ function setupYouTubeHandlers() {
 }
 
 module.exports = {
-    setupYouTubeHandlers
+    setupYouTubeHandlers,
+    saveActiveYouTubeBroadcastSession,
+    getActiveYouTubeBroadcastSession,
+    clearActiveYouTubeBroadcastSession,
+    completeYouTubeBroadcastById,
+    completeActiveYouTubeBroadcast
 };

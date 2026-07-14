@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="broadcast_room_join.window_title">EVD Yayın Odası Katılımı</title>
+    <link rel="stylesheet" href="/yayinodasi/join.css?v=20260524a">
+</head>
+<body>
+    <main class="page">
+        <section id="screen-share-section" class="card">
+            <div id="join-intro">
+                <h1 data-i18n="broadcast_room_join.title">Yayın Odasına Katıl</h1>
+                <p class="hint" data-i18n="broadcast_room_join.description">Davet bağlantısı ile odaya katılın, adınızı ve cihazlarınızı seçin.</p>
+            </div>
+            <div id="status-line" class="status-line"></div>
+        </section>
+
+        <section id="room-info-section" class="card">
+            <h2 data-i18n="broadcast_room_join.room_section">Oda Bilgisi</h2>
+            <div class="grid">
+                <div class="field-group">
+                    <label for="room-title" data-i18n="broadcast_room_join.room_title_label">Oda başlığı</label>
+                    <div id="room-title" class="value-box"></div>
+                </div>
+                <div class="field-group">
+                    <label for="room-host" data-i18n="broadcast_room_join.room_host_label">Host</label>
+                    <div id="room-host" class="value-box"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 data-i18n="broadcast_room_join.identity_section">Katılımcı Bilgisi</h2>
+            <form id="join-form" action="javascript:void(0)" autocomplete="on">
+                <div id="display-name-group" class="field-group">
+                    <label for="display-name" data-i18n="broadcast_room_join.display_name_label">Görünen ad</label>
+                    <input id="display-name" type="text" class="value-box" enterkeyhint="go" inputmode="text" autocomplete="name" data-i18n-placeholder="broadcast_room_join.display_name_placeholder" placeholder="Adınızı yazın">
+                </div>
+                <div id="room-password-group" class="field-group" hidden>
+                    <label for="room-password" data-i18n="broadcast_room_join.room_password_label">Oda parolası</label>
+                    <input id="room-password" type="password" class="value-box" enterkeyhint="go" inputmode="text" autocomplete="current-password" data-i18n-aria="broadcast_room_join.room_password_label" data-i18n-placeholder="broadcast_room_join.room_password_placeholder">
+                    <p class="hint" data-i18n="broadcast_room_join.room_password_hint">Bu oda parola istiyorsa katılmadan önce parolayı yazın.</p>
+                </div>
+            </form>
+        </section>
+
+        <section id="screen-share-card" class="card" hidden>
+            <div class="grid" style="margin-bottom: 12px;">
+                <div class="field-group">
+                    <label for="screen-share-audio-mode" data-i18n="broadcast_room_join.screen_share_audio_mode_label">Paylaşım sesi modu</label>
+                    <select id="screen-share-audio-mode" data-i18n-aria="broadcast_room_join.screen_share_audio_mode_label">
+                        <option value="echo_safe" selected data-i18n="broadcast_room_join.screen_share_audio_mode_echo_safe">Yankısız konuşma</option>
+                        <option value="high_quality" data-i18n="broadcast_room_join.screen_share_audio_mode_high_quality">Yüksek kalite stereo</option>
+                    </select>
+                    <p class="hint" data-i18n="broadcast_room_join.screen_share_audio_mode_hint">Yankısız konuşma toplantılar için önerilir. Yüksek kalite stereo müzik ve oyun sesini daha iyi korur; kulaklık kullanın.</p>
+                </div>
+            </div>
+            <div class="toolbar">
+                <button id="btn-start-screen-share" type="button" data-i18n="broadcast_room_join.screen_share_start">Paylaşımı Başlat</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <div id="post-join-section" hidden>
+            <div class="grid" style="margin-top: 16px;">
+                <div class="field-group">
+                    <label for="room-summary-status" data-i18n="broadcast_room_join.room_summary_label">Oda özeti</label>
+                    <div id="room-summary-status" class="value-box"></div>
+                </div>
+                <div class="field-group">
+                    <label for="joined-display-name" data-i18n="broadcast_room_join.joined_display_name_label">Görünen adınız</label>
+                    <input id="joined-display-name" type="text" class="value-box" data-i18n-aria="broadcast_room_join.joined_display_name_label">
+                    <button id="btn-update-display-name" type="button" class="secondary" style="margin-top: 8px;" data-i18n="broadcast_room_join.update_display_name" data-i18n-aria="broadcast_room_join.update_display_name">Adımı değiştir</button>
+                </div>
+                <div id="local-backup-recording-group" class="field-group" hidden>
+                    <label for="local-backup-recording-status" data-i18n="broadcast_room_join.local_backup_recording_label">Yerel yedek kayıt</label>
+                    <div id="local-backup-recording-status" class="value-box"></div>
+                </div>
+            </div>
+
+            <div class="field-group" style="margin-top: 16px;">
+                <button id="btn-toggle-participants-panel" type="button" class="secondary" aria-expanded="false" aria-controls="participants-panel" data-i18n="broadcast_room_join.participants_panel_button">Katılımcılar</button>
+                <div id="participants-panel" hidden style="margin-top: 12px;">
+                    <label class="meeting-control-toggle" for="participant-presence-auto-announce" style="min-height:auto; text-align:left; margin-bottom: 12px;">
+                        <input id="participant-presence-auto-announce" type="checkbox" checked>
+                        <span data-i18n="broadcast_room_join.participant_presence_auto_announce">Katılımcıların odaya giriş ve çıkış bilgilerini otomatik duyur</span>
+                    </label>
+                    <label for="remote-media-list" data-i18n="broadcast_room_join.remote_participants_label">Diğer katılımcılar</label>
+                    <div id="remote-media-list" class="value-box"></div>
+                </div>
+            </div>
+            <div id="remote-audio-host" aria-hidden="true" style="display:none;"></div>
+
+            <div class="field-group" style="margin-top: 16px;">
+                <button id="btn-toggle-more-info-panel" type="button" class="secondary" aria-expanded="false" aria-controls="more-info-panel" data-i18n="broadcast_room_join.more_info_panel_button">Diğer bilgiler</button>
+                <div id="more-info-panel" hidden style="margin-top: 12px;">
+                    <div class="grid">
+                        <div class="field-group">
+                            <label for="room-title-more" data-i18n="broadcast_room_join.room_title_label">Oda başlığı</label>
+                            <div id="room-title-more" class="value-box"></div>
+                        </div>
+                        <div class="field-group">
+                            <label for="room-host-more" data-i18n="broadcast_room_join.room_host_label">Host</label>
+                            <div id="room-host-more" class="value-box"></div>
+                        </div>
+                    </div>
+                    <div class="field-group" style="margin-top: 16px;">
+                        <button id="btn-toggle-host-activity-panel" type="button" class="secondary" aria-expanded="false" aria-controls="host-activity-panel" data-i18n="broadcast_room_join.host_activity_panel_button">Host etkinlikleri</button>
+                        <div id="host-activity-panel" hidden style="margin-top: 12px;">
+                            <label for="host-activity-status" data-i18n="broadcast_room_join.host_activity_label">Host etkinliği</label>
+                            <div id="host-activity-status" class="value-box"></div>
+                        </div>
+                    </div>
+                    <div class="field-group" style="margin-top: 16px;">
+                        <label for="btn-request-permissions" data-i18n="broadcast_room_join.permission_section_label">Cihaz izinleri</label>
+                        <div class="toolbar">
+                            <button id="btn-request-permissions" type="button" data-i18n="broadcast_room_join.permission_request_button">Kamera ve Mikrofon İznini İste</button>
+                        </div>
+                        <p class="hint" data-i18n="broadcast_room_join.permission_request_hint">İzin penceresi görünmediyse önce bu düğmeye basın, sonra tarayıcı izinlerini kontrol edin.</p>
+                    </div>
+                    <div class="field-group" style="margin-top: 16px;">
+                        <label for="scene-position-status" data-i18n="broadcast_room_join.scene_position_label">Yayındaki konumunuz</label>
+                        <div id="scene-position-status" class="value-box"></div>
+                    </div>
+                    <div class="field-group" style="margin-top: 16px;">
+                        <label for="local-preview" data-i18n="broadcast_room_join.local_preview_label">Yerel kamera önizlemesi</label>
+                        <div class="value-box">
+                            <video id="local-preview" autoplay playsinline muted style="width: 100%; max-height: 260px; background: #111;"></video>
+                        </div>
+                    </div>
+                    <div class="field-group" style="margin-top: 16px;">
+                        <label class="meeting-control-toggle" for="low-bandwidth-mode" style="min-height:auto; text-align:left;">
+                            <input id="low-bandwidth-mode" type="checkbox">
+                            <span data-i18n="broadcast_room_join.low_bandwidth_mode">Düşük bant genişliği modu</span>
+                        </label>
+                        <p class="hint" data-i18n="broadcast_room_join.low_bandwidth_mode_hint">Bağlantı zayıfsa konuk tarafında gelen/giden video kalitesini düşürerek donmayı azaltır.</p>
+                    </div>
+                    <div id="audio-channel-group" class="field-group" style="margin-top: 16px;" hidden>
+                        <label for="audio-channel-select" data-i18n="broadcast_room_join.audio_channel_label">Ses kanalı</label>
+                        <select id="audio-channel-select" class="value-box" data-i18n-aria="broadcast_room_join.audio_channel_label">
+                            <option value="original" data-i18n="broadcast_room_join.audio_channel_original">Özgün ses</option>
+                            <option value="interpreter_overlay" data-i18n="broadcast_room_join.audio_channel_interpreter_overlay">Çeviri önde, özgün ses altta</option>
+                            <option value="interpreter_only" data-i18n="broadcast_room_join.audio_channel_interpreter_only">Yalnız canlı çeviri</option>
+                        </select>
+                        <p class="hint" data-i18n="broadcast_room_join.audio_channel_hint">Host canlı çevirmen atadıysa burada dinlemek istediğiniz ses kanalını seçebilirsiniz.</p>
+                    </div>
+                    <div id="hand-raise-status-group" class="field-group" style="margin-top: 16px;">
+                        <label for="hand-raise-status" data-i18n="broadcast_room_join.hand_raise_status_label">Söz isteği durumu</label>
+                        <div id="hand-raise-status" class="value-box"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="accessible-share-group" class="field-group" style="margin-top: 16px;" hidden>
+                <label for="accessible-share-text" data-i18n="broadcast_room_join.accessible_share_label">Paylaşılan içeriğin erişilebilir metni</label>
+                <textarea id="accessible-share-text" class="value-box" rows="8" readonly data-i18n-aria="broadcast_room_join.accessible_share_label"></textarea>
+                <p id="accessible-share-status" class="hint" data-i18n="broadcast_room_join.accessible_share_empty">Henüz erişilebilir paylaşım metni yok.</p>
+                <label id="accessible-share-auto-announce-group" class="meeting-control-toggle" for="accessible-share-auto-announce" style="min-height:auto; text-align:left;" hidden>
+                    <input id="accessible-share-auto-announce" type="checkbox" checked>
+                    <span data-i18n="broadcast_room_join.accessible_share_auto_announce">Yeni paylaşılan erişilebilir metni otomatik oku</span>
+                </label>
+            </div>
+            <div class="field-group" style="margin-top: 16px;">
+                <button id="btn-toggle-live-caption-panel" type="button" class="secondary" aria-expanded="false" aria-controls="live-caption-panel" data-i18n="broadcast_room_join.live_caption_panel_button">Altyazı/çeviri paneli</button>
+                <p id="live-caption-panel-status" class="hint" data-i18n="broadcast_room_join.live_caption_unavailable">Host bu oturumda canlı altyazı veya yazılı çeviriyi etkinleştirmedi.</p>
+                <div id="live-caption-panel" class="value-box" hidden style="margin-top: 12px;">
+                    <div class="toolbar">
+                        <button id="btn-toggle-live-caption-view" type="button" data-i18n="broadcast_room_join.live_caption_session_enable">Bu oturumda altyazı/çeviriyi etkinleştir</button>
+                    </div>
+                    <div class="field-group" style="margin-top: 12px;">
+                        <label for="live-caption-preferred-language" data-i18n="broadcast_room_join.live_caption_preferred_language_label">Benim dilim</label>
+                        <select id="live-caption-preferred-language" class="value-box" data-i18n-aria="broadcast_room_join.live_caption_preferred_language_label">
+                            <option value="tr" data-i18n="broadcast_room_join.language_tr">Türkçe</option>
+                            <option value="en" data-i18n="broadcast_room_join.language_en">İngilizce</option>
+                            <option value="de" data-i18n="broadcast_room_join.language_de">Almanca</option>
+                            <option value="fr" data-i18n="broadcast_room_join.language_fr">Fransızca</option>
+                            <option value="es" data-i18n="broadcast_room_join.language_es">İspanyolca</option>
+                        </select>
+                        <p class="hint" data-i18n="broadcast_room_join.live_caption_preferred_language_hint">Konuşma bu dildeyse özgün metin, farklıysa mümkün olan çeviri gösterilir.</p>
+                    </div>
+                    <div id="live-caption-audio-mode-status" class="hint" hidden></div>
+                    <label class="meeting-control-toggle" for="live-caption-auto-announce" style="min-height:auto; text-align:left; margin-top: 12px;">
+                        <input id="live-caption-auto-announce" type="checkbox">
+                        <span id="live-caption-auto-announce-label" data-i18n="broadcast_room_join.live_caption_auto_announce_caption">Yeni altyazıları otomatik seslendir</span>
+                    </label>
+                    <div class="field-group" style="margin-top: 12px;">
+                        <label for="live-caption-text" data-i18n="broadcast_room_join.live_caption_text_label">Canlı altyazı/çeviri metni</label>
+                        <textarea id="live-caption-text" class="value-box" rows="6" readonly data-i18n-aria="broadcast_room_join.live_caption_text_label"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="field-group" style="margin-top: 16px;">
+                <button id="btn-toggle-chat-panel" type="button" class="secondary" aria-expanded="false" aria-controls="chat-panel" data-i18n="broadcast_room_join.chat_panel_button">Sohbet</button>
+                <div id="chat-panel" hidden style="margin-top: 12px;">
+                    <div class="field-group">
+                        <label for="chat-message-list" data-i18n="broadcast_room_join.chat_list_label">Mesaj listesi</label>
+                        <select id="chat-message-list" class="value-box" size="8" data-i18n-aria="broadcast_room_join.chat_list_label"></select>
+                    </div>
+                    <div class="field-group" style="margin-top: 12px;">
+                        <label for="chat-selected-detail" data-i18n="broadcast_room_join.chat_selected_detail_label">Seçili mesaj ayrıntısı</label>
+                        <div id="chat-selected-detail" class="value-box" tabindex="0" data-i18n-aria="broadcast_room_join.chat_selected_detail_label"></div>
+                    </div>
+                    <div class="field-group" style="margin-top: 16px;">
+                        <label for="chat-compose" data-i18n="broadcast_room_join.chat_compose_label">Mesaj yaz</label>
+                        <textarea id="chat-compose" class="value-box" rows="4" data-i18n-placeholder="broadcast_room_join.chat_compose_placeholder" placeholder="Mesajınızı yazın"></textarea>
+                        <div class="field-group" style="margin-top: 12px;">
+                            <label for="chat-target" data-i18n="broadcast_room_join.chat_target_label">Alıcı seç</label>
+                            <select id="chat-target" class="value-box" data-i18n-aria="broadcast_room_join.chat_target_label"></select>
+                        </div>
+                        <div class="toolbar" style="margin-top: 12px;">
+                            <button id="btn-chat-send-all" type="button" data-i18n="broadcast_room_join.chat_send_selected">Seçili alıcıya gönder</button>
+                            <button id="btn-chat-send-host" type="button" class="secondary" data-i18n="broadcast_room_join.chat_send_host">Yöneticiye Gönder</button>
+                            <button id="btn-hand-raise" type="button" class="secondary" data-i18n="broadcast_room_join.hand_raise_request">Söz İste</button>
+                        </div>
+                        <div class="toolbar" style="margin-top: 12px;">
+                            <label class="meeting-control-toggle" for="chat-auto-announce" style="min-height:auto; text-align:left;">
+                                <input id="chat-auto-announce" type="checkbox" checked>
+                                <span data-i18n="broadcast_room_join.chat_auto_announce">Yeni gelen mesajları anlık duyur</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </section>
+
+        <section class="meeting-controls-card" aria-label="Katılım kontrolleri" data-i18n-aria="broadcast_room_join.meeting_controls_label">
+            <div class="meeting-controls-dock">
+                <button id="microphone-enabled" type="button" class="meeting-control-button" data-i18n="broadcast_room_join.microphone_stop_button" data-i18n-aria="broadcast_room_join.microphone_stop_button">Sesiniz açık, sesi kapat</button>
+                <button id="camera-enabled" type="button" class="meeting-control-button" data-i18n="broadcast_room_join.camera_stop_button" data-i18n-aria="broadcast_room_join.camera_stop_button">Videonuz açık, videoyu durdur</button>
+                <div id="join-device-panel-group" class="meeting-control-device-panel">
+                    <button id="btn-toggle-join-device-panel" type="button" class="meeting-control-button" aria-expanded="false" aria-controls="join-device-panel" data-i18n="broadcast_room_join.join_device_panel_button">Ses ve görüntü ayarları</button>
+                    <div id="join-device-panel" class="meeting-control-device-panel-body" hidden>
+                        <div class="grid">
+                            <div class="field-group">
+                                <label for="microphone-device" data-i18n="broadcast_room_join.microphone_device_label">Mikrofon</label>
+                                <select id="microphone-device"></select>
+                            </div>
+                            <div class="field-group">
+                                <label for="microphone-volume" data-i18n="broadcast_room_join.microphone_volume_label">Mikrofon ses düzeyi</label>
+                                <input id="microphone-volume" type="range" min="0" max="200" step="5" value="100" data-i18n-aria="broadcast_room_join.microphone_volume_label">
+                                <div id="microphone-volume-value" class="hint">100%</div>
+                            </div>
+                            <div class="field-group">
+                                <label for="speaker-device" data-i18n="broadcast_room_join.speaker_device_label">Hoparlör</label>
+                                <select id="speaker-device"></select>
+                            </div>
+                            <div class="field-group">
+                                <label for="speaker-volume" data-i18n="broadcast_room_join.speaker_volume_label">Hoparlör ses düzeyi</label>
+                                <input id="speaker-volume" type="range" min="0" max="200" step="5" value="100" data-i18n-aria="broadcast_room_join.speaker_volume_label">
+                                <div id="speaker-volume-value" class="hint">100%</div>
+                            </div>
+                            <div class="field-group">
+                                <label for="camera-device" data-i18n="broadcast_room_join.camera_device_label">Kamera</label>
+                                <select id="camera-device"></select>
+                            </div>
+                            <div class="field-group">
+                                <button id="btn-test-speaker" type="button" class="secondary" data-i18n="broadcast_room_join.test_speaker_button">Hoparlörü test et</button>
+                            </div>
+                            <div class="field-group">
+                                <button id="btn-test-microphone" type="button" class="secondary" data-i18n="broadcast_room_join.test_microphone_button">Mikrofonu test et</button>
+                                <div id="audio-test-status" class="hint" role="status" aria-live="polite"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button id="btn-join-room" type="button" class="meeting-control-button" data-i18n="broadcast_room_join.join_button">Odaya Katıl</button>
+                <button id="btn-leave-room" type="button" class="meeting-control-button meeting-control-button-danger" data-i18n="broadcast_room_join.leave_button">Odadan Ayrıl</button>
+                <button id="btn-return-focused-share" type="button" class="meeting-control-button" hidden data-i18n="broadcast_room_join.focused_share_return">Paylaşım büyük görünümüne dön</button>
+            </div>
+        </section>
+    </main>
+
+    <div id="focused-share-view" class="focused-share-view" hidden role="dialog" aria-modal="true" data-i18n-aria="broadcast_room_join.focused_share_view_label">
+        <div class="focused-share-header">
+            <div>
+                <p id="focused-share-title" class="focused-share-title" data-i18n="broadcast_room_join.focused_share_title">Ekran paylaşımı</p>
+                <p id="focused-share-hint" class="focused-share-hint" data-i18n="broadcast_room_join.focused_share_hint">Paylaşım büyük görünümde gösteriliyor. Çıkmak için Escape tuşuna basabilirsiniz.</p>
+            </div>
+            <div class="focused-share-actions">
+                <button id="btn-toggle-focused-accessible-share" type="button" class="focused-share-secondary" aria-expanded="false" aria-controls="focused-accessible-share-panel" data-i18n="broadcast_room_join.focused_share_show_accessible_text">Erişilebilir metni göster</button>
+                <button id="btn-close-focused-share" type="button" class="focused-share-close" aria-label="Paylaşım görünümünden çık" data-i18n-aria="broadcast_room_join.focused_share_close">×</button>
+            </div>
+        </div>
+        <video id="focused-share-video" class="focused-share-video" autoplay playsinline muted></video>
+        <div id="focused-accessible-share-panel" class="focused-share-accessible-panel sr-only">
+            <label for="focused-accessible-share-text" data-i18n="broadcast_room_join.accessible_share_label">Paylaşılan içeriğin erişilebilir metni</label>
+            <textarea id="focused-accessible-share-text" class="focused-share-accessible-text" rows="5" readonly data-i18n-aria="broadcast_room_join.accessible_share_label"></textarea>
+            <label id="focused-accessible-share-auto-announce-group" class="meeting-control-toggle sr-only" for="focused-accessible-share-auto-announce">
+                <input id="focused-accessible-share-auto-announce" type="checkbox" checked>
+                <span data-i18n="broadcast_room_join.accessible_share_auto_announce">Yeni paylaşılan erişilebilir metni otomatik oku</span>
+            </label>
+            <p id="focused-accessible-share-status" class="focused-share-accessible-status" data-i18n="broadcast_room_join.accessible_share_empty">Henüz erişilebilir paylaşım metni yok.</p>
+        </div>
+        <div id="focused-live-region" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+    </div>
+
+    <div id="live-region" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+    <div id="chat-live-region" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <script src="/yayinodasi/join.js?v=20260611c"></script>
+</body>
+</html>

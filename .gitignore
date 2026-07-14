@@ -41,5 +41,8 @@ EngelsizVideoDuzenleyici_Mac_Test.zip
 # Config (contains API keys)
 .evd/
 
-# Local OBS runtime files (too large for GitHub, keep local only)
+# Generated local/build-time OAuth credentials
+src/main/youtube-oauth-bundled.generated.js
+
+# Bundled OBS runtime is Windows-only and too large for GitHub.
 src/resources/obs-studio/

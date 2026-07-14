@@ -24,6 +24,9 @@ const Keyboard = {
         if (category === 'Kayıt Global Kısayolları') {
             return this.t('dialog.keyboard_manager.category_recording_global', 'Recording Global Shortcuts');
         }
+        if (category === 'Yayın Odası') {
+            return this.t('dialog.keyboard_manager.category_broadcast_room', 'Broadcast Room');
+        }
         const lang = this.getCurrentLanguage();
         const labels = {
             'Dosya': { tr: 'Dosya', en: 'File' },
@@ -51,7 +54,7 @@ const Keyboard = {
         const lang = this.getCurrentLanguage();
         const labels = {
             newProject: { tr: 'Yeni Proje', en: 'New Project' },
-            openProject: { tr: 'Proje Aç (.kve)', en: 'Open Project (.kve)' },
+            openProject: { tr: 'Proje Aç (.kve, .eng)', en: 'Open Project (.kve, .eng)' },
             saveProject: { tr: 'Projeyi Kaydet (.kve)', en: 'Save Project (.kve)' },
             openVideo: { tr: 'Video Aç', en: 'Open Video' },
             saveVideo: { tr: 'Videoyu Kaydet/Dışa Aktar', en: 'Save or Export Video' },
@@ -138,6 +141,7 @@ const Keyboard = {
             createShorts: { tr: 'Dikey Video (Shorts/Reels) Oluştur', en: 'Create Vertical Video (Shorts/Reels)' },
             createShortsFromSelection: { tr: 'Seçili Alanı Dikey Videoya Dönüştür', en: 'Create Vertical Video from Selection' },
             addSelectionToQueue: { tr: 'Seçili Alanı Seçim Listesine Ekle', en: 'Add Selected Range to Selection List' },
+            addMarkerPairsToQueue: { tr: 'İşaretçi Çiftlerini Seçim Listesine Ekle', en: 'Add Marker Pairs to Selection List' },
             openSelectionQueue: { tr: 'Seçim Listesi', en: 'Selection List' },
             mergeSelectionQueue: { tr: 'Seçim Listesini Tek Klipte Birleştir', en: 'Merge Selection List into One Clip' },
             createShortsFromQueue: { tr: 'Seçim Listesini Dikey Videoya Dönüştür', en: 'Convert Selection List to Vertical Video' },
@@ -153,6 +157,7 @@ const Keyboard = {
             openRecordingBroadcastTeams: { tr: 'Microsoft Teams Canlı Yayın', en: 'Microsoft Teams Live Broadcast' },
             openRecordingBroadcastChatWatch: { tr: 'YouTube Sohbetini İzle', en: 'Watch YouTube Chat' },
             openLiveEffectsPanel: { tr: 'Canlı Efekt Paneli', en: 'Live Effects Panel' },
+            openBroadcastRoom: { tr: 'Yayın Odası', en: 'Broadcast Room' },
             resumeActiveBroadcastWizard: { tr: 'Etkin Canlı Yayına Geri Dön', en: 'Return to Active Live Broadcast' },
             recordingGlobalStartStop: { tr: 'Global: Kaydı veya Yayını Başlat/Durdur', en: 'Global: Start/Stop Recording or Broadcast' },
             recordingGlobalPauseResume: { tr: 'Global: Kaydı Duraklat/Devam Ettir', en: 'Global: Pause/Resume Recording' },
@@ -165,6 +170,11 @@ const Keyboard = {
             recordingGlobalPreviousWindow: { tr: 'Global: Önceki Pencere', en: 'Global: Previous Window' },
             recordingGlobalNextWindow: { tr: 'Global: Sonraki Pencere', en: 'Global: Next Window' },
             recordingGlobalWindowList: { tr: 'Global: Pencere Listesini Aç', en: 'Global: Open Window List' },
+            broadcastRoomGlobalToggleYouTubeLive: { tr: 'Yayın Odası: YouTube Canlı Yayını Başlat/Durdur', en: 'Broadcast Room: Start/Stop YouTube Live' },
+            broadcastRoomGlobalToggleBotRecording: { tr: 'Yayın Odası: Bot Kaydını Başlat/Durdur', en: 'Broadcast Room: Start/Stop Bot Recording' },
+            broadcastRoomGlobalToggleLiveTranslation: { tr: 'Yayın Odası: Canlı Çeviri/Altyazıyı Başlat/Durdur', en: 'Broadcast Room: Start/Stop Live Translation or Captions' },
+            broadcastRoomGlobalReadYouTubeStats: { tr: 'Yayın Odası: YouTube İstatistiklerini Oku', en: 'Broadcast Room: Read YouTube Statistics' },
+            instantVoiceTranslationGlobalToggle: { tr: 'Anlık Sesli Çeviri: Dinlemeyi Başlat/Durdur', en: 'Instant Spoken Translation: Start/Stop Listening' },
             zoomIn: { tr: 'Yakınlaştır (Timeline)', en: 'Zoom In (Timeline)' },
             zoomOut: { tr: 'Uzaklaştır (Timeline)', en: 'Zoom Out (Timeline)' },
             resetZoom: { tr: 'Yakınlaştırmayı Sıfırla', en: 'Reset Zoom' },
@@ -181,7 +191,7 @@ const Keyboard = {
     ACTIONS: {
         // --- Dosya (File) ---
         'newProject': { default: 'Mod+N', category: 'Dosya', label: 'Yeni Proje' },
-        'openProject': { default: 'Ctrl+Shift+O', category: 'Dosya', label: 'Proje Aç (.kve)' },
+        'openProject': { default: 'Ctrl+Shift+O', category: 'Dosya', label: 'Proje Aç (.kve, .eng)' },
         'saveProject': { default: 'Ctrl+Shift+P', category: 'Dosya', label: 'Projeyi Kaydet (.kve)' },
         'openVideo': { default: 'Mod+O', category: 'Dosya', label: 'Video Aç' },
         'saveVideo': { default: 'Mod+S', category: 'Dosya', label: 'Videoyu Kaydet/Dışa Aktar' },
@@ -190,7 +200,7 @@ const Keyboard = {
         'tabNext': { default: 'Ctrl+Tab', category: 'Dosya', label: 'Sonraki Sekme' },
         'tabPrev': { default: 'Ctrl+Shift+Tab', category: 'Dosya', label: 'Önceki Sekme' },
         'closeTab': { default: 'Mod+W', category: 'Dosya', label: 'Sekmeyi Kapat' },
-        'exitApp': { default: 'Alt+F4', category: 'Dosya', label: 'Çıkış' },
+        'exitApp': { default: navigator.userAgent.includes('Mac') ? 'Mod+Q' : 'Alt+F4', category: 'Dosya', label: 'Çıkış' },
 
         // --- Düzenleme (Edit) ---
         'undo': { default: 'Mod+Z', category: 'Düzenleme', label: 'Geri Al' },
@@ -289,6 +299,7 @@ const Keyboard = {
         'createShorts': { default: null, category: 'Ekle', label: 'Dikey Video (Shorts/Reels) Oluştur' },
         'createShortsFromSelection': { default: null, category: 'Ekle', label: 'Seçili Alanı Dikey Videoya Dönüştür' },
         'addSelectionToQueue': { default: null, category: 'Ekle', label: 'Seçili Alanı Seçim Listesine Ekle' },
+        'addMarkerPairsToQueue': { default: null, category: 'Ekle', label: 'İşaretçi Çiftlerini Seçim Listesine Ekle' },
         'openSelectionQueue': { default: null, category: 'Ekle', label: 'Seçim Listesi' },
         'mergeSelectionQueue': { default: null, category: 'Ekle', label: 'Seçim Listesini Tek Klipte Birleştir' },
         'createShortsFromQueue': { default: null, category: 'Ekle', label: 'Seçim Listesini Dikey Videoya Dönüştür' },
@@ -306,6 +317,7 @@ const Keyboard = {
         'openRecordingBroadcastTeams': { default: null, category: 'Erişilebilir Kayıt', label: 'Microsoft Teams Canlı Yayın' },
         'openRecordingBroadcastChatWatch': { default: null, category: 'Erişilebilir Kayıt', label: 'YouTube Sohbetini İzle' },
         'openLiveEffectsPanel': { default: null, category: 'Erişilebilir Kayıt', label: 'Canlı Efekt Paneli' },
+        'openBroadcastRoom': { default: null, category: 'Erişilebilir Kayıt', label: 'Yayın Odası' },
         'resumeActiveBroadcastWizard': { default: null, category: 'Erişilebilir Kayıt', label: 'Etkin Canlı Yayına Geri Dön' },
         'recordingGlobalStartStop': { default: 'Alt+Ctrl+R', category: 'Kayıt Global Kısayolları', label: 'Global: Kaydı veya Yayını Başlat/Durdur' },
         'recordingGlobalPauseResume': { default: 'Alt+Ctrl+P', category: 'Kayıt Global Kısayolları', label: 'Global: Kaydı Duraklat/Devam Ettir' },
@@ -318,6 +330,11 @@ const Keyboard = {
         'recordingGlobalPreviousWindow': { default: 'Alt+Ctrl+U', category: 'Kayıt Global Kısayolları', label: 'Global: Önceki Pencere' },
         'recordingGlobalNextWindow': { default: 'Alt+Ctrl+O', category: 'Kayıt Global Kısayolları', label: 'Global: Sonraki Pencere' },
         'recordingGlobalWindowList': { default: 'Alt+Ctrl+I', category: 'Kayıt Global Kısayolları', label: 'Global: Pencere Listesini Aç' },
+        'broadcastRoomGlobalToggleYouTubeLive': { default: 'Alt+Ctrl+L', category: 'Yayın Odası', label: 'Yayın Odası: YouTube Canlı Yayını Başlat/Durdur' },
+        'broadcastRoomGlobalToggleBotRecording': { default: 'Alt+Ctrl+B', category: 'Yayın Odası', label: 'Yayın Odası: Bot Kaydını Başlat/Durdur' },
+        'broadcastRoomGlobalToggleLiveTranslation': { default: 'Alt+Ctrl+T', category: 'Yayın Odası', label: 'Yayın Odası: Canlı Çeviri/Altyazıyı Başlat/Durdur' },
+        'broadcastRoomGlobalReadYouTubeStats': { default: 'Alt+Ctrl+Y', category: 'Yayın Odası', label: 'Yayın Odası: YouTube İstatistiklerini Oku' },
+        'instantVoiceTranslationGlobalToggle': { default: 'Alt+Ctrl+D', category: 'Yapay Zeka', label: 'Anlık Sesli Çeviri: Dinlemeyi Başlat/Durdur' },
         'zoomIn': { default: null, category: 'Görünüm', label: 'Yakınlaştır (Timeline)' },
         'zoomOut': { default: null, category: 'Görünüm', label: 'Uzaklaştır (Timeline)' },
         'resetZoom': { default: null, category: 'Görünüm', label: 'Yakınlaştırmayı Sıfırla' },
@@ -426,7 +443,7 @@ const Keyboard = {
     eventToString(e) {
         const parts = [];
         if (e.ctrlKey) parts.push('Ctrl');
-        if (e.metaKey) parts.push('Meta'); // Kullanıcıya Meta/Cmd gösterebiliriz
+        if (e.metaKey) parts.push('Cmd');
         if (e.altKey) parts.push('Alt');
         if (e.shiftKey) parts.push('Shift');
 
@@ -709,6 +726,10 @@ const Keyboard = {
             App.addSelectionToVerticalQueue();
             handled = true;
         }
+        else if (this.check('addMarkerPairsToQueue', e)) {
+            App.addMarkerPairsToVerticalQueue();
+            handled = true;
+        }
         else if (this.check('openSelectionQueue', e)) {
             App.openSelectionQueueDialog();
             handled = true;
@@ -767,6 +788,10 @@ const Keyboard = {
         }
         else if (this.check('openLiveEffectsPanel', e)) {
             window.api.openLiveEffectsPanel();
+            handled = true;
+        }
+        else if (this.check('openBroadcastRoom', e)) {
+            window.api.openBroadcastRoom();
             handled = true;
         }
         else if (this.check('resumeActiveBroadcastWizard', e)) {

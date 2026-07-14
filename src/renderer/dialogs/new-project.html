@@ -262,13 +262,33 @@
         <!-- Görsel Yerleşim Varsayılanı -->
         <div class="form-group">
             <div class="section-title" data-i18n="dialog.new_project.fill_frame_section">Visual Layout Setting</div>
-            <label class="checkbox-group">
-                <input type="checkbox" id="fill-frame" checked aria-describedby="fill-frame-desc">
-                <div class="checkbox-label">
-                    <strong data-i18n="dialog.new_project.fill_frame_title">Automatically fit all visuals to fill the frame</strong>
-                    <span id="fill-frame-desc" data-i18n="dialog.new_project.fill_frame_desc">Recommended setting. Cropping is applied if needed, and no black bars are created.</span>
-                </div>
-            </label>
+            <div class="radio-group" role="radiogroup" aria-labelledby="visual-fit-label">
+                <span id="visual-fit-label" class="sr-only" data-i18n="dialog.new_project.visual_fit_sr">Visual fit behavior</span>
+
+                <label class="radio-option">
+                    <input type="radio" name="visual-fit-mode" value="blur" checked aria-describedby="fit-blur-desc">
+                    <div class="radio-label">
+                        <strong data-i18n="dialog.new_project.fit_blur_title">Show full visual with blurred background</strong>
+                        <span id="fit-blur-desc" data-i18n="dialog.new_project.fit_blur_desc">Recommended. The full photo or video remains visible and empty areas are filled with a blurred background.</span>
+                    </div>
+                </label>
+
+                <label class="radio-option">
+                    <input type="radio" name="visual-fit-mode" value="crop" aria-describedby="fit-crop-desc">
+                    <div class="radio-label">
+                        <strong data-i18n="dialog.new_project.fit_crop_title">Crop if needed and fill the frame</strong>
+                        <span id="fit-crop-desc" data-i18n="dialog.new_project.fit_crop_desc">The frame is fully filled, but edges may be cropped when the media aspect ratio is different.</span>
+                    </div>
+                </label>
+
+                <label class="radio-option">
+                    <input type="radio" name="visual-fit-mode" value="fit" aria-describedby="fit-contain-desc">
+                    <div class="radio-label">
+                        <strong data-i18n="dialog.new_project.fit_contain_title">Fit inside the frame and leave empty space</strong>
+                        <span id="fit-contain-desc" data-i18n="dialog.new_project.fit_contain_desc">The full visual is preserved and empty areas stay black if needed.</span>
+                    </div>
+                </label>
+            </div>
         </div>
 
         <div class="buttons">
@@ -327,7 +347,7 @@
         // Form elemanları
         const form = document.getElementById('new-project-form');
         const aspectRatioInputs = document.querySelectorAll('input[name="aspect-ratio"]');
-        const fillFrameCheckbox = document.getElementById('fill-frame');
+        const visualFitInputs = document.querySelectorAll('input[name="visual-fit-mode"]');
         const createBtn = document.getElementById('create-btn');
         const cancelBtn = document.getElementById('cancel-btn');
         const liveRegion = document.getElementById('live-region');
@@ -351,6 +371,17 @@
             });
         });
 
+        visualFitInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                const label = input.value === 'crop'
+                    ? t('dialog.new_project.fit_crop_spoken', 'crop and fill')
+                    : (input.value === 'fit'
+                        ? t('dialog.new_project.fit_contain_spoken', 'fit with empty space')
+                        : t('dialog.new_project.fit_blur_spoken', 'full visual with blurred background'));
+                announce(t('runtime.new_project.visual_fit_selected', '{label} selected.', { label }));
+            });
+        });
+
         // Form gönderimi
         form.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -366,7 +397,8 @@
             const projectSettings = {
                 type: 'slideshow',
                 aspectRatio: selectedRatio.value,
-                fillFrame: fillFrameCheckbox.checked
+                visualFitMode: document.querySelector('input[name="visual-fit-mode"]:checked')?.value || 'blur',
+                fillFrame: document.querySelector('input[name="visual-fit-mode"]:checked')?.value !== 'fit'
             };
 
             console.log('Proje ayarları gönderiliyor:', projectSettings);

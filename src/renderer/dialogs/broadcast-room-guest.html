@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="broadcast_room.guest_window_title">Yayın Odası Konuk Katılımı</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: "Segoe UI", sans-serif;
+            background: #121212;
+            color: #ececec;
+        }
+
+        .page {
+            max-width: 760px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .card {
+            background: #1d1d1d;
+            border: 1px solid #333;
+            border-radius: 14px;
+            padding: 18px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button {
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid #4b4b4b;
+            background: #2e5cff;
+            color: #fff;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        button.secondary {
+            background: #2a2a2a;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        input,
+        .value-box,
+        .listbox,
+        select {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            border: 1px solid #444;
+            border-radius: 10px;
+            background: #111;
+            color: #ececec;
+            font: inherit;
+        }
+
+        .listbox ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .hint,
+        .status-line {
+            color: #cfcfcf;
+        }
+
+        #live-region {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="page">
+        <section class="card">
+            <h1 data-i18n="broadcast_room.guest_heading">Yayın Odasına Katıl</h1>
+            <p class="hint" data-i18n="broadcast_room.guest_description">
+                Bu prototip pencerede davet bağlantısıyla test konuğu gibi katılabilir ve oda listesinin canlı güncellendiğini doğrulayabilirsiniz.
+            </p>
+            <div id="status-line" class="status-line" aria-live="polite"></div>
+        </section>
+
+        <section class="card">
+            <label for="guest-display-name" data-i18n="broadcast_room.guest_name_label">Görünen Adınız</label>
+            <input id="guest-display-name" type="text" data-i18n-aria="broadcast_room.guest_name_label">
+
+            <div style="margin-top: 16px;">
+                <label for="guest-invite-link" data-i18n="broadcast_room.guest_invite_label">Davet Bağlantısı</label>
+                <input id="guest-invite-link" type="text" readonly data-i18n-aria="broadcast_room.guest_invite_label">
+            </div>
+
+            <div class="toolbar" style="margin-top: 18px;">
+                <button id="btn-join-room" type="button" data-i18n="broadcast_room.join_room" data-i18n-aria="broadcast_room.join_room">Odaya Katıl</button>
+                <button id="btn-close-window" type="button" class="secondary" data-i18n="dialog.common.close" data-i18n-aria="dialog.common.close">Kapat</button>
+            </div>
+
+            <div class="toolbar" style="margin-top: 16px;">
+                <button id="guest-camera-enabled" type="button" class="secondary" aria-pressed="true" data-i18n="broadcast_room.guest_camera_stop_button" data-i18n-aria="broadcast_room.guest_camera_stop_button">Videomu durdur</button>
+                <button id="guest-microphone-enabled" type="button" class="secondary" aria-pressed="true" data-i18n="broadcast_room.guest_microphone_stop_button" data-i18n-aria="broadcast_room.guest_microphone_stop_button">Sesimi kapat</button>
+            </div>
+            <div style="display:grid; gap:14px; margin-top:16px;">
+                <div>
+                    <label for="guest-camera-device" data-i18n="broadcast_room.guest_camera_device_label">Kamera</label>
+                    <select id="guest-camera-device" data-i18n-aria="broadcast_room.guest_camera_device_label"></select>
+                </div>
+                <div>
+                    <label for="guest-microphone-device" data-i18n="broadcast_room.guest_microphone_device_label">Mikrofon</label>
+                    <select id="guest-microphone-device" data-i18n-aria="broadcast_room.guest_microphone_device_label"></select>
+                </div>
+                <div>
+                    <label for="guest-microphone-volume" data-i18n="broadcast_room.guest_microphone_volume_label">Mikrofon ses düzeyi</label>
+                    <input id="guest-microphone-volume" type="range" min="0" max="200" step="5" value="100" data-i18n-aria="broadcast_room.guest_microphone_volume_label">
+                    <div id="guest-microphone-volume-value" class="hint">100%</div>
+                </div>
+                <div>
+                    <label for="guest-speaker-device" data-i18n="broadcast_room.guest_speaker_device_label">Hoparlör</label>
+                    <select id="guest-speaker-device" data-i18n-aria="broadcast_room.guest_speaker_device_label"></select>
+                </div>
+                <div>
+                    <label for="guest-speaker-volume" data-i18n="broadcast_room.guest_speaker_volume_label">Hoparlör ses düzeyi</label>
+                    <input id="guest-speaker-volume" type="range" min="0" max="200" step="5" value="100" data-i18n-aria="broadcast_room.guest_speaker_volume_label">
+                    <div id="guest-speaker-volume-value" class="hint">100%</div>
+                </div>
+            </div>
+            <div class="toolbar" style="margin-top: 16px;">
+                <div style="flex: 1 1 280px;">
+                    <label for="guest-share-source-select" data-i18n="broadcast_room.guest_share_source_label">Paylaşım kaynağı</label>
+                    <select id="guest-share-source-select" data-i18n-aria="broadcast_room.guest_share_source_label"></select>
+                </div>
+            </div>
+            <div class="toolbar" style="margin-top: 12px;">
+                <label style="display:flex; align-items:center; gap:8px;">
+                    <input id="guest-share-audio-enabled" type="checkbox">
+                    <span data-i18n="broadcast_room.share_audio_toggle">Kaynak sesini dahil et</span>
+                </label>
+                <div style="flex: 1 1 280px;">
+                    <label for="guest-share-audio-mode" data-i18n="broadcast_room.share_audio_mode_label">Paylaşım sesi modu</label>
+                    <select id="guest-share-audio-mode" data-i18n-aria="broadcast_room.share_audio_mode_label">
+                        <option value="echo_safe" selected data-i18n="broadcast_room.share_audio_mode_echo_safe">Yankısız konuşma</option>
+                        <option value="high_quality" data-i18n="broadcast_room.share_audio_mode_high_quality">Yüksek kalite stereo</option>
+                    </select>
+                </div>
+            </div>
+            <p class="hint" data-i18n="broadcast_room.share_audio_mode_hint">Yankısız konuşma toplantılar için önerilir. Yüksek kalite stereo müzik ve oyun sesini daha iyi korur; kulaklık kullanın.</p>
+            <div class="toolbar" style="margin-top: 12px;">
+                <button id="btn-start-share" type="button" class="secondary" data-i18n="broadcast_room.start_share" data-i18n-aria="broadcast_room.start_share">Paylaşımı Başlat</button>
+                <button id="btn-stop-share" type="button" class="secondary" data-i18n="broadcast_room.stop_share" data-i18n-aria="broadcast_room.stop_share">Paylaşımı Durdur</button>
+            </div>
+            <div id="guest-share-status" class="status-line" aria-live="polite"></div>
+        </section>
+
+        <section class="card">
+            <h2 data-i18n="broadcast_room.guest_room_snapshot">Oda Özeti</h2>
+            <div style="display: grid; gap: 14px;">
+                <div>
+                    <label for="guest-room-code" data-i18n="broadcast_room.room_code_label">Oda Kodu</label>
+                    <div id="guest-room-code" class="value-box" aria-live="polite"></div>
+                </div>
+                <div>
+                    <label for="guest-participants" data-i18n="broadcast_room.participants_section">Katılımcılar</label>
+                    <div id="guest-participants" class="listbox" role="status" aria-live="polite"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="live-region" aria-live="assertive" aria-atomic="true"></div>
+    <script src="../scripts/broadcast-room-guest.js"></script>
+</body>
+
+</html>

@@ -159,12 +159,10 @@ jobs:
           node update-tutorials-json.mjs
 
       - name: Commit updated tutorials JSON
-        id: commit_tutorials
         shell: bash
         run: |
           if git diff --quiet -- website/tutorials.json; then
             echo "No tutorial changes detected."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -173,17 +171,3 @@ jobs:
           git add website/tutorials.json
           git commit -m "chore: refresh tutorials feed"
           git push
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy updated website files
-        if: steps.commit_tutorials.outputs.changed == 'true'
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          local-dir: ./website/
-          port: 21
-          protocol: ftp
-          log-level: standard

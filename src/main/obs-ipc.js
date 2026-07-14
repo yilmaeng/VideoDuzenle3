@@ -46,6 +46,20 @@ function setupObsIpcHandlers(mainWindow) {
         }
     });
 
+    ipcMain.handle('unregister-global-shortcut', (_event, accelerator) => {
+        try {
+            if (!accelerator) {
+                return { success: false, error: 'accelerator_missing' };
+            }
+            if (globalShortcut.isRegistered(accelerator)) {
+                globalShortcut.unregister(accelerator);
+            }
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('obs-detect', async () => {
         return obsController.detectOBS();
     });
@@ -94,6 +108,15 @@ function setupObsIpcHandlers(mainWindow) {
         }
     });
 
+    ipcMain.handle('obs-set-scene-item-enabled', async (event, params) => {
+        try {
+            const result = await obsController.setSceneItemEnabled(params);
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('obs-set-camera-background', async (event, params) => {
         try {
             const result = await obsController.applyCameraBackground(params);
@@ -106,6 +129,24 @@ function setupObsIpcHandlers(mainWindow) {
     ipcMain.handle('obs-set-camera-panel-fill', async (event, params) => {
         try {
             const result = await obsController.applyCameraPanelFill(params);
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('obs-set-scene-background', async (event, params) => {
+        try {
+            const result = await obsController.applySceneBackground(params);
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('obs-ensure-live-room-audio-bridge-source', async (event, params) => {
+        try {
+            const result = await obsController.ensureLiveRoomAudioBridgeSource(params);
             return { success: true, ...result };
         } catch (error) {
             return { success: false, error: error.message };
@@ -166,6 +207,42 @@ function setupObsIpcHandlers(mainWindow) {
         }
     });
 
+    ipcMain.handle('obs-show-live-effect-audio', async (event, params) => {
+        try {
+            const result = await obsController.showLiveEffectAudio(params);
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('obs-update-live-caption-overlay', async (event, params) => {
+        try {
+            const result = await obsController.updateLiveCaptionOverlay(params);
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('obs-release-broadcast-camera-source', async (event, params) => {
+        try {
+            const result = await obsController.releaseBroadcastCameraSource(params);
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('obs-reset-broadcast-room-audio-sources', async (event, params) => {
+        try {
+            const result = await obsController.resetBroadcastRoomAudioSources(params);
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('obs-hide-live-effect-video', async (event, params) => {
         try {
             const result = await obsController.hideLiveEffectVideo(params);
@@ -184,6 +261,15 @@ function setupObsIpcHandlers(mainWindow) {
         }
     });
 
+    ipcMain.handle('obs-hide-live-effect-audio', async (event, params) => {
+        try {
+            const result = await obsController.hideLiveEffectAudio(params);
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('obs-remove-live-effect-video', async (event, params) => {
         try {
             const result = await obsController.removeLiveEffectVideo(params);
@@ -196,6 +282,15 @@ function setupObsIpcHandlers(mainWindow) {
     ipcMain.handle('obs-remove-live-effect-image', async (event, params) => {
         try {
             const result = await obsController.removeLiveEffectImage(params);
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('obs-remove-live-effect-audio', async (event, params) => {
+        try {
+            const result = await obsController.removeLiveEffectAudio(params);
             return { success: true, ...result };
         } catch (error) {
             return { success: false, error: error.message };

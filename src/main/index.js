@@ -1,7 +1,7 @@
 // Basit ve temiz Electron main process
 process.on('uncaughtException', err => { require('fs').writeFileSync('fatal.log', err.stack); console.error(err); });
 process.on('unhandledRejection', err => { require('fs').writeFileSync('fatal-reject.log', err ? (err.stack || err.toString()) : 'Unknown rejection'); console.error('Promise Rejection:', err); });
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, globalShortcut, Tray } = require('electron');
 const path = require('path');
 const fs = require('fs');
 require('./logger'); // Initialize logging system
@@ -15,10 +15,25 @@ let mainWindow;
 let createMenuFn;
 let setupIpcHandlersFn;
 let pendingLaunchPath = null;
+let instantTranslationTray = null;
 const allowMultiInstance = process.argv.includes('--multi-instance') || process.env.EVD_ALLOW_MULTI_INSTANCE === '1';
+
+function isInstantVoiceTranslationOnlyMode() {
+    const appName = String(app.getName?.() || '').toLowerCase();
+    return process.argv.includes('--instant-voice-translation')
+        || process.env.EVD_INSTANT_TRANSLATOR_ONLY === '1'
+        || appName.includes('anlık sesli çeviri')
+        || appName.includes('anlik-sesli-ceviri')
+        || appName.includes('instantvoicetranslation');
+}
 
 function isPortableMode() {
     return Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
+}
+
+function translateOrFallback(key, fallback) {
+    const value = i18n.t(key);
+    return value && !value.startsWith('[') ? value : fallback;
 }
 
 const SUPPORTED_VIDEO_EXTENSIONS = new Set([
@@ -87,6 +102,54 @@ function queueOrOpenPath(filePath) {
     }
 }
 
+function showInstantVoiceTranslationWindow() {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        createWindow();
+        return;
+    }
+
+    if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+}
+
+function ensureInstantVoiceTranslationTray() {
+    if (!isInstantVoiceTranslationOnlyMode()) {
+        return null;
+    }
+
+    if (instantTranslationTray) {
+        return instantTranslationTray;
+    }
+
+    instantTranslationTray = new Tray(path.join(__dirname, '../../Start_icon.png'));
+    instantTranslationTray.setToolTip(translateOrFallback(
+        'dialog.instant_voice_translation.tray_tooltip',
+        'Anlık Sesli Çeviri arka planda çalışıyor.'
+    ));
+    instantTranslationTray.setContextMenu(Menu.buildFromTemplate([
+        {
+            label: translateOrFallback('dialog.instant_voice_translation.tray_show', 'Pencereyi göster'),
+            click: showInstantVoiceTranslationWindow
+        },
+        {
+            label: translateOrFallback('dialog.instant_voice_translation.tray_quit', 'Çıkış'),
+            click: () => {
+                if (instantTranslationTray) {
+                    instantTranslationTray.destroy();
+                    instantTranslationTray = null;
+                }
+                app.quit();
+            }
+        }
+    ]));
+    instantTranslationTray.on('click', showInstantVoiceTranslationWindow);
+    instantTranslationTray.on('double-click', showInstantVoiceTranslationWindow);
+    return instantTranslationTray;
+}
+
 if (!allowMultiInstance) {
     const singleInstanceLock = app.requestSingleInstanceLock();
     if (!singleInstanceLock) {
@@ -116,25 +179,38 @@ if (!allowMultiInstance) {
 
 app.whenReady().then(async () => {
     try {
-        createMenuFn = require('./menu').createMenu;
         setupIpcHandlersFn = require('./ipc-handlers').setupIpcHandlers;
-        const { setupDialogHandlers } = require('./dialog-windows');
-        const { setupObsIpcHandlers } = require('./obs-ipc');
         const { setupGeminiHandlers } = require('./gemini-handler');
-        const { setupYouTubeHandlers } = require('./youtube-handler');
-        const { setupSlideshowHandlers } = require('./slideshow-handler');
-        const { setupObjectAnalysisHandlers } = require('./object-analysis-handler');
+        const { setupOpenAiHandlers } = require('./openai-handler');
+        if (!isInstantVoiceTranslationOnlyMode()) {
+            createMenuFn = require('./menu').createMenu;
+        }
 
         await i18n.init(); // Initialize i18n and wait for it now that app is ready
 
         createWindow();
         setupIpcHandlersFn(mainWindow);
-        setupDialogHandlers(mainWindow);
-        setupObsIpcHandlers(mainWindow);
         setupGeminiHandlers(mainWindow);
-        setupYouTubeHandlers(mainWindow);
-        setupSlideshowHandlers(mainWindow);
-        setupObjectAnalysisHandlers(mainWindow);
+        setupOpenAiHandlers(mainWindow);
+        if (isInstantVoiceTranslationOnlyMode()) {
+            setupInstantVoiceTranslationShortcutHandlers();
+        }
+        if (!isInstantVoiceTranslationOnlyMode()) {
+            const { setupDialogHandlers } = require('./dialog-windows');
+            const { setupObsIpcHandlers } = require('./obs-ipc');
+            const { setupElevenLabsHandlers } = require('./elevenlabs-handler');
+            const { setupYouTubeHandlers } = require('./youtube-handler');
+            const { setupEmergencyBroadcastHandlers } = require('./emergency-broadcast-handler');
+            const { setupSlideshowHandlers } = require('./slideshow-handler');
+            const { setupObjectAnalysisHandlers } = require('./object-analysis-handler');
+            setupDialogHandlers(mainWindow);
+            setupObsIpcHandlers(mainWindow);
+            setupElevenLabsHandlers(mainWindow);
+            setupYouTubeHandlers(mainWindow);
+            setupEmergencyBroadcastHandlers(mainWindow);
+            setupSlideshowHandlers(mainWindow);
+            setupObjectAnalysisHandlers(mainWindow);
+        }
 
         app.on('activate', () => {
             if (BrowserWindow.getAllWindows().length === 0) {
@@ -147,6 +223,82 @@ app.whenReady().then(async () => {
         dialog.showErrorBox(errorTitle.startsWith('[') ? 'Error' : errorTitle, error.message);
     }
 });
+
+function setupInstantVoiceTranslationShortcutHandlers() {
+    ipcMain.handle('instant-voice-translation-hide-to-tray', () => {
+        try {
+            if (!isInstantVoiceTranslationOnlyMode()) {
+                return { success: false, error: 'instant_translation_only_required' };
+            }
+            ensureInstantVoiceTranslationTray();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.hide();
+            }
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('register-global-shortcut', (event, registration) => {
+        try {
+            const accelerator = typeof registration === 'string'
+                ? registration
+                : registration?.accelerator;
+            const focusWindowOnTrigger = !!(registration && typeof registration === 'object' && registration.focusWindowOnTrigger);
+
+            if (!accelerator) {
+                return { success: false, error: 'accelerator_missing' };
+            }
+
+            if (globalShortcut.isRegistered(accelerator)) {
+                globalShortcut.unregister(accelerator);
+            }
+
+            const success = globalShortcut.register(accelerator, () => {
+                if (event.sender && !event.sender.isDestroyed()) {
+                    if (focusWindowOnTrigger) {
+                        const targetWindow = BrowserWindow.fromWebContents(event.sender);
+                        if (targetWindow && !targetWindow.isDestroyed()) {
+                            if (targetWindow.isMinimized()) {
+                                targetWindow.restore();
+                            }
+                            targetWindow.show();
+                            targetWindow.focus();
+                        }
+                    }
+                    event.sender.send('global-shortcut-triggered', accelerator);
+                }
+            });
+            return { success };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('unregister-global-shortcut', (_event, accelerator) => {
+        try {
+            if (!accelerator) {
+                return { success: false, error: 'accelerator_missing' };
+            }
+            if (globalShortcut.isRegistered(accelerator)) {
+                globalShortcut.unregister(accelerator);
+            }
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('unregister-all-global-shortcuts', () => {
+        try {
+            globalShortcut.unregisterAll();
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+}
 
 ipcMain.handle('open-external-url', async (_event, url) => {
     if (!url || typeof url !== 'string') {
@@ -168,12 +320,15 @@ ipcMain.handle('app-is-portable', () => isPortableMode());
 
 function createWindow() {
     const launchedWithExternalFile = Boolean(pendingLaunchPath);
+    const instantTranslationOnly = isInstantVoiceTranslationOnlyMode();
 
     mainWindow = new BrowserWindow({
-        width: 1200,
-        height: 800,
+        width: instantTranslationOnly ? 920 : 1200,
+        height: instantTranslationOnly ? 820 : 800,
         show: false,
-        title: i18n.t('messages.app_window_title') || 'EVD',
+        title: instantTranslationOnly
+            ? i18n.t('dialog.instant_voice_translation.standalone_title') || 'Anlık Sesli Çeviri'
+            : i18n.t('messages.app_window_title') || 'EVD',
         icon: path.join(__dirname, '../../Start_icon.png'),
         webPreferences: {
             nodeIntegration: false,
@@ -184,12 +339,19 @@ function createWindow() {
         autoHideMenuBar: false
     });
 
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'), {
-        query: launchedWithExternalFile ? { externalLaunch: '1' } : {}
+    mainWindow.loadFile(path.join(__dirname, instantTranslationOnly
+        ? '../renderer/instant-voice-translation.html'
+        : '../renderer/index.html'), {
+        query: launchedWithExternalFile && !instantTranslationOnly ? { externalLaunch: '1' } : {}
     });
 
-    const menu = createMenuFn(mainWindow);
-    Menu.setApplicationMenu(menu);
+    if (instantTranslationOnly) {
+        mainWindow.setMenuBarVisibility(false);
+        Menu.setApplicationMenu(null);
+    } else {
+        const menu = createMenuFn(mainWindow);
+        Menu.setApplicationMenu(menu);
+    }
 
     if (process.platform === 'win32' && typeof mainWindow.hookWindowMessage === 'function') {
         const WM_ENTERMENULOOP = 0x0211;
@@ -231,7 +393,8 @@ function createWindow() {
             accessibilityEnabled: app.accessibilitySupportEnabled,
             appVersion: app.getVersion(),
             isPortable: isPortableMode(),
-            launchedWithExternalFile
+            launchedWithExternalFile,
+            instantTranslationOnly
         });
 
         if (pendingLaunchPath) {
@@ -244,5 +407,13 @@ function createWindow() {
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
+    }
+});
+
+app.on('before-quit', () => {
+    globalShortcut.unregisterAll();
+    if (instantTranslationTray) {
+        instantTranslationTray.destroy();
+        instantTranslationTray = null;
     }
 });

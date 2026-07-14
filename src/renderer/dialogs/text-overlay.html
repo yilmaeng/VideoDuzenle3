@@ -300,6 +300,15 @@
         </div>
 
         <div id="tts-options" class="style-box" style="display: none;">
+            <div class="form-group">
+                <label for="tts-service" data-i18n="dialog.text_overlay_window.tts_service">Seslendirme Servisi:</label>
+                <select id="tts-service">
+                    <option value="system" data-i18n="dialog.text_overlay_window.tts_service_system">Bilgisayar sesleri</option>
+                    <option value="openai" data-i18n="dialog.text_overlay_window.tts_service_openai">OpenAI</option>
+                    <option value="elevenlabs" data-i18n="dialog.text_overlay_window.tts_service_elevenlabs">ElevenLabs</option>
+                </select>
+                <p class="hint" data-i18n="dialog.text_overlay_window.tts_service_hint">OpenAI ve ElevenLabs için Yapay Zeka menüsünde API anahtarınız kayıtlı olmalıdır.</p>
+            </div>
             <!-- Dil/Ses -->
             <div class="form-group">
                 <label for="tts-voice" data-i18n="dialog.text_overlay_window.tts_voice">Seslendirmen:</label>
@@ -585,9 +594,14 @@ Write any free-text JSON values only in ${lang}.`;
         }
 
         // Sayfa yüklendiğinde TTS seslerini yükle
-        async function loadTtsVoices() {
+        function getSelectedTtsService() {
+            return document.getElementById('tts-service')?.value || 'system';
+        }
+
+        async function loadTtsVoices(selectedVoice = '') {
             try {
-                const result = await ipcRenderer.invoke('get-tts-voices');
+                const service = getSelectedTtsService();
+                const result = await ipcRenderer.invoke('get-tts-voices', { service });
                 console.log('TTS sesleri:', result);
 
                 if (result.success && result.voices && result.voices.length > 0) {
@@ -598,18 +612,28 @@ Write any free-text JSON values only in ${lang}.`;
 
                     // Yeni sesleri ekle
                     result.voices.forEach(voice => {
-                        if (voice && voice !== 'Varsayılan') {
+                        const voiceId = typeof voice === 'string' ? voice : voice?.id;
+                        const voiceName = typeof voice === 'string' ? voice : voice?.name;
+                        if (voiceId && voiceName && voiceName !== 'Varsayılan') {
                             const option = document.createElement('option');
-                            option.value = voice;
-                            option.textContent = voice;
+                            option.value = voiceId;
+                            option.textContent = voiceName;
                             voiceSelect.appendChild(option);
                         }
                     });
+                    if (selectedVoice && Array.from(voiceSelect.options).some((option) => option.value === selectedVoice)) {
+                        voiceSelect.value = selectedVoice;
+                    }
 
                     console.log('TTS sesleri yüklendi:', result.voices.length);
+                } else {
+                    const voiceSelect = document.getElementById('tts-voice');
+                    voiceSelect.innerHTML = `<option value="">${t('dialog.text_overlay_window.tts_voice_default', 'Default')}</option>`;
                 }
             } catch (error) {
                 console.error('TTS sesleri yüklenemedi:', error);
+                const voiceSelect = document.getElementById('tts-voice');
+                voiceSelect.innerHTML = `<option value="">${t('dialog.text_overlay_window.tts_voice_load_failed', 'Sesler yüklenemedi')}</option>`;
             }
         }
 
@@ -619,6 +643,10 @@ Write any free-text JSON values only in ${lang}.`;
         // TTS checkbox toggle
         document.getElementById('tts-enable').addEventListener('change', (e) => {
             document.getElementById('tts-options').style.display = e.target.checked ? 'block' : 'none';
+        });
+
+        document.getElementById('tts-service').addEventListener('change', () => {
+            loadTtsVoices();
         });
 
         // Konum değişikliğinde X/Y alanlarını göster/gizle
@@ -660,6 +688,7 @@ Write any free-text JSON values only in ${lang}.`;
 
             try {
                 const voice = document.getElementById('tts-voice').value;
+                const service = getSelectedTtsService();
                 // Değerler 0-100 veya 0.5-2.0 arası değişmeli.
                 // HTML range: speed 50-200 -> 0.5-2.0
                 // HTML range: volume 0-100 -> 0-100
@@ -684,6 +713,7 @@ Write any free-text JSON values only in ${lang}.`;
                 const result = await ipcRenderer.invoke('preview-tts', {
                     text,
                     voice,
+                    service,
                     speed,
                     volume,
                     videoPath: window.videoPath || '',
@@ -783,6 +813,7 @@ Write any free-text JSON values only in ${lang}.`;
                 transition: document.getElementById('transition').value,
                 duration: duration,
                 ttsEnabled: document.getElementById('tts-enable').checked,
+                ttsService: getSelectedTtsService(),
                 ttsVoice: document.getElementById('tts-voice').value || null,
                 ttsSpeed: parseInt(document.getElementById('tts-speed').value) / 100,
                 ttsVolume: parseInt(document.getElementById('tts-volume').value) / 100,
@@ -810,6 +841,8 @@ Write any free-text JSON values only in ${lang}.`;
 
             document.getElementById('tts-enable').checked = false;
             document.getElementById('tts-options').style.display = 'none';
+            document.getElementById('tts-service').value = 'system';
+            loadTtsVoices();
             document.getElementById('tts-speed').value = '100';
             document.getElementById('tts-volume').value = '100';
             document.getElementById('video-volume').value = '100';
@@ -898,6 +931,8 @@ Write any free-text JSON values only in ${lang}.`;
                 document.getElementById('duration').disabled = opt.duration === 'whole';
                 document.getElementById('tts-enable').checked = opt.ttsEnabled || false;
                 document.getElementById('tts-options').style.display = opt.ttsEnabled ? 'block' : 'none';
+                document.getElementById('tts-service').value = opt.ttsService || 'system';
+                loadTtsVoices(opt.ttsVoice || '');
                 document.getElementById('add-to-list-btn').textContent = t('dialog.text_overlay_window.update', 'Update');
             }
         });

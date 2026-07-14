@@ -727,7 +727,9 @@ function buildOutputPathForClip(clip, clipIndex, totalClips) {
         return path.join(folder, finalName.endsWith(extension) ? finalName : `${finalName}${extension}`);
     }
 
-    return path.join(folder, `${safeBaseName}-short${clipIndex + 1}${extension}`);
+    const readableSuffix = String(clip?.filenameSuffix || '').trim().replace(/[^\w.-]+/g, '_');
+    const suffixPart = readableSuffix ? `-${readableSuffix}` : '';
+    return path.join(folder, `${safeBaseName}-short${clipIndex + 1}${suffixPart}${extension}`);
 }
 
 // --- PREVIEW & PROCESSING ---

@@ -11,8 +11,16 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'obs-config.json');
 const LIVE_EFFECT_CACHE_DIR = path.join(CONFIG_DIR, 'live-effects-cache');
 const LIVE_EFFECT_VIDEO_INPUT = 'KVE Canli Efekt Video';
 const LIVE_EFFECT_IMAGE_INPUT = 'KVE Canli Efekt Gorsel';
+const LIVE_EFFECT_AUDIO_INPUT = 'KVE Canli Efekt Sesi';
 const LIVE_CHAT_TEXT_INPUT = 'KVE Canli Sohbet';
 const LIVE_CHAT_BG_INPUT = 'KVE Canli Sohbet Arka Plan';
+const LIVE_CAPTION_TEXT_INPUT = 'KVE Canli Altyazi';
+const LIVE_CAPTION_BG_INPUT = 'KVE Canli Altyazi Arka Plan';
+const SCENE_BACKGROUND_IMAGE_INPUT = 'KVE Sahne Arka Plan Gorsel';
+const SCENE_BACKGROUND_VIDEO_INPUT = 'KVE Sahne Arka Plan Video';
+const SCENE_BACKGROUND_DIM_INPUT = 'KVE Sahne Arka Plan Karartma';
+const SCENE_LOGO_INPUT = 'KVE Sahne Logo';
+const LIVE_ROOM_AUDIO_BRIDGE_INPUT = 'KVE Canli Oda Sesi';
 
 function ensureConfigDir() {
     if (!fs.existsSync(CONFIG_DIR)) {
@@ -95,6 +103,14 @@ const VIDEO_QUALITY_PRESETS = {
         streamVideoBitrate: 6000,
         streamAudioBitrate: 160
     },
+    youtube_720: {
+        outputWidth: 1280,
+        outputHeight: 720,
+        fpsNumerator: 30,
+        fpsDenominator: 1,
+        streamVideoBitrate: 6000,
+        streamAudioBitrate: 160
+    },
     balanced_720: {
         outputWidth: 1280,
         outputHeight: 720,
@@ -113,6 +129,8 @@ const VIDEO_QUALITY_PRESETS = {
     }
 };
 
+const STREAM_KEYFRAME_SECONDS = 2;
+
 class OBSController {
     constructor() {
         this.client = null;
@@ -121,8 +139,10 @@ class OBSController {
         this.sceneItems = {};
         this.activeLiveEffectVideoInputName = null;
         this.activeLiveEffectImageInputName = null;
+        this.activeLiveEffectAudioInputName = null;
         this.liveEffectSuppressionState = null;
         this.config = loadConfig();
+        this.inputKindPreferenceCache = new Map();
     }
 
     detectOBS() {
@@ -273,7 +293,10 @@ class OBSController {
         const candidateKinds = process.platform === 'win32'
             ? ['wasapi_process_output_capture', 'application_audio_capture']
             : [];
-        if (candidateKinds.length === 0 || !targetWindowValue) {
+        const targetWindowValues = (Array.isArray(targetWindowValue) ? targetWindowValue : [targetWindowValue])
+            .map((value) => String(value || '').trim())
+            .filter(Boolean);
+        if (candidateKinds.length === 0 || targetWindowValues.length === 0) {
             return null;
         }
 
@@ -287,23 +310,49 @@ class OBSController {
             return null;
         }
 
+        const targetWindowLowerValues = targetWindowValues.map((value) => value.toLowerCase());
         const matchedItem = probe.propertyItems.find((item) => {
             const itemValue = item.itemValue || item.value || '';
-            return itemValue === targetWindowValue;
+            return targetWindowValues.includes(itemValue);
         }) || probe.propertyItems.find((item) => {
             const itemValue = String(item.itemValue || item.value || '').toLowerCase();
-            return itemValue.includes(String(targetWindowValue).toLowerCase());
+            return targetWindowLowerValues.some((target) => itemValue.includes(target) || target.includes(itemValue));
+        }) || probe.propertyItems.find((item) => {
+            const itemName = String(item.itemName || item.name || '').toLowerCase();
+            return targetWindowLowerValues.some((target) => itemName.includes(target) || target.includes(itemName));
         });
 
         if (!matchedItem) {
+            console.warn(`Window audio capture target not found. targets=${JSON.stringify(targetWindowValues)} available=${JSON.stringify(probe.propertyItems.map((item) => ({
+                name: item.itemName || item.name || '',
+                value: item.itemValue || item.value || ''
+            })).slice(0, 20))}`);
             return null;
         }
 
         const windowValue = matchedItem.itemValue || matchedItem.value;
         const inputName = 'KVE Pencere Sesi';
         const result = await this._ensureInput(sceneName, inputName, probe.inputKind, {
-            window: windowValue
+            window: windowValue,
+            priority: 2,
+            method: 2
         }, true);
+
+        try {
+            await this._call('SetInputSettings', {
+                inputName,
+                inputSettings: {
+                    window: windowValue,
+                    priority: 2,
+                    method: 2
+                },
+                overlay: true
+            });
+        } catch (e) { }
+
+        try {
+            await this._call('SetInputMute', { inputName, inputMuted: false });
+        } catch (e) { }
 
         return result ? {
             ...result,
@@ -489,17 +538,83 @@ class OBSController {
         }
     }
 
+    async _removeInputsByPrefixExcept(prefix, exceptInputName) {
+        if (!prefix) return;
+        const protectedName = String(exceptInputName || '').trim();
+        try {
+            const inputList = await this._call('GetInputList');
+            const inputs = inputList.inputs || inputList || [];
+            for (const input of inputs) {
+                const inputName = input.inputName || input.name;
+                if (inputName && inputName.startsWith(prefix) && inputName !== protectedName) {
+                    await this._removeInput(inputName);
+                }
+            }
+        } catch (error) {
+            console.warn(`Could not remove stale inputs by prefix "${prefix}":`, error.message);
+        }
+    }
+
+    async _setInputMonitoringByPrefix(prefix, monitorType = 'OBS_MONITORING_TYPE_NONE') {
+        if (!prefix) return;
+        try {
+            const inputList = await this._call('GetInputList');
+            const inputs = inputList.inputs || inputList || [];
+            for (const input of inputs) {
+                const inputName = input.inputName || input.name;
+                if (inputName && inputName.startsWith(prefix)) {
+                    await this.setInputMonitoring({ inputName, monitorType }).catch(() => {});
+                }
+            }
+        } catch (error) {
+            console.warn(`Could not update monitoring by prefix "${prefix}":`, error.message);
+        }
+    }
+
+    _isOwnAppWindowName(windowName) {
+        const normalizedName = String(windowName || '').trim().toLowerCase();
+        if (!normalizedName) return false;
+
+        return [
+            'korculvideoeditor',
+            'erişilebilir video kayıt sihirbazı',
+            'erisilebilir video kayit sihirbazi',
+            'erişilebilir kayıt sihirbazı',
+            'erisilebilir kayit sihirbazi',
+            'accessible recording wizard'
+        ].some((term) => normalizedName.includes(term));
+    }
+
     async _resolveWindowCaptureValue(inputName, requestedWindowTitle) {
         const normalize = (str) => (str || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
         try {
+            console.log(`[OBS] Resolving window capture for "${inputName}" requested="${requestedWindowTitle || ''}"`);
             const props = await this._call('GetInputPropertiesListPropertyItems', {
                 inputName,
                 propertyName: 'window'
             });
             const windows = props.propertyItems || [];
             const requestedTitle = normalize(requestedWindowTitle);
-            const candidates = windows.filter((item) => item.itemEnabled !== false && (item.itemValue || item.value));
+            const isStrictWindowTitleRequest = /\bevd\b/.test(requestedTitle)
+                && (
+                    requestedTitle.includes('yayın çıkışı')
+                    || requestedTitle.includes('yayin cikisi')
+                    || requestedTitle.includes('broadcast output')
+                    || requestedTitle.includes('broadcast room output')
+                    || requestedTitle.includes('sortie de diffusion')
+                    || requestedTitle.includes('salida de emisión')
+                    || requestedTitle.includes('sendeausgabe')
+                );
+            const candidates = windows.filter((item) => {
+                if (item.itemEnabled === false || !(item.itemValue || item.value)) {
+                    return false;
+                }
+
+                const candidateName = item.itemName || item.name || '';
+                const candidateValue = item.itemValue || item.value || '';
+                return !this._isOwnAppWindowName(candidateName) && !this._isOwnAppWindowName(candidateValue);
+            });
 
             let match = candidates.find((item) => item.itemValue === requestedWindowTitle || item.itemName === requestedWindowTitle);
             if (!match && requestedTitle) {
@@ -512,7 +627,7 @@ class OBSController {
                         || requestedTitle.includes(candidateName);
                 });
             }
-            if (!match && requestedTitle) {
+            if (!match && requestedTitle && !isStrictWindowTitleRequest) {
                 const requestedWords = requestedTitle.split(' ').filter((word) => word.length > 3);
                 if (requestedWords.length > 0) {
                     match = candidates.find((item) => {
@@ -521,12 +636,13 @@ class OBSController {
                     });
                 }
             }
-            if (!match && candidates.length > 0) {
+            if (!match && !requestedTitle && candidates.length > 0) {
                 match = candidates[0];
             }
             if (!match) return requestedWindowTitle;
 
             const resolvedWindowId = match.itemValue || match.value;
+            console.log(`[OBS] Window capture resolved for "${inputName}" requested="${requestedWindowTitle || ''}" resolved="${resolvedWindowId || ''}" matchedName="${match.itemName || match.name || ''}"`);
             await this._call('SetInputSettings', {
                 inputName,
                 inputSettings: {
@@ -602,7 +718,7 @@ class OBSController {
     async _ensureInput(sceneName, inputName, inputKind, inputSettings, forceRecreate = false) {
         const inputList = await this._call('GetInputList');
         const inputs = inputList.inputs || inputList;
-        const exists = inputs.find(i => i.inputName === inputName || i.name === inputName);
+        let exists = inputs.find(i => i.inputName === inputName || i.name === inputName);
 
         if (exists && forceRecreate) {
             // Remove existing input to force fresh creation with correct settings
@@ -622,9 +738,16 @@ class OBSController {
             await this._removeInput(inputName);
             // Small delay to let OBS process the removal
             await new Promise(r => setTimeout(r, 300));
+            try {
+                const refreshedInputList = await this._call('GetInputList');
+                const refreshedInputs = refreshedInputList.inputs || refreshedInputList;
+                exists = refreshedInputs.find(i => i.inputName === inputName || i.name === inputName);
+            } catch (_refreshError) {
+                exists = null;
+            }
         }
 
-        const shouldCreate = !exists || forceRecreate;
+        const shouldCreate = !exists;
 
         if (shouldCreate) {
             try {
@@ -690,21 +813,33 @@ class OBSController {
         }
 
         if (!item) {
-            try {
-                await this._call('CreateSceneItem', {
-                    sceneName,
-                    sourceName: inputName,
-                    sceneItemEnabled: true
-                });
-                await new Promise(r => setTimeout(r, 200));
-                item = await findSceneItem();
-            } catch (attachError) { }
+            for (let attempt = 1; attempt <= 4 && !item; attempt += 1) {
+                try {
+                    const latestInputList = await this._call('GetInputList');
+                    const latestInputs = latestInputList.inputs || latestInputList || [];
+                    const sourceExists = latestInputs.some(i => i.inputName === inputName || i.name === inputName);
+                    if (!sourceExists) {
+                        break;
+                    }
+                    await this._call('CreateSceneItem', {
+                        sceneName,
+                        sourceName: inputName,
+                        sceneItemEnabled: true
+                    });
+                    await new Promise(r => setTimeout(r, 150 * attempt));
+                    item = await findSceneItem();
+                } catch (attachError) {
+                    console.warn(`CreateSceneItem attempt ${attempt} failed for "${inputName}":`, attachError.message);
+                    await new Promise(r => setTimeout(r, 150 * attempt));
+                    item = await findSceneItem();
+                }
+            }
         }
 
         if (!item && !forceRecreate) {
             try {
                 await this._removeInput(inputName);
-                await new Promise(r => setTimeout(r, 250));
+                await new Promise(r => setTimeout(r, 700));
                 return await this._ensureInput(sceneName, inputName, inputKind, inputSettings, true);
             } catch (recreateError) { }
         }
@@ -720,12 +855,17 @@ class OBSController {
     }
 
     async _ensureInputWithKinds(sceneName, inputName, inputKinds, inputSettings, forceRecreate = false) {
-        const kinds = Array.isArray(inputKinds) ? inputKinds.filter(Boolean) : [inputKinds].filter(Boolean);
+        const rawKinds = Array.isArray(inputKinds) ? inputKinds.filter(Boolean) : [inputKinds].filter(Boolean);
+        const preferredKind = this.inputKindPreferenceCache.get(inputName);
+        const kinds = preferredKind
+            ? [preferredKind, ...rawKinds.filter((kind) => kind !== preferredKind)]
+            : rawKinds;
         let lastResult = null;
         for (const kind of kinds) {
             const result = await this._ensureInput(sceneName, inputName, kind, inputSettings, forceRecreate);
             lastResult = { ...result, inputKind: kind };
             if (result && result.sceneItemId) {
+                this.inputKindPreferenceCache.set(inputName, kind);
                 return lastResult;
             }
         }
@@ -751,6 +891,11 @@ class OBSController {
         }
     }
 
+    async setSceneItemEnabled({ sceneName, sceneItemId, enabled }) {
+        await this._setSceneItemEnabled({ sceneName, sceneItemId, enabled });
+        return { sceneItemId, enabled: !!enabled };
+    }
+
     async _setSceneItemIndex({ sceneName, sceneItemId, sceneItemIndex }) {
         if (!sceneName || !sceneItemId || !Number.isFinite(sceneItemIndex)) return;
         try {
@@ -770,8 +915,48 @@ class OBSController {
         }
     }
 
-    _buildLiveChatOverlayText(messages = [], maxMessages = 6) {
-        return (Array.isArray(messages) ? messages : [])
+    _wrapLiveChatOverlayLine(text, maxLineChars) {
+        const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+        const limit = Math.max(18, Number(maxLineChars) || 36);
+        if (normalized.length <= limit) {
+            return [normalized || '-'];
+        }
+
+        const lines = [];
+        let current = '';
+        normalized.split(' ').forEach((word) => {
+            const nextWord = String(word || '').trim();
+            if (!nextWord) return;
+            if (nextWord.length > limit) {
+                if (current) {
+                    lines.push(current);
+                    current = '';
+                }
+                for (let index = 0; index < nextWord.length; index += limit) {
+                    lines.push(nextWord.slice(index, index + limit));
+                }
+                return;
+            }
+            const candidate = current ? `${current} ${nextWord}` : nextWord;
+            if (candidate.length > limit && current) {
+                lines.push(current);
+                current = nextWord;
+            } else {
+                current = candidate;
+            }
+        });
+        if (current) {
+            lines.push(current);
+        }
+        return lines.length > 0 ? lines : ['-'];
+    }
+
+    _buildLiveChatOverlayText(messages = [], options = {}) {
+        const maxMessages = Math.max(1, Number(options.maxMessages) || 5);
+        const maxLineChars = Math.max(24, Number(options.maxLineChars) || 38);
+        const maxLinesPerMessage = Math.max(1, Number(options.maxLinesPerMessage) || 3);
+        const maxTotalLines = Math.max(3, Number(options.maxTotalLines) || maxMessages * maxLinesPerMessage);
+        const messageBlocks = (Array.isArray(messages) ? messages : [])
             .slice(-maxMessages)
             .map((message) => {
                 const author = String(message.authorDisplayName || message.author || '-').trim();
@@ -780,9 +965,27 @@ class OBSController {
                     .replace(/\r/g, '\n')
                     .replace(/\n+/g, ' ')
                     .trim();
-                return `${author}: ${text || '-'}`;
-            })
-            .join('\n\n');
+                const lines = this._wrapLiveChatOverlayLine(`${author}: ${text || '-'}`, maxLineChars);
+                if (lines.length <= maxLinesPerMessage) {
+                    return lines.join('\n');
+                }
+                return `${lines.slice(0, maxLinesPerMessage).join('\n')}...`;
+            });
+
+        const selectedBlocks = [];
+        let usedLines = 0;
+        for (let index = messageBlocks.length - 1; index >= 0; index -= 1) {
+            const block = messageBlocks[index];
+            const blockLines = block.split('\n').length;
+            const separatorLines = selectedBlocks.length > 0 ? 1 : 0;
+            if (selectedBlocks.length > 0 && usedLines + separatorLines + blockLines > maxTotalLines) {
+                break;
+            }
+            selectedBlocks.unshift(block);
+            usedLines += separatorLines + blockLines;
+        }
+
+        return selectedBlocks.join('\n\n');
     }
 
     async setRecordingFormat(format) {
@@ -916,26 +1119,39 @@ class OBSController {
         }
 
         if (mode === 'broadcast') {
-            try {
-                await this._call('SetProfileParameter', {
-                    parameterCategory: 'SimpleOutput',
-                    parameterName: 'VBitrate',
-                    parameterValue: String(config.streamVideoBitrate)
-                });
-                await this._call('SetProfileParameter', {
-                    parameterCategory: 'SimpleOutput',
-                    parameterName: 'ABitrate',
-                    parameterValue: String(config.streamAudioBitrate)
-                });
-            } catch (error) {
-                console.warn('[OBS] Stream bitrate preset apply failed:', error.message);
-            }
+            const setProfileParameter = async (parameterCategory, parameterName, parameterValue) => {
+                try {
+                    await this._call('SetProfileParameter', {
+                        parameterCategory,
+                        parameterName,
+                        parameterValue: String(parameterValue)
+                    });
+                    return true;
+                } catch (error) {
+                    console.warn(`[OBS] Stream preset parameter failed: ${parameterCategory}.${parameterName}:`, error.message);
+                    return false;
+                }
+            };
+
+            await setProfileParameter('SimpleOutput', 'VBitrate', config.streamVideoBitrate);
+            await setProfileParameter('SimpleOutput', 'ABitrate', config.streamAudioBitrate);
+            await setProfileParameter('SimpleOutput', 'KeyframeIntervalSec', STREAM_KEYFRAME_SECONDS);
+            await setProfileParameter('SimpleOutput', 'KeyframeInterval', STREAM_KEYFRAME_SECONDS);
+            await setProfileParameter('AdvOut', 'KeyframeIntervalSec', STREAM_KEYFRAME_SECONDS);
+            await setProfileParameter('AdvOut', 'FFVGOPSize', config.fpsNumerator * STREAM_KEYFRAME_SECONDS);
         }
 
         return {
             applied: true,
             preset,
-            settings: nextSettings
+            settings: nextSettings,
+            stream: mode === 'broadcast'
+                ? {
+                    videoBitrate: config.streamVideoBitrate,
+                    audioBitrate: config.streamAudioBitrate,
+                    keyframeIntervalSec: STREAM_KEYFRAME_SECONDS
+                }
+                : null
         };
     }
 
@@ -1005,9 +1221,11 @@ class OBSController {
             includeSystemAudio = false,
             systemAudioMode = 'system',
             systemAudioWindowTarget = '',
+            allowSystemAudioFallback = true,
             cameraDeviceId,
             micDeviceId,
-            systemDeviceId
+            systemDeviceId,
+            preferExplicitMicSource = false
         } = params || {};
 
         await this.ensureScene(sceneName);
@@ -1036,6 +1254,7 @@ class OBSController {
                 const requestedWindow = requestedWindows[index];
                 const inputName = `KVE Pencere ${index + 1}`;
                 console.log(`Step 2.${index + 1}: Creating window source ${inputName}`);
+                console.log(`[OBS] Requested window ${index + 1}: "${requestedWindow}"`);
 
                 try {
                     await this._call('CreateInput', {
@@ -1217,26 +1436,31 @@ class OBSController {
 
         console.log('========== SCREEN SOURCE SETUP END ==========');
 
-        // For camera: OBS dshow_input needs video_device_id in OBS format, not browser format
-        // Browser device IDs are NOT compatible with OBS DirectShow IDs
-        // Kullanıcının seçtiği kamerayı label eşleştirmesiyle buluyoruz
+        // For camera: OBS dshow_input needs video_device_id in OBS format, not browser format.
+        // Probe with a temporary source first, then create the real source with the selected device
+        // so OBS does not keep a half-initialized DirectShow source around.
         let cameraResult = null;
         if (includeCamera) {
-            const camSettings = {};
-            cameraResult = await this._ensureInput(sceneName, 'KVE Kamera', kinds.camera, camSettings, true);
-
-            // Kamera oluşturulduktan sonra, kullanıcının seçtiği cihazı ayarla
+            let targetDevice = null;
+            const cameraProbeInputName = 'KVE Kamera Probe';
             try {
+                await this._removeInput(cameraProbeInputName);
+                await this._call('CreateInput', {
+                    sceneName,
+                    inputName: cameraProbeInputName,
+                    inputKind: kinds.camera,
+                    inputSettings: {},
+                    sceneItemEnabled: false
+                });
+                await new Promise(r => setTimeout(r, 250));
                 const props = await this._call('GetInputPropertiesListPropertyItems', {
-                    inputName: 'KVE Kamera',
+                    inputName: cameraProbeInputName,
                     propertyName: 'video_device_id'
                 });
                 const devices = props.propertyItems || [];
                 console.log('Available OBS camera devices:', JSON.stringify(devices));
 
                 if (devices.length > 0) {
-                    let targetDevice = null;
-
                     // Kullanıcının seçtiği kamera label'ını kullanarak eşleştir
                     const camLabel = params.cameraLabel || '';
 
@@ -1263,22 +1487,31 @@ class OBSController {
                         // Eşleşme bulunamazsa, varsayılan olmayan ilk cihazı kullan
                         targetDevice = devices.find(d => d.itemValue !== 'default') || devices[0];
                     }
-
-                    if (targetDevice) {
-                        await this._call('SetInputSettings', {
-                            inputName: 'KVE Kamera',
-                            inputSettings: {
-                                video_device_id: targetDevice.itemValue || targetDevice.value,
-                                active: true
-                            },
-                            overlay: true
-                        });
-                        console.log(`Camera device set to: ${targetDevice.itemName} (${targetDevice.itemValue})`);
-                    }
                 }
             } catch (propErr) {
                 console.log('Could not query camera properties:', propErr.message);
+            } finally {
+                try { await this._removeInput(cameraProbeInputName); } catch (e) { }
+                await new Promise(r => setTimeout(r, 250));
             }
+
+            const selectedCameraDeviceId = targetDevice ? (targetDevice.itemValue || targetDevice.value) : '';
+            const camSettings = selectedCameraDeviceId
+                ? { video_device_id: selectedCameraDeviceId, active: true }
+                : { active: true };
+            try {
+                await this._removeInput('KVE Kamera');
+            } catch (e) { }
+            await new Promise(r => setTimeout(r, 250));
+            cameraResult = await this._ensureInput(sceneName, 'KVE Kamera', kinds.camera, camSettings, true);
+            if (targetDevice) {
+                console.log(`Camera device set at create time: ${targetDevice.itemName} (${selectedCameraDeviceId})`);
+            }
+        } else {
+            try {
+                await this._removeInput('KVE Kamera');
+                await this._removeInput('KVE Kamera Probe');
+            } catch (e) { }
         }
 
         // Aggressively mute ALL potential desktop audio sources first
@@ -1321,7 +1554,8 @@ class OBSController {
             else if (specials.desktop2) desktopInputName = specials.desktop2;
 
             if (desktopInputName) {
-                if (includeSystemAudio) {
+                const shouldUseDesktopSystemAudio = includeSystemAudio && systemAudioMode !== 'window';
+                if (shouldUseDesktopSystemAudio) {
                     console.log(`Unmuting System Audio: ${desktopInputName}`);
                     await this._call('SetInputMute', { inputName: desktopInputName, inputMuted: false });
                 } else {
@@ -1351,8 +1585,11 @@ class OBSController {
             console.warn('GetSpecialInputs failed:', e.message);
         }
 
-        // Eski ayrı 'KVE Mikrofon' kaynağını kaldır — artık varsayılan Mic/Aux kullanıyoruz
-        try { await this._removeInput('KVE Mikrofon'); } catch (e) { }
+        // Eski ayrı 'KVE Mikrofon' kaynağını kaldır — normal akışta varsayılan Mic/Aux kullanıyoruz.
+        // Yayın odası gibi tarayıcı/OBS köprülü akışlarda ise açık sahne kaynağı daha güvenilir.
+        if (!preferExplicitMicSource) {
+            try { await this._removeInput('KVE Mikrofon'); } catch (e) { }
+        }
 
         // Mikrofon: Varsayılan Mic/Aux girişini doğrudan kontrol et
         // Bu yaklaşım daha güvenilir çünkü:
@@ -1360,7 +1597,89 @@ class OBSController {
         // 2. Ayrı kaynak oluşturmak çift ses kaydına yol açıyordu
         // 3. Ses düzeyi ve izleme değişiklikleri doğrudan etkili olur
         let micInputName = null;
-        if (includeMic && defaultMicInputName) {
+        if (includeMic && preferExplicitMicSource) {
+            console.log('Using explicit KVE Mikrofon source for this OBS scene.');
+            if (defaultMicInputName) {
+                try {
+                    await this._call('SetInputMute', { inputName: defaultMicInputName, inputMuted: true });
+                    console.log(`Default Mic/Aux muted while explicit mic source is active: ${defaultMicInputName}`);
+                } catch (e) {
+                    console.warn('Default Mic/Aux mute failed:', e.message);
+                }
+            }
+
+            let micSettings = {};
+            const micProbeInputName = 'KVE Mikrofon Probe';
+            const shouldUseDefaultMicDevice = !micDeviceId || micDeviceId === 'default';
+            if (shouldUseDefaultMicDevice) {
+                micSettings = { device_id: 'default' };
+                console.log('Explicit mic device selected: OBS default input.');
+            }
+            try {
+                await this._removeInput(micProbeInputName);
+                await this._call('CreateInput', {
+                    sceneName,
+                    inputName: micProbeInputName,
+                    inputKind: kinds.mic,
+                    inputSettings: {},
+                    sceneItemEnabled: false
+                });
+                await new Promise(r => setTimeout(r, 200));
+                const micProps = await this._call('GetInputPropertiesListPropertyItems', {
+                    inputName: micProbeInputName,
+                    propertyName: 'device_id'
+                });
+                const micDevices = micProps.propertyItems || [];
+                console.log('Available OBS mic devices for explicit source:', JSON.stringify(micDevices));
+
+                if (!shouldUseDefaultMicDevice && micDevices.length > 0) {
+                    let micMatch = null;
+                    const micLabel = params.micLabel || '';
+
+                    if (micLabel) {
+                        const normalizedLabel = micLabel.toLowerCase().trim();
+                        micMatch = micDevices.find(d => {
+                            const devName = (d.itemName || '').toLowerCase().trim();
+                            return devName.includes(normalizedLabel) || normalizedLabel.includes(devName);
+                        });
+                    }
+
+                    if (!micMatch && micDeviceId && micDeviceId !== 'default') {
+                        const browserId = micDeviceId.toLowerCase();
+                        micMatch = micDevices.find(d => {
+                            const devVal = (d.itemValue || '').toLowerCase();
+                            const devName = (d.itemName || '').toLowerCase();
+                            return devVal.includes(browserId) || browserId.includes(devVal) ||
+                                devName.includes(browserId) || browserId.includes(devName);
+                        });
+                    }
+
+                    if (micMatch) {
+                        micSettings = { device_id: micMatch.itemValue || micMatch.value };
+                        console.log(`Explicit mic device selected: ${micMatch.itemName} (${micSettings.device_id})`);
+                    } else {
+                        micSettings = { device_id: 'default' };
+                        console.log(`No explicit OBS mic match found for: ${micLabel || micDeviceId}. Falling back to OBS default input.`);
+                    }
+                }
+            } catch (micPropErr) {
+                console.log('Could not query explicit mic properties:', micPropErr.message);
+            } finally {
+                try { await this._removeInput(micProbeInputName); } catch (e) { }
+                await new Promise(r => setTimeout(r, 200));
+            }
+
+            const micResult = await this._ensureInput(sceneName, 'KVE Mikrofon', kinds.mic, micSettings, false);
+            if (micResult) {
+                micInputName = micResult.inputName || 'KVE Mikrofon';
+                try {
+                    await this._call('SetInputMute', { inputName: micInputName, inputMuted: false });
+                    console.log(`Explicit mic unmuted: ${micInputName}`);
+                } catch (e) {
+                    console.warn('Explicit mic unmute failed:', e.message);
+                }
+            }
+        } else if (includeMic && defaultMicInputName) {
             micInputName = defaultMicInputName;
 
             // Mikrofonu aktifleştir (unmute)
@@ -1372,7 +1691,18 @@ class OBSController {
             }
 
             // Kullanıcının seçtiği mikrofon cihazını ayarla
-            if (micDeviceId && micDeviceId !== 'default') {
+            if (!micDeviceId || micDeviceId === 'default') {
+                try {
+                    await this._call('SetInputSettings', {
+                        inputName: micInputName,
+                        inputSettings: { device_id: 'default' },
+                        overlay: true
+                    });
+                    console.log('Default Mic/Aux device reset to OBS default input.');
+                } catch (defaultMicErr) {
+                    console.log('Could not reset default Mic/Aux device:', defaultMicErr.message);
+                }
+            } else if (micDeviceId && micDeviceId !== 'default') {
                 try {
                     // OBS'nin varsayılan Mic/Aux girişinin cihaz listesini sorgula
                     const micProps = await this._call('GetInputPropertiesListPropertyItems', {
@@ -1431,12 +1761,24 @@ class OBSController {
 
         let systemResult = null;
         try { await this._removeInput('KVE Sistem Sesi'); } catch (e) { }
-        if (!(includeSystemAudio && systemAudioMode === 'window')) {
-            try { await this._removeInput('KVE Pencere Sesi'); } catch (e) { }
-        }
+        try { await this._removeInput('KVE Pencere Sesi'); } catch (e) { }
 
-        if (includeSystemAudio && systemAudioMode === 'window' && systemAudioWindowTarget) {
-            const appAudioResult = await this._createWindowAudioCapture(sceneName, systemAudioWindowTarget);
+        const windowAudioTargets = [
+            systemAudioWindowTarget,
+            ...windowResults
+                .filter((entry) => {
+                    if (!systemAudioWindowTarget) return true;
+                    const requested = String(systemAudioWindowTarget || '').toLowerCase();
+                    return String(entry.name || '').toLowerCase().includes(requested)
+                        || requested.includes(String(entry.name || '').toLowerCase())
+                        || String(entry.windowId || '').toLowerCase().includes(requested)
+                        || requested.includes(String(entry.windowId || '').toLowerCase());
+                })
+                .flatMap((entry) => [entry.windowId, entry.name])
+        ].filter(Boolean);
+
+        if (includeSystemAudio && systemAudioMode === 'window' && windowAudioTargets.length > 0) {
+            const appAudioResult = await this._createWindowAudioCapture(sceneName, windowAudioTargets);
             if (appAudioResult) {
                 systemResult = { inputName: appAudioResult.inputName, mode: 'window' };
                 if (desktopInputName) {
@@ -1447,8 +1789,45 @@ class OBSController {
             }
         }
 
-        if (!systemResult && includeSystemAudio && desktopInputName) {
+        if (!systemResult && desktopInputName && systemAudioMode === 'window') {
+            try {
+                await this._call('SetInputMute', { inputName: desktopInputName, inputMuted: true });
+                console.log(`Desktop audio kept muted because window audio capture was requested: ${desktopInputName}`);
+            } catch (e) { }
+        }
+
+        if (!systemResult && includeSystemAudio && desktopInputName && (systemAudioMode !== 'window' || allowSystemAudioFallback !== false)) {
             systemResult = { inputName: desktopInputName, mode: 'system' };
+            try {
+                await this._call('SetInputMute', { inputName: desktopInputName, inputMuted: false });
+                console.log(`System audio ensured unmuted: ${desktopInputName}`);
+            } catch (e) {
+                console.warn('System audio final unmute failed:', e.message);
+            }
+        }
+
+        if (!systemResult && includeSystemAudio && (systemAudioMode !== 'window' || allowSystemAudioFallback !== false)) {
+            const systemSettings = {};
+            if (systemDeviceId && systemDeviceId !== 'default') {
+                systemSettings.device_id = systemDeviceId;
+            }
+            const fallbackSystem = await this._ensureInput(sceneName, 'KVE Sistem Sesi', kinds.system, systemSettings, true);
+            if (fallbackSystem) {
+                systemResult = { inputName: fallbackSystem.inputName, mode: 'system' };
+                try {
+                    await this._call('SetInputMute', { inputName: fallbackSystem.inputName, inputMuted: false });
+                    console.log(`Fallback system audio ensured unmuted: ${fallbackSystem.inputName}`);
+                } catch (e) {
+                    console.warn('Fallback system audio unmute failed:', e.message);
+                }
+            }
+        }
+
+        if ((!systemResult || systemResult.mode !== 'system') && desktopInputName) {
+            try {
+                await this._call('SetInputMute', { inputName: desktopInputName, inputMuted: true });
+                console.log(`Desktop audio muted after setup: ${desktopInputName}`);
+            } catch (e) { }
         }
 
         // Arrange scene items: screen at bottom, camera at top-right
@@ -1546,6 +1925,7 @@ class OBSController {
             screenItemId: screenResult.sceneItemId,
             screenInputName: screenResult.inputName,
             cameraItemId: cameraResult ? cameraResult.sceneItemId : null,
+            cameraInputName: cameraResult ? cameraResult.inputName : null,
             micInputName: micInputName || null,
             systemInputName: systemResult ? systemResult.inputName : null,
             systemAudioModeApplied: systemResult ? systemResult.mode : null,
@@ -1888,6 +2268,8 @@ class OBSController {
         await this.ensureScene(sceneName);
         await this._removeInputsByPrefix(LIVE_EFFECT_IMAGE_INPUT);
         this.activeLiveEffectImageInputName = null;
+        await this._removeInputsByPrefix(LIVE_EFFECT_AUDIO_INPUT);
+        this.activeLiveEffectAudioInputName = null;
         await this._removeInputsByPrefix(LIVE_EFFECT_VIDEO_INPUT);
         this.activeLiveEffectVideoInputName = `${LIVE_EFFECT_VIDEO_INPUT} ${Date.now()}`;
         const liveEffectInputName = this.activeLiveEffectVideoInputName;
@@ -1986,7 +2368,7 @@ class OBSController {
         }
 
         try {
-            await this.setInputMute({ inputName: liveEffectInputName, muted: true });
+            await this.setInputMute({ inputName: liveEffectInputName, muted: false });
         } catch (e) { }
 
         try {
@@ -1996,6 +2378,58 @@ class OBSController {
         return {
             inputName: liveEffectInputName,
             sceneItemId: mediaResult.sceneItemId
+        };
+    }
+
+    async showLiveEffectAudio({ sceneName = 'KVE Kayıt', sourcePath, volumePercent = 100, loop = false, restart = true } = {}) {
+        if (!sourcePath) throw new Error('sourcePath required');
+        await this.ensureScene(sceneName);
+        await this._removeInputsByPrefix(LIVE_EFFECT_AUDIO_INPUT);
+        this.activeLiveEffectAudioInputName = `${LIVE_EFFECT_AUDIO_INPUT} ${Date.now()}`;
+        const inputName = this.activeLiveEffectAudioInputName;
+
+        await this._ensureInput(
+            sceneName,
+            inputName,
+            'ffmpeg_source',
+            {
+                is_local_file: true,
+                local_file: sourcePath,
+                looping: !!loop,
+                restart_on_activate: true,
+                close_when_inactive: false,
+                clear_on_media_end: true
+            },
+            false
+        );
+
+        try {
+            await this.setInputMute({ inputName, muted: false });
+        } catch (_error) { }
+
+        try {
+            await this.setInputVolume({ inputName, volumePercent });
+        } catch (_error) { }
+
+        if (restart) {
+            try {
+                await this._call('TriggerMediaInputAction', {
+                    inputName,
+                    mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
+                });
+            } catch (_error) {
+                try {
+                    await this._call('PressInputPropertiesButton', {
+                        inputName,
+                        propertyName: 'restart'
+                    });
+                } catch (_fallbackError) { }
+            }
+        }
+
+        return {
+            inputName,
+            sceneItemId: null
         };
     }
 
@@ -2066,6 +2500,189 @@ class OBSController {
         };
     }
 
+    async applySceneBackground({
+        sceneName = 'KVE Kayıt',
+        type = 'none',
+        sourcePath = '',
+        visible = true,
+        fitMode = 'cover',
+        dimPercent = 0,
+        logoPath = '',
+        logoPosition = 'top-right',
+        logoSize = 'medium'
+    } = {}) {
+        await this.ensureScene(sceneName, { activate: false });
+        const normalizedType = String(type || 'none').toLowerCase();
+        const safeDimPercent = Math.max(0, Math.min(80, Math.round(Number(dimPercent) || 0)));
+
+        if (normalizedType === 'none' || !sourcePath) {
+            await this._removeInputsByPrefix(SCENE_BACKGROUND_IMAGE_INPUT);
+            await this._removeInputsByPrefix(SCENE_BACKGROUND_VIDEO_INPUT);
+            await this._removeInputsByPrefix(SCENE_BACKGROUND_DIM_INPUT);
+            if (!logoPath) {
+                await this._removeInputsByPrefix(SCENE_LOGO_INPUT);
+            }
+            return { inputName: null, sceneItemId: null, type: 'none' };
+        }
+
+        const isVideo = normalizedType === 'video';
+        const inputName = isVideo ? SCENE_BACKGROUND_VIDEO_INPUT : SCENE_BACKGROUND_IMAGE_INPUT;
+        const otherInputName = isVideo ? SCENE_BACKGROUND_IMAGE_INPUT : SCENE_BACKGROUND_VIDEO_INPUT;
+        await this._removeInputsByPrefix(otherInputName);
+
+        const inputSettings = isVideo
+            ? {
+                is_local_file: true,
+                local_file: sourcePath,
+                looping: true,
+                restart_on_activate: true,
+                close_when_inactive: false,
+                clear_on_media_end: false
+            }
+            : { file: sourcePath };
+
+        const result = await this._ensureInput(
+            sceneName,
+            inputName,
+            isVideo ? 'ffmpeg_source' : 'image_source',
+            inputSettings,
+            false
+        );
+
+        const videoSettings = await this.getVideoSettings();
+        const baseWidth = videoSettings.baseWidth || 1920;
+        const baseHeight = videoSettings.baseHeight || 1080;
+
+        if (result.sceneItemId) {
+            await this._setSceneItemEnabled({
+                sceneName,
+                sceneItemId: result.sceneItemId,
+                enabled: !!visible
+            });
+            await this.setSceneItemTransform({
+                sceneName,
+                sceneItemId: result.sceneItemId,
+                transform: {
+                    positionX: 0,
+                    positionY: 0,
+                    boundsType: fitMode === 'contain'
+                        ? 'OBS_BOUNDS_SCALE_INNER'
+                        : fitMode === 'stretch'
+                            ? 'OBS_BOUNDS_STRETCH'
+                            : 'OBS_BOUNDS_SCALE_OUTER',
+                    boundsWidth: baseWidth,
+                    boundsHeight: baseHeight,
+                    alignment: 5
+                }
+            });
+            await this._setSceneItemIndex({
+                sceneName,
+                sceneItemId: result.sceneItemId,
+                sceneItemIndex: 0
+            });
+        }
+
+        if (isVideo) {
+            try {
+                await this.setInputMute({ inputName, muted: true });
+            } catch (_error) { }
+            try {
+                await this._call('TriggerMediaInputAction', {
+                    inputName,
+                    mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
+                });
+            } catch (_error) { }
+        }
+
+        let dimResult = { sceneItemId: null };
+        if (safeDimPercent > 0) {
+            const alpha = Math.round((safeDimPercent / 100) * 255);
+            const color = ((alpha & 0xFF) << 24) >>> 0;
+            dimResult = await this._ensureInput(
+                sceneName,
+                SCENE_BACKGROUND_DIM_INPUT,
+                'color_source_v3',
+                {
+                    color,
+                    width: baseWidth,
+                    height: baseHeight
+                },
+                false
+            );
+            if (dimResult.sceneItemId) {
+                await this._setSceneItemEnabled({ sceneName, sceneItemId: dimResult.sceneItemId, enabled: !!visible });
+                await this.setSceneItemTransform({
+                    sceneName,
+                    sceneItemId: dimResult.sceneItemId,
+                    transform: {
+                        positionX: 0,
+                        positionY: 0,
+                        boundsType: 'OBS_BOUNDS_STRETCH',
+                        boundsWidth: baseWidth,
+                        boundsHeight: baseHeight,
+                        alignment: 5
+                    }
+                });
+                await this._setSceneItemIndex({ sceneName, sceneItemId: dimResult.sceneItemId, sceneItemIndex: 1 });
+            }
+        } else {
+            await this._removeInputsByPrefix(SCENE_BACKGROUND_DIM_INPUT);
+        }
+
+        let logoResult = { sceneItemId: null };
+        if (logoPath) {
+            logoResult = await this._ensureInput(
+                sceneName,
+                SCENE_LOGO_INPUT,
+                'image_source',
+                { file: logoPath },
+                false
+            );
+            if (logoResult.sceneItemId) {
+                const scaleMap = { small: 0.10, medium: 0.16, large: 0.24 };
+                const logoWidth = Math.round(baseWidth * (scaleMap[logoSize] || scaleMap.medium));
+                const logoHeight = Math.round(baseHeight * 0.18);
+                const margin = Math.max(20, Math.round(baseWidth * 0.02));
+                const pos = String(logoPosition || 'top-right');
+                const x = pos.includes('right') ? baseWidth - logoWidth - margin : margin;
+                const y = pos.includes('bottom') ? baseHeight - logoHeight - margin : margin;
+
+                await this._setSceneItemEnabled({ sceneName, sceneItemId: logoResult.sceneItemId, enabled: !!visible });
+                await this.setSceneItemTransform({
+                    sceneName,
+                    sceneItemId: logoResult.sceneItemId,
+                    transform: {
+                        positionX: x,
+                        positionY: y,
+                        boundsType: 'OBS_BOUNDS_SCALE_INNER',
+                        boundsWidth: logoWidth,
+                        boundsHeight: logoHeight,
+                        alignment: 5
+                    }
+                });
+                try {
+                    const itemsResponse = await this._call('GetSceneItemList', { sceneName });
+                    const items = itemsResponse.sceneItems || itemsResponse.items || [];
+                    const maxIndex = items.reduce((highest, item) => {
+                        const nextIndex = item.sceneItemIndex !== undefined ? item.sceneItemIndex : item.index;
+                        return Math.max(highest, Number.isFinite(nextIndex) ? nextIndex : 0);
+                    }, 0);
+                    await this._setSceneItemIndex({ sceneName, sceneItemId: logoResult.sceneItemId, sceneItemIndex: maxIndex });
+                } catch (_error) { }
+            }
+        } else {
+            await this._removeInputsByPrefix(SCENE_LOGO_INPUT);
+        }
+
+        return {
+            inputName,
+            sceneItemId: result.sceneItemId,
+            dimSceneItemId: dimResult.sceneItemId || null,
+            logoSceneItemId: logoResult.sceneItemId || null,
+            type: isVideo ? 'video' : 'image'
+        };
+    }
+
     async updateLiveChatOverlay({ sceneName = 'KVE Kayıt', messages = [], visible = true } = {}) {
         await this.ensureScene(sceneName, { activate: false });
 
@@ -2076,8 +2693,19 @@ class OBSController {
         const overlayHeight = Math.max(240, Math.round(baseHeight * 0.4));
         const margin = Math.max(20, Math.round(baseWidth * 0.015));
         const padding = Math.max(16, Math.round(baseWidth * 0.01));
+        const fontSize = Math.max(22, Math.round(baseHeight * 0.022));
+        const textWidth = Math.max(280, overlayWidth - padding * 2);
+        const textHeight = Math.max(200, overlayHeight - padding * 2);
+        const maxLineChars = Math.max(26, Math.floor(textWidth / Math.max(9, fontSize * 0.52)));
+        const maxTotalLines = Math.max(5, Math.floor(textHeight / Math.max(26, fontSize * 1.25)));
+        const maxLinesPerMessage = Math.max(2, Math.floor((textHeight / Math.max(26, fontSize * 1.25)) / 4));
         const shouldShow = !!visible && Array.isArray(messages) && messages.length > 0;
-        const overlayText = this._buildLiveChatOverlayText(messages);
+        const overlayText = this._buildLiveChatOverlayText(messages, {
+            maxMessages: 5,
+            maxLineChars,
+            maxLinesPerMessage,
+            maxTotalLines
+        });
 
         const backgroundResult = await this._ensureInput(
             sceneName,
@@ -2094,12 +2722,12 @@ class OBSController {
         const textResult = await this._ensureInputWithKinds(
             sceneName,
             LIVE_CHAT_TEXT_INPUT,
-            ['text_gdiplus_v2', 'text_gdiplus', 'text_ft2_source_v2', 'text_ft2_source'],
+            ['text_ft2_source_v2', 'text_ft2_source', 'text_gdiplus_v2', 'text_gdiplus'],
             {
                 text: overlayText || ' ',
                 font: {
                     face: 'Segoe UI',
-                    size: Math.max(22, Math.round(baseHeight * 0.022)),
+                    size: fontSize,
                     style: 'Regular'
                 },
                 color: 0xFFFFFFFF,
@@ -2107,8 +2735,8 @@ class OBSController {
                 outline_color: 0xFF000000,
                 outline_size: 2,
                 extents: true,
-                extents_cx: Math.max(280, overlayWidth - padding * 2),
-                extents_cy: Math.max(200, overlayHeight - padding * 2),
+                extents_cx: textWidth,
+                extents_cy: textHeight,
                 word_wrap: true,
                 valign: 'top'
             },
@@ -2146,7 +2774,10 @@ class OBSController {
                     positionY: posY + padding,
                     scaleX: 1,
                     scaleY: 1,
-                    boundsType: 'OBS_BOUNDS_NONE'
+                    boundsType: 'OBS_BOUNDS_SCALE_INNER',
+                    boundsWidth: textWidth,
+                    boundsHeight: textHeight,
+                    alignment: 5
                 }
             });
             await this._setSceneItemEnabled({
@@ -2182,6 +2813,218 @@ class OBSController {
             sceneItemId: textResult?.sceneItemId || null,
             visible: shouldShow
         };
+    }
+
+    async updateLiveCaptionOverlay({ sceneName = 'KVE Kayıt', text = '', visible = true } = {}) {
+        await this.ensureScene(sceneName, { activate: false });
+
+        const videoSettings = await this.getVideoSettings();
+        const baseWidth = videoSettings.baseWidth || 1920;
+        const baseHeight = videoSettings.baseHeight || 1080;
+        const captionText = String(text || '').trim();
+        const shouldShow = !!visible && !!captionText;
+        const marginX = Math.max(48, Math.round(baseWidth * 0.035));
+        const marginBottom = Math.max(36, Math.round(baseHeight * 0.035));
+        const paddingX = Math.max(22, Math.round(baseWidth * 0.014));
+        const paddingY = Math.max(14, Math.round(baseHeight * 0.013));
+        const overlayWidth = Math.max(640, baseWidth - marginX * 2);
+        const overlayHeight = Math.max(96, Math.round(baseHeight * 0.15));
+        const posX = Math.max(0, Math.round((baseWidth - overlayWidth) / 2));
+        const posY = Math.max(0, baseHeight - overlayHeight - marginBottom);
+
+        const backgroundResult = await this._ensureInput(
+            sceneName,
+            LIVE_CAPTION_BG_INPUT,
+            'color_source_v3',
+            {
+                color: 0xD0000000,
+                width: overlayWidth,
+                height: overlayHeight
+            },
+            false
+        );
+
+        const textResult = await this._ensureInputWithKinds(
+            sceneName,
+            LIVE_CAPTION_TEXT_INPUT,
+            ['text_ft2_source_v2', 'text_ft2_source', 'text_gdiplus_v2', 'text_gdiplus'],
+            {
+                text: captionText || ' ',
+                font: {
+                    face: 'Segoe UI',
+                    size: Math.max(34, Math.round(baseHeight * 0.04)),
+                    style: 'Bold'
+                },
+                color: 0xFFFFFFFF,
+                outline: true,
+                outline_color: 0xFF000000,
+                outline_size: 3,
+                extents: true,
+                extents_cx: Math.max(360, overlayWidth - paddingX * 2),
+                extents_cy: Math.max(60, overlayHeight - paddingY * 2),
+                word_wrap: true,
+                align: 'center',
+                valign: 'center'
+            },
+            false
+        );
+
+        if (backgroundResult?.sceneItemId) {
+            await this.setSceneItemTransform({
+                sceneName,
+                sceneItemId: backgroundResult.sceneItemId,
+                transform: {
+                    positionX: posX,
+                    positionY: posY,
+                    scaleX: 1,
+                    scaleY: 1,
+                    boundsType: 'OBS_BOUNDS_NONE'
+                }
+            });
+            await this._setSceneItemEnabled({
+                sceneName,
+                sceneItemId: backgroundResult.sceneItemId,
+                enabled: shouldShow
+            });
+        }
+
+        if (textResult?.sceneItemId) {
+            await this.setSceneItemTransform({
+                sceneName,
+                sceneItemId: textResult.sceneItemId,
+                transform: {
+                    positionX: posX + paddingX,
+                    positionY: posY + paddingY,
+                    scaleX: 1,
+                    scaleY: 1,
+                    boundsType: 'OBS_BOUNDS_NONE'
+                }
+            });
+            await this._setSceneItemEnabled({
+                sceneName,
+                sceneItemId: textResult.sceneItemId,
+                enabled: shouldShow
+            });
+        }
+
+        if (backgroundResult?.sceneItemId && textResult?.sceneItemId) {
+            try {
+                const itemsResponse = await this._call('GetSceneItemList', { sceneName });
+                const items = itemsResponse.sceneItems || itemsResponse.items || [];
+                const maxIndex = items.reduce((highest, item) => {
+                    const nextIndex = item.sceneItemIndex !== undefined ? item.sceneItemIndex : item.index;
+                    return Math.max(highest, Number.isFinite(nextIndex) ? nextIndex : 0);
+                }, 0);
+                await this._setSceneItemIndex({
+                    sceneName,
+                    sceneItemId: backgroundResult.sceneItemId,
+                    sceneItemIndex: Math.max(0, maxIndex - 1)
+                });
+                await this._setSceneItemIndex({
+                    sceneName,
+                    sceneItemId: textResult.sceneItemId,
+                    sceneItemIndex: Math.max(0, maxIndex)
+                });
+            } catch (error) { }
+        }
+
+        return {
+            inputName: LIVE_CAPTION_TEXT_INPUT,
+            sceneItemId: textResult?.sceneItemId || null,
+            visible: shouldShow
+        };
+    }
+
+    async releaseBroadcastCameraSource({ sceneName = 'KVE Kayıt' } = {}) {
+        try {
+            const sceneItems = await this._call('GetSceneItemList', { sceneName });
+            const items = sceneItems.sceneItems || sceneItems.items || [];
+            for (const item of items) {
+                const sourceName = item.sourceName || item.inputName || '';
+                if ((sourceName === 'KVE Kamera' || sourceName === 'KVE Kamera Probe') && item.sceneItemId) {
+                    await this._setSceneItemEnabled({
+                        sceneName,
+                        sceneItemId: item.sceneItemId,
+                        enabled: false
+                    });
+                }
+            }
+        } catch (error) { }
+
+        try {
+            await this._call('SetInputSettings', {
+                inputName: 'KVE Kamera',
+                inputSettings: {
+                    active: false,
+                    video_device_id: ''
+                },
+                overlay: true
+            });
+        } catch (error) { }
+
+        try {
+            await this._removeInput('KVE Kamera');
+        } catch (error) { }
+        try {
+            await this._removeInput('KVE Kamera Probe');
+        } catch (error) { }
+
+        return { success: true };
+    }
+
+    async resetBroadcastRoomAudioSources({ sceneName = 'KVE Yayın Odası' } = {}) {
+        await this.ensureScene(sceneName, { activate: false });
+
+        const removableInputs = [
+            'KVE Mikrofon',
+            'KVE Mikrofon Probe',
+            LIVE_ROOM_AUDIO_BRIDGE_INPUT,
+            'KVE Sistem Sesi',
+            'KVE Pencere Sesi',
+            'KVE Temp Window Audio Probe'
+        ];
+
+        for (const inputName of removableInputs) {
+            try {
+                await this._removeInput(inputName);
+            } catch (error) { }
+        }
+
+        try {
+            await this._removeInputsByPrefix(LIVE_ROOM_AUDIO_BRIDGE_INPUT);
+        } catch (error) { }
+
+        try {
+            await this._removeInputsByPrefix('KVE Pencere Sesi');
+        } catch (error) { }
+
+        try {
+            const specials = await this._call('GetSpecialInputs');
+            const audioInputs = [
+                specials?.desktop1,
+                specials?.desktop2,
+                specials?.mic1,
+                specials?.mic2,
+                specials?.mic3,
+                specials?.mic4
+            ].filter(Boolean);
+
+            for (const inputName of audioInputs) {
+                try {
+                    await this._call('SetInputMute', { inputName, inputMuted: true });
+                } catch (error) { }
+            }
+        } catch (error) { }
+
+        if (this.sceneItems[sceneName]) {
+            delete this.sceneItems[sceneName]['KVE Mikrofon'];
+            delete this.sceneItems[sceneName][LIVE_ROOM_AUDIO_BRIDGE_INPUT];
+            delete this.sceneItems[sceneName]['KVE Sistem Sesi'];
+            delete this.sceneItems[sceneName]['KVE Pencere Sesi'];
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return { success: true };
     }
 
     async hideLiveEffectVideo({ sceneName = 'KVE Kayıt' } = {}) {
@@ -2233,6 +3076,22 @@ class OBSController {
 
         await this._restoreBaseSourcesAfterLiveEffect(sceneName);
 
+        return { success: true };
+    }
+
+    async hideLiveEffectAudio({ sceneName = 'KVE Kayıt' } = {}) {
+        const inputName = this.activeLiveEffectAudioInputName;
+        if (inputName) {
+            try {
+                await this._call('TriggerMediaInputAction', {
+                    inputName,
+                    mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP'
+                });
+            } catch (_error) { }
+            try {
+                await this.setInputMute({ inputName, muted: true });
+            } catch (_error) { }
+        }
         return { success: true };
     }
 
@@ -2333,6 +3192,15 @@ class OBSController {
         return { success: true };
     }
 
+    async removeLiveEffectAudio({ sceneName = 'KVE Kayıt' } = {}) {
+        await this.hideLiveEffectAudio({ sceneName });
+        try {
+            await this._removeInputsByPrefix(LIVE_EFFECT_AUDIO_INPUT);
+        } catch (_error) { }
+        this.activeLiveEffectAudioInputName = null;
+        return { success: true };
+    }
+
     async removeLiveChatOverlay({ sceneName = 'KVE Kayıt' } = {}) {
         await this.hideLiveChatOverlay({ sceneName });
         try { await this._removeInput(LIVE_CHAT_TEXT_INPUT); } catch (error) { }
@@ -2423,6 +3291,78 @@ class OBSController {
             } catch (e2) { }
         }
         return { inputName, muted };
+    }
+
+    async ensureLiveRoomAudioBridgeSource({ sceneName = 'KVE Kayıt', url, inputName } = {}) {
+        if (!url) {
+            throw new Error('url required');
+        }
+        await this.ensureScene(sceneName);
+        const bridgeInputName = String(inputName || '').trim() || LIVE_ROOM_AUDIO_BRIDGE_INPUT;
+        await this._setInputMonitoringByPrefix(LIVE_ROOM_AUDIO_BRIDGE_INPUT, 'OBS_MONITORING_TYPE_NONE');
+        await this._removeInputsByPrefixExcept(LIVE_ROOM_AUDIO_BRIDGE_INPUT, bridgeInputName);
+        if (bridgeInputName !== LIVE_ROOM_AUDIO_BRIDGE_INPUT) {
+            try {
+                await this._call('GetInputSettings', { inputName: bridgeInputName });
+            } catch (_missingInputError) {
+                await this._removeInputsByPrefix(LIVE_ROOM_AUDIO_BRIDGE_INPUT);
+                await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+        }
+        let shouldUpdateSettings = true;
+        try {
+            const existingSettings = await this._call('GetInputSettings', {
+                inputName: bridgeInputName
+            });
+            const currentSettings = existingSettings?.inputSettings || {};
+            shouldUpdateSettings = String(currentSettings.url || '').trim() !== String(url || '').trim();
+        } catch (_error) {
+            shouldUpdateSettings = true;
+        }
+        const inputSettings = shouldUpdateSettings ? {
+            url,
+            width: 20,
+            height: 20,
+            fps: 1,
+            shutdown: false,
+            restart_when_active: true,
+            reroute_audio: true
+        } : {};
+        const result = await this._ensureInput(sceneName, bridgeInputName, 'browser_source', inputSettings, shouldUpdateSettings);
+        try {
+            await this._call('SetInputMute', {
+                inputName: bridgeInputName,
+                inputMuted: false
+            });
+        } catch (e) { }
+        try {
+            await this.setInputMonitoring({
+                inputName: bridgeInputName,
+                monitorType: 'OBS_MONITORING_TYPE_NONE'
+            });
+        } catch (e) { }
+        if (result?.sceneItemId) {
+            await this._setSceneItemEnabled({
+                sceneName,
+                sceneItemId: result.sceneItemId,
+                enabled: true
+            });
+            await this.setSceneItemTransform({
+                sceneName,
+                sceneItemId: result.sceneItemId,
+                transform: {
+                    positionX: -1000,
+                    positionY: -1000,
+                    boundsType: 'OBS_BOUNDS_NONE',
+                    scaleX: 0.01,
+                    scaleY: 0.01
+                }
+            }).catch(() => {});
+        }
+        return {
+            inputName: bridgeInputName,
+            sceneItemId: result?.sceneItemId || null
+        };
     }
 
     async setMicrophoneDevice({ inputName, deviceId, deviceLabel }) {

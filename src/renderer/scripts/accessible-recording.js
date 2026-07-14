@@ -1,5 +1,7 @@
 const { ipcRenderer, shell, desktopCapturer, clipboard } = require('electron');
 const { pathToFileURL } = require('url');
+const path = require('path');
+const SCENE_BACKGROUND_PROFILE_STORAGE_KEY = 'evdSceneBackgroundProfiles';
 const recordingI18n = {
     currentLang: 'tr',
     cache: {},
@@ -68,6 +70,18 @@ function getSpeechLocale() {
     return isTurkishUi() ? 'tr-TR' : 'en-US';
 }
 
+const AUDIO_BALANCE_PRESETS = {
+    manual: null,
+    balanced: {
+        micVolume: 260,
+        systemVolume: 85
+    },
+    remote_focus: {
+        micVolume: 225,
+        systemVolume: 110
+    }
+};
+
 let pendingLaunchOptions = {};
 let recordingWizardReady = false;
 let interviewQuickStartAttempted = false;
@@ -78,6 +92,28 @@ ipcRenderer.on('recording-wizard-init', (_event, options) => {
     pendingLaunchOptions = options || {};
     if (recordingWizardReady) {
         applyLaunchProfile();
+    }
+});
+
+ipcRenderer.on('live-broadcast-emergency-stopped', () => {
+    try {
+        if (typeof state !== 'undefined') {
+            state.recordingActive = false;
+            state.streamingActive = false;
+            state.recordingPaused = false;
+            state.sessionActionInProgress = false;
+        }
+        if (typeof resetYouTubeChatState === 'function') {
+            resetYouTubeChatState();
+        }
+        if (typeof updateBroadcastUi === 'function') {
+            updateBroadcastUi();
+        }
+        if (els?.recordingStatus) {
+            els.recordingStatus.textContent = t('recording_wizard.broadcast.stopped', 'Canli yayin durduruldu.');
+        }
+    } catch (error) {
+        console.warn('Emergency live broadcast UI sync failed:', error.message);
     }
 });
 
@@ -477,6 +513,19 @@ const state = {
     screenItemId: null,
     cameraItemId: null,
     screenInputName: null,
+    sceneBackground: {
+        type: 'none',
+        sourcePath: '',
+        preparedPath: '',
+        width: 0,
+        height: 0,
+        duration: 0,
+        fitMode: 'cover',
+        dimPercent: 0,
+        logoPath: '',
+        logoPosition: 'top-right',
+        logoSize: 'medium'
+    },
     videoSettings: { baseWidth: 1920, baseHeight: 1080 },
     aiSuggestion: null,
     aiSuggestionPreviewBase64: null,
@@ -489,6 +538,8 @@ const state = {
     lastOutputPath: null,
     recordingFormat: 'mp4',
     videoQualityPreset: 'current',
+    audioBalancePreset: 'manual',
+    minimizeOnRecordingStart: false,
     launchProfile: 'default',
     interviewQuickStartCompleted: false,
     liveEffectsEnabled: false,
@@ -577,6 +628,21 @@ const els = {
     camScale: document.getElementById('cam-scale'),
     btnApplyPreset: document.getElementById('btn-apply-preset'),
     camPanelFillColor: document.getElementById('cam-panel-fill-color'),
+    btnSelectSceneBackground: document.getElementById('btn-select-scene-background-recording'),
+    btnClearSceneBackground: document.getElementById('btn-clear-scene-background-recording'),
+    sceneBackgroundFitMode: document.getElementById('scene-background-fit-mode-recording'),
+    sceneBackgroundDimPercent: document.getElementById('scene-background-dim-percent-recording'),
+    sceneBackgroundDimValue: document.getElementById('scene-background-dim-value-recording'),
+    btnSelectSceneLogo: document.getElementById('btn-select-scene-logo-recording'),
+    btnClearSceneLogo: document.getElementById('btn-clear-scene-logo-recording'),
+    sceneLogoPosition: document.getElementById('scene-logo-position-recording'),
+    sceneLogoSize: document.getElementById('scene-logo-size-recording'),
+    sceneBackgroundProfileName: document.getElementById('scene-background-profile-name-recording'),
+    sceneBackgroundProfileList: document.getElementById('scene-background-profile-list-recording'),
+    btnSaveSceneBackgroundProfile: document.getElementById('btn-save-scene-background-profile-recording'),
+    btnApplySceneBackgroundProfile: document.getElementById('btn-apply-scene-background-profile-recording'),
+    btnDeleteSceneBackgroundProfile: document.getElementById('btn-delete-scene-background-profile-recording'),
+    sceneBackgroundStatus: document.getElementById('scene-background-status-recording'),
     btnAiSuggest: document.getElementById('btn-ai-suggest'),
     btnApplyAi: document.getElementById('btn-apply-ai'),
     aiStatus: document.getElementById('ai-status'),
@@ -589,6 +655,7 @@ const els = {
 
     micVolume: document.getElementById('mic-volume'),
     micVolumeValue: document.getElementById('mic-volume-value'),
+    audioBalancePreset: document.getElementById('audio-balance-preset'),
     systemVolume: document.getElementById('system-volume'),
     systemVolumeValue: document.getElementById('system-volume-value'),
     monitorEnable: document.getElementById('monitor-enable'),
@@ -638,6 +705,7 @@ const els = {
     recordingOutput: document.getElementById('recording-output'),
     obsStatsSummary: document.getElementById('obs-stats-summary'),
     globalShortcutsInfo: document.getElementById('global-shortcuts-info'),
+    minimizeOnRecordingStart: document.getElementById('minimize-on-recording-start'),
     btnOpenFolder: document.getElementById('btn-open-folder'),
     btnCopyPath: document.getElementById('btn-copy-path'),
     btnFinishAdd: document.getElementById('btn-finish-add'),
@@ -691,6 +759,7 @@ const els = {
     liveEffectsSlotGrid: document.getElementById('live-effects-slot-grid'),
     liveWindowSelect: document.getElementById('live-window-select'),
     btnApplyLiveWindow: document.getElementById('btn-apply-live-window'),
+    liveAudioBalancePreset: document.getElementById('live-audio-balance-preset'),
     windowSwitcherDialog: document.getElementById('window-switcher-dialog'),
     windowSwitcherList: document.getElementById('window-switcher-list'),
     windowSwitcherActivate: document.getElementById('window-switcher-activate'),
@@ -700,6 +769,77 @@ const els = {
     , obsOpenYes: document.getElementById('obs-open-yes')
     , obsOpenNo: document.getElementById('obs-open-no')
 };
+
+function updateAudioVolumeLabels() {
+    if (els.micVolumeValue && els.micVolume) {
+        els.micVolumeValue.textContent = `%${els.micVolume.value}`;
+    }
+    if (els.systemVolumeValue && els.systemVolume) {
+        els.systemVolumeValue.textContent = `%${els.systemVolume.value}`;
+    }
+}
+
+function syncLiveAudioControlsFromMain() {
+    const liveMicVolume = document.getElementById('live-mic-volume');
+    const liveSystemVolume = document.getElementById('live-system-volume');
+    if (liveMicVolume && els.micVolume) {
+        liveMicVolume.value = els.micVolume.value;
+    }
+    if (liveSystemVolume && els.systemVolume) {
+        liveSystemVolume.value = els.systemVolume.value;
+    }
+    if (els.liveAudioBalancePreset) {
+        els.liveAudioBalancePreset.value = state.audioBalancePreset || 'manual';
+    }
+}
+
+function applyAudioBalancePresetSelection(presetId, { announceChange = false } = {}) {
+    const normalizedPreset = AUDIO_BALANCE_PRESETS[presetId] ? presetId : 'manual';
+    state.audioBalancePreset = normalizedPreset;
+    if (els.audioBalancePreset && els.audioBalancePreset.value !== normalizedPreset) {
+        els.audioBalancePreset.value = normalizedPreset;
+    }
+
+    const presetValues = AUDIO_BALANCE_PRESETS[normalizedPreset];
+    if (presetValues) {
+        if (els.micVolume) {
+            els.micVolume.value = String(presetValues.micVolume);
+        }
+        if (els.systemVolume) {
+            els.systemVolume.value = String(presetValues.systemVolume);
+        }
+        updateAudioVolumeLabels();
+        syncLiveAudioControlsFromMain();
+        if (state.micInputName) {
+            ipcRenderer.invoke('obs-set-input-volume', {
+                inputName: state.micInputName,
+                volumePercent: parseInt(els.micVolume.value, 10)
+            }).catch(() => {});
+        }
+        if (state.systemInputName) {
+            ipcRenderer.invoke('obs-set-input-volume', {
+                inputName: state.systemInputName,
+                volumePercent: parseInt(els.systemVolume.value, 10)
+            }).catch(() => {});
+        }
+    }
+
+    if (!announceChange) {
+        return;
+    }
+
+    const messageKey = normalizedPreset === 'balanced'
+        ? 'recording_wizard.step5.audio_balance_balanced_selected'
+        : normalizedPreset === 'remote_focus'
+            ? 'recording_wizard.step5.audio_balance_remote_focus_selected'
+            : 'recording_wizard.step5.audio_balance_manual_selected';
+    const fallback = normalizedPreset === 'balanced'
+        ? 'Dengeli görüşme ön ayarı seçildi. Host mikrofonu biraz geriye, sistem veya konuk sesi biraz öne alınacak.'
+        : normalizedPreset === 'remote_focus'
+            ? 'Konuk sesi önde ön ayarı seçildi. Uzak konuşmacı sesi daha belirgin olacak şekilde denge kurulacak.'
+            : 'Ses dengeleme ön ayarı kapatıldı. Mevcut elle ayarlar korunuyor.';
+    announce(t(messageKey, fallback));
+}
 
 function announce(message) {
     if (!els.liveRegion) return;
@@ -898,6 +1038,327 @@ function syncLiveMicSelectOptions() {
     }
 
     els.liveMicSelect.disabled = els.liveMicSelect.options.length === 0;
+}
+
+function describeRecordingSceneBackgroundFile(info = {}) {
+    const sizeText = info.width && info.height ? `${info.width}x${info.height}` : '-';
+    if (info.type === 'video' && info.duration) {
+        return t('recording_wizard.step4.scene_background_video_info', 'Video arka plan: {size}, süre {duration} sn.', {
+            size: sizeText,
+            duration: Math.round(info.duration)
+        });
+    }
+    return t('recording_wizard.step4.scene_background_image_info', 'Görsel arka plan: {size}.', { size: sizeText });
+}
+
+function renderRecordingSceneBackgroundStatus() {
+    const background = state.sceneBackground || {};
+    if (els.sceneBackgroundFitMode) els.sceneBackgroundFitMode.value = background.fitMode || 'cover';
+    if (els.sceneBackgroundDimPercent) els.sceneBackgroundDimPercent.value = String(background.dimPercent || 0);
+    if (els.sceneBackgroundDimValue) els.sceneBackgroundDimValue.textContent = `%${background.dimPercent || 0}`;
+    if (els.sceneLogoPosition) els.sceneLogoPosition.value = background.logoPosition || 'top-right';
+    if (els.sceneLogoSize) els.sceneLogoSize.value = background.logoSize || 'medium';
+    if (!els.sceneBackgroundStatus) return;
+    if (!background.sourcePath) {
+        els.sceneBackgroundStatus.textContent = background.logoPath
+            ? t('recording_wizard.step4.scene_logo_selected_without_background', 'Arka plan seçilmedi. Seçili logo: {name}.', { name: path.basename(background.logoPath) })
+            : t('recording_wizard.step4.scene_background_empty', 'Arka plan seçilmedi.');
+        return;
+    }
+    els.sceneBackgroundStatus.textContent = t('recording_wizard.step4.scene_background_selected', 'Seçili arka plan: {name}. {info}', {
+        name: path.basename(background.sourcePath),
+        info: `${describeRecordingSceneBackgroundFile(background)} ${background.logoPath ? t('recording_wizard.step4.scene_logo_selected_suffix', 'Logo: {name}.', { name: path.basename(background.logoPath) }) : ''}`
+    });
+}
+
+function createRecordingSceneBackgroundProfileSnapshot() {
+    const background = state.sceneBackground || {};
+    return {
+        type: background.type || 'none',
+        sourcePath: background.sourcePath || '',
+        preparedPath: background.preparedPath || '',
+        width: Number(background.width || 0),
+        height: Number(background.height || 0),
+        duration: Number(background.duration || 0),
+        fitMode: background.fitMode || 'cover',
+        dimPercent: Math.max(0, Math.min(80, Math.round(Number(background.dimPercent || 0)))),
+        logoPath: background.logoPath || '',
+        logoPosition: background.logoPosition || 'top-right',
+        logoSize: background.logoSize || 'medium'
+    };
+}
+
+function createDefaultRecordingSceneBackgroundProfileBackground() {
+    return {
+        type: 'none',
+        sourcePath: '',
+        preparedPath: '',
+        width: 0,
+        height: 0,
+        duration: 0,
+        fitMode: 'cover',
+        dimPercent: 0,
+        logoPath: '',
+        logoPosition: 'top-right',
+        logoSize: 'medium'
+    };
+}
+
+function loadRecordingSceneBackgroundProfiles() {
+    try {
+        const raw = window.localStorage.getItem(SCENE_BACKGROUND_PROFILE_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .filter((profile) => profile && typeof profile === 'object')
+            .map((profile, index) => ({
+                id: String(profile.id || `scene-background-profile-${index + 1}`),
+                name: String(profile.name || '').trim() || t('recording_wizard.step4.scene_background_profile_default_name', 'Arka plan profili'),
+                background: {
+                    ...createDefaultRecordingSceneBackgroundProfileBackground(),
+                    ...(profile.background || {})
+                }
+            }));
+    } catch (_error) {
+        return [];
+    }
+}
+
+function saveRecordingSceneBackgroundProfiles(profiles) {
+    window.localStorage.setItem(SCENE_BACKGROUND_PROFILE_STORAGE_KEY, JSON.stringify(Array.isArray(profiles) ? profiles : []));
+}
+
+function renderRecordingSceneBackgroundProfiles(selectedId = '') {
+    if (!els.sceneBackgroundProfileList) return;
+    const profiles = loadRecordingSceneBackgroundProfiles();
+    els.sceneBackgroundProfileList.innerHTML = '';
+    if (!profiles.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = t('recording_wizard.step4.scene_background_profile_empty', 'Kayıtlı profil yok');
+        els.sceneBackgroundProfileList.appendChild(option);
+        els.sceneBackgroundProfileList.disabled = true;
+        if (els.btnApplySceneBackgroundProfile) els.btnApplySceneBackgroundProfile.disabled = true;
+        if (els.btnDeleteSceneBackgroundProfile) els.btnDeleteSceneBackgroundProfile.disabled = true;
+        return;
+    }
+    els.sceneBackgroundProfileList.disabled = false;
+    profiles.forEach((profile) => {
+        const option = document.createElement('option');
+        option.value = profile.id;
+        option.textContent = profile.name;
+        option.selected = profile.id === selectedId;
+        els.sceneBackgroundProfileList.appendChild(option);
+    });
+    if (els.btnApplySceneBackgroundProfile) els.btnApplySceneBackgroundProfile.disabled = false;
+    if (els.btnDeleteSceneBackgroundProfile) els.btnDeleteSceneBackgroundProfile.disabled = false;
+}
+
+async function prepareRecordingSceneBackgroundPathIfNeeded(filePath, info) {
+    if (!info?.needsNormalize) {
+        return filePath;
+    }
+
+    const warning = info.type === 'video' && info.longVideoWarning
+        ? t('recording_wizard.step4.scene_background_long_video_warning', 'Video 30 saniyeden uzun. Arka plan videosu döngülü oynatılacağı için kısa bir video daha iyi performans verir.')
+        : '';
+    const message = [
+        t('recording_wizard.step4.scene_background_size_warning', 'Seçilen dosya 1920x1080 önerisine uymuyor. Geçerli boyut: {width}x{height}.', {
+            width: info.width || 0,
+            height: info.height || 0
+        }),
+        warning,
+        t('recording_wizard.step4.scene_background_convert_question', 'EVD dosyayı 1920x1080 arka plan kopyasına dönüştürsün mü?')
+    ].filter(Boolean).join('\n\n');
+
+    const response = await ipcRenderer.invoke('show-message-box', {
+        type: 'question',
+        title: t('recording_wizard.step4.scene_background_convert_title', 'Arka plan boyutu uyumsuz'),
+        message,
+        buttons: [
+            t('recording_wizard.step4.scene_background_convert_button', 'Dönüştür'),
+            t('recording_wizard.step4.scene_background_use_original_button', 'Özgün dosyayı kullan'),
+            t('recording_wizard.step4.scene_background_cancel_button', 'İptal')
+        ],
+        defaultId: 0,
+        cancelId: 2,
+        noLink: true
+    });
+
+    if (response.response === 2) return '';
+    if (response.response === 1) return filePath;
+
+    if (els.sceneBackgroundStatus) {
+        els.sceneBackgroundStatus.textContent = t('recording_wizard.step4.scene_background_converting', 'Arka plan 1920x1080 olarak hazırlanıyor...');
+    }
+    const prepared = await ipcRenderer.invoke('prepare-scene-background-file', {
+        filePath,
+        type: info.type
+    });
+    if (!prepared?.success || !prepared.path) {
+        throw new Error(prepared?.error || 'background_prepare_failed');
+    }
+    return prepared.path;
+}
+
+async function applyRecordingSceneBackgroundToObs() {
+    const background = state.sceneBackground || {};
+    const sourcePath = background.preparedPath || background.sourcePath || '';
+    const response = await ipcRenderer.invoke('obs-set-scene-background', {
+        sceneName: state.sceneName,
+        type: background.type || 'none',
+        sourcePath,
+        fitMode: background.fitMode || 'cover',
+        dimPercent: background.dimPercent || 0,
+        logoPath: background.logoPath || '',
+        logoPosition: background.logoPosition || 'top-right',
+        logoSize: background.logoSize || 'medium'
+    });
+    if (!response?.success) {
+        throw new Error(response?.error || 'background_apply_failed');
+    }
+    return response;
+}
+
+async function selectRecordingSceneBackgroundFile() {
+    const result = await ipcRenderer.invoke('open-file-dialog', {
+        title: t('recording_wizard.step4.scene_background_file_dialog_title', 'Arka plan dosyası seç'),
+        properties: ['openFile'],
+        filters: [
+            { name: t('recording_wizard.step4.scene_background_files_filter', 'Arka plan dosyaları'), extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'mp4', 'webm', 'mov', 'm4v', 'mkv'] }
+        ]
+    });
+    if (result.canceled || !result.filePaths?.[0]) return;
+
+    const filePath = result.filePaths[0];
+    const info = await ipcRenderer.invoke('inspect-scene-background-file', filePath);
+    if (!info?.success) {
+        throw new Error(info?.error || 'background_inspect_failed');
+    }
+    const preparedPath = await prepareRecordingSceneBackgroundPathIfNeeded(filePath, info);
+    if (!preparedPath) {
+        if (els.sceneBackgroundStatus) {
+            els.sceneBackgroundStatus.textContent = t('recording_wizard.step4.scene_background_cancelled', 'Arka plan seçimi iptal edildi.');
+        }
+        return;
+    }
+
+    state.sceneBackground = {
+        ...state.sceneBackground,
+        type: info.type,
+        sourcePath: filePath,
+        preparedPath,
+        width: info.width || 0,
+        height: info.height || 0,
+        duration: info.duration || 0
+    };
+    renderRecordingSceneBackgroundStatus();
+
+    try {
+        await applyRecordingSceneBackgroundToObs();
+        showShortcutTooltip(t('recording_wizard.step4.scene_background_applied', 'Sahne arka planı uygulandı.'));
+    } catch (_error) {
+        showShortcutTooltip(t('recording_wizard.step4.scene_background_saved_pending_obs', 'Arka plan seçildi. OBS bağlantısı hazır olduğunda sahneye uygulanacak.'));
+    }
+}
+
+async function clearRecordingSceneBackground() {
+    state.sceneBackground = {
+        ...state.sceneBackground,
+        type: 'none',
+        sourcePath: '',
+        preparedPath: '',
+        width: 0,
+        height: 0,
+        duration: 0
+    };
+    renderRecordingSceneBackgroundStatus();
+    await applyRecordingSceneBackgroundToObs().catch(() => {});
+    showShortcutTooltip(t('recording_wizard.step4.scene_background_cleared', 'Sahne arka planı kaldırıldı.'));
+}
+
+async function selectRecordingSceneLogoFile() {
+    const result = await ipcRenderer.invoke('open-file-dialog', {
+        title: t('recording_wizard.step4.scene_logo_file_dialog_title', 'Logo dosyası seç'),
+        properties: ['openFile'],
+        filters: [
+            { name: t('recording_wizard.step4.scene_logo_files_filter', 'Logo dosyaları'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }
+        ]
+    });
+    if (result.canceled || !result.filePaths?.[0]) return;
+    state.sceneBackground.logoPath = result.filePaths[0];
+    renderRecordingSceneBackgroundStatus();
+    await applyRecordingSceneBackgroundToObs().catch(() => {});
+    showShortcutTooltip(t('recording_wizard.step4.scene_logo_selected', 'Logo seçildi: {name}', { name: path.basename(state.sceneBackground.logoPath) }));
+}
+
+async function clearRecordingSceneLogo() {
+    state.sceneBackground.logoPath = '';
+    renderRecordingSceneBackgroundStatus();
+    await applyRecordingSceneBackgroundToObs().catch(() => {});
+    showShortcutTooltip(t('recording_wizard.step4.scene_logo_cleared', 'Logo kaldırıldı.'));
+}
+
+async function updateRecordingSceneBackgroundPersonalization() {
+    state.sceneBackground.fitMode = String(els.sceneBackgroundFitMode?.value || 'cover');
+    state.sceneBackground.dimPercent = Math.max(0, Math.min(80, Math.round(Number(els.sceneBackgroundDimPercent?.value || 0))));
+    state.sceneBackground.logoPosition = String(els.sceneLogoPosition?.value || 'top-right');
+    state.sceneBackground.logoSize = String(els.sceneLogoSize?.value || 'medium');
+    renderRecordingSceneBackgroundStatus();
+    await applyRecordingSceneBackgroundToObs().catch(() => {});
+}
+
+async function saveCurrentRecordingSceneBackgroundProfile() {
+    const profileName = String(els.sceneBackgroundProfileName?.value || '').trim()
+        || t('recording_wizard.step4.scene_background_profile_default_name', 'Arka plan profili');
+    const profiles = loadRecordingSceneBackgroundProfiles();
+    const selectedId = els.sceneBackgroundProfileList?.value || '';
+    const existingIndex = profiles.findIndex((profile) => profile.id === selectedId);
+    const nextProfile = {
+        id: existingIndex >= 0 ? profiles[existingIndex].id : `scene-background-profile-${Date.now()}`,
+        name: profileName,
+        background: createRecordingSceneBackgroundProfileSnapshot()
+    };
+    if (existingIndex >= 0) {
+        profiles[existingIndex] = nextProfile;
+    } else {
+        profiles.push(nextProfile);
+    }
+    saveRecordingSceneBackgroundProfiles(profiles);
+    renderRecordingSceneBackgroundProfiles(nextProfile.id);
+    if (els.sceneBackgroundProfileName) els.sceneBackgroundProfileName.value = nextProfile.name;
+    showShortcutTooltip(t('recording_wizard.step4.scene_background_profile_saved', 'Arka plan profili kaydedildi: {name}', { name: nextProfile.name }));
+}
+
+async function applySelectedRecordingSceneBackgroundProfile() {
+    const selectedId = els.sceneBackgroundProfileList?.value || '';
+    const profile = loadRecordingSceneBackgroundProfiles().find((item) => item.id === selectedId);
+    if (!profile) {
+        showShortcutTooltip(t('recording_wizard.step4.scene_background_profile_select_required', 'Önce bir arka plan profili seçin.'));
+        return;
+    }
+    state.sceneBackground = {
+        ...state.sceneBackground,
+        ...profile.background
+    };
+    if (els.sceneBackgroundProfileName) els.sceneBackgroundProfileName.value = profile.name;
+    renderRecordingSceneBackgroundStatus();
+    await applyRecordingSceneBackgroundToObs().catch(() => {});
+    showShortcutTooltip(t('recording_wizard.step4.scene_background_profile_applied', 'Arka plan profili uygulandı: {name}', { name: profile.name }));
+}
+
+async function deleteSelectedRecordingSceneBackgroundProfile() {
+    const selectedId = els.sceneBackgroundProfileList?.value || '';
+    const profiles = loadRecordingSceneBackgroundProfiles();
+    const profile = profiles.find((item) => item.id === selectedId);
+    if (!profile) {
+        showShortcutTooltip(t('recording_wizard.step4.scene_background_profile_select_required', 'Önce bir arka plan profili seçin.'));
+        return;
+    }
+    saveRecordingSceneBackgroundProfiles(profiles.filter((item) => item.id !== selectedId));
+    renderRecordingSceneBackgroundProfiles();
+    if (els.sceneBackgroundProfileName) els.sceneBackgroundProfileName.value = '';
+    showShortcutTooltip(t('recording_wizard.step4.scene_background_profile_deleted', 'Arka plan profili silindi: {name}', { name: profile.name }));
 }
 
 async function syncRecordingWizardSession(forceClear = false) {
@@ -1755,7 +2216,7 @@ function resetYouTubeChatState() {
     renderYouTubeChatBanList();
     updateYouTubeChatVisualVisibility();
     updateYouTubeChatStatus('recording_wizard.chat.status_idle', 'Canlı sohbet bekleniyor.');
-    ipcRenderer.invoke('obs-hide-live-chat-overlay', {
+    ipcRenderer.invoke('obs-remove-live-chat-overlay', {
         sceneName: state.sceneName
     }).catch(() => { });
     syncRecordingWizardSession().catch(() => { });
@@ -2126,44 +2587,65 @@ async function syncLiveEffectVisual(slot, options = {}) {
         restart
     });
 
-    if (!slot || !visualKind) {
+    if (!slot) {
         await ipcRenderer.invoke('obs-hide-live-effect-video', { sceneName: state.sceneName });
         await ipcRenderer.invoke('obs-hide-live-effect-image', { sceneName: state.sceneName });
+        await ipcRenderer.invoke('obs-hide-live-effect-audio', { sceneName: state.sceneName });
         logRecordingWizard('live_effect_video_visual_hidden', {
             sceneName: state.sceneName
         });
         return;
     }
 
-    const response = visualKind === 'video'
-        ? await ipcRenderer.invoke('obs-show-live-effect-video', {
+    if (!visualKind) {
+        await ipcRenderer.invoke('obs-hide-live-effect-video', { sceneName: state.sceneName });
+        await ipcRenderer.invoke('obs-hide-live-effect-image', { sceneName: state.sceneName });
+    } else {
+        const response = visualKind === 'video'
+            ? await ipcRenderer.invoke('obs-show-live-effect-video', {
+                sceneName: state.sceneName,
+                sourcePath: slot.sourcePath,
+                volumePercent: slot.volumePercent || 100,
+                loop: false,
+                visible,
+                restart
+            })
+            : await ipcRenderer.invoke('obs-show-live-effect-image', {
+                sceneName: state.sceneName,
+                sourcePath: slot.imagePath,
+                visible
+            });
+
+        if (!response || !response.success) {
+            console.warn(`obs-show-live-effect-${visualKind || 'visual'} failed:`, response && response.error);
+            logRecordingWizard('live_effect_video_visual_sync_failed', {
+                slotId: slot.id,
+                visualKind,
+                error: response && response.error ? response.error : 'unknown'
+            });
+            return;
+        }
+        logRecordingWizard('live_effect_video_visual_synced', {
+            slotId: slot.id,
+            sceneItemId: response.sceneItemId || null,
+            inputName: response.inputName || null
+        });
+    }
+
+    if (slot.sourcePath && visualKind !== 'video') {
+        const audioResponse = await ipcRenderer.invoke('obs-show-live-effect-audio', {
             sceneName: state.sceneName,
             sourcePath: slot.sourcePath,
             volumePercent: slot.volumePercent || 100,
             loop: false,
-            visible,
             restart
-        })
-        : await ipcRenderer.invoke('obs-show-live-effect-image', {
-            sceneName: state.sceneName,
-            sourcePath: slot.imagePath,
-            visible
         });
-
-    if (!response || !response.success) {
-        console.warn(`obs-show-live-effect-${visualKind || 'visual'} failed:`, response && response.error);
-        logRecordingWizard('live_effect_video_visual_sync_failed', {
-            slotId: slot.id,
-            visualKind,
-            error: response && response.error ? response.error : 'unknown'
-        });
-        return;
+        if (!audioResponse || !audioResponse.success) {
+            console.warn('obs-show-live-effect-audio failed:', audioResponse && audioResponse.error);
+        }
+    } else {
+        await ipcRenderer.invoke('obs-hide-live-effect-audio', { sceneName: state.sceneName });
     }
-    logRecordingWizard('live_effect_video_visual_synced', {
-        slotId: slot.id,
-        sceneItemId: response.sceneItemId || null,
-        inputName: response.inputName || null
-    });
 }
 
 function formatLiveEffectTime(seconds) {
@@ -2192,6 +2674,7 @@ function stopLiveEffectsAudio(slotId, { resetPosition = true } = {}) {
             console.warn('Could not hide live effect visual:', error.message);
         });
     }
+    ipcRenderer.invoke('obs-hide-live-effect-audio', { sceneName: state.sceneName }).catch(() => {});
 }
 
 function attachLiveEffectsMediaElement(playerState, { preferPreview = false } = {}) {
@@ -2279,12 +2762,14 @@ async function resetLiveEffectsSession({ removeObsVideo = true } = {}) {
         if (removeObsVideo) {
             await ipcRenderer.invoke('obs-remove-live-effect-video', { sceneName: state.sceneName });
             await ipcRenderer.invoke('obs-remove-live-effect-image', { sceneName: state.sceneName });
+            await ipcRenderer.invoke('obs-remove-live-effect-audio', { sceneName: state.sceneName });
             logRecordingWizard('live_effect_session_reset_obs_video_removed', {
                 sceneName: state.sceneName || null
             });
         } else {
             await ipcRenderer.invoke('obs-hide-live-effect-video', { sceneName: state.sceneName });
             await ipcRenderer.invoke('obs-hide-live-effect-image', { sceneName: state.sceneName });
+            await ipcRenderer.invoke('obs-hide-live-effect-audio', { sceneName: state.sceneName });
             logRecordingWizard('live_effect_session_reset_obs_video_hidden', {
                 sceneName: state.sceneName || null
             });
@@ -3187,6 +3672,20 @@ function selectWindowSourceForCapture(windowSource) {
     return true;
 }
 
+function isOwnAppWindowSourceName(windowName) {
+    const normalizedName = String(windowName || '').trim().toLowerCase();
+    if (!normalizedName) return false;
+
+    return [
+        'korculvideoeditor',
+        'erişilebilir video kayıt sihirbazı',
+        'erisilebilir video kayit sihirbazi',
+        'erişilebilir kayıt sihirbazı',
+        'erisilebilir kayit sihirbazi',
+        'accessible recording wizard'
+    ].some((term) => normalizedName.includes(term));
+}
+
 function isQuickStartLaunchProfile() {
     return state.launchProfile === 'interview' || isBroadcastLaunchProfile() || isOfflinePresetLaunchProfile();
 }
@@ -3675,6 +4174,7 @@ function clearPreparedYouTubeBroadcast() {
     state.youtubeChatWatchUrl = '';
     state.youtubeLiveChatId = '';
     state.youtubeChatNextPageToken = '';
+    ipcRenderer.invoke('youtube-clear-active-live-broadcast').catch(() => { });
     updatePreparedYouTubeWatchLink();
     updateBroadcastUi();
 }
@@ -3688,6 +4188,63 @@ function getYouTubeModeratorErrorText(response = {}) {
         );
     }
     return response?.error || t('recording_wizard.unknown_error', 'Unknown error');
+}
+
+function formatYouTubeBroadcastSetupError(response = {}) {
+    const code = String(response.code || response.reason || '').trim().toLowerCase();
+    const errorText = String(response.error || '').trim();
+    const normalizedError = errorText.toLowerCase();
+
+    if (code === 'invalidtitle' || normalizedError.includes('title is invalid')) {
+        return t(
+            'recording_wizard.broadcast.youtube_create_failed_invalid_title',
+            'Yayın başlığı YouTube için uygun değil. Başlığı biraz kısaltıp özel karakterleri sadeleştirerek tekrar deneyin.'
+        );
+    }
+
+    if (
+        code === 'invalidscheduledstarttime'
+        || code === 'invalidvalue'
+        || normalizedError.includes('scheduled start time')
+        || normalizedError.includes('start time')
+        || normalizedError.includes('must be in the future')
+        || normalizedError.includes('cannot be in the past')
+    ) {
+        return t(
+            'recording_wizard.broadcast.youtube_create_failed_invalid_schedule',
+            'Planlanan yayın zamanı geçersiz görünüyor. Lütfen gelecekte bir tarih ve saat seçip tekrar deneyin.'
+        );
+    }
+
+    if (code === 'quotaexceeded' || code === 'dailylimitexceeded' || normalizedError.includes('quota')) {
+        return t(
+            'recording_wizard.broadcast.youtube_create_failed_quota',
+            'YouTube API kullanım sınırına ulaşıldı. Bir süre sonra tekrar deneyin.'
+        );
+    }
+
+    if (code === 'livestreamingnotenabled' || normalizedError.includes('live streaming is not enabled')) {
+        return t(
+            'recording_wizard.broadcast.youtube_create_failed_live_not_enabled',
+            'Bu YouTube kanalında canlı yayın özelliği etkin görünmüyor. Kanal ayarlarını kontrol edin.'
+        );
+    }
+
+    if (code === 'forbidden' || normalizedError.includes('forbidden') || normalizedError.includes('permission')) {
+        return t(
+            'recording_wizard.broadcast.youtube_create_failed_forbidden',
+            'YouTube hesabı bu işlem için izin vermedi. Hesap yetkilerini ve kanal durumunu kontrol edin.'
+        );
+    }
+
+    if (normalizedError.includes('broadcast') && normalizedError.includes('not found')) {
+        return t(
+            'recording_wizard.broadcast.youtube_broadcast_not_found',
+            'Seçilen YouTube yayını bulunamadı. Listeyi yenileyip tekrar seçin.'
+        );
+    }
+
+    return errorText || t('recording_wizard.broadcast.youtube_create_failed', 'YouTube yayını oluşturulamadı.');
 }
 
 function formatYouTubeModeratorSummaryLine(item = {}) {
@@ -4378,11 +4935,16 @@ async function prepareYouTubeBroadcastFromApi() {
             playlistId: state.youtubeSelectedPlaylistId
         });
         if (!response.success) {
+            const formattedPrepareError = formatYouTubeBroadcastSetupError(response);
             logRecordingWizard('youtube_prepare_existing_failed', {
                 broadcastId: state.youtubeSelectedBroadcastId,
-                error: response.error || null
+                error: response.error || null,
+                formattedError: formattedPrepareError || null,
+                code: response.code || null,
+                reason: response.reason || null,
+                statusCode: response.statusCode || null
             });
-            throw new Error(response.error || t('recording_wizard.broadcast.youtube_prepare_failed', 'Secilen YouTube yayini hazirlanamadi.'));
+            throw new Error(formattedPrepareError);
         }
         preparedBroadcast = response.broadcast;
         ingestion = response.ingestion;
@@ -4420,11 +4982,16 @@ async function prepareYouTubeBroadcastFromApi() {
             enableAutoStop: true
         });
         if (!response.success) {
+            const formattedCreateError = formatYouTubeBroadcastSetupError(response);
             logRecordingWizard('youtube_create_failed', {
                 title: createTitle,
-                error: response.error || null
+                error: response.error || null,
+                formattedError: formattedCreateError || null,
+                code: response.code || null,
+                reason: response.reason || null,
+                statusCode: response.statusCode || null
             });
-            throw new Error(response.error || t('recording_wizard.broadcast.youtube_create_failed', 'YouTube yayini olusturulamadi.'));
+            throw new Error(formattedCreateError);
         }
         logRecordingWizard('youtube_create_succeeded', {
             broadcastId: response.broadcast?.id || null,
@@ -4991,6 +5558,11 @@ function _registerNavigationHandlers() {
 async function init() {
     await recordingI18n.init();
     updateManualPresetLabel();
+    updateAudioVolumeLabels();
+    renderRecordingSceneBackgroundStatus();
+    renderRecordingSceneBackgroundProfiles();
+    applyAudioBalancePresetSelection(state.audioBalancePreset, { announceChange: false });
+    syncLiveAudioControlsFromMain();
     const config = await ipcRenderer.invoke('obs-get-config');
     const preferredYoutubeAccountId = config?.youtubeActiveAccountId || '';
     if (config) {
@@ -5274,6 +5846,11 @@ async function init() {
             if (event.target === els.liveEffectsOverlay) {
                 closeLiveEffectsOverlay();
             }
+        });
+    }
+    if (els.minimizeOnRecordingStart) {
+        els.minimizeOnRecordingStart.addEventListener('change', () => {
+            state.minimizeOnRecordingStart = els.minimizeOnRecordingStart.checked;
         });
     }
 
@@ -5818,6 +6395,65 @@ async function init() {
     els.btnApplyPreset.addEventListener('click', () => applySelectedPreset());
     els.btnAiSuggest.addEventListener('click', requestAiSuggestion);
     els.btnApplyAi.addEventListener('click', applyAiSuggestion);
+    if (els.btnSelectSceneBackground) {
+        els.btnSelectSceneBackground.addEventListener('click', () => {
+            selectRecordingSceneBackgroundFile().catch((error) => {
+                showShortcutTooltip(t('recording_wizard.step4.scene_background_failed', 'Arka plan ayarlanamadı: {error}', {
+                    error: error?.message || error || 'unknown_error'
+                }));
+            });
+        });
+    }
+    if (els.btnClearSceneBackground) {
+        els.btnClearSceneBackground.addEventListener('click', () => {
+            clearRecordingSceneBackground().catch((error) => {
+                showShortcutTooltip(t('recording_wizard.step4.scene_background_failed', 'Arka plan ayarlanamadı: {error}', {
+                    error: error?.message || error || 'unknown_error'
+                }));
+            });
+        });
+    }
+    els.sceneBackgroundFitMode?.addEventListener('change', () => updateRecordingSceneBackgroundPersonalization());
+    els.sceneBackgroundDimPercent?.addEventListener('input', () => updateRecordingSceneBackgroundPersonalization());
+    els.sceneLogoPosition?.addEventListener('change', () => updateRecordingSceneBackgroundPersonalization());
+    els.sceneLogoSize?.addEventListener('change', () => updateRecordingSceneBackgroundPersonalization());
+    if (els.btnSelectSceneLogo) {
+        els.btnSelectSceneLogo.addEventListener('click', () => {
+            selectRecordingSceneLogoFile().catch((error) => {
+                showShortcutTooltip(t('recording_wizard.step4.scene_background_failed', 'Arka plan ayarlanamadı: {error}', {
+                    error: error?.message || error || 'unknown_error'
+                }));
+            });
+        });
+    }
+    if (els.btnClearSceneLogo) {
+        els.btnClearSceneLogo.addEventListener('click', () => {
+            clearRecordingSceneLogo().catch((error) => {
+                showShortcutTooltip(t('recording_wizard.step4.scene_background_failed', 'Arka plan ayarlanamadı: {error}', {
+                    error: error?.message || error || 'unknown_error'
+                }));
+            });
+        });
+    }
+    els.sceneBackgroundProfileList?.addEventListener('change', () => {
+        const profile = loadRecordingSceneBackgroundProfiles().find((item) => item.id === els.sceneBackgroundProfileList.value);
+        if (els.sceneBackgroundProfileName) els.sceneBackgroundProfileName.value = profile?.name || '';
+    });
+    els.btnSaveSceneBackgroundProfile?.addEventListener('click', () => {
+        saveCurrentRecordingSceneBackgroundProfile().catch((error) => {
+            showShortcutTooltip(t('recording_wizard.step4.scene_background_profile_failed', 'Arka plan profili işlenemedi: {error}', { error: error?.message || error || 'unknown_error' }));
+        });
+    });
+    els.btnApplySceneBackgroundProfile?.addEventListener('click', () => {
+        applySelectedRecordingSceneBackgroundProfile().catch((error) => {
+            showShortcutTooltip(t('recording_wizard.step4.scene_background_profile_failed', 'Arka plan profili işlenemedi: {error}', { error: error?.message || error || 'unknown_error' }));
+        });
+    });
+    els.btnDeleteSceneBackgroundProfile?.addEventListener('click', () => {
+        deleteSelectedRecordingSceneBackgroundProfile().catch((error) => {
+            showShortcutTooltip(t('recording_wizard.step4.scene_background_profile_failed', 'Arka plan profili işlenemedi: {error}', { error: error?.message || error || 'unknown_error' }));
+        });
+    });
     if (els.aiFollowupQuestion) {
         els.aiFollowupQuestion.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && event.ctrlKey) {
@@ -5964,8 +6600,20 @@ async function init() {
         });
     }
 
+    if (els.audioBalancePreset) {
+        els.audioBalancePreset.addEventListener('change', () => {
+            applyAudioBalancePresetSelection(els.audioBalancePreset.value, { announceChange: true });
+        });
+    }
+    if (els.liveAudioBalancePreset) {
+        els.liveAudioBalancePreset.addEventListener('change', () => {
+            applyAudioBalancePresetSelection(els.liveAudioBalancePreset.value, { announceChange: true });
+        });
+    }
+
     els.micVolume.addEventListener('input', () => {
         els.micVolumeValue.textContent = `%${els.micVolume.value}`;
+        syncLiveAudioControlsFromMain();
         if (state.micInputName) {
             ipcRenderer.invoke('obs-set-input-volume', {
                 inputName: state.micInputName,
@@ -5975,6 +6623,7 @@ async function init() {
     });
     els.systemVolume.addEventListener('input', () => {
         els.systemVolumeValue.textContent = `%${els.systemVolume.value}`;
+        syncLiveAudioControlsFromMain();
         if (state.systemInputName) {
             ipcRenderer.invoke('obs-set-input-volume', {
                 inputName: state.systemInputName,
@@ -6432,11 +7081,13 @@ async function refreshSources() {
             try {
                 const obsWins = await ipcRenderer.invoke('obs-get-windows');
                 if (obsWins.success && Array.isArray(obsWins.windows) && obsWins.windows.length > 0) {
-                    windowSources = obsWins.windows.map(w => ({
-                        name: w.name, // e.g. "Belge1 - Word" or full string
-                        id: w.id,     // full ID string for OBS input settings
-                        _obs: true
-                    }));
+                    windowSources = obsWins.windows
+                        .filter((w) => !isOwnAppWindowSourceName(w && w.name))
+                        .map(w => ({
+                            name: w.name, // e.g. "Belge1 - Word" or full string
+                            id: w.id,     // full ID string for OBS input settings
+                            _obs: true
+                        }));
                     console.log(`Loaded ${windowSources.length} windows from OBS directly.`);
                 }
             } catch (e) {
@@ -6451,13 +7102,17 @@ async function refreshSources() {
             if (resultWindow.success && resultWindow.sources) {
                 const existingNames = new Set(windowSources.map(w => w.name.trim().toLowerCase()));
                 resultWindow.sources.forEach(s => {
-                    if (s.name !== 'KorculVideoEditor' && !existingNames.has(s.name.trim().toLowerCase())) {
+                    const normalizedName = String(s.name || '').trim().toLowerCase();
+                    if (!normalizedName || isOwnAppWindowSourceName(normalizedName) || existingNames.has(normalizedName)) {
+                        return;
+                    }
+                    if (!existingNames.has(normalizedName)) {
                         windowSources.push({
                             name: s.name,
                             id: s.id || s.name, // Electron desktopCapturer ID'si veya başlığı
                             _obs: false
                         });
-                        existingNames.add(s.name.trim().toLowerCase());
+                        existingNames.add(normalizedName);
                     }
                 });
                 console.log(`Merged ${resultWindow.sources.length} windows from Electron desktopCapturer. Total: ${windowSources.length}`);
@@ -6473,7 +7128,7 @@ async function refreshSources() {
                 const existingNames = new Set(windowSources.map(w => String(w.name || '').trim().toLowerCase()).filter(Boolean));
                 resultNative.sources.forEach((source) => {
                     const normalizedName = String(source.name || '').trim().toLowerCase();
-                    if (!normalizedName || existingNames.has(normalizedName)) {
+                    if (!normalizedName || isOwnAppWindowSourceName(normalizedName) || existingNames.has(normalizedName)) {
                         return;
                     }
                     windowSources.push({
@@ -6976,6 +7631,12 @@ async function setupObsSources() {
             });
             console.log(`Applied system volume: ${sysVol}%`);
         }
+    }
+
+    if (state.sceneBackground?.sourcePath) {
+        await applyRecordingSceneBackgroundToObs().catch((error) => {
+            console.warn('Scene background apply failed:', error.message || error);
+        });
     }
 
     // Debug: log OBS source state
@@ -7809,6 +8470,33 @@ function updateBroadcastUi() {
     }
 }
 
+async function minimizeAppForRecordingStartIfNeeded() {
+    if (!state.minimizeOnRecordingStart) {
+        return;
+    }
+
+    logRecordingWizard('minimize_on_recording_start_requested', {
+        mode: state.mode,
+        captureMode: state.captureMode
+    });
+    try {
+        const result = await ipcRenderer.invoke('recording-wizard-minimize-app-windows');
+        if (!result?.success) {
+            throw new Error(result?.error || 'minimize_failed');
+        }
+        await delay(600);
+    } catch (error) {
+        console.warn('[RecordingWizard] app minimize before start failed:', error);
+        logRecordingWizard('minimize_on_recording_start_failed', {
+            error: error?.message || String(error)
+        });
+        showShortcutTooltip(t(
+            'recording_wizard.step6.minimize_on_start_failed',
+            'EVD penceresi küçültülemedi, kayıt yine de başlatılıyor.'
+        ));
+    }
+}
+
 async function startRecording() {
     if (state.sessionActionInProgress) return;
     if (state.mode === 'broadcast') {
@@ -7878,6 +8566,7 @@ async function startRecording() {
                 hasServer: !!state.broadcastServer,
                 hasStreamKey: !!state.broadcastStreamKey
             });
+            await minimizeAppForRecordingStartIfNeeded();
             const result = await ipcRenderer.invoke('obs-start-streaming');
             logRecordingWizard('broadcast_obs_start_result', {
                 success: !!result?.success,
@@ -7889,6 +8578,12 @@ async function startRecording() {
                 throw new Error(formatBroadcastStartFailure(result) || result.error || t('recording_wizard.broadcast.start_failed_generic', 'Canli yayin baslatilamadi.'));
             }
             if (isYouTubeApiMode() && state.youtubePreparedBroadcastId) {
+                await ipcRenderer.invoke('youtube-save-active-live-broadcast', {
+                    broadcastId: state.youtubePreparedBroadcastId,
+                    title: state.youtubePreparedBroadcastTitle || '',
+                    watchUrl: state.youtubePreparedWatchUrl || '',
+                    source: 'recording-wizard'
+                }).catch(() => { });
                 const liveResponse = await ipcRenderer.invoke('youtube-transition-broadcast-live', {
                     broadcastId: state.youtubePreparedBroadcastId
                 });
@@ -7900,9 +8595,13 @@ async function startRecording() {
                 });
                 if (!liveResponse.success) {
                     console.warn('YouTube live transition failed:', liveResponse.error);
+                    const transitionError = formatYouTubeBroadcastSetupError(liveResponse);
                     syncYoutubeStatusText('recording_wizard.broadcast.youtube_live_transition_failed', 'Yayin OBS tarafinda basladi ancak YouTube yayina gecis adimi tamamlanamadi: {error}', {
-                        error: liveResponse.error || t('recording_wizard.unknown_error', 'Unknown error')
+                        error: transitionError || t('recording_wizard.unknown_error', 'Unknown error')
                     });
+                    showShortcutTooltip(t('recording_wizard.broadcast.youtube_live_transition_failed', 'Yayin OBS tarafinda basladi ancak YouTube yayina gecis adimi tamamlanamadi: {error}', {
+                        error: transitionError || t('recording_wizard.unknown_error', 'Unknown error')
+                    }));
                 } else {
                     syncYoutubeStatusText('recording_wizard.broadcast.youtube_live_transition_ok', 'YouTube yayini canli duruma gecti: {title}', {
                         title: state.youtubePreparedBroadcastTitle || t('recording_wizard.broadcast.youtube_untitled', 'Adsiz yayin')
@@ -7937,21 +8636,20 @@ async function startRecording() {
             showShortcutTooltip(t('recording_wizard.broadcast.started', 'Canli yayin basladi.'));
         } catch (error) {
             const isPlanningOnlyMode = isYouTubePlanningOnlyMode();
-            logRecordingWizard(isPlanningOnlyMode ? 'broadcast_plan_failed' : 'broadcast_start_failed', {
-                error: error?.message || String(error)
-            });
-            state.lastBroadcastError = error?.message || String(error);
-            updateBroadcastErrorSummary();
-            els.recordingStatus.textContent = isPlanningOnlyMode
+            const detailedMessage = isPlanningOnlyMode
                 ? t('recording_wizard.broadcast.plan_failed', 'Yayin planlanamadi: {error}', {
                     error: error.message || error
                 })
                 : t('recording_wizard.broadcast.start_failed', 'Canli yayin baslatilamadi: {error}', {
                     error: error.message || error
                 });
-            showShortcutTooltip(isPlanningOnlyMode
-                ? t('recording_wizard.broadcast.plan_failed_short', 'Yayin planlanamadi.')
-                : t('recording_wizard.broadcast.start_failed_short', 'Canli yayin baslatilamadi.'));
+            logRecordingWizard(isPlanningOnlyMode ? 'broadcast_plan_failed' : 'broadcast_start_failed', {
+                error: error?.message || String(error)
+            });
+            state.lastBroadcastError = error?.message || String(error);
+            updateBroadcastErrorSummary();
+            els.recordingStatus.textContent = detailedMessage;
+            showShortcutTooltip(detailedMessage);
         } finally {
             state.sessionActionInProgress = false;
             if (!(state.mode === 'broadcast' && !state.recordingActive && els.recordingStatus && /planlanamadi|baslatilamadi|could not|konnte nicht|no se pudo|n a pas pu/i.test(els.recordingStatus.textContent || ''))) {
@@ -7965,6 +8663,11 @@ async function startRecording() {
     if (state.recordingActive) return;
     state.sessionActionInProgress = true;
     try {
+        await ipcRenderer.invoke('obs-remove-live-chat-overlay', {
+            sceneName: state.sceneName
+        }).catch(() => { });
+        state.youtubeChatPanelOpen = false;
+        updateYouTubeChatVisualVisibility();
         logRecordingWizard('recording_start_requested', {
             recordingFormat: state.recordingFormat || 'mp4',
             liveEffectsEnabled: !!state.liveEffectsEnabled,
@@ -7984,6 +8687,7 @@ async function startRecording() {
             await syncLiveEffectVisual(introSlot, { visible: false, restart: false });
         }
 
+        await minimizeAppForRecordingStartIfNeeded();
         const result = await ipcRenderer.invoke('obs-start-recording');
         logRecordingWizard('recording_start_result', {
             success: !!result?.success,
@@ -8129,6 +8833,9 @@ async function stopRecording() {
                 });
                 if (!completeResponse.success) {
                     console.warn('YouTube complete transition failed:', completeResponse.error);
+                    const completeError = formatYouTubeBroadcastSetupError(completeResponse);
+                    syncYoutubeStatusText('recording_wizard.broadcast.stop_failed', 'Canli yayin durdurulamadi: {error}', { error: completeError });
+                    showShortcutTooltip(t('recording_wizard.broadcast.stop_failed', 'Canli yayin durdurulamadi: {error}', { error: completeError }));
                 }
             }
             state.recordingActive = false;
@@ -8336,11 +9043,22 @@ window.toggleLiveSystemAudio = async (chk) => {
 
 window.setLiveVolume = async (sourceType, val) => {
     const volPercent = parseInt(val, 10);
-    const mul = volPercent / 100.0;
     let sourceName = null;
 
-    if (sourceType === 'mic') sourceName = state.micInputName;
-    if (sourceType === 'system') sourceName = state.systemInputName;
+    if (sourceType === 'mic') {
+        sourceName = state.micInputName;
+        if (els.micVolume) {
+            els.micVolume.value = String(volPercent);
+        }
+    }
+    if (sourceType === 'system') {
+        sourceName = state.systemInputName;
+        if (els.systemVolume) {
+            els.systemVolume.value = String(volPercent);
+        }
+    }
+    updateAudioVolumeLabels();
+    syncLiveAudioControlsFromMain();
 
     if (sourceName) {
         state.lastVolPercent = volPercent; // Store for debounce if needed

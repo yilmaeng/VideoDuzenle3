@@ -611,6 +611,15 @@
 
       <!-- TTS Ayarları (checkbox işaretlenince görünür) -->
       <div id="tts-options" style="display: none;">
+        <div class="form-group">
+          <label for="text-overlay-tts-service" data-i18n="dialog.text_overlay.tts_service">Seslendirme Servisi:</label>
+          <select id="text-overlay-tts-service">
+            <option value="system" data-i18n="dialog.text_overlay.tts_service_system">Bilgisayar sesleri</option>
+            <option value="openai" data-i18n="dialog.text_overlay.tts_service_openai">OpenAI</option>
+            <option value="elevenlabs" data-i18n="dialog.text_overlay.tts_service_elevenlabs">ElevenLabs</option>
+          </select>
+          <p class="hint" data-i18n="dialog.text_overlay.tts_service_hint">OpenAI ve ElevenLabs için Yapay Zeka menüsünde API anahtarınız kayıtlı olmalıdır.</p>
+        </div>
         <!-- TTS Sesi -->
         <div class="form-group">
           <label for="text-overlay-tts-voice" data-i18n="dialog.text_overlay.tts_voice">Seslendirme Sesi:</label>
@@ -1215,6 +1224,212 @@
       <div class="dialog-buttons">
         <button type="submit" id="gemini-api-key-confirm" data-i18n="dialog.common.save">Kaydet</button>
         <button type="button" id="gemini-api-key-cancel" data-i18n="dialog.cancel">İptal</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="openai-api-key-dialog" aria-labelledby="openai-api-key-title">
+    <form method="dialog">
+      <h2 id="openai-api-key-title" data-i18n="dialog.openai_api.title">OpenAI API Anahtarı</h2>
+      <div class="form-group">
+        <label for="openai-api-key-input" data-i18n="dialog.openai_api.api_key">API Anahtarı:</label>
+        <input type="password" id="openai-api-key-input" data-i18n-placeholder="dialog.openai_api.placeholder" placeholder="OpenAI anahtarınızı buraya yapıştırın"
+          style="width: 100%; margin-bottom: 10px;">
+        <div class="checkbox-group" style="margin-bottom: 15px;">
+          <input type="checkbox" id="openai-api-key-show">
+          <label for="openai-api-key-show" data-i18n="dialog.openai_api.show_key">Anahtarı Göster</label>
+        </div>
+        <p class="hint" data-i18n="dialog.openai_api.hint">Bu anahtar şu aşamada yalnızca canlı çeviri özellikleri için saklanır. Gemini ayarlarınız ayrı kalır.</p>
+      </div>
+      <div class="dialog-buttons">
+        <button type="submit" id="openai-api-key-confirm" data-i18n="dialog.common.save">Kaydet</button>
+        <button type="button" id="openai-api-key-cancel" data-i18n="dialog.cancel">İptal</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="elevenlabs-api-key-dialog" aria-labelledby="elevenlabs-api-key-title">
+    <form method="dialog">
+      <h2 id="elevenlabs-api-key-title" data-i18n="dialog.elevenlabs_api.title">ElevenLabs API Anahtarı</h2>
+      <div class="form-group">
+        <label for="elevenlabs-api-key-input" data-i18n="dialog.elevenlabs_api.api_key">API Anahtarı:</label>
+        <input type="password" id="elevenlabs-api-key-input" data-i18n-placeholder="dialog.elevenlabs_api.placeholder" placeholder="ElevenLabs anahtarınızı buraya yapıştırın"
+          style="width: 100%; margin-bottom: 10px;">
+        <div class="checkbox-group" style="margin-bottom: 15px;">
+          <input type="checkbox" id="elevenlabs-api-key-show">
+          <label for="elevenlabs-api-key-show" data-i18n="dialog.elevenlabs_api.show_key">Anahtarı Göster</label>
+        </div>
+        <p class="hint" data-i18n="dialog.elevenlabs_api.hint">Bu anahtar şimdilik yalnızca yayın odasındaki canlı dublaj ve sesli çeviri deneyleri için saklanır.</p>
+      </div>
+      <div class="dialog-buttons">
+        <button type="submit" id="elevenlabs-api-key-confirm" data-i18n="dialog.common.save">Kaydet</button>
+        <button type="button" id="elevenlabs-api-key-cancel" data-i18n="dialog.cancel">İptal</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="instant-voice-translation-dialog" aria-labelledby="instant-voice-translation-title">
+    <form method="dialog">
+      <h2 id="instant-voice-translation-title" data-i18n="dialog.instant_voice_translation.title">Anlık Sesli Çeviri</h2>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.description">Mikrofondan duyulan konuşmayı Gemini Live Translate ile seçtiğiniz dile çevirir. Konuşulan dil hedef dille aynıysa çeviri sesi üretilmez.</p>
+      <div class="form-group">
+        <label for="instant-voice-translation-source" data-i18n="dialog.instant_voice_translation.source_label">Dinleme kaynağı</label>
+        <select id="instant-voice-translation-source" data-i18n-aria="dialog.instant_voice_translation.source_label">
+            <option value="native-microphone" data-i18n="dialog.instant_voice_translation.source_microphone">Mikrofon</option>
+          <option value="native-system-audio" data-i18n="dialog.instant_voice_translation.source_system_audio">Bilgisayar sesi</option>
+          <option value="native-window-audio" data-i18n="dialog.instant_voice_translation.source_window_audio">Pencere veya uygulama sesi</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="instant-voice-translation-conversation-mode">
+          <span data-i18n="dialog.instant_voice_translation.conversation_mode">Karşılıklı konuşma modu</span>
+        </label>
+        <p class="hint hidden" id="instant-voice-translation-conversation-hint" data-i18n="dialog.instant_voice_translation.conversation_mode_hint">Bu modda dinlenecek mikrofonu seçebilir ve çevrilen sesi sanal mikrofona gönderebilirsiniz.</p>
+        <p class="hint hidden" id="instant-voice-translation-meeting-microphone-hint" data-i18n="dialog.instant_voice_translation.meeting_microphone_hint">Karşılıklı çevirinin düzgün çalışması için toplantı uygulamasında mikrofon olarak CABLE Output seçin.</p>
+        <p class="hint hidden" id="instant-voice-translation-routing-hint" data-i18n="dialog.instant_voice_translation.conversation_routing_hint">Önerilen kurulum: Dinleme kaynağı gerçek mikrofonunuz, karşı tarafa gönderilecek ses çıkışı CABLE Input, toplantı mikrofonu CABLE Output, karşı taraf sesi kaynağı toplantı penceresi, bana gelen çeviri sesi çıkışı kulaklığınız olmalı.</p>
+      </div>
+      <div class="form-group hidden" id="instant-voice-translation-microphone-group">
+        <label for="instant-voice-translation-microphone-device" data-i18n="dialog.instant_voice_translation.microphone_device_label">Dinlenecek mikrofon</label>
+        <select id="instant-voice-translation-microphone-device" data-i18n-aria="dialog.instant_voice_translation.microphone_device_label"></select>
+        <button type="button" id="instant-voice-translation-refresh-microphones" data-i18n="dialog.instant_voice_translation.microphone_device_refresh">Mikrofonları yenile</button>
+      </div>
+      <div class="form-group hidden" id="instant-voice-translation-original-underlay-group">
+        <label>
+          <input type="checkbox" id="instant-voice-translation-original-underlay">
+          <span data-i18n="dialog.instant_voice_translation.original_underlay">Özgün sesi karşı tarafa altta gönder</span>
+        </label>
+        <label for="instant-voice-translation-original-underlay-level" data-i18n="dialog.instant_voice_translation.original_underlay_level">Özgün ses düzeyi</label>
+        <select id="instant-voice-translation-original-underlay-level" data-i18n-aria="dialog.instant_voice_translation.original_underlay_level">
+          <option value="0.1" data-i18n="dialog.instant_voice_translation.original_underlay_level_10">%10</option>
+          <option value="0.2" selected data-i18n="dialog.instant_voice_translation.original_underlay_level_20">%20</option>
+          <option value="0.3" data-i18n="dialog.instant_voice_translation.original_underlay_level_30">%30</option>
+        </select>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.original_underlay_hint">Konuşma zaten hedef dildeyse özgün ses tam seviyede gönderilir.</p>
+      </div>
+      <div class="form-group hidden" id="instant-voice-translation-my-language-group">
+        <label for="instant-voice-translation-my-language" data-i18n="dialog.instant_voice_translation.my_language">Benim dilim</label>
+        <select id="instant-voice-translation-my-language" data-i18n-aria="dialog.instant_voice_translation.my_language"></select>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.my_language_hint">Karşı tarafın sesi bu dile çevrilip size duyurulur.</p>
+      </div>
+      <div class="form-group">
+        <label for="instant-voice-translation-target-language" data-i18n="dialog.instant_voice_translation.target_language">Hedef dil</label>
+        <select id="instant-voice-translation-target-language" data-i18n-aria="dialog.instant_voice_translation.target_language">
+          <option value="tr" data-i18n="dialog.instant_voice_translation.language_tr">Türkçe</option>
+          <option value="en" data-i18n="dialog.instant_voice_translation.language_en">İngilizce</option>
+          <option value="de" data-i18n="dialog.instant_voice_translation.language_de">Almanca</option>
+          <option value="fr" data-i18n="dialog.instant_voice_translation.language_fr">Fransızca</option>
+          <option value="es" data-i18n="dialog.instant_voice_translation.language_es">İspanyolca</option>
+        </select>
+      </div>
+      <div class="form-group" id="instant-voice-translation-text-only-group">
+        <label>
+          <input type="checkbox" id="instant-voice-translation-text-only">
+          <span data-i18n="dialog.instant_voice_translation.text_only_mode">Yazılı çeviri modu: çeviriyi ekran okuyucu okusun</span>
+        </label>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.text_only_mode_hint">Sesli çeviri yerine metin çevirisi duyurulur. Bilgisayar sesi dinlerken ekran okuyucu aynı çıkıştan yakalanırsa tekrar çevrilebilir; gerekirse toplantı sesini sanal kabloya, ekran okuyucu ve çeviri çıkışını kulaklığa verin.</p>
+      </div>
+      <div class="form-group hidden" id="instant-voice-translation-incoming-volume-group">
+        <label for="instant-voice-translation-incoming-volume" data-i18n="dialog.instant_voice_translation.incoming_volume_label">Bana gelen çeviri sesi düzeyi</label>
+        <select id="instant-voice-translation-incoming-volume" data-i18n-aria="dialog.instant_voice_translation.incoming_volume_label">
+          <option value="1" data-i18n="dialog.instant_voice_translation.incoming_volume_100">%100</option>
+          <option value="1.25" data-i18n="dialog.instant_voice_translation.incoming_volume_125">%125</option>
+          <option value="1.35" selected data-i18n="dialog.instant_voice_translation.incoming_volume_135">%135</option>
+          <option value="1.5" data-i18n="dialog.instant_voice_translation.incoming_volume_150">%150</option>
+        </select>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.incoming_volume_hint">Karşı tarafın özgün sesi Zoom’dan gelmeye devam eder; bu ayar çeviriyi biraz öne alır.</p>
+      </div>
+      <div class="form-group hidden" id="instant-voice-translation-incoming-output-group">
+        <label for="instant-voice-translation-incoming-output-device" data-i18n="dialog.instant_voice_translation.incoming_output_device_label">Bana gelen çeviri sesi çıkışı</label>
+        <select id="instant-voice-translation-incoming-output-device" data-i18n-aria="dialog.instant_voice_translation.incoming_output_device_label"></select>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.incoming_output_device_hint">Burası genellikle kulaklığınız olmalı. CABLE Input seçmeyin; CABLE Input karşı tarafa giden ses içindir.</p>
+      </div>
+      <div class="form-group hidden" id="instant-voice-translation-clean-recording-group">
+        <label>
+          <input type="checkbox" id="instant-voice-translation-clean-incoming-recording">
+          <span data-i18n="dialog.instant_voice_translation.clean_incoming_recording">Karşı tarafın temiz dijital sesini kayda ekle</span>
+        </label>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.clean_incoming_recording_hint">Açıksa karşı taraf sesi hoparlörden değil, seçilen pencere/uygulama sesinden dijital olarak kayda eklenir.</p>
+      </div>
+      <div class="form-group hidden" id="instant-voice-translation-incoming-source-group">
+        <label for="instant-voice-translation-incoming-source" data-i18n="dialog.instant_voice_translation.incoming_source_label">Karşı taraf sesi kaynağı</label>
+        <select id="instant-voice-translation-incoming-source" data-i18n-aria="dialog.instant_voice_translation.incoming_source_label">
+          <option value="native-window-audio" data-i18n="dialog.instant_voice_translation.source_window_audio">Pencere veya uygulama sesi</option>
+          <option value="native-system-audio" data-i18n="dialog.instant_voice_translation.source_system_audio">Bilgisayar sesi</option>
+        </select>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.incoming_source_hint">Teams, Zoom veya tarayıcı toplantısı için mümkünse yalnızca o pencereyi seçin; böylece çeviri sesi tekrar yakalanmaz.</p>
+      </div>
+      <div class="form-group hidden" id="instant-voice-translation-window-group">
+          <label for="instant-voice-translation-window" data-i18n="dialog.instant_voice_translation.window_label">Dinlenecek pencere veya uygulama</label>
+          <select id="instant-voice-translation-window" data-i18n-aria="dialog.instant_voice_translation.window_label"></select>
+          <button type="button" id="instant-voice-translation-refresh-windows" data-i18n="dialog.instant_voice_translation.window_refresh">Pencere listesini yenile</button>
+        </div>
+      <div class="form-group hidden" id="instant-voice-translation-source-volume-group">
+        <label for="instant-voice-translation-source-volume" data-i18n="dialog.instant_voice_translation.source_volume_label">Dinlenen uygulamanın özgün ses düzeyi</label>
+        <select id="instant-voice-translation-source-volume" data-i18n-aria="dialog.instant_voice_translation.source_volume_label">
+          <option value="1" selected data-i18n="dialog.instant_voice_translation.source_volume_100">%100</option>
+          <option value="0.7" data-i18n="dialog.instant_voice_translation.source_volume_70">%70</option>
+          <option value="0.5" data-i18n="dialog.instant_voice_translation.source_volume_50">%50</option>
+          <option value="0.3" data-i18n="dialog.instant_voice_translation.source_volume_30">%30</option>
+          <option value="0.15" data-i18n="dialog.instant_voice_translation.source_volume_15">%15</option>
+        </select>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.source_volume_hint">Yalnızca pencere veya uygulama sesi seçildiğinde uygulanır. Çeviri durunca uygulamanın eski ses düzeyi geri yüklenir.</p>
+      </div>
+      <div class="form-group hidden" id="instant-voice-translation-incoming-window-group">
+        <label for="instant-voice-translation-incoming-window" data-i18n="dialog.instant_voice_translation.incoming_window_label">Karşı tarafın bulunduğu pencere veya uygulama</label>
+        <select id="instant-voice-translation-incoming-window" data-i18n-aria="dialog.instant_voice_translation.incoming_window_label"></select>
+        <button type="button" id="instant-voice-translation-refresh-incoming-windows" data-i18n="dialog.instant_voice_translation.window_refresh">Pencere listesini yenile</button>
+      </div>
+      <div class="form-group">
+        <label for="instant-voice-translation-output-device" data-i18n="dialog.instant_voice_translation.output_device_label">Çeviri sesi çıkışı</label>
+        <select id="instant-voice-translation-output-device" data-i18n-aria="dialog.instant_voice_translation.output_device_label"></select>
+        <button type="button" id="instant-voice-translation-refresh-output-devices" data-i18n="dialog.instant_voice_translation.output_device_refresh">Çıkış aygıtlarını yenile</button>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.output_device_hint">Bilgisayar sesi veya Teams dinlerken tekrar döngüsü olursa, çeviri sesini farklı bir kulaklık ya da ses çıkışına verin.</p>
+        <p class="hint hidden" id="instant-voice-translation-virtual-mic-hint" data-i18n="dialog.instant_voice_translation.virtual_microphone_hint">Karşı tarafa çevrilmiş ses göndermek için VB-CABLE kurulduktan sonra burada CABLE Input seçin; Zoom, Meet veya WhatsApp tarafında mikrofon olarak CABLE Output seçin.</p>
+        <p class="hint hidden" id="instant-voice-translation-virtual-mic-download-hint">
+          <span data-i18n="dialog.instant_voice_translation.virtual_microphone_download_hint">Bilgisayarınızda sanal mikrofon bulunmazsa karşılıklı konuşma modu düzgün çalışamaz.</span>
+          <a href="https://vb-audio.com/Cable/" target="_blank" rel="noopener noreferrer" data-i18n="dialog.instant_voice_translation.virtual_microphone_download_link">Ücretsiz VB-CABLE indirme sayfasını aç</a>
+        </p>
+      </div>
+      <div class="form-group">
+        <label for="instant-voice-translation-translation-volume" data-i18n="dialog.instant_voice_translation.translation_volume_label">Çeviri sesi düzeyi</label>
+        <select id="instant-voice-translation-translation-volume" data-i18n-aria="dialog.instant_voice_translation.translation_volume_label">
+          <option value="0.8" data-i18n="dialog.instant_voice_translation.translation_volume_80">%80</option>
+          <option value="1" selected data-i18n="dialog.instant_voice_translation.translation_volume_100">%100</option>
+          <option value="1.2" data-i18n="dialog.instant_voice_translation.translation_volume_120">%120</option>
+          <option value="1.4" data-i18n="dialog.instant_voice_translation.translation_volume_140">%140</option>
+          <option value="1.6" data-i18n="dialog.instant_voice_translation.translation_volume_160">%160</option>
+          <option value="2" data-i18n="dialog.instant_voice_translation.translation_volume_200">%200</option>
+          <option value="2.5" data-i18n="dialog.instant_voice_translation.translation_volume_250">%250</option>
+        </select>
+        <p class="hint" data-i18n="dialog.instant_voice_translation.translation_volume_hint">Çeviri sesi kısık kalıyorsa buradan artırabilirsiniz. Bu ayar yalnızca çeviri sesini etkiler.</p>
+      </div>
+      <div class="form-group">
+        <label for="instant-voice-translation-audio-export-mode" data-i18n="dialog.instant_voice_translation.audio_export_mode">MP3 çıktı modu</label>
+        <select id="instant-voice-translation-audio-export-mode" data-i18n-aria="dialog.instant_voice_translation.audio_export_mode">
+          <option value="translation-foreground" data-i18n="dialog.instant_voice_translation.audio_export_translation_foreground">Çeviri önde, özgün ses altta</option>
+          <option value="translation-only" data-i18n="dialog.instant_voice_translation.audio_export_translation_only">Yalnızca çeviri sesi</option>
+          <option value="original-foreground" data-i18n="dialog.instant_voice_translation.audio_export_original_foreground">Özgün ses önde, çeviri altta</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="instant-voice-translation-status" data-i18n="dialog.instant_voice_translation.status_label">Durum</label>
+        <textarea id="instant-voice-translation-status" rows="3" readonly aria-live="polite" data-i18n-aria="dialog.instant_voice_translation.status_label">Hazır.</textarea>
+      </div>
+      <div class="form-group">
+        <label for="instant-voice-translation-source-text" data-i18n="dialog.instant_voice_translation.source_text">Duyulan metin</label>
+        <textarea id="instant-voice-translation-source-text" rows="3" readonly data-i18n-aria="dialog.instant_voice_translation.source_text"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="instant-voice-translation-translated-text" data-i18n="dialog.instant_voice_translation.translated_text">Çeviri metni</label>
+        <textarea id="instant-voice-translation-translated-text" rows="3" readonly data-i18n-aria="dialog.instant_voice_translation.translated_text"></textarea>
+      </div>
+      <div class="dialog-buttons">
+        <button type="button" id="instant-voice-translation-start" data-i18n="dialog.instant_voice_translation.start">Canlı dinlemeyi başlat</button>
+        <button type="button" id="instant-voice-translation-stop" data-i18n="dialog.instant_voice_translation.stop">Dinlemeyi durdur</button>
+        <button type="button" id="instant-voice-translation-save-transcript" data-i18n="dialog.instant_voice_translation.save_transcript">Çevirileri TXT olarak kaydet</button>
+        <button type="button" id="instant-voice-translation-save-audio" data-i18n="dialog.instant_voice_translation.save_translation_audio">Çeviri sesini MP3 olarak kaydet</button>
+        <button type="button" id="instant-voice-translation-close" data-i18n="dialog.common.close">Kapat</button>
       </div>
     </form>
   </dialog>
@@ -1946,13 +2161,22 @@
     </form>
     </dialog>
 
-    <dialog id="subtitle-style-dialog" aria-labelledby="subtitle-style-title">
-      <form method="dialog">
-        <h2 id="subtitle-style-title" data-i18n="dialog.subtitle_style.title">Altyazı Görünümü</h2>
-        <p data-i18n="dialog.subtitle_style.description">Gömülen altyazıların görünümünü buradan ayarlayabilirsiniz.</p>
+      <dialog id="subtitle-style-dialog" aria-labelledby="subtitle-style-title">
+        <form method="dialog">
+          <h2 id="subtitle-style-title" data-i18n="dialog.subtitle_style.title">Altyazı Görünümü</h2>
+          <p data-i18n="dialog.subtitle_style.description">Gömülen altyazıların görünümünü buradan ayarlayabilirsiniz.</p>
 
-        <div class="form-group">
-          <label for="subtitle-style-text-color-select" data-i18n="dialog.subtitle_style.text_color">Yazı Rengi</label>
+          <div class="form-group">
+            <label for="subtitle-style-layout-mode" data-i18n="dialog.subtitle_style.layout_mode">Yerleşim Biçimi</label>
+            <select id="subtitle-style-layout-mode">
+              <option value="classic" data-i18n="dialog.subtitle_style.layout_mode_classic">Klasik ve Kararlı (1.0.3 benzeri)</option>
+              <option value="custom" data-i18n="dialog.subtitle_style.layout_mode_custom">Özelleştirilebilir Yeni Düzen</option>
+            </select>
+            <p class="hint" data-i18n="dialog.subtitle_style.layout_mode_hint">Klasik mod, eski sürümdeki daha oturmuş altyazı konumunu kullanır. Özelleştirilebilir mod ise renk, kutu ve boyut ayarlarını uygular.</p>
+          </div>
+
+          <div class="form-group">
+            <label for="subtitle-style-text-color-select" data-i18n="dialog.subtitle_style.text_color">Yazı Rengi</label>
           <select id="subtitle-style-text-color-select">
             <option value="#FFFFFF" data-i18n="dialog.subtitle_style.color_white">Beyaz</option>
             <option value="#FFFF00" data-i18n="dialog.subtitle_style.color_yellow">Sarı</option>
@@ -2015,6 +2239,16 @@
       <p id="subtitle-preview-text"
         style="font-style: italic; color: #aaa; margin: 10px 0; border-left: 2px solid #555; padding-left: 10px;"></p>
       <p data-i18n="dialog.subtitle_tts.description">Seslendirme için kullanılacak ses ve hız ayarlarını yapın.</p>
+
+      <div class="form-group">
+        <label for="subtitle-tts-service" data-i18n="dialog.subtitle_tts.service">Seslendirme Servisi:</label>
+        <select id="subtitle-tts-service">
+          <option value="system" data-i18n="dialog.subtitle_tts.service_system">Bilgisayar sesleri</option>
+          <option value="openai" data-i18n="dialog.subtitle_tts.service_openai">OpenAI</option>
+          <option value="elevenlabs" data-i18n="dialog.subtitle_tts.service_elevenlabs">ElevenLabs</option>
+        </select>
+        <p class="hint" data-i18n="dialog.subtitle_tts.service_hint">OpenAI ve ElevenLabs için Yapay Zeka menüsünde API anahtarınız kayıtlı olmalıdır.</p>
+      </div>
 
       <div class="form-group">
         <label for="subtitle-tts-voice" data-i18n="dialog.subtitle_tts.voice">Seslendirme Sesi:</label>

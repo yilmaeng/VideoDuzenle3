@@ -11,6 +11,9 @@ let activeDialogWindow = null;
 let mainWindowRef = null;
 let liveEffectsPanelWindow = null;
 let recordingWizardWindow = null;
+let broadcastRoomWindow = null;
+let elevenLabsDubbingToolWindow = null;
+const broadcastRoomGuestWindows = new Set();
 let activeRecordingWizardSession = null;
 
 function cloneSessionData(data) {
@@ -393,6 +396,183 @@ function openLiveEffectsPanel(parentWindow) {
     return liveEffectsPanelWindow;
 }
 
+/**
+ * Yayın Odası
+ */
+function openBroadcastRoom(parentWindow, options = {}) {
+    if (broadcastRoomWindow && !broadcastRoomWindow.isDestroyed()) {
+        if (broadcastRoomWindow.isMinimized()) {
+            broadcastRoomWindow.restore();
+        }
+        broadcastRoomWindow.show();
+        broadcastRoomWindow.focus();
+        if (options && Object.keys(options).length > 0) {
+            broadcastRoomWindow.webContents.send('broadcast-room-init', options);
+        }
+        return broadcastRoomWindow;
+    }
+
+    broadcastRoomWindow = new BrowserWindow({
+        width: 1180,
+        height: 860,
+        show: false,
+        title: i18n.t('broadcast_room.window_title') || 'EVD Yayın Odası',
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+
+    broadcastRoomWindow.loadFile(path.join(__dirname, '../renderer/dialogs/broadcast-room.html'));
+
+    broadcastRoomWindow.webContents.once('did-finish-load', () => {
+        broadcastRoomWindow.webContents.send('broadcast-room-init', options || {});
+    });
+
+    broadcastRoomWindow.once('ready-to-show', () => {
+        broadcastRoomWindow.show();
+        broadcastRoomWindow.focus();
+    });
+
+    broadcastRoomWindow.once('closed', () => {
+        broadcastRoomWindow = null;
+        if (parentWindow && !parentWindow.isDestroyed()) {
+            parentWindow.focus();
+        }
+    });
+
+    return broadcastRoomWindow;
+}
+
+function openBroadcastRoomGuestWindow(parentWindow, options = {}) {
+    const guestWindow = new BrowserWindow({
+        width: 560,
+        height: 680,
+        show: false,
+        minimizable: true,
+        maximizable: false,
+        title: i18n.t('broadcast_room.guest_window_title') || 'Yayın Odası Konuk Katılımı',
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+
+    broadcastRoomGuestWindows.add(guestWindow);
+    guestWindow.loadFile(path.join(__dirname, '../renderer/dialogs/broadcast-room-guest.html'));
+
+    guestWindow.webContents.once('did-finish-load', () => {
+        guestWindow.webContents.send('broadcast-room-guest-init', options || {});
+    });
+
+    guestWindow.once('ready-to-show', () => {
+        guestWindow.show();
+        guestWindow.focus();
+    });
+
+    guestWindow.once('closed', () => {
+        broadcastRoomGuestWindows.delete(guestWindow);
+        if (parentWindow && !parentWindow.isDestroyed()) {
+            parentWindow.focus();
+        }
+    });
+
+    return guestWindow;
+}
+
+function openBroadcastRoomJoinWindow(parentWindow, options = {}) {
+    const joinUrl = String(options?.joinUrl || '').trim();
+    if (!/^https?:\/\//i.test(joinUrl)) {
+        throw new Error('join_url_required');
+    }
+    const partition = `broadcast-room-join-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    const joinWindow = new BrowserWindow({
+        width: 760,
+        height: 820,
+        show: false,
+        minimizable: true,
+        maximizable: true,
+        title: i18n.t('broadcast_room.join_room_window_title') || 'Toplantıya Katıl',
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            partition
+        }
+    });
+
+    broadcastRoomGuestWindows.add(joinWindow);
+    const joinSession = joinWindow.webContents.session;
+    try {
+        joinSession.setPermissionRequestHandler((webContents, permission, callback) => {
+            const sameWindow = webContents && webContents.id === joinWindow.webContents.id;
+            callback(sameWindow && ['media', 'display-capture', 'fullscreen'].includes(String(permission || '')));
+        });
+    } catch (error) {
+        console.warn('broadcast room join permission handler failed:', error.message);
+    }
+    joinWindow.loadURL(joinUrl);
+
+    joinWindow.once('ready-to-show', () => {
+        joinWindow.show();
+        joinWindow.focus();
+    });
+
+    joinWindow.once('closed', () => {
+        try { joinSession.setPermissionRequestHandler(null); } catch (_error) {}
+        broadcastRoomGuestWindows.delete(joinWindow);
+        if (parentWindow && !parentWindow.isDestroyed()) {
+            parentWindow.focus();
+        }
+    });
+
+    return joinWindow;
+}
+
+function openElevenLabsDubbingTool(parentWindow, options = {}) {
+    if (elevenLabsDubbingToolWindow && !elevenLabsDubbingToolWindow.isDestroyed()) {
+        if (elevenLabsDubbingToolWindow.isMinimized()) {
+            elevenLabsDubbingToolWindow.restore();
+        }
+        elevenLabsDubbingToolWindow.show();
+        elevenLabsDubbingToolWindow.focus();
+        elevenLabsDubbingToolWindow.webContents.send('elevenlabs-dubbing-tool-init', options || {});
+        return elevenLabsDubbingToolWindow;
+    }
+
+    elevenLabsDubbingToolWindow = new BrowserWindow({
+        width: 780,
+        height: 700,
+        show: false,
+        title: i18n.t('elevenlabs_dubbing_tool.window_title') || 'ElevenLabs ile Dosya Dublajı',
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+
+    elevenLabsDubbingToolWindow.loadFile(path.join(__dirname, '../renderer/dialogs/elevenlabs-dubbing-tool.html'));
+
+    elevenLabsDubbingToolWindow.webContents.once('did-finish-load', () => {
+        elevenLabsDubbingToolWindow.webContents.send('elevenlabs-dubbing-tool-init', options || {});
+    });
+
+    elevenLabsDubbingToolWindow.once('ready-to-show', () => {
+        elevenLabsDubbingToolWindow.show();
+        elevenLabsDubbingToolWindow.focus();
+    });
+
+    elevenLabsDubbingToolWindow.once('closed', () => {
+        elevenLabsDubbingToolWindow = null;
+        if (parentWindow && !parentWindow.isDestroyed()) {
+            parentWindow.focus();
+        }
+    });
+
+    return elevenLabsDubbingToolWindow;
+}
+
 module.exports = {
     openTextOverlayDialog,
     openSyncWizard,
@@ -400,6 +580,10 @@ module.exports = {
     openRecordingWizard,
     resumeActiveRecordingWizard,
     openLiveEffectsPanel,
+    openBroadcastRoom,
+    openBroadcastRoomGuestWindow,
+    openBroadcastRoomJoinWindow,
+    openElevenLabsDubbingTool,
     setupDialogHandlers,
     setRecordingWizardSession,
     getRecordingWizardSession,

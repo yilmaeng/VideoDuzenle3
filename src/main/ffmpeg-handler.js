@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
+const { buildVerticalPlacementFilter } = require('./media-placement');
 
 /* =========================================
    DIAGNOSTIC & UTILS (V61 AUDIO MIXER REVIVAL)
@@ -108,50 +109,119 @@ function _getVerticalOutputOptions(options = {}, isPreview = false) {
     return ['-c:v', 'libx264', '-preset', preset, '-crf', crf, '-c:a', 'aac', '-movflags', '+faststart'];
 }
 
+function _isKnownColorValue(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return Boolean(normalized)
+        && normalized !== 'unknown'
+        && normalized !== 'unspecified'
+        && normalized !== 'reserved';
+}
+
+function _getVideoColorMetadata(metadata = {}) {
+    const videoStream = Array.isArray(metadata.streams)
+        ? metadata.streams.find((stream) => stream.codec_type === 'video')
+        : null;
+    if (!videoStream) {
+        return {};
+    }
+    return {
+        colorRange: _isKnownColorValue(videoStream.color_range) ? String(videoStream.color_range).trim() : '',
+        colorSpace: _isKnownColorValue(videoStream.color_space) ? String(videoStream.color_space).trim() : '',
+        colorPrimaries: _isKnownColorValue(videoStream.color_primaries) ? String(videoStream.color_primaries).trim() : '',
+        colorTransfer: _isKnownColorValue(videoStream.color_transfer) ? String(videoStream.color_transfer).trim() : ''
+    };
+}
+
+function _buildColorMetadataOutputOptions(metadata = {}, buildOptions = {}) {
+    const color = metadata.colorMetadata || _getVideoColorMetadata(metadata);
+    const defaultToBt709 = Boolean(buildOptions.defaultToBt709);
+    const forceBt709 = Boolean(buildOptions.forceBt709);
+    const options = [];
+    const colorRange = forceBt709 ? 'tv' : (_isKnownColorValue(color.colorRange) ? color.colorRange : '');
+    if (_isKnownColorValue(colorRange)) {
+        options.push('-color_range', colorRange);
+    }
+    const colorSpace = forceBt709 ? 'bt709' : (_isKnownColorValue(color.colorSpace) ? color.colorSpace : (defaultToBt709 ? 'bt709' : ''));
+    const colorPrimaries = forceBt709 ? 'bt709' : (_isKnownColorValue(color.colorPrimaries) ? color.colorPrimaries : (defaultToBt709 ? 'bt709' : ''));
+    const colorTransfer = forceBt709 ? 'bt709' : (_isKnownColorValue(color.colorTransfer) ? color.colorTransfer : (defaultToBt709 ? 'bt709' : ''));
+    if (_isKnownColorValue(colorSpace)) {
+        options.push('-colorspace', colorSpace);
+    }
+    if (_isKnownColorValue(colorPrimaries)) {
+        options.push('-color_primaries', colorPrimaries);
+    }
+    if (_isKnownColorValue(colorTransfer)) {
+        options.push('-color_trc', colorTransfer);
+    }
+    return options;
+}
+
+function _isHdrVideoMetadata(metadata = {}) {
+    const color = metadata.colorMetadata || _getVideoColorMetadata(metadata);
+    const transfer = String(color.colorTransfer || '').toLowerCase();
+    const primaries = String(color.colorPrimaries || '').toLowerCase();
+    const space = String(color.colorSpace || '').toLowerCase();
+    const videoStream = Array.isArray(metadata.streams)
+        ? metadata.streams.find((stream) => stream.codec_type === 'video')
+        : null;
+    const sideData = Array.isArray(videoStream?.side_data_list) ? videoStream.side_data_list : [];
+    return transfer.includes('smpte2084')
+        || transfer.includes('arib-std-b67')
+        || transfer.includes('hlg')
+        || primaries.includes('bt2020')
+        || space.includes('bt2020')
+        || sideData.some((item) => String(item?.side_data_type || '').toLowerCase().includes('dovi'));
+}
+
+function _buildHdrToSdrFilter(metadata = {}) {
+    if (!_isHdrVideoMetadata(metadata)) {
+        return '';
+    }
+    return 'zscale=t=linear:npl=100,format=gbrpf32le,tonemap=tonemap=hable:desat=0,zscale=p=bt709:t=bt709:m=bt709:r=tv,format=yuv420p';
+}
+
+function _buildProcessedVideoColorOutputOptions(metadata = {}) {
+    return _buildColorMetadataOutputOptions(metadata, {
+        defaultToBt709: true,
+        forceBt709: _isHdrVideoMetadata(metadata)
+    });
+}
+
+function _joinVideoFilters(...filters) {
+    return filters
+        .flat()
+        .map((filter) => String(filter || '').trim())
+        .filter(Boolean)
+        .join(',');
+}
+
+function _buildAtempoFilterChain(tempo) {
+    let remainingTempo = Math.max(0.5, Math.min(2, Number(tempo || 1)));
+    const filters = [];
+    while (remainingTempo > 2) {
+        filters.push('atempo=2');
+        remainingTempo /= 2;
+    }
+    while (remainingTempo < 0.5) {
+        filters.push('atempo=0.5');
+        remainingTempo /= 0.5;
+    }
+    if (Math.abs(remainingTempo - 1) > 0.03) {
+        filters.push(`atempo=${remainingTempo.toFixed(3)}`);
+    }
+    return filters;
+}
+
 function _buildVerticalFilterGraph(options = {}) {
     const { width, height } = _getVerticalFormatConfig(options.format);
     const method = options.method || 'blur';
     const settings = options.settings || {};
-
-    if (method === 'crop') {
-        const focus = settings.focus || 'center';
-        const shiftPercent = Number.isFinite(settings.x) ? settings.x : 0;
-        const focusExpr = focus === 'left'
-            ? '0'
-            : focus === 'right'
-                ? '(iw-ow)'
-                : '(iw-ow)/2';
-        const shiftExpr = shiftPercent === 0
-            ? focusExpr
-            : `${focusExpr}+(((iw-ow)/2)*${(shiftPercent / 50).toFixed(4)})`;
-        const cropXExpr = `max(0,min(iw-ow,${shiftExpr}))`;
-
-        return [
-            `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}:${cropXExpr}:(ih-oh)/2[outv]`
-        ];
-    }
-
-    if (method === 'letterbox') {
-        const color = settings.color || 'black';
-        return [
-            `color=c=${color}:s=${width}x${height}[bg]`,
-            `[0:v]scale=${width}:${height}:force_original_aspect_ratio=decrease[fg]`,
-            `[bg][fg]overlay=(W-w)/2:(H-h)/2[outv]`
-        ];
-    }
-
-    const sigma = Math.max(0, Number.isFinite(settings.sigma) ? settings.sigma : 18);
-    const brightnessPercent = Number.isFinite(settings.brightness) ? settings.brightness : 100;
-    const brightnessValue = ((brightnessPercent - 100) / 100).toFixed(2);
-    const centerScale = Number.isFinite(settings.scale) ? settings.scale : 100;
-    const fgWidth = Math.max(64, Math.round(width * (centerScale / 100)));
-    const fgHeight = Math.max(64, Math.round(height * (centerScale / 100)));
-
-    return [
-        `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},boxblur=${sigma}:10,eq=brightness=${brightnessValue}[bg]`,
-        `[0:v]scale=${fgWidth}:${fgHeight}:force_original_aspect_ratio=decrease[fg]`,
-        `[bg][fg]overlay=(W-w)/2:(H-h)/2[outv]`
-    ];
+    return buildVerticalPlacementFilter({
+        targetWidth: width,
+        targetHeight: height,
+        method,
+        settings
+    });
 }
 
 function _applyVerticalTrim(command, options = {}, isPreview = false) {
@@ -186,22 +256,61 @@ function _runVerticalVideoJob(inputPath, outputPath, options = {}, onProgress = 
     return new Promise((resolve, reject) => {
         const safeInput = _getSafePath(inputPath);
         const safeOutput = _getSafePath(outputPath);
+        if (!safeInput || !safeOutput) {
+            reject(new Error('Vertical video input or output path is missing.'));
+            return;
+        }
+
+        if (path.resolve(safeInput) === path.resolve(safeOutput)) {
+            reject(new Error('Vertical video output path cannot be the same as the source file.'));
+            return;
+        }
+
+        const outputDir = path.dirname(safeOutput);
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        const stderrLines = [];
         const command = ffmpeg(safeInput);
 
         _applyVerticalTrim(command, options, isPreview);
 
         command
             .complexFilter(_buildVerticalFilterGraph(options))
+            .outputOptions(['-y'])
             .outputOptions(_getVerticalOutputOptions(options, isPreview))
             .outputOptions(['-map', '[outv]', '-map', '0:a?'])
             .output(safeOutput)
+            .on('start', (commandLine) => {
+                console.log('[VerticalVideo] FFmpeg started:', commandLine);
+            })
+            .on('stderr', (line) => {
+                const text = String(line || '').trim();
+                if (!text) return;
+                stderrLines.push(text);
+                if (stderrLines.length > 24) {
+                    stderrLines.shift();
+                }
+            })
             .on('progress', (progress) => {
                 if (onProgress && typeof onProgress === 'function') {
                     onProgress(progress.percent || 0);
                 }
             })
             .on('end', () => resolve({ success: true, outputPath: safeOutput }))
-            .on('error', reject)
+            .on('error', (error) => {
+                const stderrSummary = stderrLines.slice(-6).join(' | ');
+                console.error('[VerticalVideo] FFmpeg failed:', {
+                    input: safeInput,
+                    output: safeOutput,
+                    isPreview,
+                    options,
+                    error: error?.message || String(error),
+                    stderrSummary
+                });
+                reject(new Error(stderrSummary ? `${error.message} | ${stderrSummary}` : error.message));
+            })
             .run();
     });
 }
@@ -317,26 +426,49 @@ async function _createAudioFromMix(segments, outputPath, onProgress) {
     // segments: [{ path, offset }]
     console.log(`[AudioMixComplex] Creating mix from ${segments.length} segments`);
     if (!segments || segments.length === 0) throw new Error("No segments provided");
+    const preparedSegments = await Promise.all(segments.map(async (segment) => {
+        const safePath = _getSafePath(segment.path);
+        let dubDuration = 0;
+        try {
+            const metadata = await _getVideoMetadata(safePath);
+            dubDuration = Number(metadata?.duration || metadata?.format?.duration || 0) || 0;
+        } catch (_error) {}
+        const sourceDuration = Math.max(0, Number(segment.sourceDuration || 0) || 0);
+        let tempo = 1;
+        if (sourceDuration >= 1 && dubDuration >= 0.5) {
+            const desiredDuration = Math.max(0.5, sourceDuration * 0.9);
+            tempo = Math.max(0.72, Math.min(1.28, dubDuration / desiredDuration));
+        }
+        return {
+            ...segment,
+            path: safePath,
+            tempo
+        };
+    }));
 
     return new Promise((resolve, reject) => {
         const cmd = ffmpeg();
 
         // Inputs
-        segments.forEach(seg => {
-            cmd.input(_getSafePath(seg.path));
+        preparedSegments.forEach(seg => {
+            cmd.input(seg.path);
         });
 
         // Filters
         let filterChain = [];
         let mixInputs = [];
 
-        segments.forEach((seg, i) => {
+        preparedSegments.forEach((seg, i) => {
             const delayMs = Math.round((seg.offset || 0) * 1000);
             const lbl = `a${i}`;
             // aformat: Ensure consistent format before filter
             // adelay: Delay start time
             // volume: Keep original volume (1.0)
             let f = `[${i}:a]aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp`;
+            const tempoFilters = _buildAtempoFilterChain(seg.tempo);
+            if (tempoFilters.length) {
+                f += `,${tempoFilters.join(',')}`;
+            }
             if (delayMs > 0) {
                 f += `,adelay=${delayMs}|${delayMs}`;
             }
@@ -350,7 +482,8 @@ async function _createAudioFromMix(segments, outputPath, onProgress) {
         // Keep the filter chain compatible with older FFmpeg builds.
         // Some installations do not support amix normalize=0.
         const N = segments.length;
-        filterChain.push(`${mixInputs.join('')}amix=inputs=${N}:dropout_transition=0[aout]`);
+        const mixCompensation = Math.max(1, Math.min(64, N));
+        filterChain.push(`${mixInputs.join('')}amix=inputs=${N}:dropout_transition=0,volume=${mixCompensation},alimiter=limit=0.95[aout]`);
 
         cmd.complexFilter(filterChain)
             .outputOptions([
@@ -371,6 +504,349 @@ async function _createAudioFromMix(segments, outputPath, onProgress) {
                 console.error(`[AudioMixComplex] Error:`, err);
                 reject(err);
             })
+            .run();
+    });
+}
+
+async function _addSeparateAudioTrack(videoPath, segments, outputPath, options = {}, onProgress) {
+    const safeVideoPath = _getSafePath(videoPath);
+    const safeOutputPath = _getSafePath(outputPath);
+    const safeSegments = (Array.isArray(segments) ? segments : [])
+        .map((segment) => ({
+            path: segment?.path,
+            offset: Math.max(0, Number(segment?.offset || 0)),
+            sourceDuration: Math.max(0, Number(segment?.sourceDuration || 0))
+        }))
+        .filter((segment) => segment.path && fs.existsSync(segment.path));
+    if (!safeSegments.length) {
+        throw new Error('No valid dubbing segments were found.');
+    }
+
+    const tempDubPath = path.join(os.tmpdir(), `evd_dub_track_${Date.now()}.wav`);
+    await _createAudioFromMix(safeSegments, tempDubPath, (percent) => {
+        if (onProgress) onProgress(Math.min(45, Math.max(0, Number(percent || 0) * 0.45)));
+    });
+
+    const metadata = await _getVideoMetadata(safeVideoPath).catch(() => ({}));
+    const audioStreamCount = Array.isArray(metadata?.streams)
+        ? metadata.streams.filter((stream) => stream.codec_type === 'audio').length
+        : 0;
+    const hasOriginalAudio = audioStreamCount > 0;
+    const dubAudioIndex = Math.max(0, audioStreamCount);
+    const trackTitle = String(options?.trackTitle || 'Dublaj + Özgün').trim() || 'Dublaj + Özgün';
+    const originalUnderVolume = Math.max(0, Math.min(1, Number(options?.originalUnderVolume ?? 0.18)));
+    const dubVolume = Math.max(0.1, Math.min(24, Number(options?.dubVolume ?? 1)));
+    const videoDuration = Number(metadata?.format?.duration || metadata?.duration || 0) || 0;
+    const dubVoiceTail = videoDuration > 0
+        ? `,apad,atrim=0:${Math.max(0.1, videoDuration).toFixed(3)},asetpts=PTS-STARTPTS`
+        : '';
+
+    return new Promise((resolve, reject) => {
+        const cmd = ffmpeg(safeVideoPath).input(tempDubPath);
+        const filters = [
+            `[1:a]volume=${dubVolume},dynaudnorm=f=150:g=15:m=20,alimiter=limit=0.95,aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp${dubVoiceTail}[dubvoice]`
+        ];
+        if (hasOriginalAudio && originalUnderVolume > 0) {
+            filters.push(
+                `[0:a:0]volume=${originalUnderVolume},aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp[origlow]`,
+                '[origlow][dubvoice]amix=inputs=2:duration=first:dropout_transition=0,volume=1.25[dubmix]'
+            );
+        }
+        cmd.complexFilter(filters);
+
+        const outputOptions = [
+                '-map', '0:v?',
+                '-map', '0:a?',
+                '-map', hasOriginalAudio && originalUnderVolume > 0 ? '[dubmix]' : '[dubvoice]',
+                '-c:v', 'copy',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                `-metadata:s:a:${dubAudioIndex}`, `title=${trackTitle}`,
+                '-disposition:a:0', '0',
+                `-disposition:a:${dubAudioIndex}`, 'default',
+                '-max_muxing_queue_size', '9999'
+        ];
+
+        cmd.outputOptions(outputOptions)
+            .output(safeOutputPath)
+            .on('progress', (progress) => {
+                if (onProgress) {
+                    onProgress(45 + Math.min(55, Math.max(0, Number(progress.percent || 0) * 0.55)));
+                }
+            })
+            .on('end', () => {
+                try { fs.unlinkSync(tempDubPath); } catch (_error) {}
+                resolve({ success: true, outputPath: safeOutputPath });
+            })
+            .on('error', (error) => {
+                try { fs.unlinkSync(tempDubPath); } catch (_cleanupError) {}
+                reject(error);
+            })
+            .run();
+    });
+}
+
+async function _addSeparateAudioTrackFromAudio(videoPath, audioPath, outputPath, options = {}, onProgress) {
+    const safeVideoPath = _getSafePath(videoPath);
+    const safeAudioPath = _getSafePath(audioPath);
+    const safeOutputPath = _getSafePath(outputPath);
+    if (!safeVideoPath || !fs.existsSync(safeVideoPath)) {
+        throw new Error('source_video_missing');
+    }
+    if (!safeAudioPath || !fs.existsSync(safeAudioPath)) {
+        throw new Error('separate_audio_missing');
+    }
+
+    const metadata = await _getVideoMetadata(safeVideoPath).catch(() => ({}));
+    const audioStreamCount = Array.isArray(metadata?.streams)
+        ? metadata.streams.filter((stream) => stream.codec_type === 'audio').length
+        : 0;
+    const hasOriginalAudio = audioStreamCount > 0;
+    const newAudioIndex = Math.max(0, audioStreamCount);
+    const trackTitle = String(options?.trackTitle || 'Canlı Çeviri').trim() || 'Canlı Çeviri';
+    const originalUnderVolume = Math.max(0, Math.min(1, Number(options?.originalUnderVolume ?? 0.06)));
+    const dubVolume = Math.max(0.1, Math.min(24, Number(options?.dubVolume ?? 10)));
+    const videoDuration = Number(metadata?.format?.duration || metadata?.duration || 0) || 0;
+    const interpVoiceTail = videoDuration > 0
+        ? `,apad,atrim=0:${Math.max(0.1, videoDuration).toFixed(3)},asetpts=PTS-STARTPTS`
+        : '';
+
+    return new Promise((resolve, reject) => {
+        const cmd = ffmpeg(safeVideoPath).input(safeAudioPath);
+        const filters = [
+            `[1:a]volume=${dubVolume},dynaudnorm=f=150:g=15:m=20,alimiter=limit=0.95,aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp${interpVoiceTail}[interpvoice]`
+        ];
+        if (hasOriginalAudio && originalUnderVolume > 0) {
+            filters.push(
+                `[0:a:0]volume=${originalUnderVolume},aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp[origlow]`,
+                '[origlow][interpvoice]amix=inputs=2:duration=first:dropout_transition=0,volume=1.25,alimiter=limit=0.95[interpmix]'
+            );
+        }
+        cmd.complexFilter(filters);
+        cmd.outputOptions([
+            '-map', '0:v?',
+            '-map', '0:a?',
+            '-map', hasOriginalAudio && originalUnderVolume > 0 ? '[interpmix]' : '[interpvoice]',
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            `-metadata:s:a:${newAudioIndex}`, `title=${trackTitle}`,
+            '-disposition:a:0', 'default',
+            `-disposition:a:${newAudioIndex}`, '0',
+            '-max_muxing_queue_size', '9999'
+        ])
+            .output(safeOutputPath)
+            .on('progress', (progress) => {
+                if (onProgress) onProgress(Math.max(0, Math.min(100, Number(progress.percent || 0))));
+            })
+            .on('end', () => resolve({ success: true, outputPath: safeOutputPath }))
+            .on('error', reject)
+            .run();
+    });
+}
+
+async function _createSingleDubbedRecording(videoPath, segments, outputPath, options = {}, onProgress) {
+    const safeVideoPath = _getSafePath(videoPath);
+    const safeOutputPath = _getSafePath(outputPath);
+    const safeSegments = (Array.isArray(segments) ? segments : [])
+        .map((segment) => ({
+            path: segment?.path,
+            offset: Math.max(0, Number(segment?.offset || 0)),
+            sourceDuration: Math.max(0, Number(segment?.sourceDuration || 0))
+        }))
+        .filter((segment) => segment.path && fs.existsSync(segment.path));
+    if (!safeSegments.length) {
+        throw new Error('No valid dubbing segments were found.');
+    }
+
+    const tempDubPath = path.join(os.tmpdir(), `evd_single_dub_${Date.now()}.wav`);
+    await _createAudioFromMix(safeSegments, tempDubPath, (percent) => {
+        if (onProgress) onProgress(Math.min(45, Math.max(0, Number(percent || 0) * 0.45)));
+    });
+
+    const metadata = await _getVideoMetadata(safeVideoPath).catch(() => ({}));
+    const hasOriginalAudio = Array.isArray(metadata?.streams)
+        ? metadata.streams.some((stream) => stream.codec_type === 'audio')
+        : false;
+    const trackTitle = String(options?.trackTitle || 'Dublaj + Özgün').trim() || 'Dublaj + Özgün';
+    const originalUnderVolume = Math.max(0, Math.min(1, Number(options?.originalUnderVolume ?? 0.18)));
+    const dubVolume = Math.max(0.1, Math.min(24, Number(options?.dubVolume ?? 1)));
+    const videoDuration = Number(metadata?.format?.duration || metadata?.duration || 0) || 0;
+    const dubVoiceTail = videoDuration > 0
+        ? `,apad,atrim=0:${Math.max(0.1, videoDuration).toFixed(3)},asetpts=PTS-STARTPTS`
+        : '';
+
+    return new Promise((resolve, reject) => {
+        const cmd = ffmpeg(safeVideoPath).input(tempDubPath);
+        const filters = [
+            `[1:a]volume=${dubVolume},dynaudnorm=f=150:g=15:m=20,alimiter=limit=0.95,aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp${dubVoiceTail}[dubvoice]`
+        ];
+        if (hasOriginalAudio && originalUnderVolume > 0) {
+            filters.push(
+                `[0:a:0]volume=${originalUnderVolume},aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp[origlow]`,
+                '[origlow][dubvoice]amix=inputs=2:duration=first:dropout_transition=0,volume=1.25[dubmix]'
+            );
+        }
+        cmd.complexFilter(filters);
+
+        const outputOptions = [
+            '-map', '0:v?',
+            '-map', hasOriginalAudio && originalUnderVolume > 0 ? '[dubmix]' : '[dubvoice]',
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-metadata:s:a:0', `title=${trackTitle}`,
+            '-max_muxing_queue_size', '9999'
+        ];
+
+        cmd.outputOptions(outputOptions)
+            .output(safeOutputPath)
+            .on('progress', (progress) => {
+                if (onProgress) {
+                    onProgress(45 + Math.min(55, Math.max(0, Number(progress.percent || 0) * 0.55)));
+                }
+            })
+            .on('end', () => {
+                try { fs.unlinkSync(tempDubPath); } catch (_error) {}
+                resolve({ success: true, outputPath: safeOutputPath });
+            })
+            .on('error', (error) => {
+                try { fs.unlinkSync(tempDubPath); } catch (_cleanupError) {}
+                reject(error);
+            })
+            .run();
+    });
+}
+
+async function _createSingleDubbedRecordingFromAudio(videoPath, dubAudioPath, outputPath, options = {}, onProgress) {
+    const safeVideoPath = _getSafePath(videoPath);
+    const safeDubAudioPath = _getSafePath(dubAudioPath);
+    const safeOutputPath = _getSafePath(outputPath);
+    if (!safeVideoPath || !fs.existsSync(safeVideoPath)) {
+        throw new Error('source_video_missing');
+    }
+    if (!safeDubAudioPath || !fs.existsSync(safeDubAudioPath)) {
+        throw new Error('dubbed_audio_missing');
+    }
+    const metadata = await _getVideoMetadata(safeVideoPath).catch(() => ({}));
+    const hasOriginalAudio = Array.isArray(metadata?.streams)
+        ? metadata.streams.some((stream) => stream.codec_type === 'audio')
+        : false;
+    const trackTitle = String(options?.trackTitle || 'Dublaj + Özgün').trim() || 'Dublaj + Özgün';
+    const originalUnderVolume = Math.max(0, Math.min(1, Number(options?.originalUnderVolume ?? 0.06)));
+    const dubVolume = Math.max(0.1, Math.min(24, Number(options?.dubVolume ?? 10)));
+    const shouldTranscodeVideo = ['.webm', '.mkv'].includes(path.extname(safeVideoPath).toLowerCase());
+    const videoDuration = Number(metadata?.format?.duration || metadata?.duration || 0) || 0;
+    const dubVoiceTail = videoDuration > 0
+        ? `,apad,atrim=0:${Math.max(0.1, videoDuration).toFixed(3)},asetpts=PTS-STARTPTS`
+        : '';
+
+    return new Promise((resolve, reject) => {
+        const cmd = ffmpeg(safeVideoPath).input(safeDubAudioPath);
+        const filters = [
+            `[1:a]volume=${dubVolume},dynaudnorm=f=150:g=15:m=20,alimiter=limit=0.95,aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp${dubVoiceTail}[dubvoice]`
+        ];
+        if (hasOriginalAudio && originalUnderVolume > 0) {
+            filters.push(
+                `[0:a:0]volume=${originalUnderVolume},aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp[origlow]`,
+                '[origlow][dubvoice]amix=inputs=2:duration=first:dropout_transition=0,volume=1.25,alimiter=limit=0.95[dubmix]'
+            );
+        }
+        cmd.complexFilter(filters);
+
+        cmd.outputOptions([
+            '-y',
+            '-map', '0:v?',
+            '-map', hasOriginalAudio && originalUnderVolume > 0 ? '[dubmix]' : '[dubvoice]',
+            '-c:v', shouldTranscodeVideo ? 'libx264' : 'copy',
+            ...(shouldTranscodeVideo ? [
+                '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+                '-preset', 'veryfast',
+                '-crf', '23',
+                '-pix_fmt', 'yuv420p'
+            ] : []),
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-metadata:s:a:0', `title=${trackTitle}`,
+            '-max_muxing_queue_size', '9999'
+        ])
+            .output(safeOutputPath)
+            .on('progress', (progress) => {
+                if (onProgress) {
+                    onProgress(Math.max(0, Math.min(100, Number(progress.percent || 0))));
+                }
+            })
+            .on('end', () => resolve({ success: true, outputPath: safeOutputPath }))
+            .on('error', reject)
+            .run();
+    });
+}
+
+function _buildRebalancedDubbedAudioFilters(options = {}) {
+    const originalAudioIndex = Math.max(0, Number(options?.originalAudioIndex ?? 0) || 0);
+    const dubAudioIndex = Math.max(0, Number(options?.dubAudioIndex ?? 1) || 1);
+    const originalVolume = Math.max(0, Math.min(1, Number(options?.originalVolume ?? 0.06)));
+    const dubVolume = Math.max(0.1, Math.min(24, Number(options?.dubVolume ?? 10)));
+    const originalRemovalVolume = Math.max(0, Math.min(1, Number(options?.originalRemovalVolume ?? 0.12)));
+    const cancelVolume = originalRemovalVolume * dubVolume;
+    return [
+        `[0:a:${dubAudioIndex}]volume=${dubVolume},aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp[dubsrc]`,
+        `[0:a:${originalAudioIndex}]volume=-${cancelVolume},aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp[origcancel]`,
+        '[dubsrc][origcancel]amix=inputs=2:duration=first:dropout_transition=0,dynaudnorm=f=150:g=15:m=20,alimiter=limit=0.95[dubclean]',
+        `[0:a:${originalAudioIndex}]volume=${originalVolume},aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp[origlow]`,
+        '[origlow][dubclean]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[outa]'
+    ];
+}
+
+async function _previewRebalancedDubbedRecording(videoPath, outputPath, options = {}, onProgress) {
+    const safeVideoPath = _getSafePath(videoPath);
+    const safeOutputPath = _getSafePath(outputPath);
+    const startTime = Math.max(0, Number(options?.startTime || 0) || 0);
+    const duration = Math.max(3, Math.min(60, Number(options?.duration || 20) || 20));
+    return new Promise((resolve, reject) => {
+        const cmd = ffmpeg(safeVideoPath);
+        if (startTime > 0) {
+            cmd.inputOptions(['-ss', String(startTime)]);
+        }
+        cmd.complexFilter(_buildRebalancedDubbedAudioFilters(options))
+            .outputOptions([
+                '-map', '[outa]',
+                '-t', String(duration),
+                '-c:a', 'aac',
+                '-b:a', '192k'
+            ])
+            .output(safeOutputPath)
+            .on('progress', (progress) => {
+                if (onProgress) onProgress(Math.max(0, Math.min(100, Number(progress.percent || 0))));
+            })
+            .on('end', () => resolve({ success: true, outputPath: safeOutputPath }))
+            .on('error', reject)
+            .run();
+    });
+}
+
+async function _createRebalancedDubbedRecording(videoPath, outputPath, options = {}, onProgress) {
+    const safeVideoPath = _getSafePath(videoPath);
+    const safeOutputPath = _getSafePath(outputPath);
+    const trackTitle = String(options?.trackTitle || 'Dublaj + Özgün').trim() || 'Dublaj + Özgün';
+    return new Promise((resolve, reject) => {
+        ffmpeg(safeVideoPath)
+            .complexFilter(_buildRebalancedDubbedAudioFilters(options))
+            .outputOptions([
+                '-map', '0:v?',
+                '-map', '[outa]',
+                '-c:v', 'copy',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-metadata:s:a:0', `title=${trackTitle}`,
+                '-max_muxing_queue_size', '9999'
+            ])
+            .output(safeOutputPath)
+            .on('progress', (progress) => {
+                if (onProgress) onProgress(Math.max(0, Math.min(100, Number(progress.percent || 0))));
+            })
+            .on('end', () => resolve({ success: true, outputPath: safeOutputPath }))
+            .on('error', reject)
             .run();
     });
 }
@@ -405,10 +881,11 @@ async function _overlayImageToVideo(videoInput, imageInput, output, options = {}
 
     let totalDuration = 0;
     let mainW = 1920;
+    let sourceMetadata = {};
     try {
-        const md = await _getVideoMetadata(vidPath);
-        totalDuration = md.duration || 0;
-        mainW = md.width || 1920;
+        sourceMetadata = await _getVideoMetadata(vidPath);
+        totalDuration = sourceMetadata.duration || 0;
+        mainW = sourceMetadata.width || 1920;
     } catch (e) { console.warn('[OverlayMiniMark] Metadata error:', e); }
 
     return new Promise((resolve, reject) => {
@@ -451,7 +928,7 @@ async function _overlayImageToVideo(videoInput, imageInput, output, options = {}
         }
 
         let filterParts = [];
-        filterParts.push('[0:v]format=yuv420p[v_clean]');
+        filterParts.push(`[0:v]${_joinVideoFilters(_buildHdrToSdrFilter(sourceMetadata), 'format=yuv420p')}[v_clean]`);
         filterParts.push('[1:v]format=rgba[img_raw]');
         let currentImgLabel = '[img_raw]';
 
@@ -464,7 +941,8 @@ async function _overlayImageToVideo(videoInput, imageInput, output, options = {}
 
         cmd.complexFilter(filterParts.join(';'))
             .outputOptions([
-                '-map [outv]', '-map 0:a?', '-c:v libx264', '-preset ultrafast', '-c:a copy', '-pix_fmt yuv420p', '-max_muxing_queue_size 9999'
+                '-map [outv]', '-map 0:a?', '-c:v libx264', '-preset ultrafast', '-c:a copy', '-pix_fmt yuv420p', '-max_muxing_queue_size 9999',
+                ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
             ]);
 
         if (totalDuration > 0) {
@@ -570,14 +1048,25 @@ async function _addTextOverlay(videoPath, output, text, options) {
         return new Promise((resolve, reject) => {
             let cmd = ffmpeg(sIn)
                 .input(tempImg)
-                .outputOptions(['-c:v', 'libx264', '-c:a', 'copy', '-preset', 'ultrafast', '-max_muxing_queue_size', '9999']);
+                .outputOptions([
+                    '-c:v', 'libx264',
+                    '-c:a', 'copy',
+                    '-preset', 'ultrafast',
+                    '-max_muxing_queue_size', '9999',
+                    ..._buildProcessedVideoColorOutputOptions(meta)
+                ]);
 
             // Simple overlay filter
             // Note: Use enable if timeline specified
+            const baseFilter = _buildHdrToSdrFilter(meta);
             if (endTime !== null && endTime > startTime) {
-                cmd.complexFilter(`[0:v][1:v]overlay=0:0:enable='between(t,${startTime},${endTime})'`);
+                cmd.complexFilter(baseFilter
+                    ? `[0:v]${baseFilter}[basev];[basev][1:v]overlay=0:0:enable='between(t,${startTime},${endTime})'`
+                    : `[0:v][1:v]overlay=0:0:enable='between(t,${startTime},${endTime})'`);
             } else {
-                cmd.complexFilter(`[0:v][1:v]overlay=0:0`);
+                cmd.complexFilter(baseFilter
+                    ? `[0:v]${baseFilter}[basev];[basev][1:v]overlay=0:0`
+                    : `[0:v][1:v]overlay=0:0`);
             }
 
             cmd.output(output)
@@ -601,10 +1090,15 @@ async function _addTextOverlay(videoPath, output, text, options) {
 
 async function _addTransition(videoPath, output, options) {
     const sIn = _getSafePath(videoPath);
+    const sourceMetadata = await _getVideoMetadata(sIn).catch(() => ({}));
     return new Promise((resolve, reject) => {
         ffmpeg(sIn)
-            .videoFilters('fade=t=in:st=0:d=1,fade=t=out:st=duration-1:d=1')
-            .output(output).outputOptions(['-c:v', 'libx264', '-c:a', 'copy'])
+            .videoFilters(_joinVideoFilters(_buildHdrToSdrFilter(sourceMetadata), 'fade=t=in:st=0:d=1,fade=t=out:st=duration-1:d=1'))
+            .output(output).outputOptions([
+                '-c:v', 'libx264',
+                '-c:a', 'copy',
+                ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
+            ])
             .on('end', () => resolve({ success: true, outputPath: output }))
             .on('error', reject).run();
     });
@@ -652,6 +1146,7 @@ async function _getVideoMetadata(file) {
                 duration: md.format.duration, durationFormatted: formatTime(md.format.duration), width: w, height: h, rotation: r,
                 frameRate: v && v.avg_frame_rate ? eval(v.avg_frame_rate) : 24, codec: v ? v.codec_name : 'unknown',
                 audioSampleRate: a ? parseInt(a.sample_rate) : 44100, bitrate: parseInt(md.format.bit_rate) || 0,
+                colorMetadata: _getVideoColorMetadata(md),
                 filename: path.basename(safePath), tags: md.format.tags || {},
                 hasAudio: !!a, streams: md.streams, size: md.format.size || (fs.existsSync(safePath) ? fs.statSync(safePath).size : 0)
             });
@@ -754,8 +1249,10 @@ async function _processSegmentWithOverlays(input, output, start, duration, overl
 
     // V115: Get main video dimensions for scale calculation
     let mainW = 1920; let mainH = 1080;
+    let sourceMetadata = {};
     try {
         const md = await _getVideoMetadata(sIn);
+        sourceMetadata = md || {};
         mainW = md.width || 1920;
         mainH = md.height || 1080;
     } catch (e) {
@@ -768,6 +1265,11 @@ async function _processSegmentWithOverlays(input, output, start, duration, overl
             .inputOptions([`-ss ${start}`, `-t ${duration}`]);
 
         let filters = []; let lastV = '0:v'; let subInputs = []; let currentInputIdx = 1;
+        const hdrToSdrFilter = _buildHdrToSdrFilter(sourceMetadata);
+        if (hdrToSdrFilter) {
+            filters.push(`[0:v]${hdrToSdrFilter}[hdr_base]`);
+            lastV = 'hdr_base';
+        }
 
         const resolveAsset = (p) => {
             if (!p) return null;
@@ -1021,7 +1523,8 @@ async function _processSegmentWithOverlays(input, output, start, duration, overl
             '-crf', '23',
             '-c:a', 'aac',
             '-t', duration.toString(),
-            '-shortest'
+            '-shortest',
+            ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
         ]);
 
         if (typeof onProgress === 'function') {
@@ -1297,51 +1800,26 @@ async function _detectSilence(inputPath, minDuration = 0.5, threshold = -30, onP
  * Videoyu döndür (90°, -90°/270°, 180°)
  */
 function _rotateVideo(inputPath, outputPath, degrees, onProgress) {
-    return new Promise((resolve, reject) => {
-        let transpose;
-        switch (degrees) {
-            case 90:
-                transpose = 'transpose=1'; // Saat yönünde
-                break;
-            case -90:
-            case 270:
-                transpose = 'transpose=2'; // Saat yönü tersine
-                break;
-            case 180:
-                transpose = 'transpose=1,transpose=1'; // 180 derece
-                break;
-            default:
-                reject(new Error('Geçersiz döndürme açısı'));
-                return;
-        }
+    let transpose;
+    switch (degrees) {
+        case 90:
+            transpose = 'transpose=1'; // Saat yönünde
+            break;
+        case -90:
+        case 270:
+            transpose = 'transpose=2'; // Saat yönü tersine
+            break;
+        case 180:
+            transpose = 'transpose=1,transpose=1'; // 180 derece
+            break;
+        default:
+            return Promise.reject(new Error('Geçersiz döndürme açısı'));
+    }
 
-        const sIn = _getSafePath(inputPath);
+    const sIn = _getSafePath(inputPath);
+    return _getVideoMetadata(sIn).catch(() => ({})).then((metadata) => new Promise((resolve, reject) => {
         ffmpeg(sIn)
-            .videoFilters(transpose)
-            .outputOptions([
-                '-map', '0:v:0',
-                '-map', '0:a?',
-                '-c:v', 'libx264',
-                '-preset', 'fast',
-                '-pix_fmt', 'yuv420p',
-                '-c:a', 'copy',
-                '-movflags', '+faststart'
-            ])
-            .output(outputPath)
-            .on('progress', (progress) => {
-                if (onProgress) onProgress(progress.percent);
-            })
-            .on('end', () => resolve(outputPath))
-            .on('error', reject)
-            .run();
-    });
-}
-
-function _normalizeVideoRotation(inputPath, outputPath, onProgress) {
-    return new Promise((resolve, reject) => {
-        const sIn = _getSafePath(inputPath);
-        const sOut = _getSafePath(outputPath);
-        ffmpeg(sIn)
+            .videoFilters(_joinVideoFilters(_buildHdrToSdrFilter(metadata), transpose))
             .outputOptions([
                 '-map', '0:v:0',
                 '-map', '0:a?',
@@ -1350,7 +1828,38 @@ function _normalizeVideoRotation(inputPath, outputPath, onProgress) {
                 '-pix_fmt', 'yuv420p',
                 '-c:a', 'copy',
                 '-movflags', '+faststart',
-                '-metadata:s:v:0', 'rotate=0'
+                ..._buildProcessedVideoColorOutputOptions(metadata)
+            ])
+            .output(outputPath)
+            .on('progress', (progress) => {
+                if (onProgress) onProgress(progress.percent);
+            })
+            .on('end', () => resolve(outputPath))
+            .on('error', reject)
+            .run();
+    }));
+}
+
+function _normalizeVideoRotation(inputPath, outputPath, onProgress) {
+    const sIn = _getSafePath(inputPath);
+    const sOut = _getSafePath(outputPath);
+    return _getVideoMetadata(sIn).catch(() => ({})).then((metadata) => new Promise((resolve, reject) => {
+        const cmd = ffmpeg(sIn);
+        const hdrToSdrFilter = _buildHdrToSdrFilter(metadata);
+        if (hdrToSdrFilter) {
+            cmd.videoFilters(hdrToSdrFilter);
+        }
+        cmd
+            .outputOptions([
+                '-map', '0:v:0',
+                '-map', '0:a?',
+                '-c:v', 'libx264',
+                '-preset', 'fast',
+                '-pix_fmt', 'yuv420p',
+                '-c:a', 'copy',
+                '-movflags', '+faststart',
+                '-metadata:s:v:0', 'rotate=0',
+                ..._buildProcessedVideoColorOutputOptions(metadata)
             ])
             .output(sOut)
             .on('progress', (progress) => {
@@ -1359,7 +1868,7 @@ function _normalizeVideoRotation(inputPath, outputPath, onProgress) {
             .on('end', () => resolve(sOut))
             .on('error', reject)
             .run();
-    });
+    }));
 }
 
 
@@ -1406,10 +1915,15 @@ module.exports = {
 
     renderTimeline_Internal: async function (inp, segs, out, onP, options = {}) {
         const threshold = 50;
+        const smartConcatRiskThreshold = 80;
         // Check segment length OR forced smart cut mode
         const useSmartCut = segs.length > threshold || (options && options.forceSmartCut);
+        const useSafeSinglePass = segs.length > smartConcatRiskThreshold;
 
-        if (useSmartCut) {
+        if (useSafeSinglePass) {
+            console.log(`[Render Switch] Using Safe Single-Pass Mode for high segment count. Segs=${segs.length}, Forced=${!!(options && options.forceSmartCut)}`);
+            return module.exports._renderTimeline_SinglePass(inp, segs, out, onP);
+        } else if (useSmartCut) {
             console.log(`[Render Switch] Using Chunked/Smart Mode. Segs=${segs.length}, Forced=${!!(options && options.forceSmartCut)}`);
             return module.exports._renderTimeline_Chunked(inp, segs, out, onP);
         } else {
@@ -1983,12 +2497,15 @@ module.exports = {
             // Concat
             const complexStr = `${procs.map((_, i) => `[v${i}][a${i}]`).join('')}concat=n=${procs.length}:v=1:a=1:unsafe=1[ov][oa]`;
             flt.push(complexStr);
+            const filterScriptPath = path.join(path.dirname(out), `render_filter_${Date.now()}.txt`);
+            fs.writeFileSync(filterScriptPath, flt.join(';\n'));
+            temps.push(filterScriptPath);
 
             // 3. Çalıştır
             let finalizeNotified = false;
             await new Promise((resolve, reject) => {
-                cmd.complexFilter(flt)
-                    .outputOptions([
+                cmd.outputOptions([
+                        '-filter_complex_script', filterScriptPath,
                         '-map', '[ov]',
                         '-map', '[oa]',
                         '-c:v', 'libx264', '-preset', 'fast',
@@ -2353,6 +2870,22 @@ module.exports = {
         // Arg 1: segments array, Arg 2: outputPath, Arg 3: callback
         return _createAudioFromMix(args[0], args[1], args[2]);
     },
+    addSeparateAudioTrack: async function () {
+        const args = cleanArgs(arguments);
+        return _addSeparateAudioTrack(args[0], args[1], args[2], args[3], args[4]);
+    },
+    createSingleDubbedRecordingFromAudio: async function () {
+        const args = cleanArgs(arguments);
+        return _createSingleDubbedRecordingFromAudio(args[0], args[1], args[2], args[3], args[4]);
+    },
+    previewRebalancedDubbedRecording: async function () {
+        const args = cleanArgs(arguments);
+        return _previewRebalancedDubbedRecording(args[0], args[1], args[2], args[3]);
+    },
+    createRebalancedDubbedRecording: async function () {
+        const args = cleanArgs(arguments);
+        return _createRebalancedDubbedRecording(args[0], args[1], args[2], args[3]);
+    },
     mixAudioAdvanced: async function () {
         const args = cleanArgs(arguments);
         return _mixAudioAdvanced(args[0], args[1]);
@@ -2449,9 +2982,10 @@ async function _overlayLayerJudge(videoInput, imageInput, output, options = {}) 
     console.log(`[OverlayLayerJudge V80] START. Video: ${vidPath}, Overlay: ${imgPath}`);
 
     let duration = 0;
+    let sourceMetadata = {};
     try {
-        const meta = await _getVideoMetadata(vidPath);
-        duration = meta.format.duration;
+        sourceMetadata = await _getVideoMetadata(vidPath);
+        duration = sourceMetadata.format.duration;
         console.log(`[OverlayLayerJudge V80] Metadata Duration: ${duration}`);
     } catch (e) {
         console.warn('[OverlayLayerJudge V80] Metadata Error:', e);
@@ -2488,7 +3022,12 @@ async function _overlayLayerJudge(videoInput, imageInput, output, options = {}) 
         }
 
         const overlayOpts = isImage ? ':shortest=1' : '';
-        filterParts.push(`[0:v][${overlayInput}]overlay=x=${x}:y=${y}${overlayOpts}[outv]`);
+        const baseFilter = _buildHdrToSdrFilter(sourceMetadata);
+        const baseLabel = baseFilter ? 'basev' : '0:v';
+        if (baseFilter) {
+            filterParts.unshift(`[0:v]${baseFilter}[basev]`);
+        }
+        filterParts.push(`[${baseLabel}][${overlayInput}]overlay=x=${x}:y=${y}${overlayOpts}[outv]`);
 
         cmd.complexFilter(filterParts.join(';'))
             .outputOptions([
@@ -2497,7 +3036,8 @@ async function _overlayLayerJudge(videoInput, imageInput, output, options = {}) 
                 '-c:v libx264',
                 '-preset ultrafast',
                 '-c:a copy',
-                '-pix_fmt yuv420p'
+                '-pix_fmt yuv420p',
+                ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
             ]);
 
         // THE FIX: Force duration limit to match main video
@@ -2750,7 +3290,12 @@ async function _applyTransitionsSmart(videoPath, outputPath, transitions, onProg
     // Reason: 'fade=t=out' permanently destroys video data (turns it black),
     // making subsequent 'fade=t=in' impossible on the same stream.
     // 'eq' brightness animation works perfectly for single-stream visibility control.
-    const vfParts = ['scale=trunc(iw/2)*2:trunc(ih/2)*2', 'format=yuv420p'];
+    const hdrToSdrFilter = _buildHdrToSdrFilter(videoMeta);
+    const vfParts = [
+        ...(_isKnownColorValue(hdrToSdrFilter) ? [hdrToSdrFilter] : []),
+        'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+        'format=yuv420p'
+    ];
 
     normalizedTransitions.forEach((tr, index) => {
         const transitionType = tr.type || tr.transitionType;
@@ -2838,7 +3383,8 @@ async function _applyTransitionsSmart(videoPath, outputPath, transitions, onProg
                     '-c:a', 'aac',
                     '-b:a', '320k',
                     '-af', 'aresample=async=1:first_pts=0',
-                    '-max_muxing_queue_size', '9999'
+                    '-max_muxing_queue_size', '9999',
+                    ..._buildProcessedVideoColorOutputOptions(videoMeta)
                 ])
                 .output(videoTarget)
                 .on('start', (cl) => console.log(`[SmartTransition V77] FFmpeg: ${cl}`))
@@ -2915,6 +3461,7 @@ async function _applyTransitionsWithBreaks(videoPath, outputPath, transitions, o
     let height = meta.height || 1080;
     if (width % 2 !== 0) width--;
     if (height % 2 !== 0) height--;
+    const hdrToSdrFilter = _buildHdrToSdrFilter(meta);
 
     // Helper for SFX (Scoped)
     const _findSfxV2 = (type) => {
@@ -2995,6 +3542,9 @@ async function _applyTransitionsWithBreaks(videoPath, outputPath, transitions, o
         if (seg.type === 'content') {
             // Trim and Transitions
             let vfChain = `[0:v]trim=${seg.start}:${seg.end},setpts=PTS-STARTPTS`;
+            if (hdrToSdrFilter) {
+                vfChain += `,${hdrToSdrFilter}`;
+            }
 
             // Collect SFX for this content segment
             const segSfxItems = [];
@@ -3127,7 +3677,8 @@ async function _applyTransitionsWithBreaks(videoPath, outputPath, transitions, o
                 '-b:a 320k',
                 '-af aresample=async=1:first_pts=0',
                 '-max_muxing_queue_size 9999',
-                '-shortest'
+                '-shortest',
+                ..._buildProcessedVideoColorOutputOptions(meta)
             ])
             .output(outputPath)
             .on('progress', p => { if (onProgress) onProgress(p.percent); })
@@ -3143,9 +3694,10 @@ async function _safeConvertVideo(videoPath, outputPath, options = {}, onProgress
     console.log(`[SafeConvert] V73 Converting ${path.basename(sIn)}...`);
 
     let totalDuration = 0;
+    let sourceMetadata = {};
     try {
-        const meta = await _getVideoMetadata(sIn);
-        totalDuration = meta.duration || 0;
+        sourceMetadata = await _getVideoMetadata(sIn);
+        totalDuration = sourceMetadata.duration || 0;
     } catch (e) {
         console.warn('[SafeConvert] Duration metadata could not be read for progress fallback');
     }
@@ -3187,8 +3739,16 @@ async function _safeConvertVideo(videoPath, outputPath, options = {}, onProgress
             fs.mkdirSync(path.dirname(sOut), { recursive: true });
         } catch (e) { }
 
+        const videoFilters = [];
+        const hdrToSdrFilter = _buildHdrToSdrFilter(sourceMetadata);
+        if (hdrToSdrFilter) {
+            videoFilters.push(hdrToSdrFilter);
+        }
         if (targetWidth && targetHeight) {
-            cmd.videoFilters(`scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1`);
+            videoFilters.push(`scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1`);
+        }
+        if (videoFilters.length > 0) {
+            cmd.videoFilters(_joinVideoFilters(videoFilters));
         }
 
         if (targetFps && !Number.isNaN(targetFps)) {
@@ -3207,7 +3767,8 @@ async function _safeConvertVideo(videoPath, outputPath, options = {}, onProgress
             '-c:a', audioCodec,
             '-b:a', audioCodec === 'libopus' ? '160k' : '128k',
             ...(targetBitrate ? ['-b:v', `${targetBitrate}k`] : []),
-            ...extraOutputOptions
+            ...extraOutputOptions,
+            ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
         ];
 
         cmd.outputOptions(outputOptions)
@@ -3530,6 +4091,11 @@ function concatenateVideosFast(inputPaths, outputPath, onProgress, onLog = null)
                     .on('end', () => { fs.unlinkSync(listPath); res(); })
                     .on('error', (e) => { try { fs.unlinkSync(listPath); } catch (x) { } rej(e); }).run();
             });
+            const durationOk = await validateConcatOutputDuration(outputPath, totalDuration);
+            if (!durationOk) {
+                console.warn('[Smart Merge] Fast concat produced an unexpectedly short file. Retrying with safe re-encode.');
+                await concatenateVideosSafeReencode(validInputs, outputPath, totalDuration, onProgress, onLog);
+            }
             if (onProgress) onProgress(100);
             resolve(outputPath);
         } catch (error) {
@@ -3538,6 +4104,72 @@ function concatenateVideosFast(inputPaths, outputPath, onProgress, onLog = null)
             reject(error);
         }
     });
+}
+
+async function validateConcatOutputDuration(outputPath, expectedDuration) {
+    const expected = Number(expectedDuration || 0);
+    if (!expected || expected < 5) return true;
+    try {
+        const meta = await getVideoMetadata(outputPath);
+        const actual = Number(meta?.duration || 0);
+        if (!actual) return false;
+        const missing = expected - actual;
+        if (missing <= 2) return true;
+        return actual >= expected * 0.75;
+    } catch (error) {
+        console.warn('[Smart Merge] Output duration validation warning:', error.message);
+        return false;
+    }
+}
+
+async function concatenateVideosSafeReencode(inputPaths, outputPath, expectedDuration, onProgress, onLog = null) {
+    const listPath = path.join(path.dirname(outputPath), `concat_list_safe_${Date.now()}.txt`);
+    const tempOutput = outputPath.replace(/(\.[^.]+)$/i, `_safe_${Date.now()}$1`);
+    const listContent = inputPaths.map(p => `file '${p.replace(/\\/g, '/').replace(/'/g, "'\\''")}'`).join('\n');
+    fs.writeFileSync(listPath, listContent);
+
+    try {
+        await new Promise((resolve, reject) => {
+            ffmpeg()
+                .input(listPath)
+                .inputOptions(['-f', 'concat', '-safe', '0'])
+                .outputOptions([
+                    '-fflags', '+genpts',
+                    '-avoid_negative_ts', 'make_zero',
+                    '-c:v', 'libx264',
+                    '-preset', 'veryfast',
+                    '-c:a', 'aac',
+                    '-b:a', '192k',
+                    '-movflags', '+faststart'
+                ])
+                .output(tempOutput)
+                .on('stderr', l => { if (onLog) onLog(l); })
+                .on('progress', p => {
+                    if (!onProgress) return;
+                    let percent = Number.isFinite(p.percent) ? p.percent : 0;
+                    if ((!percent || percent <= 0) && expectedDuration > 0 && p.timemark) {
+                        const seconds = _parseTimemarkToSeconds(p.timemark);
+                        if (Number.isFinite(seconds) && seconds >= 0) {
+                            percent = Math.min(100, (seconds / expectedDuration) * 100);
+                        }
+                    }
+                    onProgress(percent || 0);
+                })
+                .on('end', resolve)
+                .on('error', reject)
+                .run();
+        });
+
+        const durationOk = await validateConcatOutputDuration(tempOutput, expectedDuration);
+        if (!durationOk) {
+            throw new Error('safe_concat_duration_validation_failed');
+        }
+        try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch (e) { }
+        fs.renameSync(tempOutput, outputPath);
+    } finally {
+        try { fs.unlinkSync(listPath); } catch (e) { }
+        try { if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput); } catch (e) { }
+    }
 }
 
 function concatenateVideos(inputPaths, outputPath, onProgress) {
@@ -3631,6 +4263,7 @@ async function cutVideoFastLossless(inputPath, outputPath, startTime, endTime, o
 async function _burnSubtitles(videoPath, srtPath, outputPath, styleOptions = null, onProgress) {
     const sIn = _getSafePath(videoPath);
     const sSrt = _getSafePath(srtPath);
+    const sourceMetadata = await _getVideoMetadata(sIn).catch(() => ({}));
 
     // Windows Path Escaping for FFmpeg Filters
     // Colons in drive letters (C:) must be escaped as "\:".
@@ -3645,53 +4278,61 @@ async function _burnSubtitles(videoPath, srtPath, outputPath, styleOptions = nul
     // 3. Escape single quotes (important for filter string '...')
     normalizedSrt = normalizedSrt.replace(/'/g, "\\'");
 
-    const meta = await _getVideoMetadata(sIn);
-    const videoHeight = Math.max(240, Number(meta?.height || 1080));
-    const videoWidth = Math.max(320, Number(meta?.width || 1920));
-    const baseDimension = Math.max(320, Math.min(videoWidth, videoHeight));
-    const sizeScale = Math.max(10, Math.min(140, Number(styleOptions?.sizeScale || 50))) / 100;
-    const fontSize = Math.max(10, Math.min(28, Math.round(baseDimension * 0.026 * sizeScale)));
-    const outline = Math.max(1, Math.round(fontSize * 0.08));
-    const shadow = Math.max(1, Math.round(fontSize * 0.04));
-    const marginV = Math.max(6, Math.round(videoHeight * 0.008));
-    const backgroundMode = styleOptions?.backgroundMode || 'box';
-    const backgroundOpacity = Math.max(0, Math.min(100, Number(styleOptions?.backgroundOpacity ?? 5)));
-    const alpha = Math.round((100 - backgroundOpacity) * 2.55);
-    const alphaHex = alpha.toString(16).padStart(2, '0').toUpperCase();
-    const textColor = hexToAssBgr(styleOptions?.textColor || '#FFFFFF', '00');
-    const backgroundColor = hexToAssBgr(styleOptions?.backgroundColor || '#000000', alphaHex);
-    const subtitleStyleParts = [
-        `Fontsize=${fontSize}`,
-        `PrimaryColour=${textColor}`,
-        'OutlineColour=&H00000000',
-        'Alignment=2',
-        `MarginV=${marginV}`
-    ];
+    const layoutMode = styleOptions?.layoutMode || 'classic';
+    let subtitleFilter = `subtitles='${normalizedSrt}'`;
 
-    if (backgroundMode === 'shadow-only') {
-        subtitleStyleParts.push('BorderStyle=1');
-        subtitleStyleParts.push(`Outline=${Math.max(1, Math.round(fontSize * 0.12))}`);
-        subtitleStyleParts.push(`Shadow=${Math.max(1, Math.round(fontSize * 0.06))}`);
-    } else {
-        subtitleStyleParts.push(`BackColour=${backgroundColor}`);
-        subtitleStyleParts.push('BorderStyle=3');
-        subtitleStyleParts.push(`Outline=${outline}`);
-        subtitleStyleParts.push(`Shadow=${shadow}`);
+    if (layoutMode !== 'classic') {
+        const meta = sourceMetadata;
+        const videoHeight = Math.max(240, Number(meta?.height || 1080));
+        const videoWidth = Math.max(320, Number(meta?.width || 1920));
+        const baseDimension = Math.max(320, Math.min(videoWidth, videoHeight));
+        const sizeScale = Math.max(10, Math.min(140, Number(styleOptions?.sizeScale || 50))) / 100;
+        const fontSize = Math.max(10, Math.min(28, Math.round(baseDimension * 0.026 * sizeScale)));
+        const outline = Math.max(1, Math.round(fontSize * 0.08));
+        const shadow = Math.max(1, Math.round(fontSize * 0.04));
+        const marginV = Math.max(6, Math.round(videoHeight * 0.008));
+        const backgroundMode = styleOptions?.backgroundMode || 'box';
+        const backgroundOpacity = Math.max(0, Math.min(100, Number(styleOptions?.backgroundOpacity ?? 5)));
+        const alpha = Math.round((100 - backgroundOpacity) * 2.55);
+        const alphaHex = alpha.toString(16).padStart(2, '0').toUpperCase();
+        const textColor = hexToAssBgr(styleOptions?.textColor || '#FFFFFF', '00');
+        const backgroundColor = hexToAssBgr(styleOptions?.backgroundColor || '#000000', alphaHex);
+        const subtitleStyleParts = [
+            `Fontsize=${fontSize}`,
+            `PrimaryColour=${textColor}`,
+            'OutlineColour=&H00000000',
+            'Alignment=2',
+            `MarginV=${marginV}`
+        ];
+
+        if (backgroundMode === 'shadow-only') {
+            subtitleStyleParts.push('BorderStyle=1');
+            subtitleStyleParts.push(`Outline=${Math.max(1, Math.round(fontSize * 0.12))}`);
+            subtitleStyleParts.push(`Shadow=${Math.max(1, Math.round(fontSize * 0.06))}`);
+        } else {
+            subtitleStyleParts.push(`BackColour=${backgroundColor}`);
+            subtitleStyleParts.push('BorderStyle=3');
+            subtitleStyleParts.push(`Outline=${outline}`);
+            subtitleStyleParts.push(`Shadow=${shadow}`);
+        }
+
+        const subtitleStyle = subtitleStyleParts.join(',');
+        subtitleFilter = `subtitles='${normalizedSrt}':original_size=${videoWidth}x${videoHeight}:force_style='${subtitleStyle}'`;
     }
-
-    const subtitleStyle = subtitleStyleParts.join(',');
-    const subtitleFilter = `subtitles='${normalizedSrt}':original_size=${videoWidth}x${videoHeight}:force_style='${subtitleStyle}'`;
 
     return new Promise((resolve, reject) => {
         ffmpeg(sIn)
-            .videoFilters(subtitleFilter)
+            .videoFilters(_joinVideoFilters(_buildHdrToSdrFilter(sourceMetadata), subtitleFilter))
             .outputOptions([
                 '-c:v', 'libx264',
-                '-preset', 'ultrafast',
+                '-preset', 'veryfast',
+                '-crf', '18',
+                '-pix_fmt', 'yuv420p',
                 '-c:a', 'aac',
                 '-b:a', '192k',
                 '-max_muxing_queue_size', '9999',
-                '-movflags', '+faststart'
+                '-movflags', '+faststart',
+                ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
             ])
             .output(outputPath)
             .on('progress', (p) => { if (onProgress) onProgress(p.percent); })
@@ -3751,7 +4392,12 @@ async function addCtaOverlay(params, onProgress) {
             }
 
             const endT = startTime + effectiveDuration;
-            filterChain += `[0:v][cta_processed]overlay=x=${overlayX}:y=${overlayY}:enable='between(t,${startTime},${endT})'[outv]`;
+            const hdrToSdrFilter = _buildHdrToSdrFilter(mainMeta);
+            const mainVideoLabel = hdrToSdrFilter ? 'mainv' : '0:v';
+            if (hdrToSdrFilter) {
+                filterChain += `[0:v]${hdrToSdrFilter}[mainv];`;
+            }
+            filterChain += `[${mainVideoLabel}][cta_processed]overlay=x=${overlayX}:y=${overlayY}:enable='between(t,${startTime},${endT})'[outv]`;
 
             const cmd = ffmpeg(mainSafe).input(resolvedCtaPath);
             let outputMaps = ['-map', '[outv]'];
@@ -3788,7 +4434,8 @@ async function addCtaOverlay(params, onProgress) {
                     '-c:v', videoCodec,
                     '-preset', preset,
                     '-c:a', 'aac',
-                    ...outputMaps
+                    ...outputMaps,
+                    ..._buildProcessedVideoColorOutputOptions(mainMeta)
                 ])
                 .output(outputPath)
                 .on('progress', (p) => { if (onProgress) onProgress(p.percent); })
@@ -3832,9 +4479,10 @@ async function _addVideoLayer(params, onProgress) {
 
     // V115: Get metadata before starting to support percentage scale
     let mainW = 1920;
+    let sourceMetadata = {};
     try {
-        const meta = await _getVideoMetadata(mainSafe);
-        mainW = meta.width || 1920;
+        sourceMetadata = await _getVideoMetadata(mainSafe);
+        mainW = sourceMetadata.width || 1920;
     } catch (e) {
         console.warn('[AddVideoLayer] Metadata fetch error, defaulting to 1920w:', e);
     }
@@ -3886,8 +4534,8 @@ async function _addVideoLayer(params, onProgress) {
         const posX = (x !== undefined) ? x : 0;
         const posY = (y !== undefined) ? y : 0;
 
-        // Ensure main video is yuv420p for compatibility
-        filters.push(`[0:v]format=yuv420p[mainv]`);
+        // Ensure main video is SDR/yuv420p for compatibility; HDR sources are tone-mapped first.
+        filters.push(`[0:v]${_joinVideoFilters(_buildHdrToSdrFilter(sourceMetadata), 'format=yuv420p')}[mainv]`);
         filters.push(`[mainv]${layerLabel}overlay=x=${posX}:y=${posY}${enableExpr}[outv]`);
 
         // Audio Mixing (Simple)
@@ -3915,7 +4563,8 @@ async function _addVideoLayer(params, onProgress) {
                     '-preset', 'ultrafast',
                     '-c:a', 'aac',
                     '-t', totalDuration.toString(), // Hard limit output duration
-                    '-shortest'
+                    '-shortest',
+                    ..._buildProcessedVideoColorOutputOptions(meta)
                 ])
                 .output(outputPath)
                 .on('progress', (p) => {
@@ -3947,7 +4596,8 @@ async function _addVideoLayer(params, onProgress) {
                     '-c:v', 'libx264',
                     '-preset', 'ultrafast',
                     '-c:a', 'aac',
-                    '-shortest'
+                    '-shortest',
+                    ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
                 ])
                 .output(outputPath)
                 .on('progress', (p) => { if (onProgress) onProgress(Math.min(99, Math.round(p.percent || 0))); })
@@ -3989,11 +4639,20 @@ async function _remuxVideo(inputPath, targetFormat) {
 const _legacy_exports = {
     setupFFmpeg,
     getVideoMetadata: _getVideoMetadata,
+    buildColorMetadataOutputOptions: _buildColorMetadataOutputOptions,
+    buildHdrToSdrFilter: _buildHdrToSdrFilter,
+    buildProcessedVideoColorOutputOptions: _buildProcessedVideoColorOutputOptions,
     extractAudio: _extractAudio,
     extractVideo: _extractVideo,
     mixAudio: _mixAudioAdvanced, // Mapping mixAudio to mixAudioAdvanced
     mixAudioAdvanced: _mixAudioAdvanced,
     createAudioFromMix: _createAudioFromMix,
+    addSeparateAudioTrack: _addSeparateAudioTrack,
+    addSeparateAudioTrackFromAudio: _addSeparateAudioTrackFromAudio,
+    createSingleDubbedRecording: _createSingleDubbedRecording,
+    createSingleDubbedRecordingFromAudio: _createSingleDubbedRecordingFromAudio,
+    previewRebalancedDubbedRecording: _previewRebalancedDubbedRecording,
+    createRebalancedDubbedRecording: _createRebalancedDubbedRecording,
     previewAudioSegment: _previewAudio, // Helper for audio preview
     burnSubtitles: _burnSubtitles,
     addTextOverlay: _addTextOverlay,

@@ -1,0 +1,1734 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="broadcast_room.window_title">EVD Yayın Odası</title>
+    <link rel="stylesheet" href="../styles/main.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: "Segoe UI", sans-serif;
+            background: #121212;
+            color: #ececec;
+        }
+
+        .page {
+            max-width: 1180px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .card {
+            background: #1d1d1d;
+            border: 1px solid #333;
+            border-radius: 14px;
+            padding: 18px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .toolbar button {
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid #4b4b4b;
+            background: #2e5cff;
+            color: #fff;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .toolbar button.secondary {
+            background: #2a2a2a;
+        }
+
+        h1,
+        h2 {
+            margin-top: 0;
+        }
+
+        p,
+        li {
+            line-height: 1.5;
+        }
+
+        .status-line {
+            min-height: 24px;
+            color: #cfcfcf;
+        }
+
+        .value-box,
+        .listbox,
+        select {
+            padding: 12px;
+            border: 1px solid #444;
+            border-radius: 10px;
+            background: #111;
+            color: #ececec;
+            font: inherit;
+        }
+
+        .value-box {
+            word-break: break-all;
+            user-select: text;
+        }
+
+        .value-box a {
+            color: #8fb3ff;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.72);
+        }
+
+        .dialog-content {
+            width: min(560px, 94vw);
+            padding: 22px;
+            border: 1px solid #555;
+            border-radius: 14px;
+            background: #1d1d1d;
+            color: #ececec;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+        }
+
+        .dialog-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+        }
+
+        .dialog-buttons button {
+            padding: 10px 14px;
+            border: 1px solid #4b4b4b;
+            border-radius: 8px;
+            background: #2e5cff;
+            color: #fff;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .dialog-buttons button.secondary {
+            background: #2a2a2a;
+        }
+
+        .dialog-buttons button.danger {
+            background: #9f2f2f;
+        }
+
+        .listbox {
+            min-height: 140px;
+        }
+
+        .listbox ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .hint {
+            color: #b8b8b8;
+        }
+
+        .subpanel {
+            margin-top: 16px;
+            padding: 14px;
+            border: 1px solid #3b3b3b;
+            border-radius: 10px;
+            background: #161616;
+        }
+
+        .stage-preview-grid {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
+            gap: 24px;
+            align-items: stretch;
+        }
+
+        .stage-preview-grid::before {
+            content: "";
+            position: absolute;
+            top: 8px;
+            bottom: 8px;
+            left: 50%;
+            width: 8px;
+            transform: translateX(-50%);
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(120, 150, 255, 0.92) 0%, rgba(72, 96, 196, 0.95) 100%);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 10px 24px rgba(0, 0, 0, 0.35);
+            pointer-events: none;
+        }
+
+        .stage-preview-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .stage-preview-frame {
+            flex: 1;
+            min-height: 340px;
+            padding: 10px;
+            border: 1px solid #3f3f3f;
+            border-radius: 14px;
+            background: #101010;
+        }
+
+        .stage-preview-frame video {
+            width: 100%;
+            height: 100%;
+            min-height: 320px;
+            max-height: 520px;
+            object-fit: cover;
+            border-radius: 10px;
+            background: #000;
+        }
+
+        .stage-preview-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .stage-preview-list > section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 12px;
+            border: 1px solid #3f3f3f;
+            border-radius: 14px;
+            background: #101010;
+        }
+
+        .stage-preview-list > section h3,
+        .stage-preview-list > section p {
+            margin: 0;
+        }
+
+        .stage-preview-list > section video {
+            width: 100%;
+            min-height: 320px;
+            max-height: 520px;
+            object-fit: cover;
+            border-radius: 10px;
+            background: #000;
+        }
+
+        .stage-preview-list > section.share-active video {
+            object-fit: contain;
+            background: #050505;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+        }
+
+        .stage-preview-meta {
+            color: #b8b8b8;
+            font-size: 0.95em;
+        }
+
+        body.stage-focus-mode {
+            padding: 0;
+            background: #000;
+        }
+
+        body.stage-focus-mode .page {
+            max-width: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        body.stage-focus-mode .page > .card:not(.stage-preview-card),
+        body.stage-focus-mode .page > .grid {
+            display: none;
+        }
+
+        body.stage-focus-mode .stage-preview-card {
+            min-height: 100vh;
+            padding: 12px;
+            border: none;
+            border-radius: 0;
+            background: #000;
+        }
+
+        body.stage-focus-mode .stage-preview-card h2,
+        body.stage-focus-mode .stage-preview-card .hint,
+        body.stage-focus-mode .stage-preview-card label,
+        body.stage-focus-mode .stage-preview-card .stage-preview-meta,
+        body.stage-focus-mode .stage-preview-list > section h3,
+        body.stage-focus-mode .stage-preview-list > section p {
+            display: none;
+        }
+
+        body.stage-focus-mode .stage-preview-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            min-height: calc(100vh - 24px);
+            gap: 18px;
+        }
+
+        body.stage-focus-mode .stage-preview-grid::before {
+            top: 0;
+            bottom: 0;
+            width: 10px;
+            background: linear-gradient(180deg, rgba(142, 166, 255, 0.98) 0%, rgba(82, 108, 224, 0.98) 100%);
+            box-shadow: 0 0 24px rgba(61, 86, 196, 0.4);
+        }
+
+        body.stage-focus-mode .stage-preview-panel,
+        body.stage-focus-mode .stage-preview-frame,
+        body.stage-focus-mode .stage-preview-list,
+        body.stage-focus-mode .stage-preview-list > section {
+            height: 100%;
+        }
+
+        body.stage-focus-mode .stage-preview-frame,
+        body.stage-focus-mode .stage-preview-list > section {
+            padding: 0;
+            border-color: #1e1e1e;
+            background: #000;
+        }
+
+        body.stage-focus-mode .stage-preview-frame video,
+        body.stage-focus-mode .stage-preview-list > section video {
+            min-height: calc(100vh - 24px);
+            max-height: none;
+            border-radius: 0;
+        }
+
+        body.stage-focus-mode .stage-preview-list > section.share-active video {
+            object-fit: contain;
+            background: #000;
+        }
+
+        .radio-stack {
+            display: grid;
+            gap: 8px;
+        }
+
+        .live-effects-launch {
+            margin-top: 12px;
+        }
+
+        .live-effects-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.72);
+            z-index: 5000;
+        }
+
+        .live-effects-overlay.open {
+            display: flex;
+        }
+
+        .live-effects-panel {
+            width: min(920px, calc(100vw - 40px));
+            max-height: calc(100vh - 40px);
+            overflow: auto;
+            background: #171717;
+            border: 1px solid #4b4b4b;
+            border-radius: 14px;
+            padding: 18px;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        }
+
+        .live-effects-topbar {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: flex-start;
+        }
+
+        .live-effects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .live-effects-preview {
+            margin-top: 16px;
+        }
+
+        .live-effects-preview[hidden] {
+            display: none;
+        }
+
+        .live-effects-preview video {
+            width: 100%;
+            max-height: 260px;
+            border-radius: 10px;
+            background: #000;
+        }
+
+        .live-effects-slot {
+            text-align: left;
+            background: #222;
+            border: 1px solid #444;
+            color: #eee;
+            padding: 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .live-effects-slot.active {
+            border-color: #2e5cff;
+            box-shadow: 0 0 0 1px #2e5cff inset;
+        }
+
+        .live-effects-slot.playing {
+            background: #1e2d16;
+            border-color: #4caf50;
+        }
+
+        .live-effects-slot-title {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .live-effects-slot-meta {
+            display: block;
+            color: #b8b8b8;
+            font-size: 0.95em;
+            margin-top: 2px;
+        }
+
+        #live-region {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        #chat-live-region {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        @media (max-width: 960px) {
+            .stage-preview-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stage-preview-grid::before {
+                display: none;
+            }
+
+            .stage-preview-frame,
+            .stage-preview-list > section video,
+            .stage-preview-frame video {
+                min-height: 260px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="page">
+        <section class="card">
+            <h1 data-i18n="broadcast_room.title">EVD Yayın Odası</h1>
+            <p class="hint" data-i18n="broadcast_room.description">
+                Bu ilk faz kabuğunda oda oluşturma, davet bağlantısı ve temel kaynak alanları hazırlanır. Canlı görüşme ve yayın akışları sonraki fazlarda bağlanacaktır.
+            </p>
+            <div id="status-line" class="status-line"></div>
+        </section>
+
+        <section class="card">
+            <h2 data-i18n="broadcast_room.section_navigator_title">Bölge Listesi</h2>
+            <p class="hint" data-i18n="broadcast_room.section_navigator_hint">Alt+L ile bu listeye gelebilir, yukarı ve aşağı oklarla bölgeler arasında dolaşıp Enter ile seçili bölgenin ilk öğesine gidebilirsiniz. Ctrl+Sağ ve Ctrl+Sol ile bölgeler arasında hızlı geçiş yapabilirsiniz.</p>
+            <div>
+                <label for="room-section-list" data-i18n="broadcast_room.section_navigator_label">Bölgeler</label>
+                <select id="room-section-list" class="value-box" size="8" data-i18n-aria="broadcast_room.section_navigator_label"></select>
+            </div>
+        </section>
+
+        <section class="card stage-preview-card" data-room-section-id="live_preview">
+            <h2 data-i18n="broadcast_room.live_stage_section">Canlı Görüşme Önizlemesi</h2>
+            <p class="hint" data-i18n="broadcast_room.live_stage_hint">Ekran paylaşımı yokken konuşmacı görüntülerini burada büyük ve net biçimde izleyebilirsiniz. Kayıt sırasında temiz görünen alanın burası olması hedeflenir.</p>
+            <div class="toolbar" style="margin-top: 12px;">
+                <button id="btn-ai-review-live-preview" type="button" class="secondary" data-i18n="broadcast_room.ai_review_live_preview" data-i18n-aria="broadcast_room.ai_review_live_preview">Yapay zekadan görüş al</button>
+            </div>
+            <div style="margin-top: 12px;">
+                <label for="ai-live-preview-status" data-i18n="broadcast_room.ai_live_preview_status_label">Yapay zeka görüşü</label>
+                <div id="ai-live-preview-status" class="value-box" role="status" aria-live="polite"></div>
+            </div>
+            <div class="stage-preview-grid" style="margin-top: 16px;">
+                <div class="stage-preview-panel">
+                    <label for="host-live-preview" data-i18n="broadcast_room.host_live_preview_label">Host canlı kamera önizlemesi</label>
+                    <div class="stage-preview-frame">
+                        <video id="host-live-preview" autoplay playsinline muted></video>
+                    </div>
+                </div>
+                <div class="stage-preview-panel">
+                    <label for="remote-participant-media-list" data-i18n="broadcast_room.remote_participants_media_label">Canlı katılımcı önizlemeleri</label>
+                    <div id="remote-participant-media-list" class="stage-preview-list"></div>
+                    <div id="remote-participant-audio-host" aria-hidden="true" style="display:none;"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card" data-room-section-id="room_operations">
+            <h2 data-i18n="broadcast_room.room_section">Oda Durumu</h2>
+            <div class="toolbar">
+                <button id="btn-create-room" type="button" data-i18n="broadcast_room.create_room" data-i18n-aria="broadcast_room.create_room">Oda Oluştur</button>
+                <button id="btn-copy-link" type="button" class="secondary" data-i18n="broadcast_room.copy_invite" data-i18n-aria="broadcast_room.copy_invite">Bağlantıyı Kopyala</button>
+                <button id="btn-close-room" type="button" class="secondary" data-i18n="broadcast_room.close_room" data-i18n-aria="broadcast_room.close_room">Odayı Kapat</button>
+                <button id="btn-toggle-room-management" type="button" class="secondary" aria-expanded="false" aria-controls="room-management-panel" data-i18n="broadcast_room.room_management_toggle" data-i18n-aria="broadcast_room.room_management_toggle">Oda Yönetimi</button>
+                <button id="btn-refresh-persistent-rooms" type="button" class="secondary" data-i18n="broadcast_room.refresh_persistent_rooms" data-i18n-aria="broadcast_room.refresh_persistent_rooms">Kalıcı Odaları Yenile</button>
+            </div>
+            <p class="hint" style="margin-top:12px;" data-i18n="broadcast_room.quick_vs_persistent_hint">Üstteki Oda Oluştur hızlı/geçici oda içindir. Kalıcı oda için Oda Yönetimi içindeki oluştur düğmesini veya aşağıdaki kayıtlı odalar listesini kullanın.</p>
+            <div id="join-existing-room-panel" class="subpanel" style="margin-top:16px;">
+                <h3 style="margin:0 0 6px 0;" data-i18n="broadcast_room.join_existing_room_section">Toplantıya Katıl</h3>
+                <p id="join-existing-room-hint" class="hint" data-i18n="broadcast_room.join_existing_room_hint">Bir davet bağlantısı, oda anahtarı veya kalıcı oda adı yazın. Enter ya da Katıl düğmesi gerçek konuk katılım penceresini açar.</p>
+                <label for="join-existing-room-input" data-i18n="broadcast_room.join_existing_room_label">Toplantı adı veya bağlantısı</label>
+                <input id="join-existing-room-input" type="text" class="value-box" data-i18n-aria="broadcast_room.join_existing_room_label" data-i18n-placeholder="broadcast_room.join_existing_room_placeholder" aria-describedby="join-existing-room-hint" style="margin-top:8px;">
+                <div class="grid" style="margin-top:12px;">
+                    <div>
+                        <label for="join-existing-room-display-name" data-i18n="broadcast_room.join_existing_room_display_name_label">Katılımda görünecek ad</label>
+                        <input id="join-existing-room-display-name" type="text" class="value-box" data-i18n-aria="broadcast_room.join_existing_room_display_name_label" data-i18n-placeholder="broadcast_room.join_existing_room_display_name_placeholder">
+                    </div>
+                    <div>
+                        <label for="join-existing-room-password" data-i18n="broadcast_room.join_existing_room_password_label">Oda parolası</label>
+                        <input id="join-existing-room-password" type="password" class="value-box" data-i18n-aria="broadcast_room.join_existing_room_password_label" data-i18n-placeholder="broadcast_room.join_existing_room_password_placeholder">
+                    </div>
+                </div>
+                <div class="toolbar" style="margin-top:12px;">
+                    <button id="btn-join-existing-room" type="button" class="secondary" data-i18n="broadcast_room.join_existing_room_button" data-i18n-aria="broadcast_room.join_existing_room_button">Toplantıya katıl</button>
+                </div>
+                <div id="join-existing-room-history-panel" style="margin-top:12px;" hidden>
+                    <label id="join-existing-room-history-label" for="join-existing-room-history-listbox" data-i18n="broadcast_room.join_existing_room_history_label">Daha önce katılınan veya kayıtlı odalar</label>
+                    <p id="join-existing-room-history-hint" class="hint" data-i18n="broadcast_room.join_existing_room_history_hint">Yukarı ve aşağı oklarla oda seçin. Enter seçili odaya konuk olarak katılır.</p>
+                    <div id="join-existing-room-history-list" class="listbox" tabindex="-1"></div>
+                </div>
+            </div>
+            <div id="joined-guest-name-panel" class="subpanel" style="margin-top:16px;" hidden>
+                <h3 style="margin:0 0 6px 0;" data-i18n="broadcast_room.joined_guest_name_section">Konuk adınız</h3>
+                <p class="hint" data-i18n="broadcast_room.joined_guest_name_hint">Odaya konuk olarak bağlıyken görünen adınızı buradan değiştirebilirsiniz.</p>
+                <label for="joined-guest-display-name" data-i18n="broadcast_room.joined_guest_display_name_label">Görünen adınız</label>
+                <input id="joined-guest-display-name" type="text" class="value-box" data-i18n-aria="broadcast_room.joined_guest_display_name_label">
+                <div class="toolbar" style="margin-top:12px;">
+                    <button id="btn-update-joined-guest-name" type="button" class="secondary" data-i18n="broadcast_room.update_joined_guest_name" data-i18n-aria="broadcast_room.update_joined_guest_name">Adımı değiştir</button>
+                </div>
+            </div>
+            <div class="subpanel" style="margin-top:16px;">
+                <h3 style="margin:0 0 6px 0;" data-i18n="broadcast_room.persistent_rooms_section">Kalıcı Odalar</h3>
+                <p id="persistent-rooms-list-hint" class="hint" data-i18n="broadcast_room.persistent_rooms_hint">Yukarı ve aşağı oklarla odalar arasında gezinin. Enter seçili odayı açar. Sağ ok bağlam menüsünü açar, sol ok kapatır.</p>
+                <label id="persistent-rooms-list-label" for="persistent-rooms-listbox" data-i18n="broadcast_room.persistent_room_list_label">Kalıcı oda listesi</label>
+                <div id="persistent-rooms-list" class="listbox" tabindex="-1"></div>
+            </div>
+            <div class="toolbar" style="margin-top: 16px;" data-room-section-id="device_controls">
+                <button id="host-camera-enabled" type="button" class="secondary" data-i18n="broadcast_room.host_camera_stop_button" data-i18n-aria="broadcast_room.host_camera_stop_button">Videonuz açık, videoyu durdur</button>
+                <button id="host-microphone-enabled" type="button" class="secondary" data-i18n="broadcast_room.host_microphone_stop_button" data-i18n-aria="broadcast_room.host_microphone_stop_button">Sesiniz açık, sesi kapat</button>
+                <label style="display:flex; align-items:center; gap:8px;">
+                    <input id="allow-guest-screen-share" type="checkbox" checked>
+                    <span data-i18n="broadcast_room.allow_guest_screen_share_toggle">Konuk ekran paylaşımına izin ver</span>
+                </label>
+            </div>
+            <div class="grid" style="margin-top: 16px;" data-room-section-id="device_controls">
+                <div>
+                    <label for="host-camera-device" data-i18n="broadcast_room.host_camera_device_label">Host kamerası</label>
+                    <select id="host-camera-device" data-i18n-aria="broadcast_room.host_camera_device_label"></select>
+                </div>
+                <div>
+                    <label for="host-microphone-device" data-i18n="broadcast_room.host_microphone_device_label">Host mikrofonu</label>
+                    <select id="host-microphone-device" data-i18n-aria="broadcast_room.host_microphone_device_label"></select>
+                </div>
+                <div>
+                    <label for="host-microphone-volume" data-i18n="broadcast_room.host_microphone_volume_label">Mikrofon ses düzeyi</label>
+                    <input id="host-microphone-volume" type="range" min="0" max="200" step="5" value="100" data-i18n-aria="broadcast_room.host_microphone_volume_label">
+                    <div id="host-microphone-volume-value" class="hint">100%</div>
+                </div>
+                <div>
+                    <label for="host-speaker-device" data-i18n="broadcast_room.host_speaker_device_label">Host hoparlörü</label>
+                    <select id="host-speaker-device" data-i18n-aria="broadcast_room.host_speaker_device_label"></select>
+                </div>
+                <div>
+                    <label for="host-speaker-volume" data-i18n="broadcast_room.host_speaker_volume_label">Hoparlör ses düzeyi</label>
+                    <input id="host-speaker-volume" type="range" min="0" max="200" step="5" value="100" data-i18n-aria="broadcast_room.host_speaker_volume_label">
+                    <div id="host-speaker-volume-value" class="hint">100%</div>
+                </div>
+                <div>
+                    <button id="btn-test-host-speaker" type="button" class="secondary" data-i18n="broadcast_room.test_speaker_button" data-i18n-aria="broadcast_room.test_speaker_button">Hoparlörü test et</button>
+                </div>
+                <div>
+                    <button id="btn-test-host-microphone" type="button" class="secondary" data-i18n="broadcast_room.test_microphone_button" data-i18n-aria="broadcast_room.test_microphone_button">Mikrofonu test et</button>
+                    <div id="host-audio-test-status" class="hint" role="status" aria-live="polite"></div>
+                </div>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <h3 data-i18n="broadcast_room.room_status_label">Durum</h3>
+                    <div id="room-status" class="value-box"></div>
+                </div>
+                <div>
+                    <h3 data-i18n="broadcast_room.room_code_label">Oda Kodu</h3>
+                    <div id="room-code" class="value-box"></div>
+                </div>
+                <div>
+                    <h3 data-i18n="broadcast_room.invite_link_label">Davet Bağlantısı</h3>
+                    <div id="invite-link" class="value-box"></div>
+                </div>
+            </div>
+            <div id="room-management-panel" class="subpanel" hidden>
+                <h3 data-i18n="broadcast_room.room_management_title">Oda Yönetimi</h3>
+                <p class="hint" data-i18n="broadcast_room.room_management_hint">Odanın adını ve konukların genel izinlerini buradan yönetin.</p>
+                <div class="grid">
+                    <div>
+                        <label for="host-display-name-input" data-i18n="broadcast_room.host_display_name_input_label">Host adı</label>
+                        <input id="host-display-name-input" type="text" class="value-box" data-i18n-aria="broadcast_room.host_display_name_input_label">
+                    </div>
+                    <div>
+                        <label for="room-title-input" data-i18n="broadcast_room.room_title_input_label">Oda adı</label>
+                        <input id="room-title-input" type="text" class="value-box" data-i18n-aria="broadcast_room.room_title_input_label">
+                    </div>
+                </div>
+                <div class="toolbar" style="margin-top: 16px;">
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input id="allow-guest-camera" type="checkbox" checked>
+                        <span data-i18n="broadcast_room.allow_guest_camera_toggle">Konuk kamerasına izin ver</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input id="allow-guest-microphone" type="checkbox" checked>
+                        <span data-i18n="broadcast_room.allow_guest_microphone_toggle">Konuk mikrofonuna izin ver</span>
+                    </label>
+                </div>
+                <div class="toolbar" style="margin-top: 16px;">
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input id="persistent-room-enabled" type="checkbox">
+                        <span data-i18n="broadcast_room.persistent_room_toggle">Bu odayı kalıcı oda olarak kullan</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input id="webinar-mode-enabled" type="checkbox">
+                        <span data-i18n="broadcast_room.webinar_mode_toggle">Webinar modu: yeni katılanlar izleyici olsun</span>
+                    </label>
+                </div>
+                <div class="grid" style="margin-top: 16px;">
+                    <div>
+                        <label for="persistent-room-slug-input" data-i18n="broadcast_room.persistent_room_slug_label">Kalıcı oda bağlantı anahtarı</label>
+                        <input id="persistent-room-slug-input" type="text" class="value-box" data-i18n-aria="broadcast_room.persistent_room_slug_label" data-i18n-placeholder="broadcast_room.persistent_room_slug_placeholder">
+                        <p class="hint" data-i18n="broadcast_room.persistent_room_slug_hint">Örnek: sebeder-toplanti-odasi. Boşluk, Türkçe karakter ve özel işaret kullanmayın. Büyük/küçük harf fark etmez; bağlantı küçük harfe çevrilir.</p>
+                    </div>
+                    <div>
+                        <label for="persistent-room-password-input" data-i18n="broadcast_room.persistent_room_password_label">Oda parolası</label>
+                        <input id="persistent-room-password-input" type="password" class="value-box" data-i18n-aria="broadcast_room.persistent_room_password_label" data-i18n-placeholder="broadcast_room.persistent_room_password_placeholder">
+                    </div>
+                </div>
+                <div class="toolbar" style="margin-top: 16px; flex-wrap: wrap;">
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input id="allow-join-when-host-absent" type="checkbox">
+                        <span data-i18n="broadcast_room.allow_join_when_host_absent_toggle">Host bağlı değilken de konuk katılsın</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input id="require-password-when-host-present" type="checkbox">
+                        <span data-i18n="broadcast_room.require_password_when_host_present_toggle">Host varken parola iste</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input id="require-password-when-host-absent" type="checkbox">
+                        <span data-i18n="broadcast_room.require_password_when_host_absent_toggle">Host yokken parola iste</span>
+                    </label>
+                </div>
+                <div class="toolbar" style="margin-top: 16px;">
+                    <button id="btn-create-room-from-management" type="button" class="secondary" data-i18n="broadcast_room.create_room_from_management" data-i18n-aria="broadcast_room.create_room_from_management">Bu ayarlarla oda oluştur</button>
+                    <button id="btn-save-room-management" type="button" class="secondary" data-i18n="broadcast_room.save_room_management" data-i18n-aria="broadcast_room.save_room_management">Oda ayarlarını uygula</button>
+                    <button id="btn-mute-all-guests" type="button" class="secondary" data-i18n="broadcast_room.mute_all_guests" data-i18n-aria="broadcast_room.mute_all_guests">Tüm katılımcıları sustur</button>
+                    <button id="btn-unmute-all-guests" type="button" class="secondary" data-i18n="broadcast_room.unmute_all_guests" data-i18n-aria="broadcast_room.unmute_all_guests">Tüm katılımcıların sesini aç</button>
+                    <button id="btn-stop-all-guest-cameras" type="button" class="secondary" data-i18n="broadcast_room.stop_all_guest_cameras" data-i18n-aria="broadcast_room.stop_all_guest_cameras">Tüm katılımcı videolarını durdur</button>
+                    <button id="btn-start-all-guest-cameras" type="button" class="secondary" data-i18n="broadcast_room.start_all_guest_cameras" data-i18n-aria="broadcast_room.start_all_guest_cameras">Tüm katılımcı videolarını başlat</button>
+                </div>
+                <details id="webinar-host-key-details" style="margin-top: 16px;">
+                    <summary data-i18n="broadcast_room.open_webinar_with_key_section">Webinar anahtarıyla webinar aç</summary>
+                    <p class="hint" data-i18n="broadcast_room.open_webinar_with_key_hint">Admin tarafından verilen webinar anahtarını girerek onaylanmış webinarı host olarak açabilirsiniz.</p>
+                    <div class="grid">
+                        <div>
+                            <label for="webinar-host-key-input" data-i18n="broadcast_room.webinar_host_key_label">Webinar anahtarı</label>
+                            <input id="webinar-host-key-input" type="text" class="value-box" autocomplete="off" data-i18n-aria="broadcast_room.webinar_host_key_label" data-i18n-placeholder="broadcast_room.webinar_host_key_placeholder">
+                        </div>
+                        <div>
+                            <label for="webinar-host-name-input" data-i18n="broadcast_room.webinar_host_name_label">Host adı</label>
+                            <input id="webinar-host-name-input" type="text" class="value-box" data-i18n-aria="broadcast_room.webinar_host_name_label">
+                        </div>
+                    </div>
+                    <div class="toolbar" style="margin-top: 16px;">
+                        <button id="btn-open-webinar-with-key" type="button" class="secondary" data-i18n="broadcast_room.open_webinar_with_key" data-i18n-aria="broadcast_room.open_webinar_with_key">Webinarı aç</button>
+                    </div>
+                </details>
+                <details id="webinar-request-details" style="margin-top: 16px;">
+                    <summary data-i18n="broadcast_room.webinar_request_section">Webinar talep et</summary>
+                    <p class="hint" data-i18n="broadcast_room.webinar_request_hint">Webinar ihtiyacınızı admine iletin. İstek detayları alanına konu, yaklaşık zaman ve özel ihtiyaçlarınızı yazabilirsiniz.</p>
+                    <div class="grid">
+                        <div>
+                            <label for="webinar-requester-name" data-i18n="broadcast_room.webinar_requester_name_label">Adınız</label>
+                            <input id="webinar-requester-name" type="text" class="value-box" data-i18n-aria="broadcast_room.webinar_requester_name_label">
+                        </div>
+                        <div>
+                            <label for="webinar-requester-email" data-i18n="broadcast_room.webinar_requester_email_label">E-posta veya iletişim bilgisi</label>
+                            <input id="webinar-requester-email" type="text" class="value-box" data-i18n-aria="broadcast_room.webinar_requester_email_label" data-i18n-placeholder="broadcast_room.webinar_requester_email_placeholder">
+                        </div>
+                    </div>
+                    <div class="field-group" style="margin-top: 16px;">
+                        <label for="webinar-request-details-input" data-i18n="broadcast_room.webinar_request_details_label">İstek detayları</label>
+                        <textarea id="webinar-request-details-input" class="value-box" rows="5" data-i18n-aria="broadcast_room.webinar_request_details_label" data-i18n-placeholder="broadcast_room.webinar_request_details_placeholder"></textarea>
+                    </div>
+                    <div class="toolbar" style="margin-top: 16px;">
+                        <button id="btn-submit-webinar-request" type="button" class="secondary" data-i18n="broadcast_room.submit_webinar_request" data-i18n-aria="broadcast_room.submit_webinar_request">Webinar talebini gönder</button>
+                        <button id="btn-webinar-request-admin-mail-draft" type="button" class="secondary" data-i18n="broadcast_room.webinar_request_admin_mail_draft" data-i18n-aria="broadcast_room.webinar_request_admin_mail_draft">Admin için e-posta taslağı hazırla</button>
+                    </div>
+                    <div id="webinar-request-status" class="value-box" role="status" aria-live="polite" style="margin-top: 12px;"></div>
+                </details>
+                <details id="admin-login-details" style="margin-top: 16px;">
+                    <summary data-i18n="broadcast_room.admin_login_section">Gelişmiş: Admin girişi</summary>
+                    <p class="hint" data-i18n="broadcast_room.admin_login_hint">Webinar talepleri gibi yönetici işlemleri için admin anahtarınızı girin. Anahtar bu ekranda saklanmaz.</p>
+                    <div class="grid">
+                        <div>
+                            <label for="admin-secret-input" data-i18n="broadcast_room.admin_secret_label">Admin anahtarı</label>
+                            <input id="admin-secret-input" type="password" class="value-box" autocomplete="off" data-i18n-aria="broadcast_room.admin_secret_label" data-i18n-placeholder="broadcast_room.admin_secret_placeholder">
+                        </div>
+                        <div>
+                            <h3 data-i18n="broadcast_room.admin_status_label">Admin durumu</h3>
+                            <div id="admin-login-status" class="value-box" role="status" aria-live="polite"></div>
+                        </div>
+                    </div>
+                    <div class="toolbar" style="margin-top: 16px;">
+                        <button id="btn-admin-login" type="button" class="secondary" data-i18n="broadcast_room.admin_login_button" data-i18n-aria="broadcast_room.admin_login_button">Admin girişi yap</button>
+                        <button id="btn-admin-logout" type="button" class="secondary" data-i18n="broadcast_room.admin_logout_button" data-i18n-aria="broadcast_room.admin_logout_button">Admin oturumunu kapat</button>
+                    </div>
+                    <div id="webinar-admin-panel" style="margin-top: 16px;" hidden>
+                        <h4 data-i18n="broadcast_room.webinar_requests_admin_title">Webinar talepleri</h4>
+                        <p class="hint" data-i18n="broadcast_room.webinar_requests_admin_hint">Talepler arasında ok tuşlarıyla dolaşın. Seçili talep için e-posta taslağı hazırlayabilir veya durumunu güncelleyebilirsiniz.</p>
+                        <div class="toolbar" style="margin-top: 12px;">
+                            <button id="btn-refresh-webinar-requests" type="button" class="secondary" data-i18n="broadcast_room.refresh_webinar_requests" data-i18n-aria="broadcast_room.refresh_webinar_requests">Webinar taleplerini yenile</button>
+                            <button id="btn-webinar-request-mail-draft" type="button" class="secondary" data-i18n="broadcast_room.webinar_request_mail_draft" data-i18n-aria="broadcast_room.webinar_request_mail_draft">E-posta taslağı hazırla</button>
+                            <button id="btn-approve-webinar-request" type="button" class="secondary" data-i18n="broadcast_room.approve_webinar_request" data-i18n-aria="broadcast_room.approve_webinar_request">Onaylandı işaretle</button>
+                            <button id="btn-reject-webinar-request" type="button" class="secondary" data-i18n="broadcast_room.reject_webinar_request" data-i18n-aria="broadcast_room.reject_webinar_request">Reddedildi işaretle</button>
+                        </div>
+                        <div class="grid" style="margin-top: 12px;">
+                            <div>
+                                <label for="webinar-requests-list" data-i18n="broadcast_room.webinar_requests_list_label">Webinar talep listesi</label>
+                                <select id="webinar-requests-list" class="value-box" size="7" data-i18n-aria="broadcast_room.webinar_requests_list_label"></select>
+                            </div>
+                            <div>
+                                <label for="webinar-request-detail-preview" data-i18n="broadcast_room.webinar_request_detail_preview_label">Seçili talep ayrıntısı</label>
+                                <textarea id="webinar-request-detail-preview" class="value-box" rows="7" readonly data-i18n-aria="broadcast_room.webinar_request_detail_preview_label"></textarea>
+                            </div>
+                        </div>
+                        <div class="field-group" style="margin-top: 16px;">
+                            <h4 data-i18n="broadcast_room.webinar_create_from_request_title">Seçili talepten webinar oluştur</h4>
+                            <div class="grid">
+                                <div>
+                                    <label for="webinar-create-title" data-i18n="broadcast_room.webinar_create_title_label">Webinar adı</label>
+                                    <input id="webinar-create-title" type="text" class="value-box" data-i18n-aria="broadcast_room.webinar_create_title_label">
+                                </div>
+                                <div>
+                                    <label for="webinar-create-scheduled-at" data-i18n="broadcast_room.webinar_create_scheduled_at_label">Planlanan tarih ve saat</label>
+                                    <input id="webinar-create-scheduled-at" type="datetime-local" class="value-box" data-i18n-aria="broadcast_room.webinar_create_scheduled_at_label">
+                                </div>
+                                <div>
+                                    <label for="webinar-create-duration" data-i18n="broadcast_room.webinar_create_duration_label">Süre, dakika</label>
+                                    <input id="webinar-create-duration" type="number" min="15" max="1440" step="15" class="value-box" value="120" data-i18n-aria="broadcast_room.webinar_create_duration_label">
+                                </div>
+                                <div>
+                                    <label for="webinar-create-audience-limit" data-i18n="broadcast_room.webinar_create_audience_limit_label">İzleyici limiti</label>
+                                    <input id="webinar-create-audience-limit" type="number" min="1" max="1000" class="value-box" value="150" data-i18n-aria="broadcast_room.webinar_create_audience_limit_label">
+                                </div>
+                                <div>
+                                    <label for="webinar-create-panelist-limit" data-i18n="broadcast_room.webinar_create_panelist_limit_label">Panelist limiti</label>
+                                    <input id="webinar-create-panelist-limit" type="number" min="1" max="50" class="value-box" value="20" data-i18n-aria="broadcast_room.webinar_create_panelist_limit_label">
+                                </div>
+                                <div>
+                                    <label for="webinar-create-password" data-i18n="broadcast_room.webinar_create_password_label">Webinar parolası</label>
+                                    <input id="webinar-create-password" type="password" class="value-box" data-i18n-aria="broadcast_room.webinar_create_password_label" data-i18n-placeholder="broadcast_room.webinar_create_password_placeholder">
+                                </div>
+                            </div>
+                            <div class="toolbar" style="margin-top: 12px; flex-wrap: wrap;">
+                                <label style="display:flex; align-items:center; gap:8px;">
+                                    <input id="webinar-create-persistent" type="checkbox">
+                                    <span data-i18n="broadcast_room.webinar_create_persistent_label">Kalıcı webinar yap</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px;">
+                                    <input id="webinar-create-allow-join-when-host-absent" type="checkbox">
+                                    <span data-i18n="broadcast_room.webinar_create_allow_join_when_host_absent_label">Host yokken izleyici katılabilsin</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px;">
+                                    <input id="webinar-create-restrict-before-start" type="checkbox">
+                                    <span data-i18n="broadcast_room.webinar_create_restrict_before_start_label">Planlanan saatten önce anahtarla açılmasın</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px;">
+                                    <input id="webinar-create-restrict-after-end" type="checkbox">
+                                    <span data-i18n="broadcast_room.webinar_create_restrict_after_end_label">Süre bitince anahtar geçersiz olsun</span>
+                                </label>
+                            </div>
+                            <div class="toolbar" style="margin-top: 12px;">
+                                <button id="btn-create-webinar-from-request" type="button" class="secondary" data-i18n="broadcast_room.create_webinar_from_request" data-i18n-aria="broadcast_room.create_webinar_from_request">Seçili talepten webinar oluştur</button>
+                                <button id="btn-copy-webinar-host-key" type="button" class="secondary" data-i18n="broadcast_room.copy_webinar_host_key" data-i18n-aria="broadcast_room.copy_webinar_host_key">Webinar anahtarını kopyala</button>
+                            </div>
+                            <textarea id="webinar-created-summary" class="value-box" rows="4" readonly data-i18n-aria="broadcast_room.webinar_created_summary_label" style="margin-top: 12px;"></textarea>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <section class="card" data-room-section-id="obs_setup">
+            <h2 data-i18n="broadcast_room.obs_section">OBS Hazırlığı</h2>
+            <p class="hint" data-i18n="broadcast_room.obs_hint">Yerel kayıt ve yayın için OBS Studio açık olmalı ve WebSocket bağlantısı hazır olmalıdır.</p>
+            <div class="toolbar">
+                <button id="btn-detect-obs" type="button" class="secondary" data-i18n="broadcast_room.detect_obs" data-i18n-aria="broadcast_room.detect_obs">OBS'yi Denetle</button>
+                <button id="btn-test-obs-connection" type="button" class="secondary" data-i18n="broadcast_room.test_obs_connection" data-i18n-aria="broadcast_room.test_obs_connection">Bağlantıyı Test Et</button>
+                <button id="btn-launch-obs" type="button" class="secondary" data-i18n="broadcast_room.launch_obs" data-i18n-aria="broadcast_room.launch_obs">OBS'yi Aç</button>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <h3 data-i18n="broadcast_room.obs_detect_label">OBS Durumu</h3>
+                    <div id="obs-detect-status" class="value-box" role="status" aria-live="polite"></div>
+                </div>
+                <div>
+                    <h3 data-i18n="broadcast_room.obs_connection_label">Bağlantı Durumu</h3>
+                    <div id="obs-connection-status" class="value-box" role="status" aria-live="polite"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card" data-room-section-id="scene_background">
+            <h2 data-i18n="broadcast_room.scene_background_section">Sahne Arka Planı</h2>
+            <p class="hint" data-i18n="broadcast_room.scene_background_hint">Yayın sahnesinin en altına görsel veya sessiz döngülü video arka plan ekleyin. Önerilen boyut 1920x1080'dir.</p>
+            <div class="toolbar">
+                <button id="btn-select-scene-background" type="button" class="secondary" data-i18n="broadcast_room.select_scene_background" data-i18n-aria="broadcast_room.select_scene_background">Arka plan dosyası seç</button>
+                <button id="btn-clear-scene-background" type="button" class="secondary" data-i18n="broadcast_room.clear_scene_background" data-i18n-aria="broadcast_room.clear_scene_background">Arka planı kaldır</button>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <label for="scene-background-fit-mode" data-i18n="broadcast_room.scene_background_fit_mode_label">Arka plan yerleşimi</label>
+                    <select id="scene-background-fit-mode" data-i18n-aria="broadcast_room.scene_background_fit_mode_label">
+                        <option value="cover" data-i18n="broadcast_room.scene_background_fit_cover">Doldur ve kırp</option>
+                        <option value="contain" data-i18n="broadcast_room.scene_background_fit_contain">Sığdır ve boşluk bırak</option>
+                        <option value="stretch" data-i18n="broadcast_room.scene_background_fit_stretch">Esnet</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="scene-background-dim-percent" data-i18n="broadcast_room.scene_background_dim_label">Arka plan karartma yüzdesi</label>
+                    <input id="scene-background-dim-percent" type="range" min="0" max="80" step="5" value="0" data-i18n-aria="broadcast_room.scene_background_dim_label">
+                    <span id="scene-background-dim-value">%0</span>
+                </div>
+                <div>
+                    <label for="scene-logo-position" data-i18n="broadcast_room.scene_logo_position_label">Logo konumu</label>
+                    <select id="scene-logo-position" data-i18n-aria="broadcast_room.scene_logo_position_label">
+                        <option value="top-right" data-i18n="broadcast_room.scene_logo_top_right">Sağ üst</option>
+                        <option value="top-left" data-i18n="broadcast_room.scene_logo_top_left">Sol üst</option>
+                        <option value="bottom-right" data-i18n="broadcast_room.scene_logo_bottom_right">Sağ alt</option>
+                        <option value="bottom-left" data-i18n="broadcast_room.scene_logo_bottom_left">Sol alt</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="scene-logo-size" data-i18n="broadcast_room.scene_logo_size_label">Logo boyutu</label>
+                    <select id="scene-logo-size" data-i18n-aria="broadcast_room.scene_logo_size_label">
+                        <option value="small" data-i18n="broadcast_room.scene_logo_size_small">Küçük</option>
+                        <option value="medium" selected data-i18n="broadcast_room.scene_logo_size_medium">Orta</option>
+                        <option value="large" data-i18n="broadcast_room.scene_logo_size_large">Büyük</option>
+                    </select>
+                </div>
+            </div>
+            <div class="toolbar" style="margin-top: 12px;">
+                <button id="btn-select-scene-logo" type="button" class="secondary" data-i18n="broadcast_room.select_scene_logo" data-i18n-aria="broadcast_room.select_scene_logo">Logo dosyası seç</button>
+                <button id="btn-clear-scene-logo" type="button" class="secondary" data-i18n="broadcast_room.clear_scene_logo" data-i18n-aria="broadcast_room.clear_scene_logo">Logoyu kaldır</button>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <label for="scene-background-profile-name" data-i18n="broadcast_room.scene_background_profile_name_label">Arka plan profil adı</label>
+                    <input id="scene-background-profile-name" type="text" data-i18n-placeholder="broadcast_room.scene_background_profile_name_placeholder" placeholder="Örneğin: Kurumsal yayın">
+                </div>
+                <div>
+                    <label for="scene-background-profile-list" data-i18n="broadcast_room.scene_background_profile_list_label">Kayıtlı arka plan profilleri</label>
+                    <select id="scene-background-profile-list" data-i18n-aria="broadcast_room.scene_background_profile_list_label">
+                        <option value="" data-i18n="broadcast_room.scene_background_profile_empty">Kayıtlı profil yok</option>
+                    </select>
+                </div>
+            </div>
+            <div class="toolbar" style="margin-top: 12px;">
+                <button id="btn-save-scene-background-profile" type="button" class="secondary" data-i18n="broadcast_room.save_scene_background_profile" data-i18n-aria="broadcast_room.save_scene_background_profile">Profil olarak kaydet</button>
+                <button id="btn-apply-scene-background-profile" type="button" class="secondary" data-i18n="broadcast_room.apply_scene_background_profile" data-i18n-aria="broadcast_room.apply_scene_background_profile">Profili uygula</button>
+                <button id="btn-delete-scene-background-profile" type="button" class="secondary" data-i18n="broadcast_room.delete_scene_background_profile" data-i18n-aria="broadcast_room.delete_scene_background_profile">Profili sil</button>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <h3 data-i18n="broadcast_room.scene_background_status_label">Arka plan durumu</h3>
+                    <div id="scene-background-status" class="value-box" role="status" aria-live="polite" data-i18n="broadcast_room.scene_background_empty">Arka plan seçilmedi.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card" data-room-section-id="local_recording">
+            <h2 data-i18n="broadcast_room.recording_section">Yerel Kayıt</h2>
+            <p class="hint" data-i18n="broadcast_room.recording_hint">Aktif yayın odası sahnesini yerel bilgisayarınıza kaydedin. Canlı yayın açmadan önce prova veya ham kayıt almak için bunu kullanabilirsiniz.</p>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <label for="recording-audio-balance-preset" data-i18n="broadcast_room.recording_audio_preset_label">Ses dengeleme ön ayarı</label>
+                    <select id="recording-audio-balance-preset" data-i18n-aria="broadcast_room.recording_audio_preset_label">
+                        <option value="manual" data-i18n="broadcast_room.recording_audio_preset_manual">Kapalı (elle ayarla)</option>
+                        <option value="balanced" data-i18n="broadcast_room.recording_audio_preset_balanced">Dengeli görüşme</option>
+                        <option value="remote_focus" data-i18n="broadcast_room.recording_audio_preset_remote_focus">Konuk sesi önde</option>
+                    </select>
+                    <p class="hint" data-i18n="broadcast_room.recording_audio_preset_hint">Bu seçim zorunlu değildir. Konuk veya toplantı sesi host sesine göre geride kalıyorsa deneyebilirsiniz.</p>
+                </div>
+            </div>
+            <div class="toolbar">
+                <button id="btn-start-local-recording" type="button" data-i18n="broadcast_room.start_recording" data-i18n-aria="broadcast_room.start_recording">Kaydı Başlat</button>
+                <button id="btn-stop-local-recording" type="button" class="secondary" data-i18n="broadcast_room.stop_recording" data-i18n-aria="broadcast_room.stop_recording">Kaydı Durdur</button>
+                <button id="btn-start-bot-stage-recording" type="button" class="secondary" data-i18n="broadcast_room.start_bot_stage_recording" data-i18n-aria="broadcast_room.start_bot_stage_recording">Bot ile Kaydet</button>
+                <button id="btn-stop-bot-stage-recording" type="button" class="secondary" data-i18n="broadcast_room.stop_bot_stage_recording" data-i18n-aria="broadcast_room.stop_bot_stage_recording">Bot Kaydını Durdur</button>
+            </div>
+            <div class="form-group" style="margin-top: 16px;">
+                <label>
+                    <input type="checkbox" id="recording-auto-add-live-translation-track">
+                    <span data-i18n="broadcast_room.recording_auto_add_live_translation_track">Kayıt bitince insan canlı çevirmen kanalını ayrı ses parçası olarak ekle</span>
+                </label>
+                <p class="hint" data-i18n="broadcast_room.recording_auto_add_live_translation_track_hint">Bir katılımcı canlı çevirmen rolündeyse, onun sesi önde ve özgün konuşmalar altta olacak şekilde kayıt sonunda MP4 dosyasına seçilebilir ikinci ses parçası eklenir.</p>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <h3 data-i18n="broadcast_room.recording_status_label">Kayıt Durumu</h3>
+                    <div id="recording-status" class="value-box" role="status" aria-live="polite"></div>
+                </div>
+                <div>
+                    <h3 data-i18n="broadcast_room.recording_output_label">Son Çıktı Yolu</h3>
+                    <div id="recording-output" class="value-box"></div>
+                </div>
+            </div>
+            <div class="subpanel" style="margin-top: 16px;">
+                <h3 style="margin:0 0 6px 0;" data-i18n="broadcast_room.local_backup_recordings_title">Konuk yerel yedek kayıtları</h3>
+                <p class="hint" data-i18n="broadcast_room.local_backup_recordings_hint">Konukların tarayıcılarında yerel olarak kaydedilip sunucuya yüklenen yedek ses/görüntü parçalarını burada kontrol edin. Birleştirme adımı için önce kayıtların tamamlandığını doğrulayın.</p>
+                <div class="toolbar" style="margin-top: 12px;">
+                    <button id="btn-refresh-local-backup-recordings" type="button" class="secondary" data-i18n="broadcast_room.refresh_local_backup_recordings" data-i18n-aria="broadcast_room.refresh_local_backup_recordings">Yedek kayıtları yenile</button>
+                    <button id="btn-merge-selected-local-backup-recording" type="button" class="secondary" data-i18n="broadcast_room.merge_selected_local_backup_recording" data-i18n-aria="broadcast_room.merge_selected_local_backup_recording">Seçili yedek sesi ana kayda ekle</button>
+                    <button id="btn-overlay-selected-local-backup-recording" type="button" class="secondary" data-i18n="broadcast_room.overlay_selected_local_backup_recording" data-i18n-aria="broadcast_room.overlay_selected_local_backup_recording">Seçili yedek kamerayı ana kayda yerleştir</button>
+                    <button id="btn-rebuild-selected-local-backup-recording-from-timeline" type="button" class="secondary" data-i18n="broadcast_room.rebuild_selected_local_backup_recording_from_timeline" data-i18n-aria="broadcast_room.rebuild_selected_local_backup_recording_from_timeline">Seçili yedeği sahne zaman çizelgesine göre yerleştir</button>
+                    <button id="btn-rebuild-all-local-backup-recordings-from-timeline" type="button" class="secondary" data-i18n="broadcast_room.rebuild_all_local_backup_recordings_from_timeline" data-i18n-aria="broadcast_room.rebuild_all_local_backup_recordings_from_timeline">Tüm uygun yedekleri sahne zaman çizelgesine göre yerleştir</button>
+                    <button id="btn-clear-local-backup-recordings" type="button" class="secondary" data-i18n="broadcast_room.clear_local_backup_recordings" data-i18n-aria="broadcast_room.clear_local_backup_recordings">Bu odanın yedek kayıtlarını temizle</button>
+                </div>
+                <div class="grid" style="margin-top: 12px;">
+                    <div>
+                        <label id="local-backup-recordings-list-label" for="local-backup-recordings-list" data-i18n="broadcast_room.local_backup_recordings_list_label">Konuk yedek kayıt listesi</label>
+                        <select id="local-backup-recordings-list" class="value-box" size="6" aria-labelledby="local-backup-recordings-list-label"></select>
+                    </div>
+                    <div>
+                        <h3 id="local-backup-recording-detail-label" data-i18n="broadcast_room.local_backup_recording_detail_label">Seçili yedek kayıt ayrıntısı</h3>
+                        <div id="local-backup-recording-detail" class="value-box" role="status" aria-live="polite" aria-labelledby="local-backup-recording-detail-label"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <label for="recording-dub-output-dub-volume" data-i18n="broadcast_room.recording_dub_output_dub_volume_label">Dublaj çıktı sesi</label>
+                    <select id="recording-dub-output-dub-volume" data-i18n-aria="broadcast_room.recording_dub_output_dub_volume_label">
+                        <option value="high" data-i18n="broadcast_room.recording_dub_output_dub_high">Belirgin önde</option>
+                        <option value="medium" data-i18n="broadcast_room.recording_dub_output_dub_medium">Dengeli</option>
+                        <option value="very_high" data-i18n="broadcast_room.recording_dub_output_dub_very_high">Daha da önde</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="recording-dub-output-original-volume" data-i18n="broadcast_room.recording_dub_output_original_volume_label">Özgün çıktı sesi</label>
+                    <select id="recording-dub-output-original-volume" data-i18n-aria="broadcast_room.recording_dub_output_original_volume_label">
+                        <option value="very_low" data-i18n="broadcast_room.recording_dub_output_original_very_low">Çok altta</option>
+                        <option value="low" data-i18n="broadcast_room.recording_dub_output_original_low">Altta</option>
+                        <option value="medium" data-i18n="broadcast_room.recording_dub_output_original_medium">Biraz daha duyulur</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="recording-dub-output-timing" data-i18n="broadcast_room.recording_dub_output_timing_label">Dublaj zamanlaması</label>
+                    <select id="recording-dub-output-timing" data-i18n-aria="broadcast_room.recording_dub_output_timing_label">
+                        <option value="on_time" data-i18n="broadcast_room.recording_dub_output_timing_on_time">Konuşma başlangıcına yakın</option>
+                        <option value="slightly_late" data-i18n="broadcast_room.recording_dub_output_timing_slightly_late">Biraz geç başlasın</option>
+                        <option value="later" data-i18n="broadcast_room.recording_dub_output_timing_later">Daha geç başlasın</option>
+                        <option value="slightly_early" data-i18n="broadcast_room.recording_dub_output_timing_slightly_early">Biraz erken başlasın</option>
+                    </select>
+                </div>
+            </div>
+            <div class="toolbar" style="margin-top: 16px;">
+                <button id="btn-open-recording-folder" type="button" class="secondary" data-i18n="broadcast_room.open_recording_folder" data-i18n-aria="broadcast_room.open_recording_folder">Klasörü Aç</button>
+                <button id="btn-copy-recording-path" type="button" class="secondary" data-i18n="broadcast_room.copy_recording_path" data-i18n-aria="broadcast_room.copy_recording_path">Yolu Kopyala</button>
+                <button id="btn-add-dub-track-to-recording" type="button" class="secondary" data-i18n="broadcast_room.add_dub_track_to_recording" data-i18n-aria="broadcast_room.add_dub_track_to_recording">Dublajı Ayrı Ses Parçası Olarak Ekle</button>
+                <button id="btn-create-single-dubbed-recording" type="button" class="secondary" data-i18n="broadcast_room.create_single_dubbed_recording" data-i18n-aria="broadcast_room.create_single_dubbed_recording">Dublajlı Tek Sesli Kopya Oluştur</button>
+            </div>
+            <div class="grid" style="margin-top: 12px;">
+                <div>
+                    <h3 data-i18n="broadcast_room.dub_segments_status_label">Canlı çeviri dublaj segmentleri</h3>
+                    <div id="dub-segments-status" class="value-box" aria-live="off"></div>
+                </div>
+            </div>
+            <div class="subpanel" style="margin-top: 16px;">
+                <h3 style="margin:0 0 6px 0;" data-i18n="broadcast_room.elevenlabs_dubbing_section">ElevenLabs ile kayıt sonrası dublaj</h3>
+                <p class="hint" data-i18n="broadcast_room.elevenlabs_dubbing_hint">Bu seçenek kaydı ElevenLabs Dubbing servisine gönderir, dublaj sesini indirir ve özgün sesi altta kalacak şekilde tek sesli yeni bir kopya oluşturur. Mevcut canlı çeviri akışını değiştirmez.</p>
+                <div class="grid" style="margin-top: 12px;">
+                    <div>
+                        <label for="elevenlabs-dubbing-source-language" data-i18n="broadcast_room.elevenlabs_dubbing_source_language_label">Dublaj kaynak dili</label>
+                        <select id="elevenlabs-dubbing-source-language" data-i18n-aria="broadcast_room.elevenlabs_dubbing_source_language_label">
+                            <option value="auto" data-i18n="broadcast_room.translation_language_auto">Otomatik algıla</option>
+                            <option value="tr" data-i18n="broadcast_room.translation_language_tr">Türkçe</option>
+                            <option value="en" data-i18n="broadcast_room.translation_language_en">İngilizce</option>
+                            <option value="de" data-i18n="broadcast_room.translation_language_de">Almanca</option>
+                            <option value="fr" data-i18n="broadcast_room.translation_language_fr">Fransızca</option>
+                            <option value="es" data-i18n="broadcast_room.translation_language_es">İspanyolca</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="elevenlabs-dubbing-target-language" data-i18n="broadcast_room.elevenlabs_dubbing_target_language_label">Dublaj hedef dili</label>
+                        <select id="elevenlabs-dubbing-target-language" data-i18n-aria="broadcast_room.elevenlabs_dubbing_target_language_label">
+                            <option value="tr" data-i18n="broadcast_room.translation_language_tr">Türkçe</option>
+                            <option value="en" data-i18n="broadcast_room.translation_language_en">İngilizce</option>
+                            <option value="de" data-i18n="broadcast_room.translation_language_de">Almanca</option>
+                            <option value="fr" data-i18n="broadcast_room.translation_language_fr">Fransızca</option>
+                            <option value="es" data-i18n="broadcast_room.translation_language_es">İspanyolca</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="toolbar" style="margin-top: 12px;">
+                    <button id="btn-import-elevenlabs-dubbing-recording" type="button" class="secondary" data-i18n="broadcast_room.import_elevenlabs_dubbing_recording" data-i18n-aria="broadcast_room.import_elevenlabs_dubbing_recording">Dublaj için kayıt dosyası içe aktar</button>
+                    <button id="btn-check-elevenlabs-dubbing-estimate" type="button" class="secondary" data-i18n="broadcast_room.check_elevenlabs_dubbing_estimate" data-i18n-aria="broadcast_room.check_elevenlabs_dubbing_estimate">Süre ve kredi tahminini kontrol et</button>
+                    <button id="btn-create-elevenlabs-dubbed-recording" type="button" class="secondary" data-i18n="broadcast_room.create_elevenlabs_dubbed_recording" data-i18n-aria="broadcast_room.create_elevenlabs_dubbed_recording">ElevenLabs Dubbing ile dublajlı kopya oluştur</button>
+                    <button id="btn-remix-elevenlabs-dubbed-recording" type="button" class="secondary" data-i18n="broadcast_room.remix_elevenlabs_dubbed_recording" data-i18n-aria="broadcast_room.remix_elevenlabs_dubbed_recording">Son ElevenLabs dublajını yeniden dengele</button>
+                </div>
+                <div class="grid" style="margin-top: 12px;">
+                    <div>
+                        <h3 data-i18n="broadcast_room.elevenlabs_dubbing_estimate_label">Süre ve kredi tahmini</h3>
+                        <div id="elevenlabs-dubbing-estimate" class="value-box" role="status" aria-live="polite"></div>
+                    </div>
+                    <div>
+                        <h3 data-i18n="broadcast_room.elevenlabs_dubbing_selected_file_label">Dublaj için seçili kayıt</h3>
+                        <div id="elevenlabs-dubbing-selected-file" class="value-box" role="status" aria-live="polite"></div>
+                    </div>
+                    <div>
+                        <h3 data-i18n="broadcast_room.elevenlabs_dubbing_cached_audio_label">Saklanan ElevenLabs dublaj sesi</h3>
+                        <div id="elevenlabs-dubbing-cached-audio" class="value-box" role="status" aria-live="polite"></div>
+                    </div>
+                    <div>
+                        <h3 data-i18n="broadcast_room.elevenlabs_dubbing_status_label">ElevenLabs dublaj durumu</h3>
+                        <div id="elevenlabs-dubbing-status" class="value-box" role="status" aria-live="polite"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="subpanel" style="margin-top: 16px;">
+                <h3 style="margin:0 0 6px 0;" data-i18n="broadcast_room.rebalance_import_section">Eski dublajlı kaydı yeniden dengele</h3>
+                <p class="hint" data-i18n="broadcast_room.rebalance_import_hint">Daha önce oluşturduğunuz iki ses parçalı MP4 dosyasını içe alıp dublaj ve özgün ses düzeylerini tek sesli yeni kopya olarak yeniden oluşturabilirsiniz.</p>
+                <div class="toolbar" style="margin-top: 12px;">
+                    <button id="btn-import-dubbed-recording" type="button" class="secondary" data-i18n="broadcast_room.import_dubbed_recording" data-i18n-aria="broadcast_room.import_dubbed_recording">İki parçalı kaydı içe aktar</button>
+                    <button id="btn-preview-rebalanced-dubbed-recording" type="button" class="secondary" data-i18n="broadcast_room.preview_rebalanced_dubbed_recording" data-i18n-aria="broadcast_room.preview_rebalanced_dubbed_recording">Denge önizlemesini dinle</button>
+                    <button id="btn-export-rebalanced-dubbed-recording" type="button" class="secondary" data-i18n="broadcast_room.export_rebalanced_dubbed_recording" data-i18n-aria="broadcast_room.export_rebalanced_dubbed_recording">Yeniden dengelenmiş kopya oluştur</button>
+                </div>
+                <div class="grid" style="margin-top: 12px;">
+                    <div>
+                        <label for="rebalance-preview-start" data-i18n="broadcast_room.rebalance_preview_start_label">Önizleme başlangıcı, saniye</label>
+                        <input id="rebalance-preview-start" type="number" min="0" step="1" value="0" data-i18n-aria="broadcast_room.rebalance_preview_start_label">
+                    </div>
+                    <div>
+                        <h3 data-i18n="broadcast_room.rebalance_import_status_label">İçe aktarılan dosya</h3>
+                        <div id="rebalance-import-status" class="value-box" role="status" aria-live="polite"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card" data-room-section-id="live_translation">
+            <h2 data-i18n="broadcast_room.translation_section">Canlı Çeviri</h2>
+            <p class="hint" data-i18n="broadcast_room.translation_hint">Bu bölüm, oda sesinden yazılı otomatik altyazı veya yazılı çeviri üretir. Canlı sesli dublaj bu akışta kullanılmaz; dublaj için kayıt sonrası ElevenLabs dublaj aracını kullanabilirsiniz.</p>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="translation-enabled">
+                    <span data-i18n="broadcast_room.translation_enable">Bu oturumda canlı çeviriyi etkinleştir</span>
+                </label>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <label for="translation-service" data-i18n="broadcast_room.translation_service_label">Altyazı servisi</label>
+                    <select id="translation-service" data-i18n-aria="broadcast_room.translation_service_label">
+                        <option value="openai" selected data-i18n="broadcast_room.translation_service_openai">OpenAI (altyazı için önerilir)</option>
+                        <option value="elevenlabs" data-i18n="broadcast_room.translation_service_elevenlabs">ElevenLabs</option>
+                        <option value="gemini" data-i18n="broadcast_room.translation_service_gemini">Gemini Live Translate (sesli çeviri için önerilir)</option>
+                    </select>
+                    <p id="translation-service-cost" class="hint" aria-live="off"></p>
+                </div>
+                <div>
+                    <label for="translation-source-language" data-i18n="broadcast_room.translation_source_language_label">Kaynak konuşma dili</label>
+                    <select id="translation-source-language" data-i18n-aria="broadcast_room.translation_source_language_label">
+                        <option value="auto" data-i18n="broadcast_room.translation_language_auto">Otomatik algıla</option>
+                        <option value="tr" data-i18n="broadcast_room.translation_language_tr">Türkçe</option>
+                        <option value="en" data-i18n="broadcast_room.translation_language_en">İngilizce</option>
+                        <option value="de" data-i18n="broadcast_room.translation_language_de">Almanca</option>
+                        <option value="fr" data-i18n="broadcast_room.translation_language_fr">Fransızca</option>
+                        <option value="es" data-i18n="broadcast_room.translation_language_es">İspanyolca</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="translation-target-language" data-i18n="broadcast_room.translation_target_language_label">Hedef çeviri dili</label>
+                    <select id="translation-target-language" data-i18n-aria="broadcast_room.translation_target_language_label">
+                        <option value="tr" data-i18n="broadcast_room.translation_language_tr">Türkçe</option>
+                        <option value="en" data-i18n="broadcast_room.translation_language_en">İngilizce</option>
+                        <option value="de" data-i18n="broadcast_room.translation_language_de">Almanca</option>
+                        <option value="fr" data-i18n="broadcast_room.translation_language_fr">Fransızca</option>
+                        <option value="es" data-i18n="broadcast_room.translation_language_es">İspanyolca</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="translation-output-mode" data-i18n="broadcast_room.translation_output_mode_label">Çıktı modu</label>
+                    <select id="translation-output-mode" data-i18n-aria="broadcast_room.translation_output_mode_label">
+                        <option value="captions_only" selected data-i18n="broadcast_room.translation_output_captions_only">Otomatik altyazı</option>
+                        <option value="translated_captions" data-i18n="broadcast_room.translation_output_translated_captions">Yazılı çeviri</option>
+                        <option value="voice_translation" data-i18n="broadcast_room.translation_output_voice_translation">Sesli çeviri</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="translation-scope" data-i18n="broadcast_room.translation_scope_label">Çeviri kapsamı</label>
+                    <select id="translation-scope" data-i18n-aria="broadcast_room.translation_scope_label">
+                        <option value="single_target" selected data-i18n="broadcast_room.translation_scope_single_target">Tek hedef dil</option>
+                        <option value="personal" data-i18n="broadcast_room.translation_scope_personal">Katılımcıların diline göre kişisel çeviri</option>
+                    </select>
+                    <p class="hint" data-i18n="broadcast_room.translation_scope_hint">Tek hedef dil mevcut davranışı korur. Kişisel çeviri deneysel olarak konukların seçtiği dili dikkate alır.</p>
+                </div>
+                <div>
+                    <label for="translation-host-listen-language" data-i18n="broadcast_room.translation_host_listen_language_label">Host dinleme dili</label>
+                    <select id="translation-host-listen-language" data-i18n-aria="broadcast_room.translation_host_listen_language_label">
+                        <option value="tr" data-i18n="broadcast_room.translation_language_tr">Türkçe</option>
+                        <option value="en" data-i18n="broadcast_room.translation_language_en">İngilizce</option>
+                        <option value="de" data-i18n="broadcast_room.translation_language_de">Almanca</option>
+                        <option value="fr" data-i18n="broadcast_room.translation_language_fr">Fransızca</option>
+                        <option value="es" data-i18n="broadcast_room.translation_language_es">İspanyolca</option>
+                    </select>
+                    <p class="hint" data-i18n="broadcast_room.translation_host_listen_language_hint">Kişisel çeviri modunda host, konuk konuşmalarının çevirisini bu dilde duyar.</p>
+                </div>
+            </div>
+            <div class="form-group" style="margin-top: 16px;">
+                <label>
+                    <input type="checkbox" id="translation-caption-overlay-enabled" checked>
+                    <span data-i18n="broadcast_room.translation_caption_overlay_enable">Canlı altyazıyı kayıt ve yayına göm</span>
+                </label>
+                <p class="hint" data-i18n="broadcast_room.translation_caption_overlay_hint">Canlı altyazı temiz yayın çıkışının altına eklenir. Konuk sayfasını etkilemez.</p>
+            </div>
+            <div class="form-group" style="margin-top: 16px;">
+                <label>
+                    <input type="checkbox" id="translation-auto-announce-enabled">
+                    <span data-i18n="broadcast_room.translation_auto_announce_enable">Yeni gelen altyazı/çeviriyi otomatik seslendir</span>
+                </label>
+                <p class="hint" data-i18n="broadcast_room.translation_auto_announce_hint">Açıksa host ekran okuyucusu yalnızca yeni tamamlanan altyazı veya çeviri parçasını okur; tüm dökümü baştan okutmaz.</p>
+            </div>
+            <div class="form-group" style="margin-top: 16px;">
+                <label>
+                    <input type="checkbox" id="translation-monitor-dub-enabled" checked>
+                    <span data-i18n="broadcast_room.translation_monitor_dub_enable">Host çeviri sesini kendi kulaklığında duysun</span>
+                </label>
+                <p class="hint" data-i18n="broadcast_room.translation_monitor_dub_hint">Kapalıysa çeviri sesi konuklara gönderilmeye devam eder; sadece host tarafında canlı olarak çalınmaz.</p>
+            </div>
+            <div class="form-group" style="margin-top: 16px;">
+                <label for="live-interpreter-output-channel" data-i18n="broadcast_room.live_interpreter_output_channel_label">Yayın ve kayıt ses kanalı</label>
+                <select id="live-interpreter-output-channel" data-i18n-aria="broadcast_room.live_interpreter_output_channel_label">
+                    <option value="original" data-i18n="broadcast_room.live_interpreter_output_original">Özgün ses</option>
+                    <option value="interpreter_overlay" data-i18n="broadcast_room.live_interpreter_output_overlay">Canlı çeviri önde, özgün ses altta</option>
+                    <option value="interpreter_only" data-i18n="broadcast_room.live_interpreter_output_only">Yalnız canlı çeviri</option>
+                </select>
+                <p class="hint" data-i18n="broadcast_room.live_interpreter_output_channel_hint">Bir katılımcıyı canlı çevirmen yaptığınızda kayıt ve YouTube çıkışında hangi ses karışımının duyulacağını seçin.</p>
+            </div>
+            <div class="toolbar" style="margin-top: 16px;">
+                <button id="btn-check-translation-key" type="button" class="secondary" data-i18n="broadcast_room.translation_check_key" data-i18n-aria="broadcast_room.translation_check_key">Anahtarları denetle</button>
+                <button id="btn-prepare-live-translation" type="button" data-i18n="broadcast_room.translation_prepare_captions" data-i18n-aria="broadcast_room.translation_prepare_captions">Canlı otomatik altyazıyı başlat</button>
+                <button id="btn-stop-live-translation" type="button" class="secondary" data-i18n="broadcast_room.translation_stop" data-i18n-aria="broadcast_room.translation_stop">Çeviri hazırlığını durdur</button>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <h3 data-i18n="broadcast_room.translation_openai_status_label">OpenAI Çeviri Anahtarı</h3>
+                    <div id="translation-openai-status" class="value-box" aria-live="off"></div>
+                </div>
+                <div>
+                    <h3 data-i18n="broadcast_room.translation_dub_service_status_label">Altyazı Servisi Anahtarı</h3>
+                    <div id="translation-dub-service-status" class="value-box" aria-live="off"></div>
+                </div>
+                <div>
+                    <h3 data-i18n="broadcast_room.translation_status_label">Hazırlık Durumu</h3>
+                    <div id="translation-status" class="value-box" aria-live="off"></div>
+                </div>
+            </div>
+            <div style="margin-top: 16px;">
+                <label for="translation-summary" data-i18n="broadcast_room.translation_summary_label">Çeviri oturum özeti</label>
+                <textarea id="translation-summary" class="value-box" readonly rows="5" data-i18n-aria="broadcast_room.translation_summary_label"></textarea>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <label for="translation-original-transcript" data-i18n="broadcast_room.translation_original_transcript_label">Özgün konuşma dökümü</label>
+                    <textarea id="translation-original-transcript" class="value-box" readonly rows="8" data-i18n-aria="broadcast_room.translation_original_transcript_label"></textarea>
+                </div>
+                <div>
+                    <label for="translation-translated-transcript" data-i18n="broadcast_room.translation_translated_transcript_label">Çevrilmiş metin</label>
+                    <textarea id="translation-translated-transcript" class="value-box" readonly rows="8" data-i18n-aria="broadcast_room.translation_translated_transcript_label"></textarea>
+                </div>
+            </div>
+            <p class="hint" style="margin-top: 12px;" data-i18n="broadcast_room.translation_openai_manage_hint">OpenAI anahtarınızı Yapay Zeka menüsündeki OpenAI API Anahtarı, ElevenLabs anahtarınızı da ElevenLabs API Anahtarı öğesinden yönetebilirsiniz.</p>
+        </section>
+
+        <section class="card" data-room-section-id="live_effects">
+            <h2 data-i18n="recording_wizard.step1.live_effects_title">Canlı Efekt Paneli</h2>
+            <p class="hint" data-i18n="recording_wizard.step1.live_effects_hint_disabled">Bu özellik kapalıyken kayıt normal şekilde devam eder. Açarsanız oturum için bir efekt profili bağlanır.</p>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="live-effects-enable-room">
+                    <span data-i18n="recording_wizard.step1.live_effects_enable">Bu oturumda Canlı Efekt Panelini etkinleştir</span>
+                </label>
+            </div>
+            <div class="grid" style="margin-top:16px;">
+                <div>
+                    <label for="live-effects-profile-room" data-i18n="recording_wizard.step1.live_effects_profile">Kullanılacak efekt profili</label>
+                    <select id="live-effects-profile-room" data-i18n-aria="recording_wizard.step1.live_effects_profile_aria"></select>
+                </div>
+                <div>
+                    <label for="live-effects-session-summary-room" data-i18n="recording_wizard.step6.live_effects_summary_label">Canlı efekt oturum özeti</label>
+                    <textarea id="live-effects-session-summary-room" class="value-box" readonly rows="5"
+                        data-i18n-aria="recording_wizard.step6.live_effects_summary_aria">Bu oturum için canlı efekt profili etkin değil.</textarea>
+                </div>
+            </div>
+            <div class="toolbar live-effects-launch">
+                <button type="button" id="btn-open-live-effects-panel-room" class="secondary" data-i18n="recording_wizard.step1.live_effects_edit" data-i18n-aria="recording_wizard.step1.live_effects_edit">Efekt Panelini Aç</button>
+                <button type="button" id="btn-refresh-live-effects-room" class="secondary" data-i18n="recording_wizard.step1.live_effects_refresh" data-i18n-aria="recording_wizard.step1.live_effects_refresh">Profilleri Yenile</button>
+                <button type="button" id="btn-toggle-live-effects-overlay-room" data-i18n="recording_wizard.step6.live_effects_open" data-i18n-aria="recording_wizard.step6.live_effects_open">Efekt Katmanını Aç (Alt+Ctrl+Boşluk)</button>
+            </div>
+        </section>
+
+        <section class="card" data-room-section-id="youtube_stream">
+            <div class="toolbar" style="justify-content: space-between;">
+                <h2 style="margin-bottom:0;" data-i18n="broadcast_room.youtube_section">YouTube Canlı Yayın</h2>
+                <button id="btn-toggle-youtube-room" type="button" class="secondary" aria-expanded="false" aria-controls="youtube-panel-room" data-i18n="broadcast_room.youtube_toggle_section" data-i18n-aria="broadcast_room.youtube_toggle_section">YouTube</button>
+            </div>
+            <div id="youtube-panel-room" hidden>
+            <p class="hint" data-i18n="broadcast_room.youtube_hint">Kayıt sihirbazındaki gibi YouTube hesabı bağlayabilir, planlı bir yayın hazırlayabilir veya mevcut planlı yayını seçebilirsiniz.</p>
+            <div class="toolbar">
+                <button id="btn-youtube-connect-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_connect" data-i18n-aria="broadcast_room.youtube_connect">YouTube Hesabını Bağla</button>
+                <button id="btn-youtube-disconnect-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_disconnect" data-i18n-aria="broadcast_room.youtube_disconnect">Bağlantıyı Kaldır</button>
+                <button id="btn-youtube-prepare-room" type="button" data-i18n="broadcast_room.youtube_prepare" data-i18n-aria="broadcast_room.youtube_prepare">Yayını Hazırla</button>
+                <button id="btn-youtube-start-room" type="button" data-i18n="broadcast_room.youtube_start_live" data-i18n-aria="broadcast_room.youtube_start_live">Canlı Yayını Başlat</button>
+                <button id="btn-youtube-stop-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_stop_live" data-i18n-aria="broadcast_room.youtube_stop_live">Canlı Yayını Durdur</button>
+            </div>
+            <div class="grid" style="margin-top: 16px;">
+                <div>
+                    <label for="youtube-account-select-room" data-i18n="broadcast_room.youtube_account_label">Bağlı YouTube hesabı</label>
+                    <select id="youtube-account-select-room" data-i18n-aria="broadcast_room.youtube_account_label"></select>
+                </div>
+                <div>
+                    <label for="youtube-playlist-select-room" data-i18n="broadcast_room.youtube_playlist_label">Oynatma listesi</label>
+                    <div class="toolbar" style="align-items: stretch;">
+                        <select id="youtube-playlist-select-room" style="flex:1;" data-i18n-aria="broadcast_room.youtube_playlist_label"></select>
+                        <button id="btn-youtube-refresh-playlists-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_refresh_playlists" data-i18n-aria="broadcast_room.youtube_refresh_playlists">Listeleri Yenile</button>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 16px;">
+                <div class="toolbar" role="radiogroup" data-i18n-aria="broadcast_room.youtube_mode_group_label">
+                    <label><input type="radio" name="youtube-room-mode" value="instant"> <span data-i18n="broadcast_room.youtube_mode_instant">Yeni canlı yayın başlat</span></label>
+                    <label><input type="radio" name="youtube-room-mode" value="planned" checked> <span data-i18n="broadcast_room.youtube_mode_planned">Yeni planlı yayın oluştur</span></label>
+                    <label><input type="radio" name="youtube-room-mode" value="existing"> <span data-i18n="broadcast_room.youtube_mode_existing">Var olan planlı yayını kullan</span></label>
+                </div>
+            </div>
+            <div id="youtube-create-fields-room" class="grid" style="margin-top: 16px;">
+                <div>
+                    <label for="youtube-live-title-room" data-i18n="broadcast_room.youtube_title_label">Yayın başlığı</label>
+                    <input id="youtube-live-title-room" class="value-box" type="text" data-i18n-placeholder="broadcast_room.youtube_title_placeholder" placeholder="Yayın başlığını girin">
+                </div>
+                <div>
+                    <label for="youtube-live-visibility-room" data-i18n="broadcast_room.youtube_visibility_label">Gizlilik</label>
+                    <select id="youtube-live-visibility-room" data-i18n-aria="broadcast_room.youtube_visibility_label">
+                        <option value="private" data-i18n="broadcast_room.youtube_visibility_private">Özel</option>
+                        <option value="unlisted" data-i18n="broadcast_room.youtube_visibility_unlisted">Liste dışı</option>
+                        <option value="public" data-i18n="broadcast_room.youtube_visibility_public">Herkese açık</option>
+                    </select>
+                </div>
+                <div style="grid-column: 1 / -1;">
+                    <label for="youtube-live-description-room" data-i18n="broadcast_room.youtube_description_label">Açıklama</label>
+                    <textarea id="youtube-live-description-room" class="value-box" rows="4" data-i18n-placeholder="broadcast_room.youtube_description_placeholder" placeholder="Yayın açıklamasını girin"></textarea>
+                </div>
+                <div id="youtube-schedule-field-room">
+                    <label for="youtube-live-scheduled-at-room" data-i18n="broadcast_room.youtube_schedule_label">Planlanan başlangıç</label>
+                    <input id="youtube-live-scheduled-at-room" class="value-box" type="datetime-local">
+                </div>
+            </div>
+            <div id="youtube-existing-fields-room" style="margin-top: 16px;">
+                <label for="youtube-existing-broadcasts-room" data-i18n="broadcast_room.youtube_existing_label">Planlı yayınlar</label>
+                <div class="toolbar" style="align-items: stretch;">
+                    <select id="youtube-existing-broadcasts-room" style="flex:1;" data-i18n-aria="broadcast_room.youtube_existing_label"></select>
+                    <button id="btn-youtube-refresh-broadcasts-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_refresh_broadcasts" data-i18n-aria="broadcast_room.youtube_refresh_broadcasts">Yayınları Yenile</button>
+                </div>
+            </div>
+            <div style="margin-top: 16px;">
+                <h3 data-i18n="broadcast_room.youtube_auth_status_label">YouTube Durumu</h3>
+                <div id="youtube-auth-status-room" class="value-box" role="status" aria-live="polite"></div>
+            </div>
+            <div style="margin-top: 16px;">
+                <h3 data-i18n="broadcast_room.youtube_broadcast_status_label">Hazırlık Durumu</h3>
+                <div id="youtube-broadcast-status-room" class="value-box" role="status" aria-live="polite"></div>
+            </div>
+            <div style="margin-top: 16px;">
+                <h3 data-i18n="broadcast_room.youtube_live_status_label">Canlı Yayın Durumu</h3>
+                <div id="youtube-live-status-room" class="value-box" role="status" aria-live="polite"></div>
+            </div>
+            <div id="youtube-watch-link-panel-room" style="margin-top: 16px;">
+                <label for="youtube-watch-link-room" data-i18n="broadcast_room.youtube_watch_link_label">İzleyici bağlantısı</label>
+                <input id="youtube-watch-link-room" class="value-box" type="text" readonly>
+                <div class="toolbar" style="margin-top: 10px;">
+                    <button id="btn-youtube-open-watch-link-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_open_watch_link" data-i18n-aria="broadcast_room.youtube_open_watch_link">Bağlantıyı Aç</button>
+                    <button id="btn-youtube-copy-watch-link-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_copy_watch_link" data-i18n-aria="broadcast_room.youtube_copy_watch_link">Bağlantıyı Kopyala</button>
+                </div>
+            </div>
+            <section id="youtube-chat-panel-room" class="card" style="margin-top:16px; display:none;">
+                <div class="toolbar" style="justify-content: space-between; align-items:flex-start;">
+                    <div style="flex:1;">
+                        <h3 style="margin:0 0 6px 0;" data-i18n="recording_wizard.chat.title">Canlı Sohbet</h3>
+                        <p id="youtube-chat-status-room" class="hint" role="status" aria-live="assertive" aria-atomic="true" data-i18n="recording_wizard.chat.status_idle">Canlı sohbet bekleniyor.</p>
+                    </div>
+                    <div class="step-actions" style="margin:0;">
+                        <button type="button" id="btn-toggle-chat-panel-room" data-i18n="recording_wizard.chat.open_panel" data-i18n-aria="recording_wizard.chat.open_panel">Sohbeti Aç</button>
+                    </div>
+                </div>
+                <div class="window-selection-row" style="margin-top:10px;">
+                    <label><input type="checkbox" id="youtube-chat-visible-toggle-room" checked> <span data-i18n="recording_wizard.chat.visible_on_stream">Sohbeti yayında göster</span></label>
+                    <label><input type="checkbox" id="youtube-chat-auto-read-toggle-room"> <span data-i18n="recording_wizard.chat.auto_read">Yeni mesajları ekran okuyucuya otomatik duyur</span></label>
+                    <label><input type="checkbox" id="youtube-chat-background-notification-toggle-room"> <span data-i18n="recording_wizard.chat.background_notification">Arka planda yeni mesaj geldiğinde sistem bildirimi göster</span></label>
+                    <label><input type="checkbox" id="youtube-chat-background-flash-toggle-room"> <span data-i18n="recording_wizard.chat.background_flash">Arka planda yeni mesaj geldiğinde görev çubuğunda dikkat çek</span></label>
+                    <label><input type="checkbox" id="youtube-chat-background-sound-toggle-room"> <span data-i18n="recording_wizard.chat.background_sound">Arka planda yeni mesaj geldiğinde kısa bir ses çal</span></label>
+                </div>
+                <div id="youtube-chat-visual-panel-room" style="margin-top:12px; display:none;">
+                    <div class="form-group">
+                        <label for="youtube-live-stats-room" data-i18n="broadcast_room.youtube_live_stats_label">YouTube yayın istatistikleri</label>
+                        <textarea id="youtube-live-stats-room" class="value-box" rows="8" readonly
+                            data-i18n-aria="broadcast_room.youtube_live_stats_label"
+                            aria-live="off"></textarea>
+                    </div>
+                    <label for="youtube-chat-list-room" data-i18n="recording_wizard.chat.list_label">Sohbet mesajları</label>
+                    <select id="youtube-chat-list-room" size="8" style="width:100%;" data-i18n-aria="recording_wizard.chat.list_aria"></select>
+                    <p class="hint" data-i18n="recording_wizard.chat.help">Alt+Ctrl+C ile sohbet listesine geçin. Yukarı ve aşağı oklarla mesajlar arasında gezin. Tab ile yazma alanına geçin. Enter gönderir, Shift+Enter yeni satır ekler.</p>
+                    <label for="youtube-chat-composer-room" data-i18n="recording_wizard.chat.composer_label">Mesaj yaz</label>
+                    <textarea id="youtube-chat-composer-room" rows="3" style="width:100%; resize:vertical;"
+                        data-i18n-aria="recording_wizard.chat.composer_aria"
+                        data-i18n-placeholder="recording_wizard.chat.composer_placeholder"
+                        placeholder="Mesajınızı yazın"></textarea>
+                    <div class="step-actions" style="margin-top:10px;">
+                        <button type="button" id="btn-youtube-chat-send-room" data-i18n="recording_wizard.chat.send" data-i18n-aria="recording_wizard.chat.send">Mesajı Gönder</button>
+                        <button type="button" id="btn-close-youtube-chat-panel-room" data-i18n="recording_wizard.chat.close_panel" data-i18n-aria="recording_wizard.chat.close_panel">Sohbeti Kapat</button>
+                    </div>
+                </div>
+            </section>
+            </div>
+        </section>
+
+        <section class="grid">
+            <section class="card" data-room-section-id="participants_chat">
+                <h2 data-i18n="broadcast_room.host_chat_section">Oda Sohbeti</h2>
+                <p class="hint" data-i18n="broadcast_room.host_chat_hint">Konuklardan gelen herkese açık ve yöneticiye özel mesajlar burada görünür. Alt+C ile sohbet listesine geçebilirsiniz.</p>
+                <div class="toolbar" style="margin-bottom: 12px;">
+                    <button id="btn-toggle-room-chat-panel" type="button" class="secondary" aria-expanded="false" aria-controls="room-chat-panel" data-i18n="broadcast_room.toggle_room_chat_panel" data-i18n-aria="broadcast_room.toggle_room_chat_panel">Sohbet Paneli</button>
+                </div>
+                <div id="room-chat-panel" hidden>
+                    <label style="display:flex; align-items:center; gap:8px; margin-top: 8px;">
+                        <input id="room-chat-background-notification-toggle" type="checkbox">
+                        <span data-i18n="broadcast_room.room_chat_background_notification">Yeni oda mesajlarını arka planda bildirim olarak al</span>
+                    </label>
+                    <div style="margin-top: 14px;">
+                        <label for="room-chat-list" data-i18n="broadcast_room.room_chat_list_label">Oda mesajları</label>
+                        <select id="room-chat-list" class="value-box" size="8" data-i18n-aria="broadcast_room.room_chat_list_label"></select>
+                    </div>
+                    <div class="field-group" style="margin-top: 12px;">
+                        <label for="room-chat-selected-detail" data-i18n="broadcast_room.room_chat_selected_detail_label">Seçili mesaj ayrıntısı</label>
+                        <div id="room-chat-selected-detail" class="value-box" tabindex="0" data-i18n-aria="broadcast_room.room_chat_selected_detail_label"></div>
+                    </div>
+                    <div class="field-group" style="margin-top: 16px;">
+                        <label for="room-chat-compose" data-i18n="broadcast_room.room_chat_compose_label">Mesaj yaz</label>
+                        <textarea id="room-chat-compose" class="value-box" rows="4" data-i18n-placeholder="broadcast_room.room_chat_compose_placeholder" placeholder="Mesajınızı yazın"></textarea>
+                        <div class="field-group" style="margin-top: 12px;">
+                            <label for="room-chat-target" data-i18n="broadcast_room.room_chat_target_label">Alıcı seç</label>
+                            <select id="room-chat-target" class="value-box" data-i18n-aria="broadcast_room.room_chat_target_label"></select>
+                        </div>
+                        <div class="toolbar" style="margin-top: 12px;">
+                            <button id="btn-room-chat-send" type="button" data-i18n="broadcast_room.room_chat_send">Gönder</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card" data-room-section-id="participants">
+                <h2 data-i18n="broadcast_room.participants_section">Katılımcılar</h2>
+                <p class="hint" data-i18n="broadcast_room.participants_hint">Katılımcılara sağ tıklayarak oda içi izinlerini ve medya durumlarını yönetebilirsiniz.</p>
+                <div style="margin-bottom: 14px;">
+                    <label for="hand-raise-list" data-i18n="broadcast_room.hand_raise_list_label">Söz isteyenler</label>
+                    <p class="hint" data-i18n="broadcast_room.hand_raise_list_hint">Konuk biri söz istediğinde adı burada görünür ve ekran okuyucuya otomatik anons edilir.</p>
+                    <div id="hand-raise-list" class="listbox"></div>
+                </div>
+                <div class="toolbar" style="margin-bottom: 12px;">
+                    <button id="btn-toggle-participant-list" type="button" class="secondary" aria-expanded="true" aria-controls="participant-list" data-i18n="broadcast_room.toggle_participant_list" data-i18n-aria="broadcast_room.toggle_participant_list">Katılımcı Listesi</button>
+                </div>
+                <label class="meeting-control-toggle" for="participant-presence-auto-announce" style="min-height:auto; text-align:left; margin-bottom: 12px;">
+                    <input id="participant-presence-auto-announce" type="checkbox" checked>
+                    <span data-i18n="broadcast_room.participant_presence_auto_announce">Katılımcıların odaya giriş ve çıkış bilgilerini otomatik duyur</span>
+                </label>
+                <label id="participant-list-label" for="participant-listbox" data-i18n="broadcast_room.participant_list_label">Katılımcı listesi</label>
+                <p id="participant-list-hint" class="hint" data-i18n="broadcast_room.participant_list_hint">Liste açıldığında yukarı ve aşağı oklarla katılımcılar arasında dolaşabilirsiniz. Enter veya sağ tık seçili katılımcı menüsünü açar.</p>
+                <div id="participant-list" class="listbox" tabindex="-1"></div>
+            </section>
+
+            <section class="card" data-room-section-id="scene_layout">
+                <h2 data-i18n="broadcast_room.scene_section">Sahne Düzeni</h2>
+                <p class="hint" data-i18n="broadcast_room.scene_hint">Bir düzen seçin. Slotlar seçilen düzene göre otomatik güncellenir.</p>
+                <div class="grid">
+                    <div>
+                        <label for="scene-preset-select" data-i18n="broadcast_room.scene_preset_label">Düzen</label>
+                        <select id="scene-preset-select" data-i18n-aria="broadcast_room.scene_preset_label"></select>
+                    </div>
+                    <div>
+                        <label for="scene-slot-select" data-i18n="broadcast_room.scene_slot_label">Slotlar</label>
+                        <p class="hint" data-i18n="broadcast_room.scene_slot_hint">Yukarı ve aşağı oklarla slotlar arasında dolaşın. Sağ okla atama menüsünü açın, Enter ile kaynağı atayın.</p>
+                        <select id="scene-slot-select" size="6" data-i18n-aria="broadcast_room.scene_slot_label"></select>
+                    </div>
+                </div>
+                <div style="margin-top: 14px;">
+                    <label for="scene-summary" data-i18n="broadcast_room.scene_summary_label">Sahne Özeti</label>
+                    <div id="scene-summary" class="value-box" role="status" aria-live="polite"></div>
+                </div>
+                <div id="scene-suggestion-panel" class="subpanel" hidden>
+                    <h3 data-i18n="broadcast_room.scene_suggestions_title">Paylaşım Başladı: Hızlı Sahne Önerileri</h3>
+                    <p id="scene-suggestion-summary" class="hint" data-i18n="broadcast_room.scene_suggestions_hint">Yeni paylaşım için sahneyi otomatik değiştirmiyoruz. İsterseniz aşağıdaki önerilerden birini tek tuşla uygulayabilirsiniz.</p>
+                    <div class="toolbar" style="margin-top: 12px;">
+                        <button id="btn-apply-scene-suggestion-share-main" type="button" class="secondary" data-i18n="broadcast_room.scene_suggestion_share_main" data-i18n-aria="broadcast_room.scene_suggestion_share_main">Paylaşım ana ekranda, yüzler küçük</button>
+                        <button id="btn-apply-scene-suggestion-speakers-main" type="button" class="secondary" data-i18n="broadcast_room.scene_suggestion_speakers_main" data-i18n-aria="broadcast_room.scene_suggestion_speakers_main">Yüzler büyük, paylaşım küçük</button>
+                    </div>
+                </div>
+                <div class="toolbar" style="margin-top: 16px;">
+                    <button id="btn-toggle-advanced-layout-room" type="button" class="secondary" aria-expanded="false" aria-controls="advanced-layout-panel-room" data-i18n="broadcast_room.advanced_layout_toggle" data-i18n-aria="broadcast_room.advanced_layout_toggle" hidden>Gelişmiş Düzen Ayarları</button>
+                </div>
+                <div id="advanced-layout-panel-room" class="subpanel" hidden>
+                    <h3 data-i18n="broadcast_room.advanced_layout_title">Gelişmiş Düzen Ayarları</h3>
+                    <p class="hint" data-i18n="broadcast_room.advanced_layout_hint">Ekran ve konuşmacı birlikte kullanıldığında kayıt sihirbazındaki oran ve AI yerleşim araçlarını burada da kullanabilirsiniz.</p>
+                    <fieldset role="radiogroup" data-i18n-aria="recording_wizard.step4.layout_aria">
+                        <legend data-i18n="recording_wizard.step4.layout_presets">Düzen Ön Ayarları</legend>
+                        <div class="radio-stack">
+                            <label><input type="radio" name="broadcast-advanced-layout-preset" value="side-l" checked> <span data-broadcast-layout-label-for="side-l" data-i18n="recording_wizard.layout.side_l">Yan Yana (Ekran Sol / Kamera Sağ)</span></label>
+                            <label><input type="radio" name="broadcast-advanced-layout-preset" value="side-r"> <span data-broadcast-layout-label-for="side-r" data-i18n="recording_wizard.layout.side_r">Yan Yana (Kamera Sol / Ekran Sağ)</span></label>
+                            <label><input type="radio" name="broadcast-advanced-layout-preset" value="side-l-slide"> <span data-broadcast-layout-label-for="side-l-slide" data-i18n="recording_wizard.layout.side_l_slide">Sunum Yanyana (Ekran Solda %65, Kamera Sağda %35) - Tablo/Grafik için</span></label>
+                            <label><input type="radio" name="broadcast-advanced-layout-preset" value="side-r-slide"> <span data-broadcast-layout-label-for="side-r-slide" data-i18n="recording_wizard.layout.side_r_slide">Sunum Yanyana (Kamera Solda %35, Ekran Sağda %65) - Tablo/Grafik için</span></label>
+                        </div>
+                    </fieldset>
+                    <div class="grid" style="margin-top: 16px;">
+                        <div>
+                            <label for="broadcast-share-participant-placement" data-i18n="broadcast_room.share_participant_placement_label">Paylaşımda katılımcı konumu</label>
+                            <select id="broadcast-share-participant-placement" data-i18n-aria="broadcast_room.share_participant_placement_label">
+                                <option value="bottom" selected data-i18n="broadcast_room.share_participant_placement_bottom">Katılımcıları altta göster</option>
+                                <option value="side" data-i18n="broadcast_room.share_participant_placement_side">Katılımcıları sağda/sol tarafta göster</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="broadcast-cam-scale" data-i18n="recording_wizard.step4.scale">Ölçek (%)</label>
+                            <input id="broadcast-cam-scale" class="value-box" type="number" min="5" max="95" value="35">
+                        </div>
+                        <div>
+                            <label for="broadcast-cam-bg-color" data-i18n="recording_wizard.step4.camera_bg">Kamera Arka Plan Rengi</label>
+                            <select id="broadcast-cam-bg-color" data-i18n-aria="recording_wizard.step4.camera_bg">
+                                <option value="none" selected data-i18n="recording_wizard.camera_bg.none">Yok (Normal Görüntü)</option>
+                                <option value="black" data-i18n="recording_wizard.camera_bg.black">Siyah</option>
+                                <option value="white" data-i18n="recording_wizard.camera_bg.white">Beyaz</option>
+                                <option value="charcoal" data-i18n="recording_wizard.camera_bg.charcoal">Füme / Koyu Gri (Premium)</option>
+                                <option value="purple" data-i18n="recording_wizard.camera_bg.purple">Mor (Yayıncı Estetiği)</option>
+                                <option value="turquoise" data-i18n="recording_wizard.camera_bg.turquoise">Turkuaz (Ferah Önizleme)</option>
+                                <option value="green" data-i18n="recording_wizard.camera_bg.green">Yeşil (Chroma Key)</option>
+                                <option value="blue" data-i18n="recording_wizard.camera_bg.blue">Mavi</option>
+                                <option value="blur" data-i18n="recording_wizard.camera_bg.blur">Bulanık (Sanal Arka Plan)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="broadcast-cam-panel-fill-color" data-i18n="recording_wizard.step4.camera_panel_fill">Yan Yana Boşluk Dolgusu</label>
+                            <select id="broadcast-cam-panel-fill-color" data-i18n-aria="recording_wizard.step4.camera_panel_fill">
+                                <option value="none" selected data-i18n="recording_wizard.camera_bg.none">Yok (Normal Görüntü)</option>
+                                <option value="black" data-i18n="recording_wizard.camera_bg.black">Siyah</option>
+                                <option value="white" data-i18n="recording_wizard.camera_bg.white">Beyaz</option>
+                                <option value="charcoal" data-i18n="recording_wizard.camera_bg.charcoal">Füme / Koyu Gri (Premium)</option>
+                                <option value="purple" data-i18n="recording_wizard.camera_bg.purple">Mor (Yayıncı Estetiği)</option>
+                                <option value="turquoise" data-i18n="recording_wizard.camera_bg.turquoise">Turkuaz (Ferah Önizleme)</option>
+                                <option value="green" data-i18n="recording_wizard.camera_bg.green">Yeşil (Chroma Key)</option>
+                                <option value="blue" data-i18n="recording_wizard.camera_bg.blue">Mavi</option>
+                                <option value="blur" data-i18n="recording_wizard.camera_bg.blur">Bulanık (Sanal Arka Plan)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p class="hint" data-i18n="broadcast_room.advanced_layout_ratio_hint">50/50 ve 65/35 gibi oranlar için bu paneli kullanın. AI önerileri mevcut sahneyi analiz ederek daha uygun bir konuşmacı alanı önerebilir.</p>
+                    <div class="toolbar" style="margin-top: 12px;">
+                        <button id="btn-apply-advanced-layout-room" type="button" class="secondary" data-i18n="recording_wizard.step4.apply_preset" data-i18n-aria="recording_wizard.step4.apply_preset">Ön ayarı uygula</button>
+                        <button id="btn-ai-suggest-advanced-layout-room" type="button" class="secondary" data-i18n="recording_wizard.step4.ai_suggest" data-i18n-aria="recording_wizard.step4.ai_suggest">Yapay zekadan öneri al</button>
+                        <button id="btn-apply-ai-advanced-layout-room" type="button" class="secondary" disabled data-i18n="recording_wizard.step4.apply_ai" data-i18n-aria="recording_wizard.step4.apply_ai">Öneriyi uygula</button>
+                    </div>
+                    <div id="advanced-layout-ai-status-room" class="status-line" role="status" aria-live="polite" data-i18n="recording_wizard.step4.ai_waiting">AI önerisi bekleniyor.</div>
+                    <div id="advanced-layout-ai-followup-panel-room" style="display:none; margin-top:12px;">
+                        <div>
+                            <label for="advanced-layout-ai-followup-question-room" data-i18n="recording_wizard.step4.ai_followup_label">Ek soru sor</label>
+                            <textarea id="advanced-layout-ai-followup-question-room" class="value-box" rows="3" data-i18n-placeholder="recording_wizard.step4.ai_followup_placeholder" placeholder="Örneğin: Konuşmacı yüzü biraz daha büyük olsa ekran yine okunaklı kalır mı?"></textarea>
+                        </div>
+                        <div class="toolbar" style="margin-top: 10px;">
+                            <button id="btn-ai-followup-advanced-layout-room" type="button" class="secondary" data-i18n="recording_wizard.step4.ai_followup_button" data-i18n-aria="recording_wizard.step4.ai_followup_button">Ek soruyu gönder</button>
+                        </div>
+                        <div id="advanced-layout-ai-followup-status-room" class="status-line" role="status" aria-live="polite" data-i18n="recording_wizard.step4.ai_followup_waiting">Ek soru hazır. İsterseniz daha ayrıntılı bir soru sorabilirsiniz.</div>
+                    </div>
+                    <div class="toolbar" style="margin-top: 12px;">
+                        <button id="btn-ai-describe-advanced-layout-room" type="button" class="secondary" data-i18n="recording_wizard.step4.ai_describe" data-i18n-aria="recording_wizard.step4.ai_describe">Ekranı Betimle (AI)</button>
+                    </div>
+                    <div id="advanced-layout-ai-describe-status-room" class="status-line" role="status" aria-live="polite" data-i18n="recording_wizard.step4.description_waiting">Betimleme bekleniyor.</div>
+                </div>
+            </section>
+
+            <section class="card" data-room-section-id="share_sources">
+                <h2 data-i18n="broadcast_room.sources_section">Kaynaklar</h2>
+                <p class="hint" data-i18n="broadcast_room.sources_hint">Konuk video, ekran paylaşımı ve kayıt sihirbazı 3. adımındaki yerel kaynaklar burada birleşecektir.</p>
+                <div style="display:grid; gap:14px; margin-bottom: 14px;">
+                    <div>
+                        <label for="scene-source-select" data-i18n="broadcast_room.scene_source_label">Sahne kaynağı</label>
+                        <select id="scene-source-select" size="8" data-i18n-aria="broadcast_room.scene_source_label"></select>
+                    </div>
+                    <div class="toolbar">
+                        <button id="btn-assign-scene-source" type="button" class="secondary" data-i18n="broadcast_room.assign_scene_source" data-i18n-aria="broadcast_room.assign_scene_source">Seçili slota ata</button>
+                        <button id="btn-clear-scene-slot" type="button" class="secondary" data-i18n="broadcast_room.clear_scene_slot" data-i18n-aria="broadcast_room.clear_scene_slot">Seçili slotu temizle</button>
+                    </div>
+                </div>
+                <div style="display:grid; gap:14px; margin-bottom: 14px;">
+                    <div class="toolbar">
+                        <button id="btn-toggle-host-share-panel" type="button" class="secondary" aria-expanded="false" aria-controls="host-share-panel" data-i18n="broadcast_room.host_share_toggle_section" data-i18n-aria="broadcast_room.host_share_toggle_section">Yerel Paylaşım</button>
+                    </div>
+                </div>
+                <div id="host-share-panel" style="display:grid; gap:14px; margin-bottom: 14px;" hidden>
+                    <div>
+                        <label for="host-share-source-select" data-i18n="broadcast_room.host_share_source_label">Host yerel paylaşım kaynağı</label>
+                        <div class="toolbar" style="align-items: stretch;">
+                            <select id="host-share-source-select" style="flex:1;" data-i18n-aria="broadcast_room.host_share_source_label"></select>
+                            <button id="btn-refresh-local-sources" type="button" class="secondary" data-i18n="broadcast_room.refresh_local_sources" data-i18n-aria="broadcast_room.refresh_local_sources">Yerel Kaynakları Yenile</button>
+                        </div>
+                    </div>
+                    <div class="toolbar">
+                        <label style="display:flex; align-items:center; gap:8px;">
+                            <input id="host-share-audio-enabled" type="checkbox">
+                            <span data-i18n="broadcast_room.share_audio_toggle">Kaynak sesini dahil et</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px;">
+                            <input id="host-share-monitor-audio-enabled" type="checkbox" checked>
+                            <span data-i18n="broadcast_room.host_share_monitor_audio_toggle">Sesli paylaşımı konuklara yankısız monitor hattından duyur</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label for="host-share-scene-behavior" data-i18n="broadcast_room.host_share_scene_behavior_label">Paylaşım başlayınca sahne davranışı</label>
+                        <select id="host-share-scene-behavior" data-i18n-aria="broadcast_room.host_share_scene_behavior_label">
+                            <option value="none" data-i18n="broadcast_room.host_share_scene_behavior_none">Bir şey yapma, sahneyi elle değiştireceğim</option>
+                            <option value="share-main" data-i18n="broadcast_room.host_share_scene_behavior_share_main">Paylaşımı büyük göster, katılımcıları küçük tut</option>
+                            <option value="share-small" data-i18n="broadcast_room.host_share_scene_behavior_share_small">Paylaşımı küçük göster, katılımcıları büyük tut</option>
+                        </select>
+                    </div>
+                    <div class="toolbar">
+                        <button id="btn-start-host-share" type="button" class="secondary" data-i18n="broadcast_room.start_host_share" data-i18n-aria="broadcast_room.start_host_share">Yerel Paylaşımı Başlat</button>
+                        <button id="btn-stop-host-share" type="button" class="secondary" data-i18n="broadcast_room.stop_host_share" data-i18n-aria="broadcast_room.stop_host_share">Yerel Paylaşımı Durdur</button>
+                    </div>
+                    <div class="card" style="margin-top: 8px;">
+                        <h3 data-i18n="broadcast_room.accessible_share_section">Erişilebilir paylaşım belgesi</h3>
+                        <p class="hint" data-i18n="broadcast_room.accessible_share_hint">Ekran paylaşımında gösterdiğiniz Word, PowerPoint, Excel veya metin dosyasının okunabilir içeriğini konuklara ayrıca gönderin. Dosyanın kendisi sunucuya yüklenmez; yalnızca çıkarılan metin oda durumuna aktarılır.</p>
+                        <div class="toolbar">
+                            <button id="btn-select-accessible-share-document" type="button" class="secondary" data-i18n="broadcast_room.select_accessible_share_document" data-i18n-aria="broadcast_room.select_accessible_share_document">Erişilebilir belge seç</button>
+                            <button id="btn-publish-accessible-share-document" type="button" class="secondary" data-i18n="broadcast_room.publish_accessible_share_document" data-i18n-aria="broadcast_room.publish_accessible_share_document">Konuklara gönder</button>
+                            <button id="btn-clear-accessible-share-document" type="button" class="secondary" data-i18n="broadcast_room.clear_accessible_share_document" data-i18n-aria="broadcast_room.clear_accessible_share_document">Erişilebilir paylaşımı temizle</button>
+                        </div>
+                        <div class="grid" style="margin-top: 12px;">
+                            <div>
+                                <label for="accessible-share-current-item" data-i18n="broadcast_room.accessible_share_current_item_label">Konukta gösterilecek bölüm</label>
+                                <select id="accessible-share-current-item" data-i18n-aria="broadcast_room.accessible_share_current_item_label"></select>
+                            </div>
+                            <div class="toolbar" style="align-items: end;">
+                                <button id="btn-accessible-share-previous" type="button" class="secondary" data-i18n="broadcast_room.accessible_share_previous" data-i18n-aria="broadcast_room.accessible_share_previous">Önceki bölüm</button>
+                                <button id="btn-accessible-share-next" type="button" class="secondary" data-i18n="broadcast_room.accessible_share_next" data-i18n-aria="broadcast_room.accessible_share_next">Sonraki bölüm</button>
+                            </div>
+                        </div>
+                        <label style="display:flex; align-items:center; gap:8px; margin-top: 12px;">
+                            <input id="accessible-share-follow-powerpoint" type="checkbox">
+                            <span data-i18n="broadcast_room.accessible_share_follow_powerpoint">PowerPoint slayt gösterisini otomatik izle</span>
+                        </label>
+                        <p class="hint" data-i18n="broadcast_room.accessible_share_follow_powerpoint_hint">PowerPoint slayt gösterisi açıksa, slayt değiştikçe konuk tarafındaki erişilebilir metin de güncellenmeye çalışılır. Çalışmazsa önceki/sonraki bölüm düğmelerini kullanabilirsiniz.</p>
+                        <div style="margin-top: 12px;">
+                            <label for="accessible-share-status" data-i18n="broadcast_room.accessible_share_status_label">Erişilebilir paylaşım durumu</label>
+                            <div id="accessible-share-status" class="value-box" role="status" aria-live="polite" data-i18n="broadcast_room.accessible_share_empty">Henüz erişilebilir belge seçilmedi.</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="source-list" class="listbox"></div>
+            </section>
+
+            <section class="card" data-room-section-id="diagnostics">
+                <h2 data-i18n="broadcast_room.diagnostics_section">Tanı ve Olay Geçmişi</h2>
+                <p class="hint" data-i18n="broadcast_room.diagnostics_hint">Oda, kaynak, sahne ve yayın olaylarının son kayıtlarını burada görebilirsiniz.</p>
+                <div class="toolbar">
+                    <button id="btn-copy-diagnostics" type="button" class="secondary" data-i18n="broadcast_room.copy_diagnostics" data-i18n-aria="broadcast_room.copy_diagnostics">Tanı Kayıtlarını Kopyala</button>
+                    <button id="btn-clear-diagnostics" type="button" class="secondary" data-i18n="broadcast_room.clear_diagnostics" data-i18n-aria="broadcast_room.clear_diagnostics">Tanı Kayıtlarını Temizle</button>
+                </div>
+                <div style="margin-top: 14px;">
+                    <label for="diagnostics-list" data-i18n="broadcast_room.diagnostics_list_label">Tanı kayıtları</label>
+                    <div id="diagnostics-list" class="listbox"></div>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <div id="live-effects-overlay-room" class="live-effects-overlay" aria-hidden="true">
+        <section class="live-effects-panel" id="live-effects-overlay-panel-room" role="dialog" aria-modal="true"
+            aria-labelledby="live-effects-overlay-title-room" tabindex="-1">
+            <div class="live-effects-topbar">
+                <div>
+                    <h3 id="live-effects-overlay-title-room" data-i18n="recording_wizard.step6.live_effects_overlay_title">Canlı Efekt Katmanı</h3>
+                    <p class="hint" data-i18n="recording_wizard.step6.live_effects_overlay_description">Alt+Ctrl+Boşluk ile açıp kapatabilirsiniz. 1 ile 0 arası bir slotu çalar ve seçili yapar.</p>
+                </div>
+                <button type="button" id="btn-close-live-effects-overlay-room" data-i18n="recording_wizard.step6.live_effects_close" data-i18n-aria="recording_wizard.step6.live_effects_close">Katmanı Kapat</button>
+            </div>
+            <div class="form-group">
+                <label for="live-effects-active-status-room" data-i18n="recording_wizard.step6.live_effects_active_status">Canlı efekt durumu</label>
+                <textarea id="live-effects-active-status-room" class="value-box" readonly rows="4"
+                    data-i18n-aria="recording_wizard.step6.live_effects_active_status_aria"></textarea>
+            </div>
+            <div class="form-group live-effects-preview" id="live-effects-video-preview-panel-room" hidden>
+                <label for="live-effects-video-preview-room" data-i18n="recording_wizard.step6.live_effects_video_preview">Video onizleme</label>
+                <div id="live-effects-video-preview-container-room">
+                    <video id="live-effects-video-preview-room" preload="auto" playsinline></video>
+                </div>
+            </div>
+            <div id="live-effects-slot-grid-room" class="live-effects-grid"></div>
+            <div class="status-line" id="live-effects-help-text-room" data-i18n="recording_wizard.step6.live_effects_help">Kısayollar: 1-0 slot çal, S durdur, P veya K duraklat/devam, R döngü aç/kapat, Yukarı/Aşağı ses seviyesi, J/L geri/ileri sar, Escape katmanı kapatır.</div>
+            <div id="live-effects-media-host-room" aria-hidden="true" style="display:none;"></div>
+        </section>
+    </div>
+
+    <div id="live-region" aria-live="assertive" aria-atomic="true"></div>
+    <div id="chat-live-region" role="alert" aria-live="assertive" aria-atomic="true" aria-relevant="additions text"></div>
+    <div id="participant-context-menu" class="live-effects-overlay" aria-hidden="true" style="background: transparent; display:none;">
+        <section id="participant-context-menu-panel" class="live-effects-panel" role="dialog" aria-modal="true" aria-labelledby="participant-context-menu-title" tabindex="-1" style="width:min(460px, calc(100vw - 40px));">
+            <div class="live-effects-topbar">
+                <div>
+                    <h3 id="participant-context-menu-title" data-i18n="broadcast_room.participant_menu_title">Katılımcı Menüsü</h3>
+                    <p id="participant-context-menu-name" class="hint"></p>
+                </div>
+                <button id="btn-close-participant-context-menu" type="button" data-i18n="broadcast_room.close_participant_menu" data-i18n-aria="broadcast_room.close_participant_menu">Menüyü Kapat</button>
+            </div>
+            <div class="toolbar" style="margin-top: 16px;">
+                <button id="btn-participant-remove" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_remove" data-i18n-aria="broadcast_room.participant_remove">Odadan çıkar</button>
+                <button id="btn-participant-send-message" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_send_message" data-i18n-aria="broadcast_room.participant_send_message">Mesaj gönder</button>
+                <button id="btn-participant-rename" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_rename" data-i18n-aria="broadcast_room.participant_rename">Adını değiştir</button>
+                <button id="btn-participant-toggle-co-host" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_make_co_host" data-i18n-aria="broadcast_room.participant_make_co_host">Ortak host yap</button>
+                <button id="btn-participant-toggle-panelist" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_make_panelist" data-i18n-aria="broadcast_room.participant_make_panelist">Panelist yap</button>
+                <button id="btn-participant-toggle-sign-interpreter" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_make_sign_interpreter" data-i18n-aria="broadcast_room.participant_make_sign_interpreter">İşaret dili tercümanı yap</button>
+                <button id="btn-participant-toggle-live-interpreter" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_make_live_interpreter" data-i18n-aria="broadcast_room.participant_make_live_interpreter">Canlı çevirmen yap</button>
+                <button id="btn-participant-start-camera" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_toggle_camera_off" data-i18n-aria="broadcast_room.participant_toggle_camera_off">Videosunu kapat</button>
+                <button id="btn-participant-start-microphone" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_toggle_microphone_off" data-i18n-aria="broadcast_room.participant_toggle_microphone_off">Sesini kapat</button>
+            </div>
+            <div id="participant-message-composer-group" class="field-group" style="margin-top: 16px;" hidden>
+                <label for="participant-message-compose" data-i18n="broadcast_room.participant_message_compose_label">Özel mesaj yaz</label>
+                <textarea id="participant-message-compose" class="value-box" rows="4" data-i18n-placeholder="broadcast_room.participant_message_compose_placeholder" placeholder="Mesajınızı yazın"></textarea>
+                <div class="toolbar" style="margin-top: 12px;">
+                    <button id="btn-participant-send-message-confirm" type="button" data-participant-menu-item data-i18n="broadcast_room.participant_send_message_confirm" data-i18n-aria="broadcast_room.participant_send_message_confirm">Özel mesajı gönder</button>
+                    <button id="btn-participant-cancel-message" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_cancel_message" data-i18n-aria="broadcast_room.participant_cancel_message">Mesaj alanını kapat</button>
+                </div>
+            </div>
+            <div id="participant-rename-group" class="field-group" style="margin-top: 16px;" hidden>
+                <label for="participant-rename-input" data-i18n="broadcast_room.participant_rename_input_label">Yeni görünen ad</label>
+                <input id="participant-rename-input" type="text" class="value-box" data-i18n-aria="broadcast_room.participant_rename_input_label">
+                <div class="toolbar" style="margin-top: 12px;">
+                    <button id="btn-participant-rename-confirm" type="button" data-participant-menu-item data-i18n="broadcast_room.participant_rename_confirm" data-i18n-aria="broadcast_room.participant_rename_confirm">Adı kaydet</button>
+                    <button id="btn-participant-cancel-rename" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_cancel_rename" data-i18n-aria="broadcast_room.participant_cancel_rename">Ad değiştirmeyi kapat</button>
+                </div>
+            </div>
+            <div class="toolbar" style="margin-top: 16px;">
+                <button id="btn-participant-allow-screen-share" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_allow_screen_share" data-i18n-aria="broadcast_room.participant_allow_screen_share">Ekran paylaşmasına izin ver</button>
+                <button id="btn-participant-allow-camera" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_allow_camera" data-i18n-aria="broadcast_room.participant_allow_camera">Kamerasına izin ver</button>
+                <button id="btn-participant-allow-microphone" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_allow_microphone" data-i18n-aria="broadcast_room.participant_allow_microphone">Mikrofonuna izin ver</button>
+                <button id="btn-participant-stop-camera" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_stop_camera" data-i18n-aria="broadcast_room.participant_stop_camera">Kamerasını kapat</button>
+                <button id="btn-participant-stop-microphone" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_stop_microphone" data-i18n-aria="broadcast_room.participant_stop_microphone">Mikrofonunu kapat</button>
+                <button id="btn-participant-mark-hand-raise-seen" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_mark_hand_raise_seen" data-i18n-aria="broadcast_room.participant_mark_hand_raise_seen">Söz isteği görüldü</button>
+            </div>
+        </section>
+    </div>
+
+    <div id="participant-global-menu" class="live-effects-overlay" aria-hidden="true" style="background: transparent; display:none;">
+        <section id="participant-global-menu-panel" class="live-effects-panel" role="dialog" aria-modal="true" aria-labelledby="participant-global-menu-title" tabindex="-1" style="width:min(460px, calc(100vw - 40px));">
+            <div class="live-effects-topbar">
+                <div>
+                    <h3 id="participant-global-menu-title" data-i18n="broadcast_room.participant_global_menu_title">Genel Katılımcı Seçenekleri</h3>
+                    <p class="hint" data-i18n="broadcast_room.participant_global_menu_hint">Bu menü odadaki tüm katılımcılar için hızlı mikrofon, kamera ve izin işlemleri uygular.</p>
+                </div>
+                <button id="btn-close-participant-global-menu" type="button" data-i18n="broadcast_room.close_participant_global_menu" data-i18n-aria="broadcast_room.close_participant_global_menu">Menüyü Kapat</button>
+            </div>
+            <div class="toolbar" role="menu" style="margin-top: 16px; flex-direction:column; align-items:stretch;">
+                <button id="btn-global-mute-all-guests" type="button" class="secondary" data-participant-global-menu-item data-i18n="broadcast_room.mute_all_guests" data-i18n-aria="broadcast_room.mute_all_guests">Tüm katılımcıları sustur</button>
+                <button id="btn-global-stop-all-guest-cameras" type="button" class="secondary" data-participant-global-menu-item data-i18n="broadcast_room.stop_all_guest_cameras" data-i18n-aria="broadcast_room.stop_all_guest_cameras">Tüm katılımcı videolarını durdur</button>
+                <button id="btn-global-toggle-guest-microphone-permission" type="button" class="secondary" data-participant-global-menu-item data-i18n="broadcast_room.global_block_guest_microphone_permission" data-i18n-aria="broadcast_room.global_block_guest_microphone_permission">Katılımcıların mikrofon açma iznini kapat</button>
+                <button id="btn-global-toggle-guest-camera-permission" type="button" class="secondary" data-participant-global-menu-item data-i18n="broadcast_room.global_block_guest_camera_permission" data-i18n-aria="broadcast_room.global_block_guest_camera_permission">Katılımcıların video açma iznini kapat</button>
+                <button id="btn-global-toggle-guest-screen-share-permission" type="button" class="secondary" data-participant-global-menu-item data-i18n="broadcast_room.global_block_guest_screen_share_permission" data-i18n-aria="broadcast_room.global_block_guest_screen_share_permission">Katılımcıların ekran paylaşma iznini kapat</button>
+            </div>
+        </section>
+    </div>
+
+    <div id="scene-slot-context-menu" class="live-effects-overlay" aria-hidden="true" style="background: transparent; display:none;">
+        <section id="scene-slot-context-menu-panel" class="live-effects-panel" role="dialog" aria-modal="true" aria-labelledby="scene-slot-context-menu-title" tabindex="-1" style="width:min(520px, calc(100vw - 40px));">
+            <div class="live-effects-topbar">
+                <div>
+                    <h3 id="scene-slot-context-menu-title" data-i18n="broadcast_room.scene_slot_assignment_menu_title">Slot Atama Menüsü</h3>
+                    <p id="scene-slot-context-menu-name" class="hint"></p>
+                </div>
+                <button id="btn-close-scene-slot-context-menu" type="button" data-i18n="broadcast_room.close_scene_slot_assignment_menu" data-i18n-aria="broadcast_room.close_scene_slot_assignment_menu">Menüyü Kapat</button>
+            </div>
+            <div id="scene-slot-context-menu-items" class="toolbar" role="menu" style="margin-top: 16px; flex-direction:column; align-items:stretch;"></div>
+        </section>
+    </div>
+
+    <div id="persistent-room-context-menu" class="live-effects-overlay" aria-hidden="true" style="background: transparent; display:none;">
+        <section id="persistent-room-context-menu-panel" class="live-effects-panel" role="dialog" aria-modal="true" aria-labelledby="persistent-room-context-menu-title" tabindex="-1" style="width:min(460px, calc(100vw - 40px));">
+            <div class="toolbar" style="justify-content: space-between; align-items:flex-start;">
+                <div>
+                    <h3 id="persistent-room-context-menu-title" data-i18n="broadcast_room.persistent_room_menu_title">Kalıcı Oda Menüsü</h3>
+                    <p id="persistent-room-context-menu-name" class="hint"></p>
+                </div>
+                <button id="btn-close-persistent-room-context-menu" type="button" data-i18n="broadcast_room.close_persistent_room_menu" data-i18n-aria="broadcast_room.close_persistent_room_menu">Menüyü Kapat</button>
+            </div>
+            <div class="toolbar" style="margin-top:16px; flex-direction:column; align-items:stretch;">
+                <button id="btn-persistent-room-copy-link" type="button" class="secondary" data-i18n="broadcast_room.persistent_room_copy_link" data-i18n-aria="broadcast_room.persistent_room_copy_link">Oda bağlantısını kopyala</button>
+                <button id="btn-persistent-room-toggle-password-host-present" type="button" class="secondary" data-i18n="broadcast_room.persistent_room_toggle_password_host_present" data-i18n-aria="broadcast_room.persistent_room_toggle_password_host_present">Host varken parola korumasını aç/kapat</button>
+                <button id="btn-persistent-room-toggle-password-host-absent" type="button" class="secondary" data-i18n="broadcast_room.persistent_room_toggle_password_host_absent" data-i18n-aria="broadcast_room.persistent_room_toggle_password_host_absent">Host yokken parola korumasını aç/kapat</button>
+                <button id="btn-persistent-room-toggle-join-host-absent" type="button" class="secondary" data-i18n="broadcast_room.persistent_room_toggle_join_host_absent" data-i18n-aria="broadcast_room.persistent_room_toggle_join_host_absent">Host yokken katılımı etkinleştir/devre dışı bırak</button>
+                <button id="btn-persistent-room-edit" type="button" class="secondary" data-i18n="broadcast_room.persistent_room_edit" data-i18n-aria="broadcast_room.persistent_room_edit">Odayı düzenle</button>
+            </div>
+        </section>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <script src="../scripts/broadcast-room.js"></script>
+</body>
+
+</html>

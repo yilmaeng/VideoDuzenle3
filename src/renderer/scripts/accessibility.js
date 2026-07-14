@@ -6,6 +6,8 @@
 const Accessibility = {
     announcer: null,
     alerter: null,
+    announceSequence: 0,
+    alertSequence: 0,
     t(key, fallback, params = {}) {
         if (!window.i18nHelper) return fallback;
         const value = window.i18nHelper.t(key, params);
@@ -18,6 +20,62 @@ const Accessibility = {
     init() {
         this.announcer = document.getElementById('screen-reader-announcer');
         this.alerter = document.getElementById('screen-reader-alert');
+
+        if (this.announcer) {
+            this.announcer.setAttribute('aria-atomic', 'true');
+        }
+        if (this.alerter) {
+            this.alerter.setAttribute('aria-atomic', 'true');
+            this.alerter.setAttribute('role', 'alert');
+        }
+
+        if (!this._dialogAnnouncementBound) {
+            window.addEventListener('evd-accessibility-dialog-announce', (event) => {
+                const detail = event?.detail || {};
+                const parts = [
+                    String(detail.title || '').trim(),
+                    String(detail.message || '').trim(),
+                    String(detail.detail || '').trim()
+                ].filter(Boolean);
+
+                if (parts.length === 0) {
+                    return;
+                }
+
+                const announcement = parts.join('. ');
+                this.announceDialogMessage(announcement);
+            });
+            this._dialogAnnouncementBound = true;
+        }
+    },
+
+    announceDialogMessage(message) {
+        const target = this._getTarget('assertive');
+        if (!target || !message) return;
+
+        target.setAttribute('aria-atomic', 'true');
+        target.setAttribute('role', 'alert');
+        target.textContent = '';
+
+        const speak = () => {
+            target.textContent = '';
+            setTimeout(() => {
+                target.textContent = message;
+            }, 20);
+        };
+
+        speak();
+
+        // Native dialog focus can interrupt the first announcement on some screen readers.
+        // Repeat once shortly after to improve reliability before focus lands on the button.
+        setTimeout(() => {
+            speak();
+        }, 180);
+
+        if (this.alertTimeout) clearTimeout(this.alertTimeout);
+        this.alertTimeout = setTimeout(() => {
+            target.textContent = '';
+        }, 9000);
     },
 
     /**
@@ -61,8 +119,9 @@ const Accessibility = {
         target.textContent = '';
 
         // Küçük bir gecikme ile yeni mesajı ekle
+        const sequence = ++this.announceSequence;
         setTimeout(() => {
-            target.textContent = message;
+            target.textContent = `${message}${sequence % 2 ? '\u200B' : '\u200C'}`;
 
             // 5 saniye sonra temizle (görsel kirliliği önlemek için)
             if (this.announceTimeout) clearTimeout(this.announceTimeout);
@@ -84,8 +143,9 @@ const Accessibility = {
 
         target.textContent = '';
 
+        const sequence = ++this.alertSequence;
         setTimeout(() => {
-            target.textContent = message;
+            target.textContent = `${message}${sequence % 2 ? '\u200B' : '\u200C'}`;
 
             // 8 saniye sonra temizle
             if (this.alertTimeout) clearTimeout(this.alertTimeout);

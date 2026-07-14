@@ -37,6 +37,86 @@ const Dialogs = {
     silencePreviewTarget: 0, // Önizleme atlama hedefi (sessizliğin sonu)
     aiChatHistory: [], // Yapay zeka konuşma geçmişi
     currentAiApiKey: null, // Mevcut API anahtarı
+    instantVoiceTranslationDialog: null,
+    instantVoiceTranslationRunning: false,
+    instantVoiceTranslationStream: null,
+    instantVoiceTranslationAudioContext: null,
+    instantVoiceTranslationProcessor: null,
+    instantVoiceTranslationSourceNode: null,
+    instantVoiceTranslationSilentGain: null,
+    instantVoiceTranslationRecorder: null,
+    instantVoiceTranslationDecodeContext: null,
+    instantVoiceTranslationOutputContext: null,
+    instantVoiceTranslationNextPlayTime: 0,
+    instantVoiceTranslationOriginalUnderlayNextPlayTime: 0,
+    instantVoiceTranslationPendingAudioChunks: [],
+    instantVoiceTranslationAudioSendTimer: null,
+    instantVoiceTranslationDiagnostics: [],
+    instantVoiceTranslationTranscriptEntries: [],
+    instantVoiceTranslationAudioEntries: [],
+    instantVoiceTranslationSourceAudioEntries: [],
+    instantVoiceTranslationSourceAudioSessionRestore: null,
+    instantVoiceTranslationOriginalUnderlayPendingNodes: [],
+    instantVoiceTranslationOriginalPassthroughUntil: 0,
+    instantVoiceTranslationSuppressNextTranslatedAudio: false,
+    instantVoiceTranslationLastTextOnlyAnnouncement: '',
+    instantVoiceTranslationTextOnlyAnnouncementBuffer: '',
+    instantVoiceTranslationTextOnlyAnnouncementTimer: null,
+    instantVoiceTranslationTextOnlyAnnouncementStartedAt: 0,
+    instantVoiceTranslationTextOnlyAnnouncementSpokenText: '',
+    instantVoiceTranslationTextOnlyAnnouncementLastInputText: '',
+    instantVoiceTranslationTranscriptStartedAt: null,
+    instantVoiceTranslationTranscriptStoppedAt: null,
+    instantVoiceTranslationLatestSourceText: '',
+    instantVoiceTranslationSentChunkCount: 0,
+    instantVoiceTranslationReceivedAudioCount: 0,
+    instantVoiceTranslationQueuedChunkCount: 0,
+    instantVoiceTranslationGlobalShortcut: '',
+    instantVoiceTranslationGlobalShortcutRegistered: false,
+    instantVoiceTranslationShortcutToneContext: null,
+    instantVoiceTranslationLanguages: [
+        ['tr', 'language_tr', 'Türkçe'],
+        ['en', 'language_en', 'İngilizce'],
+        ['de', 'language_de', 'Almanca'],
+        ['fr', 'language_fr', 'Fransızca'],
+        ['es', 'language_es', 'İspanyolca'],
+        ['ar', 'language_ar', 'Arapça'],
+        ['bn', 'language_bn', 'Bengalce'],
+        ['bg', 'language_bg', 'Bulgarca'],
+        ['ca', 'language_ca', 'Katalanca'],
+        ['zh-CN', 'language_zh_cn', 'Çince (Basitleştirilmiş)'],
+        ['zh-TW', 'language_zh_tw', 'Çince (Geleneksel)'],
+        ['hr', 'language_hr', 'Hırvatça'],
+        ['cs', 'language_cs', 'Çekçe'],
+        ['da', 'language_da', 'Danca'],
+        ['nl', 'language_nl', 'Felemenkçe'],
+        ['fi', 'language_fi', 'Fince'],
+        ['el', 'language_el', 'Yunanca'],
+        ['gu', 'language_gu', 'Guceratça'],
+        ['he', 'language_he', 'İbranice'],
+        ['hi', 'language_hi', 'Hintçe'],
+        ['hu', 'language_hu', 'Macarca'],
+        ['id', 'language_id', 'Endonezce'],
+        ['it', 'language_it', 'İtalyanca'],
+        ['ja', 'language_ja', 'Japonca'],
+        ['kn', 'language_kn', 'Kannada'],
+        ['ko', 'language_ko', 'Korece'],
+        ['ml', 'language_ml', 'Malayalam'],
+        ['mr', 'language_mr', 'Marathi'],
+        ['no', 'language_no', 'Norveççe'],
+        ['pl', 'language_pl', 'Lehçe'],
+        ['pt', 'language_pt', 'Portekizce'],
+        ['ro', 'language_ro', 'Romence'],
+        ['ru', 'language_ru', 'Rusça'],
+        ['sk', 'language_sk', 'Slovakça'],
+        ['sv', 'language_sv', 'İsveççe'],
+        ['ta', 'language_ta', 'Tamilce'],
+        ['te', 'language_te', 'Telugu'],
+        ['th', 'language_th', 'Tayca'],
+        ['uk', 'language_uk', 'Ukraynaca'],
+        ['ur', 'language_ur', 'Urduca'],
+        ['vi', 'language_vi', 'Vietnamca']
+    ],
     t(key, fallback, params = {}) {
         if (!window.i18nHelper) return fallback;
         const value = window.i18nHelper.t(key, params);
@@ -174,9 +254,12 @@ const Dialogs = {
         return canvas.toDataURL('image/jpeg', 0.78).split(',')[1];
     },
     drawSubtitlePreviewOnCanvas(ctx, width, height, previewText, styleOptions) {
+        const layoutMode = styleOptions?.layoutMode || 'classic';
         const baseDimension = Math.max(320, Math.min(width, height));
         const sizeScale = Math.max(10, Math.min(140, Number(styleOptions?.sizeScale || 50))) / 100;
-        const fontSize = Math.max(10, Math.min(28, Math.round(baseDimension * 0.026 * sizeScale)));
+        const fontSize = layoutMode === 'classic'
+            ? Math.max(14, Math.min(30, Math.round(baseDimension * 0.03)))
+            : Math.max(10, Math.min(28, Math.round(baseDimension * 0.026 * sizeScale)));
         const lineHeight = Math.round(fontSize * 1.25);
         const maxTextWidth = Math.round(width * 0.82);
         ctx.font = `bold ${fontSize}px Arial, sans-serif`;
@@ -196,14 +279,19 @@ const Dialogs = {
         if (currentLine) lines.push(currentLine);
         if (lines.length === 0) lines.push('-');
 
-        const backgroundMode = styleOptions?.backgroundMode || 'box';
+        const backgroundMode = layoutMode === 'classic'
+            ? 'shadow-only'
+            : (styleOptions?.backgroundMode || 'box');
         const bgOpacity = Math.max(0, Math.min(100, Number(styleOptions?.backgroundOpacity ?? 5))) / 100;
         const textColor = styleOptions?.textColor || '#ffffff';
         const bgColor = styleOptions?.backgroundColor || '#000000';
         const paddingX = Math.round(fontSize * 0.6);
         const paddingY = Math.round(fontSize * 0.35);
         const totalTextHeight = (lines.length * lineHeight) + (paddingY * 2);
-        const boxY = height - Math.max(6, Math.round(height * 0.008)) - totalTextHeight;
+        const bottomMargin = layoutMode === 'classic'
+            ? Math.max(16, Math.round(height * 0.035))
+            : Math.max(6, Math.round(height * 0.008));
+        const boxY = height - bottomMargin - totalTextHeight;
 
         lines.forEach((line, index) => {
             const textWidth = Math.ceil(ctx.measureText(line).width);
@@ -546,6 +634,9 @@ const Dialogs = {
         this.silenceListDialog = document.getElementById('silence-list-dialog');
         this.aiDescriptionDialog = document.getElementById('ai-description-dialog');
         this.geminiApiKeyDialog = document.getElementById('gemini-api-key-dialog');
+        this.openAiApiKeyDialog = document.getElementById('openai-api-key-dialog');
+        this.elevenLabsApiKeyDialog = document.getElementById('elevenlabs-api-key-dialog');
+        this.instantVoiceTranslationDialog = document.getElementById('instant-voice-translation-dialog');
         this.accessibleConfirmDialog = document.getElementById('accessible-confirm-dialog');
         this.imageWizardDialog = document.getElementById('image-wizard-dialog');
         this.selectionQueueDialog = document.getElementById('selection-queue-dialog');
@@ -573,7 +664,8 @@ const Dialogs = {
             this.audioAddDialog, this.audioEditorDialog, this.imagesDialog,
             this.shortcutsDialog, this.aiDialog, this.videoPropertiesDialog,
             this.videoMismatchDialog, this.silenceParamsDialog, this.silenceListDialog,
-            this.aiDescriptionDialog, this.geminiApiKeyDialog, this.accessibleConfirmDialog,
+            this.aiDescriptionDialog, this.geminiApiKeyDialog, this.openAiApiKeyDialog, this.elevenLabsApiKeyDialog, this.accessibleConfirmDialog,
+            this.instantVoiceTranslationDialog,
             this.imageWizardDialog, this.selectionQueueDialog, this.transitionLibraryDialog, this.transitionListDialog,
             this.subtitleActionDialog, this.subtitleTtsDialog, this.subtitleStyleDialog,
             this.videoLayerWizardDialog, this.ctaLibraryDialog,
@@ -603,6 +695,9 @@ const Dialogs = {
         this.setupSilenceEventListeners();
         this.setupAIEventListeners();
         this.setupGeminiApiKeyEventListeners();
+        this.setupOpenAiApiKeyEventListeners();
+        this.setupElevenLabsApiKeyEventListeners();
+        this.setupInstantVoiceTranslationEventListeners();
         this.setupAccessibleConfirmEventListeners();
         this.setupSubtitleTtsEventListeners();
         this.setupCtaLibraryEventListeners();
@@ -1254,7 +1349,7 @@ const Dialogs = {
                     videoVolume: sourceVolume,
                     loopAudio: asBackground,
                     audioTrimStart: this.audioTrimRange?.start || 0,
-                    audioTrimEnd: this.audioTrimRange?.end || (this.pendingAudioMetadata?.duration || 0),
+                    audioTrimEnd: asBackground ? 0 : (this.audioTrimRange?.end || (this.pendingAudioMetadata?.duration || 0)),
                     startTime: this.audioDialogStartTime || 0
                 });
 
@@ -1288,7 +1383,7 @@ const Dialogs = {
                     sourceVolume,
                     asBackground,
                     trimStart: this.audioTrimRange?.start || 0,
-                    trimEnd: this.audioTrimRange?.end || (this.pendingAudioMetadata?.duration || 0)
+                    trimEnd: asBackground ? 0 : (this.audioTrimRange?.end || (this.pendingAudioMetadata?.duration || 0))
                 });
             }
 
@@ -2501,6 +2596,8 @@ const Dialogs = {
         // TTS alanlarını sıfırla
         document.getElementById('text-overlay-tts-enable').checked = false;
         document.getElementById('tts-options').style.display = 'none';
+        const textTtsServiceSelect = document.getElementById('text-overlay-tts-service');
+        if (textTtsServiceSelect) textTtsServiceSelect.value = 'system';
         document.getElementById('text-overlay-tts-speed').value = '100';
         document.getElementById('text-overlay-tts-speed-value').textContent = '%100';
         document.getElementById('text-overlay-tts-volume').value = '100';
@@ -2510,14 +2607,17 @@ const Dialogs = {
 
         // TTS seslerini yükle
         try {
-            const result = await window.api.getTtsVoices();
+            const result = await window.api.getTtsVoices({ service: textTtsServiceSelect?.value || 'system' });
             if (result.success && result.voices) {
                 const voiceSelect = document.getElementById('text-overlay-tts-voice');
                 voiceSelect.innerHTML = `<option value="">${this.t('dialog.text_overlay.default', 'Default')}</option>`;
                 result.voices.forEach(voice => {
+                    const voiceId = typeof voice === 'string' ? voice : voice?.id;
+                    const voiceName = typeof voice === 'string' ? voice : voice?.name;
+                    if (!voiceId || !voiceName) return;
                     const option = document.createElement('option');
-                    option.value = voice;
-                    option.textContent = voice;
+                    option.value = voiceId;
+                    option.textContent = voiceName;
                     voiceSelect.appendChild(option);
                 });
             }
@@ -2563,11 +2663,33 @@ const Dialogs = {
         // TTS checkbox toggle
         const ttsEnableCheckbox = document.getElementById('text-overlay-tts-enable');
         const ttsOptions = document.getElementById('tts-options');
+        const ttsServiceSelect = document.getElementById('text-overlay-tts-service');
 
         ttsEnableCheckbox?.addEventListener('change', () => {
             ttsOptions.style.display = ttsEnableCheckbox.checked ? 'block' : 'none';
             if (ttsEnableCheckbox.checked) {
                 Accessibility.announce('Seslendirme seçenekleri açıldı');
+            }
+        });
+
+        ttsServiceSelect?.addEventListener('change', async () => {
+            try {
+                const result = await window.api.getTtsVoices({ service: ttsServiceSelect.value || 'system' });
+                const voiceSelect = document.getElementById('text-overlay-tts-voice');
+                voiceSelect.innerHTML = `<option value="">${this.t('dialog.text_overlay.default', 'Default')}</option>`;
+                if (result.success) {
+                    (result.voices || []).forEach((voice) => {
+                        const voiceId = typeof voice === 'string' ? voice : voice?.id;
+                        const voiceName = typeof voice === 'string' ? voice : voice?.name;
+                        if (!voiceId || !voiceName) return;
+                        const option = document.createElement('option');
+                        option.value = voiceId;
+                        option.textContent = voiceName;
+                        voiceSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('TTS sesleri yüklenemedi:', error);
             }
         });
 
@@ -2614,6 +2736,7 @@ const Dialogs = {
                 startTime: VideoPlayer.getCurrentTime(),
                 // TTS seçenekleri
                 ttsEnabled: ttsEnableCheckbox.checked,
+                ttsService: document.getElementById('text-overlay-tts-service')?.value || 'system',
                 ttsVoice: document.getElementById('text-overlay-tts-voice').value || null,
                 ttsSpeed: parseInt(ttsSpeedSlider.value) / 100, // 100% = 1.0
                 ttsVolume: parseInt(ttsVolumeSlider.value) / 100,
@@ -2674,10 +2797,15 @@ const Dialogs = {
             const text = document.getElementById('text-overlay-content').value.trim();
             if (text) {
                 const ttsVoice = document.getElementById('text-overlay-tts-voice').value || null;
+                const ttsService = document.getElementById('text-overlay-tts-service')?.value || 'system';
                 const ttsSpeed = parseInt(document.getElementById('text-overlay-tts-speed').value) / 100;
 
                 try {
-                    await window.api.ttsSpeakPreview({ text, voice: ttsVoice, speed: ttsSpeed });
+                    const result = await window.api.previewTts({ text, service: ttsService, voice: ttsVoice, speed: ttsSpeed });
+                    if (result?.audioPath) {
+                        const audio = new Audio(`file:///${result.audioPath.replace(/\\/g, '/')}`);
+                        await audio.play();
+                    }
                 } catch (error) {
                     console.error('TTS önizleme hatası:', error);
                 }
@@ -3877,6 +4005,1534 @@ const Dialogs = {
     },
 
     /**
+     * OpenAI API anahtarı olay dinleyicilerini kur
+     */
+    setupOpenAiApiKeyEventListeners() {
+        document.getElementById('openai-api-key-confirm')?.addEventListener('click', async () => {
+            const input = document.getElementById('openai-api-key-input');
+            const apiKey = input.value.trim();
+
+            if (!apiKey) {
+                Accessibility.alert(this.t('runtime.dialogs.enter_openai_api_key', 'Lütfen OpenAI API anahtarınızı girin.'));
+                return;
+            }
+
+            const result = await window.api.saveOpenAiApiKey({ apiKey });
+            if (result.success) {
+                Accessibility.announce(this.t('runtime.dialogs.openai_api_key_saved', 'OpenAI API anahtarı çeviri için kaydedildi.'));
+                this.openAiApiKeyDialog.close();
+            } else {
+                Accessibility.alert(this.t('runtime.dialogs.openai_api_key_save_failed', 'OpenAI API anahtarı kaydedilirken bir hata oluştu: {error}', {
+                    error: result.error
+                }));
+            }
+        });
+
+        document.getElementById('openai-api-key-cancel')?.addEventListener('click', () => {
+            this.openAiApiKeyDialog.close();
+        });
+
+        document.getElementById('openai-api-key-show')?.addEventListener('change', (e) => {
+            const input = document.getElementById('openai-api-key-input');
+            input.type = e.target.checked ? 'text' : 'password';
+            Accessibility.announce(e.target.checked
+                ? this.t('runtime.dialogs.openai_api_key_visible', 'OpenAI anahtarı gösteriliyor.')
+                : this.t('runtime.dialogs.openai_api_key_hidden', 'OpenAI anahtarı gizlendi.'));
+        });
+    },
+
+    /**
+     * ElevenLabs API anahtarı olay dinleyicilerini kur
+     */
+    setupElevenLabsApiKeyEventListeners() {
+        document.getElementById('elevenlabs-api-key-confirm')?.addEventListener('click', async () => {
+            const input = document.getElementById('elevenlabs-api-key-input');
+            const apiKey = input.value.trim();
+
+            if (!apiKey) {
+                Accessibility.alert(this.t('runtime.dialogs.enter_elevenlabs_api_key', 'Lütfen ElevenLabs API anahtarınızı girin.'));
+                return;
+            }
+
+            const result = await window.api.saveElevenLabsApiKey({ apiKey });
+            if (result.success) {
+                Accessibility.announce(this.t('runtime.dialogs.elevenlabs_api_key_saved', 'ElevenLabs API anahtarı canlı dublaj için kaydedildi.'));
+                this.elevenLabsApiKeyDialog.close();
+            } else {
+                Accessibility.alert(this.t('runtime.dialogs.elevenlabs_api_key_save_failed', 'ElevenLabs API anahtarı kaydedilirken bir hata oluştu: {error}', {
+                    error: result.error
+                }));
+            }
+        });
+
+        document.getElementById('elevenlabs-api-key-cancel')?.addEventListener('click', () => {
+            this.elevenLabsApiKeyDialog.close();
+        });
+
+        document.getElementById('elevenlabs-api-key-show')?.addEventListener('change', (e) => {
+            const input = document.getElementById('elevenlabs-api-key-input');
+            input.type = e.target.checked ? 'text' : 'password';
+            Accessibility.announce(e.target.checked
+                ? this.t('runtime.dialogs.elevenlabs_api_key_visible', 'ElevenLabs anahtarı gösteriliyor.')
+                : this.t('runtime.dialogs.elevenlabs_api_key_hidden', 'ElevenLabs anahtarı gizlendi.'));
+        });
+    },
+
+    setupInstantVoiceTranslationEventListeners() {
+        document.getElementById('instant-voice-translation-start')?.addEventListener('click', () => {
+            this.startInstantVoiceTranslation().catch((error) => {
+                this.stopInstantVoiceTranslation().catch(() => {});
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.start_failed', 'Canlı çeviri başlatılamadı: {error}', {
+                    error: error?.message || error || 'unknown_error'
+                }));
+            });
+        });
+        document.getElementById('instant-voice-translation-stop')?.addEventListener('click', () => {
+            this.stopInstantVoiceTranslation().catch(() => {});
+        });
+        document.getElementById('instant-voice-translation-save-transcript')?.addEventListener('click', () => {
+            this.saveInstantVoiceTranslationTranscript().catch((error) => {
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.save_transcript_failed', 'Çeviri dökümü kaydedilemedi: {error}', {
+                    error: error?.message || error || 'unknown_error'
+                }));
+            });
+        });
+        document.getElementById('instant-voice-translation-save-audio')?.addEventListener('click', () => {
+            this.saveInstantVoiceTranslationAudio().catch((error) => {
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.save_translation_audio_failed', 'Çeviri sesi kaydedilemedi: {error}', {
+                    error: error?.message || error || 'unknown_error'
+                }));
+            });
+        });
+        document.getElementById('instant-voice-translation-source')?.addEventListener('change', () => {
+            this.updateInstantVoiceTranslationSourceControls();
+        });
+        document.getElementById('instant-voice-translation-conversation-mode')?.addEventListener('change', () => {
+            this.updateInstantVoiceTranslationSourceControls();
+        });
+        document.getElementById('instant-voice-translation-text-only')?.addEventListener('change', () => {
+            this.renderInstantVoiceTranslationState();
+        });
+        document.getElementById('instant-voice-translation-source-volume')?.addEventListener('change', () => {
+            this.renderInstantVoiceTranslationState();
+            this.updateInstantVoiceTranslationSourceAudioSessionVolumeLive().catch(() => {});
+        });
+        document.getElementById('instant-voice-translation-original-underlay')?.addEventListener('change', () => {
+            this.renderInstantVoiceTranslationState();
+        });
+        document.getElementById('instant-voice-translation-refresh-microphones')?.addEventListener('click', () => {
+            this.refreshInstantVoiceTranslationMicrophoneDevices().then(() => {
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.microphone_device_refreshed', 'Mikrofonlar yenilendi.'));
+            }).catch((error) => {
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.microphone_device_refresh_failed', 'Mikrofonlar yenilenemedi: {error}', {
+                    error: error?.message || error
+                }));
+            });
+        });
+        document.getElementById('instant-voice-translation-refresh-windows')?.addEventListener('click', () => {
+            this.refreshInstantVoiceTranslationWindowSources().catch((error) => {
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.window_refresh_failed', 'Pencere listesi alınamadı: {error}', {
+                    error: error?.message || error
+                }));
+            });
+        });
+        document.getElementById('instant-voice-translation-refresh-output-devices')?.addEventListener('click', () => {
+            this.refreshInstantVoiceTranslationOutputDevices().then(() => {
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.output_device_refreshed', 'Çıkış aygıtları yenilendi.'));
+            }).catch((error) => {
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.output_device_refresh_failed', 'Çıkış aygıtları yenilenemedi: {error}', {
+                    error: error?.message || error
+                }));
+            });
+        });
+        document.getElementById('instant-voice-translation-close')?.addEventListener('click', () => {
+            this.stopInstantVoiceTranslation().finally(() => {
+                this.instantVoiceTranslationDialog?.close();
+            });
+        });
+        this.instantVoiceTranslationDialog?.addEventListener('close', () => {
+            this.unregisterInstantVoiceTranslationGlobalShortcut();
+            this.stopInstantVoiceTranslation().catch(() => {});
+        });
+        window.api.onGeminiLiveTranslateEvent?.((payload) => {
+            this.handleInstantVoiceTranslationGeminiEvent(payload);
+        });
+        window.api.onGlobalShortcutTriggered?.((accelerator) => {
+            this.handleInstantVoiceTranslationGlobalShortcut(accelerator);
+        });
+    },
+
+    async showInstantVoiceTranslationDialog() {
+        const apiData = await window.api.getGeminiApiData();
+        if (!apiData?.apiKey) {
+            Accessibility.alert(this.t('dialog.instant_voice_translation.key_missing', 'Gemini API anahtarı bulunamadı. Önce Yapay Zeka menüsünden Gemini API Anahtarı öğesini açıp anahtarınızı ekleyin.'));
+            return;
+        }
+        const sourceText = document.getElementById('instant-voice-translation-source-text');
+        const translatedText = document.getElementById('instant-voice-translation-translated-text');
+        const status = document.getElementById('instant-voice-translation-status');
+        if (sourceText) sourceText.value = '';
+        if (translatedText) translatedText.value = '';
+        if (status) status.value = this.t('dialog.instant_voice_translation.ready', 'Hazır.');
+        this.instantVoiceTranslationTranscriptEntries = [];
+        this.instantVoiceTranslationAudioEntries = [];
+        this.instantVoiceTranslationSourceAudioEntries = [];
+        this.instantVoiceTranslationTranscriptStartedAt = null;
+        this.instantVoiceTranslationTranscriptStoppedAt = null;
+        this.instantVoiceTranslationLatestSourceText = '';
+        this.populateInstantVoiceTranslationLanguages();
+        this.renderInstantVoiceTranslationState();
+        this.updateInstantVoiceTranslationSourceControls();
+        await this.refreshInstantVoiceTranslationMicrophoneDevices();
+        await this.refreshInstantVoiceTranslationOutputDevices();
+        this.registerInstantVoiceTranslationGlobalShortcut();
+        this.instantVoiceTranslationDialog?.showModal();
+        setTimeout(() => {
+            document.getElementById('instant-voice-translation-target-language')?.focus();
+        }, 80);
+        Accessibility.announce(this.t('dialog.instant_voice_translation.opened', 'Anlık sesli çeviri açıldı. Hedef dili seçip canlı dinlemeyi başlatabilirsiniz.'));
+    },
+
+    getInstantVoiceTranslationGlobalShortcut() {
+        const actionId = 'instantVoiceTranslationGlobalToggle';
+        const binding = window.Keyboard?.getActionShortcut?.(actionId);
+        return Array.isArray(binding) ? binding[0] : (binding || 'Alt+Ctrl+D');
+    },
+
+    normalizeInstantVoiceTranslationGlobalShortcut(accelerator = '') {
+        const normalized = String(accelerator || '').trim();
+        if (!normalized) return '';
+        return normalized
+            .replace(/\bCommandOrControl\b/gi, 'Ctrl')
+            .replace(/\bCmdOrCtrl\b/gi, 'Ctrl')
+            .replace(/\bCmd\b/gi, 'Ctrl')
+            .replace(/\bControl\b/gi, 'Ctrl')
+            .split('+')
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .join('+');
+    },
+
+    populateInstantVoiceTranslationLanguages() {
+        const select = document.getElementById('instant-voice-translation-target-language');
+        if (!select || select.dataset.populated === 'true') return;
+        const currentValue = select.value || 'tr';
+        select.innerHTML = '';
+        this.instantVoiceTranslationLanguages.forEach(([value, key, fallback]) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = this.t(`dialog.instant_voice_translation.${key}`, fallback);
+            select.appendChild(option);
+        });
+        select.value = this.instantVoiceTranslationLanguages.some(([value]) => value === currentValue)
+            ? currentValue
+            : 'tr';
+        select.dataset.populated = 'true';
+    },
+
+    playInstantVoiceTranslationShortcutTone(kind = 'start') {
+        try {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return;
+            if (!this.instantVoiceTranslationShortcutToneContext || this.instantVoiceTranslationShortcutToneContext.state === 'closed') {
+                this.instantVoiceTranslationShortcutToneContext = new AudioContextClass();
+            }
+            const audioContext = this.instantVoiceTranslationShortcutToneContext;
+            audioContext.resume().catch(() => {});
+            const oscillator = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            const now = audioContext.currentTime;
+            const isStart = kind === 'start';
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(isStart ? 880 : 330, now);
+            oscillator.frequency.exponentialRampToValueAtTime(isStart ? 1320 : 220, now + 0.16);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+            oscillator.connect(gain);
+            gain.connect(audioContext.destination);
+            oscillator.start(now);
+            oscillator.stop(now + 0.2);
+        } catch (_error) {}
+    },
+
+    registerInstantVoiceTranslationGlobalShortcut() {
+        const accelerator = this.normalizeInstantVoiceTranslationGlobalShortcut(this.getInstantVoiceTranslationGlobalShortcut());
+        if (!accelerator) return;
+        this.instantVoiceTranslationGlobalShortcut = accelerator;
+        this.instantVoiceTranslationGlobalShortcutRegistered = true;
+        window.api.registerGlobalShortcut?.({
+            accelerator,
+            focusWindowOnTrigger: false
+        }).catch(() => {
+            this.instantVoiceTranslationGlobalShortcutRegistered = false;
+        });
+    },
+
+    unregisterInstantVoiceTranslationGlobalShortcut() {
+        const accelerator = this.instantVoiceTranslationGlobalShortcut;
+        this.instantVoiceTranslationGlobalShortcut = '';
+        this.instantVoiceTranslationGlobalShortcutRegistered = false;
+        if (accelerator) {
+            window.api.unregisterGlobalShortcut?.(accelerator).catch(() => {});
+        }
+    },
+
+    handleInstantVoiceTranslationGlobalShortcut(accelerator = '') {
+        if (!this.instantVoiceTranslationDialog?.open) return;
+        const received = this.normalizeInstantVoiceTranslationGlobalShortcut(accelerator);
+        const expected = this.normalizeInstantVoiceTranslationGlobalShortcut(this.instantVoiceTranslationGlobalShortcut || this.getInstantVoiceTranslationGlobalShortcut());
+        if (!received || received !== expected) return;
+        if (this.instantVoiceTranslationRunning) {
+            this.stopInstantVoiceTranslation()
+                .then(() => this.playInstantVoiceTranslationShortcutTone('stop'))
+                .catch(() => {});
+        } else {
+            this.startInstantVoiceTranslation().catch((error) => {
+                this.stopInstantVoiceTranslation().catch(() => {});
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.start_failed', 'Canlı çeviri başlatılamadı: {error}', {
+                    error: error?.message || error || 'unknown_error'
+                }));
+            }).then(() => {
+                if (this.instantVoiceTranslationRunning) {
+                    this.playInstantVoiceTranslationShortcutTone('start');
+                }
+            });
+        }
+    },
+
+    setInstantVoiceTranslationStatus(message, { announce = true } = {}) {
+        const status = document.getElementById('instant-voice-translation-status');
+        if (status) {
+            status.value = message || '';
+        }
+        if (message && announce) {
+            Accessibility.announce(message);
+        }
+    },
+
+    addInstantVoiceTranslationDiagnostic(message, details = {}) {
+        const time = new Date().toLocaleTimeString();
+        const line = `[${time}] ${message}`;
+        this.instantVoiceTranslationDiagnostics.push(line);
+        if (this.instantVoiceTranslationDiagnostics.length > 40) {
+            this.instantVoiceTranslationDiagnostics.splice(0, this.instantVoiceTranslationDiagnostics.length - 40);
+        }
+        try {
+            window.api.send('broadcast-room-log', {
+                event: 'instant-voice-translation',
+                at: new Date().toISOString(),
+                message,
+                ...details
+            });
+        } catch (_error) {}
+    },
+
+    renderInstantVoiceTranslationState() {
+        const startButton = document.getElementById('instant-voice-translation-start');
+        const stopButton = document.getElementById('instant-voice-translation-stop');
+        const languageSelect = document.getElementById('instant-voice-translation-target-language');
+        const sourceSelect = document.getElementById('instant-voice-translation-source');
+        const sourceVolumeSelect = document.getElementById('instant-voice-translation-source-volume');
+        const translationVolumeSelect = document.getElementById('instant-voice-translation-translation-volume');
+        const windowSelect = document.getElementById('instant-voice-translation-window');
+        const microphoneSelect = document.getElementById('instant-voice-translation-microphone-device');
+        const outputDeviceSelect = document.getElementById('instant-voice-translation-output-device');
+        const conversationMode = document.getElementById('instant-voice-translation-conversation-mode');
+        const textOnlyMode = document.getElementById('instant-voice-translation-text-only');
+        const originalUnderlay = document.getElementById('instant-voice-translation-original-underlay');
+        const originalUnderlayLevel = document.getElementById('instant-voice-translation-original-underlay-level');
+        const refreshWindowsButton = document.getElementById('instant-voice-translation-refresh-windows');
+        const refreshMicrophonesButton = document.getElementById('instant-voice-translation-refresh-microphones');
+        const refreshOutputButton = document.getElementById('instant-voice-translation-refresh-output-devices');
+        const saveTranscriptButton = document.getElementById('instant-voice-translation-save-transcript');
+        const saveAudioButton = document.getElementById('instant-voice-translation-save-audio');
+        if (startButton) startButton.disabled = this.instantVoiceTranslationRunning;
+        if (stopButton) stopButton.disabled = !this.instantVoiceTranslationRunning;
+        if (languageSelect) languageSelect.disabled = this.instantVoiceTranslationRunning;
+        if (sourceSelect) sourceSelect.disabled = this.instantVoiceTranslationRunning;
+        if (sourceVolumeSelect) sourceVolumeSelect.disabled = false;
+        if (translationVolumeSelect) translationVolumeSelect.disabled = false;
+        if (conversationMode) conversationMode.disabled = this.instantVoiceTranslationRunning;
+        if (textOnlyMode) textOnlyMode.disabled = this.instantVoiceTranslationRunning;
+        if (originalUnderlay) originalUnderlay.disabled = this.instantVoiceTranslationRunning;
+        if (originalUnderlayLevel) originalUnderlayLevel.disabled = this.instantVoiceTranslationRunning || !Boolean(originalUnderlay?.checked);
+        if (windowSelect) windowSelect.disabled = this.instantVoiceTranslationRunning;
+        if (microphoneSelect) microphoneSelect.disabled = this.instantVoiceTranslationRunning;
+        if (outputDeviceSelect) outputDeviceSelect.disabled = this.instantVoiceTranslationRunning;
+        if (refreshWindowsButton) refreshWindowsButton.disabled = this.instantVoiceTranslationRunning;
+        if (refreshMicrophonesButton) refreshMicrophonesButton.disabled = this.instantVoiceTranslationRunning;
+        if (refreshOutputButton) refreshOutputButton.disabled = this.instantVoiceTranslationRunning;
+        if (saveTranscriptButton) saveTranscriptButton.disabled = this.instantVoiceTranslationRunning || !this.instantVoiceTranslationTranscriptEntries.length;
+        if (saveAudioButton) saveAudioButton.disabled = this.instantVoiceTranslationRunning || !this.instantVoiceTranslationAudioEntries.length;
+        if (!this.instantVoiceTranslationRunning) {
+            const status = document.getElementById('instant-voice-translation-status');
+            if (status && !status.value) {
+                status.value = this.t('dialog.instant_voice_translation.ready', 'Hazır.');
+            }
+        }
+    },
+
+    extractInstantVoiceTranslationWindowPid(source = {}) {
+        const directPid = Number(source.processId || source.pid || 0);
+        if (Number.isFinite(directPid) && directPid > 0) {
+            return Math.trunc(directPid);
+        }
+        const id = String(source.id || '');
+        const parts = id.split(':');
+        const pid = Number(parts[2] || 0);
+        return Number.isFinite(pid) && pid > 0 ? pid : 0;
+    },
+
+    async refreshInstantVoiceTranslationWindowSources() {
+        const select = document.getElementById('instant-voice-translation-window');
+        if (!select) return;
+        select.innerHTML = '';
+        const result = await window.api.getDesktopSources?.({
+            types: ['window'],
+            fetchWindowIcons: false,
+            thumbnailSize: { width: 0, height: 0 }
+        });
+        let sources = Array.isArray(result?.sources) ? result.sources : [];
+        this.addInstantVoiceTranslationDiagnostic('Pencere kaynakları alındı.', {
+            sourceCount: sources.length,
+            sourcePreview: sources.slice(0, 6).map((source) => ({
+                id: String(source.id || ''),
+                name: String(source.name || ''),
+                processId: source.processId || 0
+            }))
+        });
+        let usableSources = sources
+            .map((source) => ({
+                id: String(source.id || ''),
+                name: String(source.name || '').trim(),
+                pid: this.extractInstantVoiceTranslationWindowPid(source),
+                processName: String(source.processName || '').trim()
+            }))
+            .filter((source) => source.name);
+
+        if (!usableSources.length && window.api.getWindowProcessSources) {
+            const fallbackResult = await window.api.getWindowProcessSources();
+            sources = Array.isArray(fallbackResult?.sources) ? fallbackResult.sources : [];
+            this.addInstantVoiceTranslationDiagnostic('Windows pencere süreçleri alındı.', {
+                sourceCount: sources.length,
+                sourcePreview: sources.slice(0, 6).map((source) => ({
+                    id: String(source.id || ''),
+                    name: String(source.name || ''),
+                    processId: source.processId || 0
+                }))
+            });
+            usableSources = sources
+                .map((source) => ({
+                    id: String(source.id || ''),
+                    name: String(source.name || '').trim(),
+                    pid: this.extractInstantVoiceTranslationWindowPid(source),
+                    processName: String(source.processName || '').trim()
+                }))
+                .filter((source) => source.name);
+        }
+
+        if (!usableSources.length) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = this.t('dialog.instant_voice_translation.window_none', 'Dinlenebilir pencere bulunamadı');
+            select.appendChild(option);
+            return;
+        }
+
+        usableSources.forEach((source) => {
+            const option = document.createElement('option');
+            option.value = String(source.pid);
+            option.textContent = source.name;
+            option.dataset.sourceId = source.id;
+            option.dataset.windowTitle = source.name;
+            option.dataset.processName = source.processName || '';
+            select.appendChild(option);
+        });
+    },
+
+    async refreshInstantVoiceTranslationOutputDevices() {
+        const select = document.getElementById('instant-voice-translation-output-device');
+        if (!select) return;
+        const previousValue = select.value || 'default';
+        select.innerHTML = '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = 'default';
+        defaultOption.textContent = this.t('dialog.instant_voice_translation.output_device_default', 'Sistem varsayılanı');
+        select.appendChild(defaultOption);
+        try {
+            const devices = await navigator.mediaDevices?.enumerateDevices?.();
+            (Array.isArray(devices) ? devices : [])
+                .filter((device) => device.kind === 'audiooutput')
+                .forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId || 'default';
+                    option.textContent = device.label || this.t('dialog.instant_voice_translation.output_device_named_fallback', 'Ses çıkışı {number}', {
+                        number: index + 1
+                    });
+                    select.appendChild(option);
+                });
+        } catch (_error) {}
+        if ([...select.options].some((option) => option.value === previousValue)) {
+            select.value = previousValue;
+        }
+    },
+
+    async refreshInstantVoiceTranslationMicrophoneDevices() {
+        const select = document.getElementById('instant-voice-translation-microphone-device');
+        if (!select) return;
+        const previousValue = select.value || 'default';
+        select.innerHTML = '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = 'default';
+        defaultOption.textContent = this.t('dialog.instant_voice_translation.microphone_device_default', 'Sistem varsayılanı');
+        select.appendChild(defaultOption);
+        try {
+            const devices = await navigator.mediaDevices?.enumerateDevices?.();
+            (Array.isArray(devices) ? devices : [])
+                .filter((device) => device.kind === 'audioinput')
+                .forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId || 'default';
+                    option.textContent = device.label || this.t('dialog.instant_voice_translation.microphone_device_named_fallback', 'Mikrofon {number}', {
+                        number: index + 1
+                    });
+                    select.appendChild(option);
+                });
+        } catch (_error) {}
+        if ([...select.options].some((option) => option.value === previousValue)) {
+            select.value = previousValue;
+        }
+    },
+
+    updateInstantVoiceTranslationSourceControls() {
+        const sourceSelect = document.getElementById('instant-voice-translation-source');
+        const group = document.getElementById('instant-voice-translation-window-group');
+        const sourceVolumeGroup = document.getElementById('instant-voice-translation-source-volume-group');
+        const microphoneGroup = document.getElementById('instant-voice-translation-microphone-group');
+        const originalUnderlayGroup = document.getElementById('instant-voice-translation-original-underlay-group');
+        const conversationHint = document.getElementById('instant-voice-translation-conversation-hint');
+        const virtualMicHint = document.getElementById('instant-voice-translation-virtual-mic-hint');
+        const textOnlyGroup = document.getElementById('instant-voice-translation-text-only-group');
+        const conversationMode = Boolean(document.getElementById('instant-voice-translation-conversation-mode')?.checked);
+        const shouldShowWindowList = sourceSelect?.value === 'native-window-audio';
+        const shouldShowMicrophoneList = conversationMode && (!sourceSelect || sourceSelect.value === 'native-microphone');
+        if (group) {
+            group.classList.toggle('hidden', !shouldShowWindowList);
+        }
+        sourceVolumeGroup?.classList.toggle('hidden', conversationMode || !shouldShowWindowList);
+        if (microphoneGroup) {
+            microphoneGroup.classList.toggle('hidden', !shouldShowMicrophoneList);
+        }
+        originalUnderlayGroup?.classList.toggle('hidden', !conversationMode);
+        conversationHint?.classList.toggle('hidden', !conversationMode);
+        virtualMicHint?.classList.toggle('hidden', !conversationMode);
+        textOnlyGroup?.classList.toggle('hidden', conversationMode);
+        if (shouldShowWindowList) {
+            this.refreshInstantVoiceTranslationWindowSources().catch((error) => {
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.window_refresh_failed', 'Pencere listesi alınamadı: {error}', {
+                    error: error?.message || error
+                }));
+            });
+        }
+    },
+
+    encodeInstantVoiceTranslationAudio(samples) {
+        const channel = samples && typeof samples.getChannelData === 'function'
+            ? samples.getChannelData(0)
+            : samples;
+        if (!channel?.length) {
+            return '';
+        }
+        const bytes = new Uint8Array(channel.length * 2);
+        for (let index = 0; index < channel.length; index += 1) {
+            const sample = Math.max(-1, Math.min(1, channel[index]));
+            const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+            const value = Math.round(intSample);
+            bytes[index * 2] = value & 0xff;
+            bytes[index * 2 + 1] = (value >> 8) & 0xff;
+        }
+        let binary = '';
+        const chunkSize = 0x8000;
+        for (let index = 0; index < bytes.length; index += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+        }
+        return btoa(binary);
+    },
+
+    startInstantVoiceTranslationAudioSender() {
+        if (this.instantVoiceTranslationAudioSendTimer) {
+            clearInterval(this.instantVoiceTranslationAudioSendTimer);
+        }
+        this.instantVoiceTranslationAudioSendTimer = setInterval(() => {
+            if (!this.instantVoiceTranslationRunning) return;
+            const samples = this.instantVoiceTranslationPendingAudioChunks.shift();
+            if (!samples) return;
+            const audioBase64 = this.encodeInstantVoiceTranslationAudio(samples);
+            if (audioBase64) {
+                this.instantVoiceTranslationSentChunkCount += 1;
+                if (this.instantVoiceTranslationSentChunkCount <= 5 || this.instantVoiceTranslationSentChunkCount % 20 === 0) {
+                    this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_chunk_sent', 'Ses parçası Gemini’ye gönderildi: {count}', {
+                        count: this.instantVoiceTranslationSentChunkCount
+                    }), { count: this.instantVoiceTranslationSentChunkCount });
+                }
+                window.api.sendGeminiLiveTranslateAudioChunk({
+                    audioBase64,
+                    sampleRate: 16000
+                });
+            }
+        }, 120);
+    },
+
+    getInstantVoiceTranslationRecorderMimeType() {
+        if (typeof MediaRecorder === 'undefined') return '';
+        const candidates = [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/ogg;codecs=opus',
+            'audio/ogg'
+        ];
+        return candidates.find((mimeType) => MediaRecorder.isTypeSupported?.(mimeType)) || '';
+    },
+
+    async handleInstantVoiceTranslationRecorderBlob(blob) {
+        if (!this.instantVoiceTranslationRunning || !blob || blob.size <= 0) return;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        try {
+            if (!this.instantVoiceTranslationDecodeContext || this.instantVoiceTranslationDecodeContext.state === 'closed') {
+                this.instantVoiceTranslationDecodeContext = new AudioContextClass();
+            }
+            const arrayBuffer = await blob.arrayBuffer();
+            const audioBuffer = await this.instantVoiceTranslationDecodeContext.decodeAudioData(arrayBuffer.slice(0));
+            if (!this.instantVoiceTranslationRunning) return;
+            this.instantVoiceTranslationQueuedChunkCount += 1;
+            if (this.instantVoiceTranslationQueuedChunkCount <= 3 || this.instantVoiceTranslationQueuedChunkCount % 10 === 0) {
+                this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_chunk_queued', 'Mikrofondan ses parçası kuyruğa alındı: {count}', {
+                    count: this.instantVoiceTranslationQueuedChunkCount
+                }), {
+                    count: this.instantVoiceTranslationQueuedChunkCount,
+                    duration: audioBuffer.duration,
+                    sampleRate: audioBuffer.sampleRate
+                });
+            }
+            const audioBase64 = this.encodeInstantVoiceTranslationAudio(audioBuffer);
+            if (!audioBase64) return;
+            this.instantVoiceTranslationSentChunkCount += 1;
+            if (this.instantVoiceTranslationSentChunkCount <= 5 || this.instantVoiceTranslationSentChunkCount % 10 === 0) {
+                this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_chunk_sent', 'Ses parçası Gemini’ye gönderildi: {count}', {
+                    count: this.instantVoiceTranslationSentChunkCount
+                }), {
+                    count: this.instantVoiceTranslationSentChunkCount,
+                    sampleRate: audioBuffer.sampleRate
+                });
+            }
+            window.api.sendGeminiLiveTranslateAudioChunk({
+                audioBase64,
+                sampleRate: audioBuffer.sampleRate || 48000
+            });
+        } catch (error) {
+            this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_chunk_decode_failed', 'Mikrofon parçası çözülemedi: {error}', {
+                error: error?.message || error
+            }), { error: error?.message || String(error) });
+        }
+    },
+
+    parseInstantVoiceTranslationSampleRate(mimeType = '') {
+        const match = String(mimeType || '').match(/rate=(\d+)/i);
+        const sampleRate = Number(match?.[1] || 24000);
+        return Number.isFinite(sampleRate) && sampleRate > 0 ? sampleRate : 24000;
+    },
+
+    base64ToArrayBuffer(base64) {
+        const binary = atob(String(base64 || ''));
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+            bytes[index] = binary.charCodeAt(index);
+        }
+        return bytes.buffer;
+    },
+
+    normalizeInstantVoiceTranslationSpeechText(value = '') {
+        return String(value || '')
+            .toLocaleLowerCase()
+            .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    },
+
+    cleanInstantVoiceTranslationTextOnlyAnnouncement(value = '') {
+        return String(value || '')
+            .replace(/\s+/g, ' ')
+            .replace(/\s+([,.;:!?])/g, '$1')
+            .replace(/([¿¡])\s+/g, '$1')
+            .trim();
+    },
+
+    smoothInstantVoiceTranslationTextOnlyAnnouncementCasing(value = '') {
+        const text = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(value);
+        const letters = text.match(/\p{L}/gu) || [];
+        if (letters.length < 6) return text;
+        const uppercaseLetters = letters.filter((letter) => letter === letter.toLocaleUpperCase() && letter !== letter.toLocaleLowerCase());
+        if (uppercaseLetters.length / letters.length < 0.85) return text;
+        const locale = document.documentElement?.lang || navigator.language || 'tr';
+        const lowered = text.toLocaleLowerCase(locale);
+        return lowered.replace(/(^|[.!?]\s+)(\p{L})/gu, (match, prefix, letter) => `${prefix}${letter.toLocaleUpperCase(locale)}`);
+    },
+
+    findInstantVoiceTranslationSentenceBoundary(value = '') {
+        const text = String(value || '');
+        let boundary = 0;
+        const regex = /[.!?。！？]+(?:["'”’)\]]+)?(?=\s|$)/gu;
+        let match = regex.exec(text);
+        while (match) {
+            boundary = match.index + match[0].length;
+            match = regex.exec(text);
+        }
+        return boundary;
+    },
+
+    splitInstantVoiceTranslationReadableTextOnlyChunk(value = '') {
+        const text = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(value);
+        if (!text) return { readyText: '', remainingText: '' };
+        const boundaryIndex = this.findInstantVoiceTranslationSentenceBoundary(text);
+        if (boundaryIndex > 0) {
+            return {
+                readyText: text.slice(0, boundaryIndex),
+                remainingText: this.cleanInstantVoiceTranslationTextOnlyAnnouncement(text.slice(boundaryIndex))
+            };
+        }
+        const lastSpaceIndex = text.lastIndexOf(' ');
+        if (lastSpaceIndex >= 8 && text.length - lastSpaceIndex <= 18) {
+            return {
+                readyText: text.slice(0, lastSpaceIndex),
+                remainingText: this.cleanInstantVoiceTranslationTextOnlyAnnouncement(text.slice(lastSpaceIndex + 1))
+            };
+        }
+        return { readyText: text, remainingText: '' };
+    },
+
+    clearInstantVoiceTranslationTextOnlyAnnouncementTimer() {
+        if (!this.instantVoiceTranslationTextOnlyAnnouncementTimer) return;
+        clearTimeout(this.instantVoiceTranslationTextOnlyAnnouncementTimer);
+        this.instantVoiceTranslationTextOnlyAnnouncementTimer = null;
+    },
+
+    resetInstantVoiceTranslationTextOnlyAnnouncementBuffer() {
+        this.clearInstantVoiceTranslationTextOnlyAnnouncementTimer();
+        this.instantVoiceTranslationTextOnlyAnnouncementBuffer = '';
+        this.instantVoiceTranslationTextOnlyAnnouncementStartedAt = 0;
+        this.instantVoiceTranslationTextOnlyAnnouncementSpokenText = '';
+        this.instantVoiceTranslationTextOnlyAnnouncementLastInputText = '';
+    },
+
+    getInstantVoiceTranslationTextOnlyAnnouncementDelta(previous = '', current = '') {
+        const oldText = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(previous);
+        const newText = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(current);
+        if (!newText) return { text: '', lastInputText: oldText };
+        if (!oldText) return { text: newText, lastInputText: newText };
+        if (newText === oldText || oldText.startsWith(newText)) {
+            return { text: '', lastInputText: oldText };
+        }
+        if (newText.startsWith(oldText)) {
+            const suffix = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(newText.slice(oldText.length));
+            return {
+                text: suffix && !this.normalizeInstantVoiceTranslationSpeechText(suffix) ? '' : suffix,
+                lastInputText: newText
+            };
+        }
+        const minOverlap = Math.min(12, oldText.length, newText.length);
+        for (let length = Math.min(oldText.length, newText.length); length >= minOverlap; length -= 1) {
+            if (oldText.slice(-length) === newText.slice(0, length)) {
+                return {
+                    text: this.cleanInstantVoiceTranslationTextOnlyAnnouncement(newText.slice(length)),
+                    lastInputText: newText
+                };
+            }
+        }
+        const normalizedOld = this.normalizeInstantVoiceTranslationSpeechText(oldText);
+        const normalizedNew = this.normalizeInstantVoiceTranslationSpeechText(newText);
+        if (normalizedOld && normalizedNew && (normalizedNew === normalizedOld || normalizedOld.startsWith(normalizedNew))) {
+            return { text: '', lastInputText: oldText };
+        }
+        return { text: newText, lastInputText: newText };
+    },
+
+    announceInstantVoiceTranslationTextOnlyChunk(text = '', { force = false } = {}) {
+        const cleanText = this.smoothInstantVoiceTranslationTextOnlyAnnouncementCasing(text);
+        if (!cleanText) return false;
+        const normalized = this.normalizeInstantVoiceTranslationSpeechText(cleanText);
+        if (!force && (!normalized || normalized === this.instantVoiceTranslationLastTextOnlyAnnouncement)) {
+            return false;
+        }
+        this.instantVoiceTranslationLastTextOnlyAnnouncement = normalized;
+        this.instantVoiceTranslationTextOnlyAnnouncementSpokenText = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(this.instantVoiceTranslationTextOnlyAnnouncementSpokenText
+            ? `${this.instantVoiceTranslationTextOnlyAnnouncementSpokenText} ${cleanText}`
+            : cleanText);
+        Accessibility.announce(cleanText);
+        return true;
+    },
+
+    flushInstantVoiceTranslationTextOnlyAnnouncement({ force = false } = {}) {
+        this.clearInstantVoiceTranslationTextOnlyAnnouncementTimer();
+        const text = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(this.instantVoiceTranslationTextOnlyAnnouncementBuffer);
+        if (!text) {
+            this.instantVoiceTranslationTextOnlyAnnouncementBuffer = '';
+            this.instantVoiceTranslationTextOnlyAnnouncementStartedAt = 0;
+            return;
+        }
+        const { readyText, remainingText } = force
+            ? this.splitInstantVoiceTranslationReadableTextOnlyChunk(text)
+            : { readyText: text, remainingText: '' };
+        if (!readyText || !this.announceInstantVoiceTranslationTextOnlyChunk(readyText, { force })) {
+            return;
+        }
+        this.instantVoiceTranslationTextOnlyAnnouncementBuffer = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(remainingText);
+        this.instantVoiceTranslationTextOnlyAnnouncementStartedAt = this.instantVoiceTranslationTextOnlyAnnouncementBuffer ? Date.now() : 0;
+        if (this.instantVoiceTranslationTextOnlyAnnouncementBuffer) {
+            this.instantVoiceTranslationTextOnlyAnnouncementTimer = setTimeout(() => {
+                this.flushInstantVoiceTranslationTextOnlyAnnouncement({ force: true });
+            }, 900);
+        }
+    },
+
+    queueInstantVoiceTranslationTextOnlyAnnouncement(value = '', { force = false } = {}) {
+        if (!this.isInstantVoiceTranslationTextOnlyModeEnabled()) return;
+        const incomingText = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(value);
+        const delta = this.getInstantVoiceTranslationTextOnlyAnnouncementDelta(this.instantVoiceTranslationTextOnlyAnnouncementLastInputText, incomingText);
+        let text = delta.text;
+        this.instantVoiceTranslationTextOnlyAnnouncementLastInputText = delta.lastInputText;
+        if (!text) {
+            const pendingText = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(this.instantVoiceTranslationTextOnlyAnnouncementBuffer);
+            if (pendingText
+                && this.normalizeInstantVoiceTranslationSpeechText(pendingText) === this.normalizeInstantVoiceTranslationSpeechText(incomingText)
+                && this.findInstantVoiceTranslationSentenceBoundary(incomingText) > 0) {
+                this.clearInstantVoiceTranslationTextOnlyAnnouncementTimer();
+                this.instantVoiceTranslationTextOnlyAnnouncementBuffer = incomingText;
+                const boundaryIndex = this.findInstantVoiceTranslationSentenceBoundary(this.instantVoiceTranslationTextOnlyAnnouncementBuffer);
+                const readyText = this.instantVoiceTranslationTextOnlyAnnouncementBuffer.slice(0, boundaryIndex);
+                const remainingText = this.instantVoiceTranslationTextOnlyAnnouncementBuffer.slice(boundaryIndex);
+                this.announceInstantVoiceTranslationTextOnlyChunk(readyText, { force: true });
+                this.instantVoiceTranslationTextOnlyAnnouncementBuffer = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(remainingText);
+                this.instantVoiceTranslationTextOnlyAnnouncementStartedAt = this.instantVoiceTranslationTextOnlyAnnouncementBuffer ? Date.now() : 0;
+            }
+            return;
+        }
+        const spokenText = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(this.instantVoiceTranslationTextOnlyAnnouncementSpokenText);
+        if (spokenText && text.startsWith(spokenText)) {
+            text = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(text.slice(spokenText.length));
+            if (!text) return;
+        }
+        const normalized = this.normalizeInstantVoiceTranslationSpeechText(text);
+        if (!normalized || normalized === this.instantVoiceTranslationLastTextOnlyAnnouncement) return;
+
+        const previous = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(this.instantVoiceTranslationTextOnlyAnnouncementBuffer);
+        let nextText = text;
+        if (previous) {
+            const previousNormalized = this.normalizeInstantVoiceTranslationSpeechText(previous);
+            if (normalized.startsWith(previousNormalized)) {
+                nextText = text;
+            } else if (previousNormalized && previousNormalized.startsWith(normalized)) {
+                nextText = previous;
+            } else {
+                nextText = `${previous} ${text}`;
+            }
+        }
+
+        this.instantVoiceTranslationTextOnlyAnnouncementBuffer = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(nextText);
+        if (!this.instantVoiceTranslationTextOnlyAnnouncementStartedAt) {
+            this.instantVoiceTranslationTextOnlyAnnouncementStartedAt = Date.now();
+        }
+
+        if (force) {
+            this.flushInstantVoiceTranslationTextOnlyAnnouncement({ force: true });
+            return;
+        }
+
+        const boundaryIndex = this.findInstantVoiceTranslationSentenceBoundary(this.instantVoiceTranslationTextOnlyAnnouncementBuffer);
+        if (boundaryIndex > 0) {
+            this.clearInstantVoiceTranslationTextOnlyAnnouncementTimer();
+            const readyText = this.instantVoiceTranslationTextOnlyAnnouncementBuffer.slice(0, boundaryIndex);
+            const pendingText = this.instantVoiceTranslationTextOnlyAnnouncementBuffer.slice(boundaryIndex);
+            this.announceInstantVoiceTranslationTextOnlyChunk(readyText, { force: true });
+            this.instantVoiceTranslationTextOnlyAnnouncementBuffer = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(pendingText);
+            this.instantVoiceTranslationTextOnlyAnnouncementStartedAt = this.instantVoiceTranslationTextOnlyAnnouncementBuffer ? Date.now() : 0;
+            if (this.instantVoiceTranslationTextOnlyAnnouncementBuffer) {
+                this.instantVoiceTranslationTextOnlyAnnouncementTimer = setTimeout(() => {
+                    this.flushInstantVoiceTranslationTextOnlyAnnouncement({ force: true });
+                }, 900);
+            }
+            return;
+        }
+
+        const waitedTooLong = Date.now() - this.instantVoiceTranslationTextOnlyAnnouncementStartedAt >= 2600;
+        if (waitedTooLong) {
+            this.flushInstantVoiceTranslationTextOnlyAnnouncement({ force: true });
+            return;
+        }
+
+        this.clearInstantVoiceTranslationTextOnlyAnnouncementTimer();
+        this.instantVoiceTranslationTextOnlyAnnouncementTimer = setTimeout(() => {
+            this.flushInstantVoiceTranslationTextOnlyAnnouncement({ force: true });
+        }, 900);
+    },
+
+    updateInstantVoiceTranslationTextOnlyDisplay(textarea, value = '') {
+        if (!textarea) return;
+        const incomingText = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(value);
+        if (!incomingText) return;
+        const currentText = this.cleanInstantVoiceTranslationTextOnlyAnnouncement(textarea.value);
+        if (!currentText || incomingText.startsWith(currentText)) {
+            textarea.value = incomingText;
+            return;
+        }
+        if (currentText.startsWith(incomingText)) {
+            return;
+        }
+        const delta = this.getInstantVoiceTranslationTextOnlyAnnouncementDelta(currentText, incomingText);
+        const nextText = delta.text
+            ? this.cleanInstantVoiceTranslationTextOnlyAnnouncement(`${currentText} ${delta.text}`)
+            : currentText;
+        textarea.value = nextText || incomingText;
+    },
+
+    shouldSuppressInstantVoiceTranslationAudio(payload = {}) {
+        const transcript = this.normalizeInstantVoiceTranslationSpeechText(payload.transcript);
+        const translatedText = this.normalizeInstantVoiceTranslationSpeechText(payload.translatedText);
+        if (!transcript || !translatedText) {
+            return false;
+        }
+        return transcript === translatedText || transcript.includes(translatedText) || translatedText.includes(transcript);
+    },
+
+    isInstantVoiceTranslationConversationModeEnabled() {
+        return Boolean(document.getElementById('instant-voice-translation-conversation-mode')?.checked);
+    },
+
+    isInstantVoiceTranslationTextOnlyModeEnabled() {
+        return !this.isInstantVoiceTranslationConversationModeEnabled()
+            && Boolean(document.getElementById('instant-voice-translation-text-only')?.checked);
+    },
+
+    isInstantVoiceTranslationOriginalUnderlayEnabled() {
+        return this.isInstantVoiceTranslationConversationModeEnabled()
+            && Boolean(document.getElementById('instant-voice-translation-original-underlay')?.checked);
+    },
+
+    getInstantVoiceTranslationOriginalUnderlayGain() {
+        const value = Number(document.getElementById('instant-voice-translation-original-underlay-level')?.value || 0.2);
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.2;
+    },
+
+    getInstantVoiceTranslationSourceAudioSessionVolume() {
+        const value = Number(document.getElementById('instant-voice-translation-source-volume')?.value || 1);
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+    },
+
+    async applyInstantVoiceTranslationSourceAudioSessionVolume(targetProcessId, targetWindowTitle = '', targetProcessName = '', targetWindowSourceId = '') {
+        const volume = this.getInstantVoiceTranslationSourceAudioSessionVolume();
+        const pid = Number(targetProcessId || 0);
+        if (volume >= 0.999) {
+            return null;
+        }
+        if (!pid && !targetWindowTitle && !targetProcessName && !targetWindowSourceId) {
+            return { success: false, error: 'target_process_id_required' };
+        }
+        if (typeof window.api?.setInstantVoiceTranslationAudioSessionVolume !== 'function') {
+            return null;
+        }
+        const result = await window.api.setInstantVoiceTranslationAudioSessionVolume({
+            targetProcessId: pid,
+            targetWindowTitle,
+            targetProcessName,
+            targetWindowSourceId,
+            volume
+        });
+        if (result?.success && Number.isFinite(Number(result.previousVolume))) {
+            if (!this.instantVoiceTranslationSourceAudioSessionRestore) {
+                this.instantVoiceTranslationSourceAudioSessionRestore = {
+                    targetProcessId: Number(result.targetProcessId || pid),
+                    targetWindowTitle,
+                    targetProcessName,
+                    targetWindowSourceId,
+                    volume: Math.max(0, Math.min(1, Number(result.previousVolume)))
+                };
+            }
+            return result;
+        }
+        return result || { success: false, error: 'audio_session_volume_failed' };
+    },
+
+    async updateInstantVoiceTranslationSourceAudioSessionVolumeLive() {
+        if (!this.instantVoiceTranslationRunning || this.isInstantVoiceTranslationConversationModeEnabled()) {
+            return;
+        }
+        const sourceSelect = document.getElementById('instant-voice-translation-source');
+        const windowSelect = document.getElementById('instant-voice-translation-window');
+        if (sourceSelect?.value !== 'native-window-audio') {
+            return;
+        }
+        const selectedWindowOption = windowSelect?.selectedOptions?.[0] || null;
+        const selectedWindowTitle = String(selectedWindowOption?.dataset?.windowTitle || selectedWindowOption?.textContent || this.instantVoiceTranslationSourceAudioSessionRestore?.targetWindowTitle || '').trim();
+        const selectedWindowProcessName = String(selectedWindowOption?.dataset?.processName || this.instantVoiceTranslationSourceAudioSessionRestore?.targetProcessName || '').trim();
+        const selectedWindowSourceId = String(selectedWindowOption?.dataset?.sourceId || this.instantVoiceTranslationSourceAudioSessionRestore?.targetWindowSourceId || '').trim();
+        const pid = Number(windowSelect?.value || this.instantVoiceTranslationSourceAudioSessionRestore?.targetProcessId || 0);
+        if (!pid && !selectedWindowTitle && !selectedWindowProcessName && !selectedWindowSourceId) {
+            return;
+        }
+        const result = await this.applyInstantVoiceTranslationSourceAudioSessionVolume(
+            pid,
+            selectedWindowTitle,
+            selectedWindowProcessName,
+            selectedWindowSourceId
+        ).catch((error) => ({
+            success: false,
+            error: error?.message || String(error)
+        }));
+        if (result && !result.success) {
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.source_volume_failed', 'Dinlenen uygulamanın ses düzeyi değiştirilemedi: {error}', {
+                error: result.error || 'audio_session_not_found'
+            }));
+        }
+    },
+
+    async restoreInstantVoiceTranslationSourceAudioSessionVolume() {
+        const restore = this.instantVoiceTranslationSourceAudioSessionRestore;
+        this.instantVoiceTranslationSourceAudioSessionRestore = null;
+        if (!restore || typeof window.api?.setInstantVoiceTranslationAudioSessionVolume !== 'function') {
+            return;
+        }
+        await window.api.setInstantVoiceTranslationAudioSessionVolume({
+            targetProcessId: restore.targetProcessId,
+            targetWindowTitle: restore.targetWindowTitle,
+            targetProcessName: restore.targetProcessName,
+            targetWindowSourceId: restore.targetWindowSourceId,
+            volume: restore.volume
+        }).catch(() => {});
+    },
+
+    getInstantVoiceTranslationTargetLanguageLabel() {
+        const select = document.getElementById('instant-voice-translation-target-language');
+        return select?.selectedOptions?.[0]?.textContent?.trim() || select?.value || '';
+    },
+
+    appendInstantVoiceTranslationTranscriptEntry(payload = {}) {
+        const translatedText = String(payload.translatedText || '').trim();
+        if (!translatedText) return;
+        const transcript = String(payload.transcript || this.instantVoiceTranslationLatestSourceText || '').trim();
+        const previous = this.instantVoiceTranslationTranscriptEntries[this.instantVoiceTranslationTranscriptEntries.length - 1];
+        if (
+            previous
+            && this.normalizeInstantVoiceTranslationSpeechText(previous.translatedText) === this.normalizeInstantVoiceTranslationSpeechText(translatedText)
+            && this.normalizeInstantVoiceTranslationSpeechText(previous.transcript) === this.normalizeInstantVoiceTranslationSpeechText(transcript)
+        ) {
+            return;
+        }
+        this.instantVoiceTranslationTranscriptEntries.push({
+            time: new Date().toISOString(),
+            transcript,
+            translatedText
+        });
+        this.renderInstantVoiceTranslationState();
+    },
+
+    appendInstantVoiceTranslationAudioEntry(payload = {}) {
+        const audioBase64 = String(payload.audioBase64 || '').trim();
+        if (!audioBase64 || this.shouldSuppressInstantVoiceTranslationAudio(payload)) return;
+        const previous = this.instantVoiceTranslationAudioEntries[this.instantVoiceTranslationAudioEntries.length - 1];
+        if (previous?.audioBase64 === audioBase64) return;
+        this.instantVoiceTranslationAudioEntries.push({
+            time: new Date().toISOString(),
+            offsetMs: this.instantVoiceTranslationTranscriptStartedAt
+                ? Math.max(0, Date.now() - new Date(this.instantVoiceTranslationTranscriptStartedAt).getTime())
+                : 0,
+            mimeType: String(payload.mimeType || 'audio/pcm;rate=24000'),
+            audioBase64
+        });
+        this.renderInstantVoiceTranslationState();
+    },
+
+    appendInstantVoiceTranslationSourceAudioEntry(payload = {}) {
+        const audioBase64 = String(payload.audioBase64 || '').trim();
+        if (!audioBase64) return;
+        const startedAt = this.instantVoiceTranslationTranscriptStartedAt
+            ? new Date(this.instantVoiceTranslationTranscriptStartedAt).getTime()
+            : 0;
+        const sampleRate = this.parseInstantVoiceTranslationSampleRate(payload.mimeType || 'audio/pcm;rate=48000');
+        const sampleCount = Math.floor(this.base64ToArrayBuffer(audioBase64).byteLength / 2);
+        const durationMs = sampleRate > 0 ? Math.round((sampleCount / sampleRate) * 1000) : 0;
+        const offsetMs = startedAt > 0
+            ? Math.max(0, Date.now() - startedAt - Math.max(0, durationMs))
+            : 0;
+        this.instantVoiceTranslationSourceAudioEntries.push({
+            time: new Date().toISOString(),
+            offsetMs,
+            durationMs,
+            mimeType: String(payload.mimeType || 'audio/pcm;rate=48000'),
+            audioBase64
+        });
+    },
+
+    getInstantVoiceTranslationAudioGain() {
+        const value = Number(document.getElementById('instant-voice-translation-translation-volume')?.value || 1);
+        return Number.isFinite(value) ? Math.max(0.2, Math.min(3, value)) : 1;
+    },
+
+    buildInstantVoiceTranslationTranscriptText() {
+        const lines = [];
+        lines.push(this.t('dialog.instant_voice_translation.transcript_file_title', 'Anlık sesli çeviri dökümü'));
+        lines.push(this.t('dialog.instant_voice_translation.transcript_file_target_language', 'Hedef dil: {language}', {
+            language: this.getInstantVoiceTranslationTargetLanguageLabel() || '-'
+        }));
+        if (this.instantVoiceTranslationTranscriptStartedAt) {
+            lines.push(this.t('dialog.instant_voice_translation.transcript_file_started_at', 'Başlangıç: {time}', {
+                time: new Date(this.instantVoiceTranslationTranscriptStartedAt).toLocaleString()
+            }));
+        }
+        if (this.instantVoiceTranslationTranscriptStoppedAt) {
+            lines.push(this.t('dialog.instant_voice_translation.transcript_file_stopped_at', 'Bitiş: {time}', {
+                time: new Date(this.instantVoiceTranslationTranscriptStoppedAt).toLocaleString()
+            }));
+        }
+        lines.push('');
+        this.instantVoiceTranslationTranscriptEntries.forEach((entry, index) => {
+            lines.push(this.t('dialog.instant_voice_translation.transcript_file_entry_heading', 'Bölüm {number} - {time}', {
+                number: index + 1,
+                time: new Date(entry.time).toLocaleTimeString()
+            }));
+            if (entry.transcript) {
+                lines.push(this.t('dialog.instant_voice_translation.transcript_file_source_label', 'Duyulan metin:'));
+                lines.push(entry.transcript);
+            }
+            lines.push(this.t('dialog.instant_voice_translation.transcript_file_translation_label', 'Çeviri:'));
+            lines.push(entry.translatedText);
+            lines.push('');
+        });
+        return `${lines.join('\n').trim()}\n`;
+    },
+
+    getInstantVoiceTranslationTranscriptDefaultFilename() {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        return `${this.t('dialog.instant_voice_translation.transcript_default_filename', 'anlik-ceviri-dokumu')}-${stamp}.txt`;
+    },
+
+    async saveInstantVoiceTranslationTranscript() {
+        if (!this.instantVoiceTranslationTranscriptEntries.length) {
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.save_transcript_empty', 'Kaydedilecek çeviri metni yok.'));
+            return;
+        }
+        const saveResult = await window.api.showSaveDialog({
+            title: this.t('dialog.instant_voice_translation.save_transcript_dialog_title', 'Çeviri dökümünü kaydet'),
+            defaultPath: this.getInstantVoiceTranslationTranscriptDefaultFilename(),
+            filters: [
+                { name: this.t('dialog.instant_voice_translation.save_transcript_filter_text', 'Metin dosyası'), extensions: ['txt'] }
+            ]
+        });
+        if (saveResult?.canceled || !saveResult?.filePath) {
+            return;
+        }
+        const result = await window.api.saveFileContent({
+            filePath: saveResult.filePath,
+            content: this.buildInstantVoiceTranslationTranscriptText()
+        });
+        if (!result?.success) {
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.save_transcript_failed', 'Çeviri dökümü kaydedilemedi: {error}', {
+                error: result?.error || 'unknown_error'
+            }));
+            return;
+        }
+        this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.save_transcript_success', 'Çeviri dökümü kaydedildi: {path}', {
+            path: saveResult.filePath
+        }));
+    },
+
+    getInstantVoiceTranslationAudioDefaultFilename() {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        return `${this.t('dialog.instant_voice_translation.translation_audio_default_filename', 'anlik-ceviri-sesi')}-${stamp}.mp3`;
+    },
+
+    async saveInstantVoiceTranslationAudio() {
+        if (!this.instantVoiceTranslationAudioEntries.length) {
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.save_translation_audio_empty', 'Kaydedilecek çeviri sesi yok.'));
+            return;
+        }
+        const saveResult = await window.api.showSaveDialog({
+            title: this.t('dialog.instant_voice_translation.save_translation_audio_dialog_title', 'Çeviri sesini kaydet'),
+            defaultPath: this.getInstantVoiceTranslationAudioDefaultFilename(),
+            filters: [
+                { name: this.t('dialog.instant_voice_translation.save_translation_audio_filter_mp3', 'MP3 ses dosyası'), extensions: ['mp3'] }
+            ]
+        });
+        if (saveResult?.canceled || !saveResult?.filePath) {
+            return;
+        }
+        const result = await window.api.saveInstantVoiceTranslationAudio?.({
+            filePath: saveResult.filePath,
+            entries: this.instantVoiceTranslationAudioEntries,
+            sourceEntries: this.instantVoiceTranslationSourceAudioEntries,
+            mode: document.getElementById('instant-voice-translation-audio-export-mode')?.value || 'translation-foreground'
+        });
+        if (!result?.success) {
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.save_translation_audio_failed', 'Çeviri sesi kaydedilemedi: {error}', {
+                error: result?.error || 'unknown_error'
+            }));
+            return;
+        }
+        this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.save_translation_audio_success', 'Çeviri sesi kaydedildi: {path}', {
+            path: result.outputPath || saveResult.filePath
+        }));
+    },
+
+    async ensureInstantVoiceTranslationOutputContext(outputDeviceId = 'default') {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) {
+            throw new Error('audio_context_unavailable');
+        }
+        const requestedSinkId = outputDeviceId && outputDeviceId !== 'default' ? outputDeviceId : 'default';
+        if (this.instantVoiceTranslationOutputContext && this.instantVoiceTranslationOutputSinkId && this.instantVoiceTranslationOutputSinkId !== requestedSinkId) {
+            try { await this.instantVoiceTranslationOutputContext.close(); } catch (_error) {}
+            if (this.instantVoiceTranslationOutputElement) {
+                this.instantVoiceTranslationOutputElement.pause();
+                this.instantVoiceTranslationOutputElement.srcObject = null;
+            }
+            this.instantVoiceTranslationOutputContext = null;
+            this.instantVoiceTranslationOutputDestination = null;
+            this.instantVoiceTranslationOutputElement = null;
+            this.instantVoiceTranslationOutputSinkId = '';
+        }
+        if (!this.instantVoiceTranslationOutputContext || this.instantVoiceTranslationOutputContext.state === 'closed') {
+            this.instantVoiceTranslationOutputContext = new AudioContextClass();
+            this.instantVoiceTranslationOutputDestination = null;
+            this.instantVoiceTranslationOutputElement = null;
+            this.instantVoiceTranslationOutputSinkId = requestedSinkId;
+            this.instantVoiceTranslationNextPlayTime = 0;
+        }
+        const audioContext = this.instantVoiceTranslationOutputContext;
+        await audioContext.resume().catch(() => {});
+        if (outputDeviceId && outputDeviceId !== 'default') {
+            if (!this.instantVoiceTranslationOutputDestination) {
+                this.instantVoiceTranslationOutputDestination = audioContext.createMediaStreamDestination();
+            }
+            if (!this.instantVoiceTranslationOutputElement || this.instantVoiceTranslationOutputSinkId !== outputDeviceId) {
+                if (this.instantVoiceTranslationOutputElement) {
+                    this.instantVoiceTranslationOutputElement.pause();
+                    this.instantVoiceTranslationOutputElement.srcObject = null;
+                }
+                this.instantVoiceTranslationOutputElement = new Audio();
+                this.instantVoiceTranslationOutputElement.srcObject = this.instantVoiceTranslationOutputDestination.stream;
+                if (typeof this.instantVoiceTranslationOutputElement.setSinkId === 'function') {
+                    await this.instantVoiceTranslationOutputElement.setSinkId(outputDeviceId);
+                }
+                await this.instantVoiceTranslationOutputElement.play().catch(() => {});
+                this.instantVoiceTranslationOutputSinkId = outputDeviceId;
+            }
+        } else {
+            this.instantVoiceTranslationOutputSinkId = 'default';
+        }
+        return audioContext;
+    },
+
+    async playInstantVoiceTranslationPcmAudio(payload = {}, { gainValue = 1, startDelaySeconds = 0, queueName = 'translation', allowSuppressed = false } = {}) {
+        const audioBase64 = String(payload.audioBase64 || '').trim();
+        if (!audioBase64) return;
+        if (!allowSuppressed && this.shouldSuppressInstantVoiceTranslationAudio(payload)) return;
+        const sampleRate = this.parseInstantVoiceTranslationSampleRate(payload.mimeType);
+        const pcm = new Int16Array(this.base64ToArrayBuffer(audioBase64));
+        if (!pcm.length) return;
+        const outputDeviceId = document.getElementById('instant-voice-translation-output-device')?.value || 'default';
+        const audioContext = await this.ensureInstantVoiceTranslationOutputContext(outputDeviceId);
+        const audioBuffer = audioContext.createBuffer(1, pcm.length, sampleRate);
+        const channel = audioBuffer.getChannelData(0);
+        for (let index = 0; index < pcm.length; index += 1) {
+            channel[index] = Math.max(-1, Math.min(1, pcm[index] / 32768));
+        }
+        const source = audioContext.createBufferSource();
+        const gainNode = audioContext.createGain();
+        gainNode.gain.value = Math.max(0, Math.min(3, Number(gainValue) || 1));
+        source.buffer = audioBuffer;
+        source.connect(gainNode);
+        if (outputDeviceId && outputDeviceId !== 'default' && this.instantVoiceTranslationOutputDestination) {
+            gainNode.connect(this.instantVoiceTranslationOutputDestination);
+        } else {
+            gainNode.connect(audioContext.destination);
+        }
+        const currentNextPlayTime = queueName === 'original-underlay'
+            ? this.instantVoiceTranslationOriginalUnderlayNextPlayTime
+            : this.instantVoiceTranslationNextPlayTime;
+        const startAt = Math.max(
+            audioContext.currentTime + 0.02 + Math.max(0, Number(startDelaySeconds) || 0),
+            Number(currentNextPlayTime || 0)
+        );
+        if (queueName === 'original-underlay') {
+            this.instantVoiceTranslationOriginalUnderlayNextPlayTime = startAt + audioBuffer.duration;
+            const now = audioContext.currentTime;
+            this.instantVoiceTranslationOriginalUnderlayPendingNodes = this.instantVoiceTranslationOriginalUnderlayPendingNodes
+                .filter((item) => item.endAt > now);
+            this.instantVoiceTranslationOriginalUnderlayPendingNodes.push({
+                gainNode,
+                startAt,
+                endAt: startAt + audioBuffer.duration
+            });
+        } else {
+            this.instantVoiceTranslationNextPlayTime = startAt + audioBuffer.duration;
+        }
+        source.start(startAt);
+    },
+
+    async playInstantVoiceTranslationAudio(payload = {}, options = {}) {
+        return this.playInstantVoiceTranslationPcmAudio(payload, {
+            gainValue: this.getInstantVoiceTranslationAudioGain(),
+            ...options
+        });
+    },
+
+    async playInstantVoiceTranslationOriginalUnderlayAudio(payload = {}) {
+        if (!this.isInstantVoiceTranslationOriginalUnderlayEnabled()) return;
+        const passthroughActive = Date.now() < Number(this.instantVoiceTranslationOriginalPassthroughUntil || 0);
+        return this.playInstantVoiceTranslationPcmAudio(payload, {
+            gainValue: passthroughActive ? 1 : this.getInstantVoiceTranslationOriginalUnderlayGain(),
+            startDelaySeconds: passthroughActive ? 0 : 1.2,
+            queueName: 'original-underlay',
+            allowSuppressed: true
+        });
+    },
+
+    raiseInstantVoiceTranslationPendingOriginalUnderlayToFullVolume() {
+        if (!this.isInstantVoiceTranslationConversationModeEnabled()) return;
+        this.instantVoiceTranslationOriginalPassthroughUntil = Date.now() + 3500;
+        const audioContext = this.instantVoiceTranslationOutputContext;
+        if (!audioContext) return;
+        const now = audioContext.currentTime;
+        this.instantVoiceTranslationOriginalUnderlayPendingNodes = this.instantVoiceTranslationOriginalUnderlayPendingNodes
+            .filter((item) => item.endAt > now);
+        this.instantVoiceTranslationOriginalUnderlayPendingNodes.forEach((item) => {
+            try {
+                item.gainNode.gain.cancelScheduledValues(now);
+                item.gainNode.gain.setValueAtTime(1, now);
+            } catch (_error) {}
+        });
+    },
+
+    async startInstantVoiceTranslation() {
+        if (this.instantVoiceTranslationRunning) return;
+        const targetLanguage = document.getElementById('instant-voice-translation-target-language')?.value || 'tr';
+        const captureMode = document.getElementById('instant-voice-translation-source')?.value || 'native-microphone';
+        const microphoneDeviceId = document.getElementById('instant-voice-translation-microphone-device')?.value || 'default';
+        const windowSelect = document.getElementById('instant-voice-translation-window');
+        const selectedWindowPid = Number(windowSelect?.value || 0);
+        const selectedWindowOption = windowSelect?.selectedOptions?.[0] || null;
+        const selectedWindowTitle = String(selectedWindowOption?.dataset?.windowTitle || selectedWindowOption?.textContent || '').trim();
+        const selectedWindowProcessName = String(selectedWindowOption?.dataset?.processName || '').trim();
+        const selectedWindowSourceId = String(selectedWindowOption?.dataset?.sourceId || '').trim();
+        if (captureMode === 'native-window-audio' && !selectedWindowTitle) {
+            throw new Error(this.t('dialog.instant_voice_translation.window_required', 'Önce dinlenecek pencere veya uygulamayı seçin.'));
+        }
+        this.instantVoiceTranslationDiagnostics = [];
+        this.instantVoiceTranslationTranscriptEntries = [];
+        this.instantVoiceTranslationAudioEntries = [];
+        this.instantVoiceTranslationSourceAudioEntries = [];
+        this.instantVoiceTranslationOriginalUnderlayPendingNodes = [];
+        this.instantVoiceTranslationOriginalPassthroughUntil = 0;
+        this.instantVoiceTranslationSuppressNextTranslatedAudio = false;
+        this.instantVoiceTranslationLastTextOnlyAnnouncement = '';
+        this.resetInstantVoiceTranslationTextOnlyAnnouncementBuffer();
+        this.instantVoiceTranslationTranscriptStartedAt = new Date().toISOString();
+        this.instantVoiceTranslationTranscriptStoppedAt = null;
+        this.instantVoiceTranslationLatestSourceText = '';
+        this.instantVoiceTranslationSentChunkCount = 0;
+        this.instantVoiceTranslationReceivedAudioCount = 0;
+        this.instantVoiceTranslationQueuedChunkCount = 0;
+        this.instantVoiceTranslationNextPlayTime = 0;
+        this.instantVoiceTranslationOriginalUnderlayNextPlayTime = 0;
+        this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_start_clicked', 'Başlat düğmesi alındı. Hedef dil: {lang}', {
+            lang: targetLanguage
+        }), { targetLanguage, captureMode });
+        this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.starting', 'Canlı dinleme başlatılıyor...'));
+        this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_capture_request', 'Ses yakalama hazırlanıyor.'));
+        const startResult = await window.api.geminiLiveTranslateStart({
+            sourceLanguage: 'auto',
+            targetLanguage,
+            captureMode,
+            microphoneDeviceId: captureMode === 'native-microphone' && microphoneDeviceId !== 'default' ? microphoneDeviceId : undefined,
+            targetProcessId: captureMode === 'native-window-audio' ? selectedWindowPid : undefined,
+            targetWindowTitle: captureMode === 'native-window-audio' ? selectedWindowTitle : undefined,
+            targetProcessName: captureMode === 'native-window-audio' ? selectedWindowProcessName : undefined,
+            targetWindowSourceId: captureMode === 'native-window-audio' ? selectedWindowSourceId : undefined
+        });
+        if (!startResult?.success) {
+            throw new Error(startResult?.error || 'gemini_live_translate_start_failed');
+        }
+        const sourceVolumeResult = captureMode === 'native-window-audio'
+            ? await this.applyInstantVoiceTranslationSourceAudioSessionVolume(
+                selectedWindowPid,
+                selectedWindowTitle,
+                selectedWindowProcessName,
+                selectedWindowSourceId
+            ).catch((error) => ({
+                success: false,
+                error: error?.message || String(error)
+            }))
+            : null;
+        this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_gemini_started', 'Gemini Live bağlantısı başlatıldı.'));
+        this.instantVoiceTranslationRunning = true;
+        this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_recorder_started', 'Mikrofon kaydedici başladı. Biçim: {mime}', {
+            mime: 'native-wasapi'
+        }), { mimeType: 'native-wasapi' });
+        this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_capture_running', 'Ses yakalama ve gönderim başladı.'));
+        this.renderInstantVoiceTranslationState();
+        this.setInstantVoiceTranslationStatus(this.isInstantVoiceTranslationTextOnlyModeEnabled()
+            ? this.t('dialog.instant_voice_translation.running_text_only', 'Canlı dinleme sürüyor. Çeviri metni hazır oldukça ekran okuyucuya duyurulacak.')
+            : this.t('dialog.instant_voice_translation.running', 'Canlı dinleme sürüyor. Çeviri sesi hazır oldukça duyulacak.'));
+        if (sourceVolumeResult && !sourceVolumeResult.success) {
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.source_volume_failed', 'Dinlenen uygulamanın ses düzeyi değiştirilemedi: {error}', {
+                error: sourceVolumeResult.error || 'audio_session_not_found'
+            }));
+        }
+    },
+
+    async stopInstantVoiceTranslation() {
+        if (!this.instantVoiceTranslationRunning && !this.instantVoiceTranslationStream && !this.instantVoiceTranslationAudioContext && !this.instantVoiceTranslationRecorder) {
+            this.renderInstantVoiceTranslationState();
+            return;
+        }
+        this.instantVoiceTranslationRunning = false;
+        this.instantVoiceTranslationTranscriptStoppedAt = new Date().toISOString();
+        this.flushInstantVoiceTranslationTextOnlyAnnouncement({ force: true });
+        this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_stop_requested', 'Durdurma istendi.'));
+        await this.restoreInstantVoiceTranslationSourceAudioSessionVolume();
+        try {
+            if (this.instantVoiceTranslationRecorder && this.instantVoiceTranslationRecorder.state !== 'inactive') {
+                this.instantVoiceTranslationRecorder.stop();
+            }
+        } catch (_error) {}
+        this.instantVoiceTranslationRecorder = null;
+        try {
+            this.instantVoiceTranslationProcessor?.disconnect();
+            this.instantVoiceTranslationSourceNode?.disconnect();
+            this.instantVoiceTranslationSilentGain?.disconnect();
+        } catch (_error) {}
+        this.instantVoiceTranslationProcessor = null;
+        this.instantVoiceTranslationSourceNode = null;
+        this.instantVoiceTranslationSilentGain = null;
+        if (this.instantVoiceTranslationAudioSendTimer) {
+            clearInterval(this.instantVoiceTranslationAudioSendTimer);
+            this.instantVoiceTranslationAudioSendTimer = null;
+        }
+        this.instantVoiceTranslationPendingAudioChunks = [];
+        try {
+            this.instantVoiceTranslationStream?.getTracks?.().forEach((track) => track.stop());
+        } catch (_error) {}
+        this.instantVoiceTranslationStream = null;
+        try {
+            await this.instantVoiceTranslationAudioContext?.close?.();
+        } catch (_error) {}
+        this.instantVoiceTranslationAudioContext = null;
+        try {
+            await this.instantVoiceTranslationDecodeContext?.close?.();
+        } catch (_error) {}
+        this.instantVoiceTranslationDecodeContext = null;
+        try {
+            await this.instantVoiceTranslationOutputContext?.close?.();
+        } catch (_error) {}
+        this.instantVoiceTranslationOutputContext = null;
+        this.instantVoiceTranslationNextPlayTime = 0;
+        this.instantVoiceTranslationOriginalUnderlayNextPlayTime = 0;
+        await window.api.geminiLiveTranslateStop().catch(() => {});
+        this.renderInstantVoiceTranslationState();
+        this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.stopped', 'Canlı dinleme durduruldu.'));
+    },
+
+    handleInstantVoiceTranslationGeminiEvent(payload = {}) {
+        if (!this.instantVoiceTranslationDialog?.open) return;
+        const type = String(payload.type || '');
+        if (type === 'ready') {
+            this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_event_ready', 'Gemini hazır olayı geldi.'));
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.connected', 'Gemini bağlantısı hazır.'));
+            return;
+        }
+        if (type === 'connection-refreshing') {
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.connection_refreshing', 'Gemini bağlantısı süre sınırı nedeniyle yenileniyor. Çeviri birkaç saniye içinde devam edecek.'));
+            return;
+        }
+        if (type === 'connection-refreshed') {
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.connection_refreshed', 'Gemini bağlantısı yenilendi. Canlı çeviri devam ediyor.'));
+            return;
+        }
+        if (type === 'connection-refresh-failed') {
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.connection_refresh_failed', 'Gemini bağlantısı yenilenemedi. Çeviri açık kalacak ve kısa süre sonra yeniden denenecek: {error}', {
+                error: payload.error || 'unknown_error'
+            }));
+            return;
+        }
+        if (type === 'error') {
+            const errorText = String(payload.error || 'unknown_error');
+            if (!this.instantVoiceTranslationRunning || errorText.includes('gemini_live_translate_socket_closed:1000')) {
+                return;
+            }
+            this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_event_error', 'Gemini hata olayı geldi: {error}', {
+                error: errorText
+            }), { error: errorText });
+            this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.error', 'Canlı çeviri hatası: {error}', {
+                error: errorText
+            }));
+            return;
+        }
+        if (type === 'diagnostic') {
+            this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_native_microphone_event', 'Native mikrofon olayı: {message}', {
+                message: payload.message || 'event'
+            }), payload);
+            return;
+        }
+        if (type === 'source-audio' && this.instantVoiceTranslationRunning) {
+            this.appendInstantVoiceTranslationSourceAudioEntry(payload);
+            this.playInstantVoiceTranslationOriginalUnderlayAudio(payload).catch(() => {});
+            return;
+        }
+        if (payload.transcript) {
+            this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_transcript', 'Duyulan metin geldi.'));
+            const sourceText = document.getElementById('instant-voice-translation-source-text');
+            this.instantVoiceTranslationLatestSourceText = String(payload.transcript || '');
+            if (sourceText) sourceText.value = payload.transcript;
+        }
+        if (payload.translatedText) {
+            this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_translation', 'Çeviri metni geldi.'));
+            const translatedText = document.getElementById('instant-voice-translation-translated-text');
+            if (this.isInstantVoiceTranslationTextOnlyModeEnabled()) {
+                this.updateInstantVoiceTranslationTextOnlyDisplay(translatedText, payload.translatedText);
+            } else if (translatedText) {
+                translatedText.value = payload.translatedText;
+            }
+            this.queueInstantVoiceTranslationTextOnlyAnnouncement(payload.translatedText);
+            if (this.isInstantVoiceTranslationConversationModeEnabled() && this.shouldSuppressInstantVoiceTranslationAudio(payload)) {
+                this.instantVoiceTranslationSuppressNextTranslatedAudio = true;
+                this.raiseInstantVoiceTranslationPendingOriginalUnderlayToFullVolume();
+            } else {
+                this.instantVoiceTranslationSuppressNextTranslatedAudio = false;
+            }
+            this.appendInstantVoiceTranslationTranscriptEntry(payload);
+        }
+        if (type === 'audio' && this.instantVoiceTranslationRunning) {
+            this.instantVoiceTranslationReceivedAudioCount += 1;
+            if (this.isInstantVoiceTranslationTextOnlyModeEnabled()) {
+                return;
+            }
+            if (this.instantVoiceTranslationSuppressNextTranslatedAudio || this.shouldSuppressInstantVoiceTranslationAudio(payload)) {
+                this.instantVoiceTranslationSuppressNextTranslatedAudio = false;
+                return;
+            }
+            this.appendInstantVoiceTranslationAudioEntry(payload);
+            this.addInstantVoiceTranslationDiagnostic(this.t('dialog.instant_voice_translation.diagnostic_audio_received', 'Çeviri sesi geldi: {count}', {
+                count: this.instantVoiceTranslationReceivedAudioCount
+            }), { count: this.instantVoiceTranslationReceivedAudioCount });
+            this.playInstantVoiceTranslationAudio(payload).catch((error) => {
+                this.setInstantVoiceTranslationStatus(this.t('dialog.instant_voice_translation.audio_failed', 'Çeviri sesi çalınamadı: {error}', {
+                    error: error?.message || error || 'unknown_error'
+                }));
+            });
+        }
+    },
+
+    /**
      * Gemini API anahtarı girme diyaloğunu göster
      */
     async showGeminiApiKeyDialog() {
@@ -3904,6 +5560,60 @@ const Dialogs = {
         this.geminiApiKeyDialog.showModal();
 
         // Küçük bir gecikme ile odaklan ve içeriği seç
+        setTimeout(() => {
+            input.focus();
+            input.select();
+        }, 100);
+    },
+
+    /**
+     * OpenAI API anahtarı girme diyaloğunu göster
+     */
+    async showOpenAiApiKeyDialog() {
+        const input = document.getElementById('openai-api-key-input');
+        const showCheckbox = document.getElementById('openai-api-key-show');
+        const apiData = await window.api.getOpenAiApiData();
+
+        input.type = 'password';
+        if (showCheckbox) showCheckbox.checked = false;
+
+        if (apiData.apiKey) {
+            input.value = apiData.apiKey;
+            Accessibility.announce(this.t('runtime.dialogs.openai_api_key_dialog_opened_existing', 'OpenAI API anahtarı diyaloğu açıldı. Kayıtlı bir anahtar bulundu.'));
+        } else {
+            input.value = '';
+            Accessibility.announce(this.t('runtime.dialogs.openai_api_key_dialog_opened_empty', 'OpenAI API anahtarı diyaloğu açıldı. Lütfen anahtarınızı yapıştırın.'));
+        }
+
+        this.openAiApiKeyDialog.showModal();
+
+        setTimeout(() => {
+            input.focus();
+            input.select();
+        }, 100);
+    },
+
+    /**
+     * ElevenLabs API anahtarı girme diyaloğunu göster
+     */
+    async showElevenLabsApiKeyDialog() {
+        const input = document.getElementById('elevenlabs-api-key-input');
+        const showCheckbox = document.getElementById('elevenlabs-api-key-show');
+        const apiData = await window.api.getElevenLabsApiData();
+
+        input.type = 'password';
+        if (showCheckbox) showCheckbox.checked = false;
+
+        if (apiData.apiKey) {
+            input.value = apiData.apiKey;
+            Accessibility.announce(this.t('runtime.dialogs.elevenlabs_api_key_dialog_opened_existing', 'ElevenLabs API anahtarı diyaloğu açıldı. Kayıtlı bir anahtar bulundu.'));
+        } else {
+            input.value = '';
+            Accessibility.announce(this.t('runtime.dialogs.elevenlabs_api_key_dialog_opened_empty', 'ElevenLabs API anahtarı diyaloğu açıldı. Lütfen anahtarınızı yapıştırın.'));
+        }
+
+        this.elevenLabsApiKeyDialog.showModal();
+
         setTimeout(() => {
             input.focus();
             input.select();
@@ -6411,28 +8121,40 @@ const Dialogs = {
         const actionCancel = document.getElementById('sub-action-cancel');
         const styleDialog = this.subtitleStyleDialog;
         const styleTextColor = document.getElementById('subtitle-style-text-color-select');
+        const layoutModeSelect = document.getElementById('subtitle-style-layout-mode');
         const backgroundModeSelect = document.getElementById('subtitle-style-background-mode');
         const styleBgColor = document.getElementById('subtitle-style-bg-color-select');
         const styleBgOpacity = document.getElementById('subtitle-style-bg-opacity');
         const styleBgOpacityVal = document.getElementById('subtitle-style-bg-opacity-val');
         const styleBgColorGroup = document.getElementById('subtitle-style-bg-color-group');
         const styleBgOpacityGroup = document.getElementById('subtitle-style-bg-opacity-group');
+        const styleTextColorGroup = styleTextColor?.closest('.form-group');
+        const backgroundModeGroup = backgroundModeSelect?.closest('.form-group');
         const styleSizeScale = document.getElementById('subtitle-style-size-scale');
         const styleSizeScaleVal = document.getElementById('subtitle-style-size-scale-val');
+        const styleSizeScaleGroup = styleSizeScale?.closest('.form-group');
         const styleAiReviewBtn = document.getElementById('subtitle-style-ai-review');
         const styleAiFeedback = document.getElementById('subtitle-style-ai-feedback');
         const styleConfirm = document.getElementById('subtitle-style-confirm');
         const styleCancel = document.getElementById('subtitle-style-cancel');
 
-        const syncBackgroundModeUi = () => {
+        const syncSubtitleStyleUi = () => {
+            const isClassic = (layoutModeSelect?.value || 'classic') === 'classic';
             const useBox = (backgroundModeSelect?.value || 'box') === 'box';
-            if (styleBgColor) styleBgColor.disabled = !useBox;
-            if (styleBgOpacity) styleBgOpacity.disabled = !useBox;
-            if (styleBgColorGroup) styleBgColorGroup.style.opacity = useBox ? '1' : '0.55';
-            if (styleBgOpacityGroup) styleBgOpacityGroup.style.opacity = useBox ? '1' : '0.55';
+            if (styleTextColor) styleTextColor.disabled = isClassic;
+            if (backgroundModeSelect) backgroundModeSelect.disabled = isClassic;
+            if (styleSizeScale) styleSizeScale.disabled = isClassic;
+            if (styleBgColor) styleBgColor.disabled = isClassic || !useBox;
+            if (styleBgOpacity) styleBgOpacity.disabled = isClassic || !useBox;
+            if (styleTextColorGroup) styleTextColorGroup.style.opacity = isClassic ? '0.55' : '1';
+            if (backgroundModeGroup) backgroundModeGroup.style.opacity = isClassic ? '0.55' : '1';
+            if (styleSizeScaleGroup) styleSizeScaleGroup.style.opacity = isClassic ? '0.55' : '1';
+            if (styleBgColorGroup) styleBgColorGroup.style.opacity = (!isClassic && useBox) ? '1' : '0.55';
+            if (styleBgOpacityGroup) styleBgOpacityGroup.style.opacity = (!isClassic && useBox) ? '1' : '0.55';
         };
 
         const getSubtitleStyleOptions = () => ({
+            layoutMode: layoutModeSelect?.value || 'classic',
             textColor: styleTextColor?.value || '#ffffff',
             backgroundMode: backgroundModeSelect?.value || 'box',
             backgroundColor: styleBgColor?.value || '#000000',
@@ -6468,7 +8190,8 @@ const Dialogs = {
         }
 
         if (styleDialog && !this.subtitleStyleDialogSetupDone) {
-            backgroundModeSelect?.addEventListener('change', syncBackgroundModeUi);
+            layoutModeSelect?.addEventListener('change', syncSubtitleStyleUi);
+            backgroundModeSelect?.addEventListener('change', syncSubtitleStyleUi);
             styleBgOpacity?.addEventListener('input', () => {
                 if (styleBgOpacityVal) styleBgOpacityVal.textContent = `%${styleBgOpacity.value}`;
             });
@@ -6494,10 +8217,14 @@ const Dialogs = {
                         return;
                     }
                     const currentStyleOptions = getSubtitleStyleOptions();
+                    const layoutModeLabel = currentStyleOptions.layoutMode === 'classic'
+                        ? this.t('dialog.subtitle_style.layout_mode_classic', 'Klasik ve Kararlı (1.0.3 benzeri)')
+                        : this.t('dialog.subtitle_style.layout_mode_custom', 'Özelleştirilebilir Yeni Düzen');
                     let prompt = this.t(
                         'dialog.subtitle_style.ai_review_prompt',
-                        'Sen erişilebilir video altyazıları konusunda uzman bir yardımcı asistansın. Şu altyazı ayarlarını kısaca değerlendir: yazı rengi {textColor}, arka plan rengi {backgroundColor}, arka plan opaklığı yüzde {backgroundOpacity}, yazı boyutu yüzde {sizeScale}. En fazla 3 kısa cümleyle okunabilirlik yorumu ver ve gerekirse küçük bir öneri söyle.',
+                        'Sen erişilebilir video altyazıları konusunda uzman bir yardımcı asistansın. Şu altyazı ayarlarını kısaca değerlendir: yerleşim biçimi {layoutMode}, yazı rengi {textColor}, arka plan rengi {backgroundColor}, arka plan opaklığı yüzde {backgroundOpacity}, yazı boyutu yüzde {sizeScale}. En fazla 3 kısa cümleyle okunabilirlik yorumu ver ve gerekirse küçük bir öneri söyle.',
                         {
+                            layoutMode: layoutModeLabel,
                             textColor: currentStyleOptions.textColor,
                             backgroundColor: currentStyleOptions.backgroundColor,
                             backgroundOpacity: currentStyleOptions.backgroundOpacity,
@@ -6606,6 +8333,7 @@ const Dialogs = {
 
         // --- TTS Options Dialog Listeners ---
         const dialog = this.subtitleTtsDialog;
+        const serviceSelect = document.getElementById('subtitle-tts-service');
         const voiceSelect = document.getElementById('subtitle-tts-voice');
         const speedInput = document.getElementById('subtitle-tts-speed');
         const volumeInput = document.getElementById('subtitle-tts-volume');
@@ -6631,10 +8359,16 @@ const Dialogs = {
         speedInput?.addEventListener('input', updateSpeed);
         volumeInput?.addEventListener('input', updateTtsVolume);
         originalVolumeInput?.addEventListener('input', updateOriginalVolume);
+        serviceSelect?.addEventListener('change', () => {
+            this.loadSubtitleTtsVoices({ force: true }).catch((error) => {
+                console.error('Subtitle TTS voices reload failed:', error);
+            });
+        });
 
         // Önizleme (Sadece ses)
         previewBtn?.addEventListener('click', async () => {
             const text = document.getElementById('subtitle-preview-text').textContent;
+            const service = serviceSelect ? serviceSelect.value : 'system';
             const voice = voiceSelect.value;
             const speed = parseFloat(speedInput.value) / 100;
             const volume = parseInt(volumeInput.value);
@@ -6646,6 +8380,7 @@ const Dialogs = {
                 // generateTts yerine previewTts kullanıyoruz
                 const result = await window.api.previewTts({
                     text: text,
+                    service: service,
                     voice: voice,
                     speed: speed,
                     volume: volume
@@ -6658,7 +8393,7 @@ const Dialogs = {
                     } else if (result.wavPath || result.audioPath) {
                         // Dosya yolu döndü
                         const path = result.wavPath || result.audioPath;
-                        const audio = new Audio(path);
+                        const audio = new Audio(`file:///${path.replace(/\\/g, '/')}`);
                         await audio.play();
                         Accessibility.announce(this.t('runtime.subtitle.preview_playing', 'Preview is playing'));
                     }
@@ -6678,12 +8413,14 @@ const Dialogs = {
         // Onay
         confirmBtn?.addEventListener('click', () => {
             if (this.subtitleTtsResolve) {
+                const serviceVal = serviceSelect ? serviceSelect.value : 'system';
                 const voiceVal = voiceSelect ? voiceSelect.value : '';
                 const speedVal = speedInput ? parseFloat(speedInput.value) / 100 : 1.0;
                 const volumeVal = volumeInput ? parseInt(volumeInput.value) : 100;
                 const origVolVal = originalVolumeInput ? (parseInt(originalVolumeInput.value) / 100) : 0.2; // Varsayılan 0.2
 
                 this.subtitleTtsResolve({
+                    service: serviceVal,
                     voice: voiceVal,
                     speed: speedVal,
                     volume: volumeVal,
@@ -6713,6 +8450,33 @@ const Dialogs = {
         });
     },
 
+    async loadSubtitleTtsVoices({ selectedVoice = '', force = false } = {}) {
+        const serviceSelect = document.getElementById('subtitle-tts-service');
+        const voiceSelect = document.getElementById('subtitle-tts-voice');
+        if (!voiceSelect) return;
+        if (!force && voiceSelect.options.length > 1) return;
+
+        const service = serviceSelect ? serviceSelect.value : 'system';
+        const result = await window.api.getTtsVoices({ service });
+        if (result.success) {
+            voiceSelect.innerHTML = `<option value="">${this.t('dialog.subtitle_tts.default_voice', 'Default')}</option>`;
+            (result.voices || []).forEach((voice) => {
+                const voiceId = typeof voice === 'string' ? voice : voice?.id;
+                const voiceName = typeof voice === 'string' ? voice : voice?.name;
+                if (!voiceId || !voiceName) return;
+                const opt = document.createElement('option');
+                opt.value = voiceId;
+                opt.textContent = voiceName;
+                voiceSelect.appendChild(opt);
+            });
+            if (selectedVoice && Array.from(voiceSelect.options).some((option) => option.value === selectedVoice)) {
+                voiceSelect.value = selectedVoice;
+            }
+            return;
+        }
+        voiceSelect.innerHTML = `<option value="">${this.t('dialog.subtitle_tts.voice_load_failed', 'Voices could not be loaded')}</option>`;
+    },
+
     /**
      * Altyazı TTS diyaloğunu göster
      */
@@ -6721,19 +8485,9 @@ const Dialogs = {
         window.i18nHelper?.translateDOM?.(this.subtitleTtsDialog);
 
         // Sesleri yükle
-        const voiceSelect = document.getElementById('subtitle-tts-voice');
-        if (voiceSelect && voiceSelect.options.length <= 1) {
-            const result = await window.api.getTtsVoices();
-            if (result.success) {
-                voiceSelect.innerHTML = `<option value="">${this.t('dialog.subtitle_tts.default_voice', 'Default')}</option>`;
-                result.voices.forEach(v => {
-                    const opt = document.createElement('option');
-                    opt.value = v;
-                    opt.textContent = v;
-                    voiceSelect.appendChild(opt);
-                });
-            }
-        }
+        const serviceSelect = document.getElementById('subtitle-tts-service');
+        if (serviceSelect) serviceSelect.value = serviceSelect.value || 'system';
+        await this.loadSubtitleTtsVoices({ force: true });
 
         this.subtitleTtsDialog.showModal();
         Accessibility.announce(this.t('runtime.subtitle.tts_dialog_opened', 'Speech settings opened. You can adjust the original video volume here.'));
@@ -6769,6 +8523,7 @@ const Dialogs = {
         window.i18nHelper?.translateDOM?.(this.subtitleStyleDialog);
 
         const resolvedStyleOptions = {
+            layoutMode: initialStyleOptions?.layoutMode || 'classic',
             textColor: initialStyleOptions?.textColor || '#FFFFFF',
             backgroundMode: initialStyleOptions?.backgroundMode || 'box',
             backgroundColor: initialStyleOptions?.backgroundColor || '#000000',
@@ -6777,6 +8532,7 @@ const Dialogs = {
         };
 
         const styleTextColor = document.getElementById('subtitle-style-text-color-select');
+        const layoutModeSelect = document.getElementById('subtitle-style-layout-mode');
         const backgroundModeSelect = document.getElementById('subtitle-style-background-mode');
         const styleBgColor = document.getElementById('subtitle-style-bg-color-select');
         const styleBgOpacity = document.getElementById('subtitle-style-bg-opacity');
@@ -6787,6 +8543,7 @@ const Dialogs = {
         const styleSizeScaleVal = document.getElementById('subtitle-style-size-scale-val');
         const styleAiFeedback = document.getElementById('subtitle-style-ai-feedback');
 
+        if (layoutModeSelect) layoutModeSelect.value = resolvedStyleOptions.layoutMode;
         if (styleTextColor) styleTextColor.value = resolvedStyleOptions.textColor.toUpperCase();
         if (backgroundModeSelect) backgroundModeSelect.value = resolvedStyleOptions.backgroundMode;
         if (styleBgColor) styleBgColor.value = resolvedStyleOptions.backgroundColor.toUpperCase();
@@ -6795,15 +8552,22 @@ const Dialogs = {
         if (styleSizeScale) styleSizeScale.value = String(resolvedStyleOptions.sizeScale);
         if (styleSizeScaleVal) styleSizeScaleVal.textContent = `%${resolvedStyleOptions.sizeScale}`;
         if (styleAiFeedback) styleAiFeedback.value = '';
-        const useBox = resolvedStyleOptions.backgroundMode === 'box';
-        if (styleBgColor) styleBgColor.disabled = !useBox;
-        if (styleBgOpacity) styleBgOpacity.disabled = !useBox;
-        if (styleBgColorGroup) styleBgColorGroup.style.opacity = useBox ? '1' : '0.55';
-        if (styleBgOpacityGroup) styleBgOpacityGroup.style.opacity = useBox ? '1' : '0.55';
+        const isClassic = (layoutModeSelect?.value || 'classic') === 'classic';
+        const useBox = (backgroundModeSelect?.value || 'box') === 'box';
+        if (styleTextColor) styleTextColor.disabled = isClassic;
+        if (backgroundModeSelect) backgroundModeSelect.disabled = isClassic;
+        if (styleSizeScale) styleSizeScale.disabled = isClassic;
+        if (styleBgColor) styleBgColor.disabled = isClassic || !useBox;
+        if (styleBgOpacity) styleBgOpacity.disabled = isClassic || !useBox;
+        if (styleTextColor?.closest('.form-group')) styleTextColor.closest('.form-group').style.opacity = isClassic ? '0.55' : '1';
+        if (backgroundModeSelect?.closest('.form-group')) backgroundModeSelect.closest('.form-group').style.opacity = isClassic ? '0.55' : '1';
+        if (styleSizeScale?.closest('.form-group')) styleSizeScale.closest('.form-group').style.opacity = isClassic ? '0.55' : '1';
+        if (styleBgColorGroup) styleBgColorGroup.style.opacity = (!isClassic && useBox) ? '1' : '0.55';
+        if (styleBgOpacityGroup) styleBgOpacityGroup.style.opacity = (!isClassic && useBox) ? '1' : '0.55';
 
         this.subtitleStyleDialog.showModal();
         Accessibility.announce(this.t('runtime.subtitle.style_dialog_opened', 'Altyazı görünüm ayarları açıldı.'));
-        styleTextColor?.focus();
+        layoutModeSelect?.focus();
 
         return new Promise((resolve) => {
             this.subtitleStyleResolve = resolve;
@@ -7167,6 +8931,265 @@ const Dialogs = {
                 <p>Birden fazla öğeyi aynı anda eklemek için:</p>
                 <p>Görsel veya ses eklerken "Hemen Uygula" yerine "Listeye Ekle" derseniz, öğeler bekleme kuyruğuna alınır. <strong>Ekle > Ekleme Listesi</strong> menüsünden tümünü tek seferde videoya işleyebilirsiniz. Bu, her işlem için ayrı ayrı beklemeyi önler.</p>
             `
+        },
+        {
+            id: 'broadcast-room-overview',
+            titleKey: 'help.broadcast_room_overview.title',
+            contentKey: 'help.broadcast_room_overview.content',
+            title: 'Yayın Odasına Giriş',
+            content: `
+                <h3>Yayın Odası Nedir?</h3>
+                <p>Yayın Odası; konukları davet etmek, sahne düzeni kurmak, kayıt almak, YouTube yayını başlatmak, ekran paylaşmak ve canlı efekt kullanmak için tasarlanmış erişilebilir bir canlı yayın çalışma alanıdır.</p>
+                <p>Buradaki mantık iki parçalıdır. Önce oda bağlantısını kurarsınız. Sonra bu bağlantının ekranda ve kayıtta nasıl görüneceğini sahne düzeni ile belirlersiniz.</p>
+                <ul>
+                    <li><strong>Oda ve cihazlar:</strong> Oda oluşturma, kalıcı odalar, kamera, mikrofon ve hoparlör seçimi.</li>
+                    <li><strong>Katılımcılar ve sohbet:</strong> Konuk listesi, söz isteme, özel mesaj ve herkese mesaj.</li>
+                    <li><strong>Paylaşım ve kaynaklar:</strong> Host ekran paylaşımı, konuk ekran paylaşımı ve yerel kaynak seçimi.</li>
+                    <li><strong>Sahne düzeni:</strong> Kim solda, kim sağda, ekran büyük mi, yüzler küçük mü gibi görünüm kararları.</li>
+                    <li><strong>Kayıt ve yayın:</strong> OBS hazırlığı, yerel kayıt, YouTube canlı yayın ve efekt katmanı.</li>
+                </ul>
+                <p><strong>Menü yolu:</strong> <strong>Kayıt &gt; Yayın Odası</strong>.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-interface',
+            titleKey: 'help.broadcast_room_interface.title',
+            contentKey: 'help.broadcast_room_interface.content',
+            title: 'Yayın Odası Arayüzü',
+            content: `
+                <h3>Arayüzü Nasıl Düşünmelisiniz?</h3>
+                <p>Yayın Odasının en üstünde <strong>Bölge Listesi</strong> bulunur. <strong>Alt+L</strong> ile bu listeye gidip ok tuşlarıyla bölgeler arasında dolaşabilir, <strong>Enter</strong> ile seçtiğiniz bölgenin ilk öğesine geçebilirsiniz.</p>
+                <p>Başlıca bölgeler şunlardır:</p>
+                <ul>
+                    <li><strong>Canlı Görüntü Önizlemesi:</strong> Host, konuklar ve varsa ekran paylaşımının büyük önizlemesi.</li>
+                    <li><strong>Oda ve Cihazlar:</strong> Oda oluşturma, kalıcı odalar ve cihaz seçimleri.</li>
+                    <li><strong>Katılımcılar ve Sohbet:</strong> Mesaj listesi, host mesaj alanı ve katılımcı listesi.</li>
+                    <li><strong>Paylaşım ve Kaynaklar:</strong> Host yerel paylaşımı ve yakalanacak kaynaklar.</li>
+                    <li><strong>Sahne Düzeni:</strong> Yan yana, paylaşım büyük, yüzler küçük gibi yerleşimler.</li>
+                    <li><strong>OBS, Kayıt, YouTube, Efekt:</strong> Yayın akışını fiilen başlatan ve yöneten bölümler.</li>
+                    <li><strong>Tanı ve Olay Geçmişi:</strong> Bağlantı, paylaşım, ses ve katılımcı olaylarını izlediğiniz alan.</li>
+                </ul>
+                <p><strong>Hızlı gezinim:</strong> <strong>Ctrl+Sağ</strong> ve <strong>Ctrl+Sol</strong> ile bölgeler arasında şerit menü gibi hızlı geçiş yapabilirsiniz.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-open-room',
+            titleKey: 'help.broadcast_room_open_room.title',
+            contentKey: 'help.broadcast_room_open_room.content',
+            title: 'Nasıl Oda Açılır?',
+            content: `
+                <h3>Geçici Oda Açma</h3>
+                <ol>
+                    <li>Yayın Odasını açın.</li>
+                    <li>Kamera, mikrofon ve hoparlör seçimlerinizi kontrol edin.</li>
+                    <li>İsterseniz host adını ve oda adını düzenleyin.</li>
+                    <li><strong>Oda Oluştur</strong> düğmesine basın.</li>
+                    <li>Oda kurulduğunda bağlantı panoya kopyalanır. Bunu konuğunuzla paylaşabilirsiniz.</li>
+                </ol>
+                <p>Geçici oda, o oturum için hızlı bir bağlantı oluşturur. Bir prova, tek seferlik görüşme veya anlık yayın hazırlığı için en pratik yoldur.</p>
+                <h3>Konuk Ne Yapar?</h3>
+                <p>Konuk bağlantıyı açar, görünen adını yazar, isterse kamera ve mikrofonunu açar ve <strong>Odaya Katıl</strong> ile bağlanır. Eğer oda kurallarında parola isteniyorsa, parola alanı da otomatik görünür.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-persistent-rooms',
+            titleKey: 'help.broadcast_room_persistent_rooms.title',
+            contentKey: 'help.broadcast_room_persistent_rooms.content',
+            title: 'Kalıcı Odalar ve Kurallar',
+            content: `
+                <h3>Kalıcı Oda Ne İşe Yarar?</h3>
+                <p>Aynı bağlantıyı tekrar tekrar kullanmak istiyorsanız kalıcı oda mantığı daha uygundur. Böylece her yayında yeni link göndermek zorunda kalmazsınız.</p>
+                <ol>
+                    <li><strong>Oda Yönetimi</strong> düğmesini açın.</li>
+                    <li>Oda adı, host adı ve isterseniz kalıcı oda bağlantı anahtarını belirleyin.</li>
+                    <li>Parola koruması istiyorsanız oda parolasını girin.</li>
+                    <li>Host varken veya host yokken parolanın zorunlu olup olmayacağını seçin.</li>
+                    <li>Host bağlı değilken konukların odaya girip giremeyeceğini belirleyin.</li>
+                    <li><strong>Bu ayarlarla oda oluştur</strong> düğmesine basın.</li>
+                </ol>
+                <p>Oda kurulduktan sonra <strong>Kalıcı Oda Listesi</strong> içinde görünür. Bu listede yukarı ve aşağı oklarla gezebilir, <strong>Enter</strong> ile odayı açabilir, <strong>Sağ ok</strong> ile bağlam menüsünü açabilirsiniz.</p>
+                <p>Kalıcı oda menüsünde bağlantı kopyalama, parola kuralı değiştirme, host yokken katılımı açıp kapatma ve oda düzenleme gibi işlemler bulunur.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-layouts',
+            titleKey: 'help.broadcast_room_layouts.title',
+            contentKey: 'help.broadcast_room_layouts.content',
+            title: 'Sahne Düzenleri',
+            content: `
+                <h3>Sahne Düzeni Nedir?</h3>
+                <p>Sahne düzeni, host ve konukların kayıtta veya canlı yayında nasıl görüneceğini belirler. Odaya bağlanmak ile sahneye yerleşmek aynı şey değildir. Kişiler önce bağlanır, ardından siz onları sahne mantığına göre yerleştirirsiniz.</p>
+                <p>Yaygın kullanım örnekleri şunlardır:</p>
+                <ul>
+                    <li><strong>Yan yana iki konuşmacı:</strong> Röportajlar ve eşit söz hakkı olan görüşmeler için uygundur.</li>
+                    <li><strong>Paylaşım büyük, yüzler küçük:</strong> Sunum, eğitim ve ekran anlatımı için uygundur.</li>
+                    <li><strong>Yüzler büyük, paylaşım küçük:</strong> Ekranın destekleyici olduğu ama konuşmacıların hâlâ ana unsur olduğu yayınlar için uygundur.</li>
+                    <li><strong>Tek kişi veya odaklı görünüm:</strong> Tek konuşmacılı akışlar için kullanılır.</li>
+                </ul>
+                <p>Konuk ekran paylaşımı başlatırsa sistem size hızlı sahne önerileri sunabilir; fakat düzeni otomatik olarak zorla değiştirmez. Son kararı host verir.</p>
+                <p><strong>İpucu:</strong> Düzen seçtikten sonra <strong>Yapay zekadan görüş al</strong> ile yüzlerin ve paylaşımın gerçekten doğru görünüp görünmediğini denetletebilirsiniz.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-recording',
+            titleKey: 'help.broadcast_room_recording.title',
+            contentKey: 'help.broadcast_room_recording.content',
+            title: 'Kayıt Nasıl Yapılır?',
+            content: `
+                <h3>Yerel Kayıt Akışı</h3>
+                <ol>
+                    <li>OBS bağlantısının ve gerekli kaynakların hazır olduğundan emin olun.</li>
+                    <li>Konuklar bağlandıysa sahne düzeninizi seçin.</li>
+                    <li>Gerekirse paylaşım ve efekt kontrollerini hazırlayın.</li>
+                    <li><strong>Kaydı Başlat</strong> düğmesine basın veya <strong>Alt+R</strong> kısayolunu kullanın.</li>
+                    <li>Kayıt sırasında sahne düzeni değiştirebilir, katılımcı yönetebilir ve gerekiyorsa paylaşım başlatabilirsiniz.</li>
+                    <li>İşiniz bitince aynı düğmeyle kaydı durdurun.</li>
+                </ol>
+                <p>Yeni mimaride kayıt için ayrı bir <strong>Yayın Çıkışı</strong> mantığı kullanılır. Böylece host arayüzündeki kontrol düğmeleri kayda karışmadan, siz yönetim yapmaya devam edebilirsiniz.</p>
+                <p><strong>Öneri:</strong> Özellikle yeni bir düzen veya efekt deniyorsanız önce kısa bir prova kaydı alın.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-youtube',
+            titleKey: 'help.broadcast_room_youtube.title',
+            contentKey: 'help.broadcast_room_youtube.content',
+            title: 'YouTube Canlı Yayın Süreci',
+            content: `
+                <h3>YouTube Yayınına Geçmeden Önce</h3>
+                <p>YouTube tarafı kayıtla benzer görünse de ek olarak hesap, yayın planı ve akış anahtarı mantığı içerir.</p>
+                <ol>
+                    <li>OBS ve yayın odası düzeninizi tamamlayın.</li>
+                    <li>YouTube hesabı bağlantınızı kontrol edin.</li>
+                    <li>Yeni yayın oluşturacaksanız başlık, açıklama ve görünürlük gibi ayarları gözden geçirin.</li>
+                    <li>Gerekirse mevcut bir yayın planını seçin.</li>
+                    <li><strong>Canlı Yayını Başlat</strong> düğmesine basın.</li>
+                    <li>Yayın başladıktan sonra katılımcı, paylaşım ve efekt işlemleri canlı olarak yönetilebilir.</li>
+                </ol>
+                <p><strong>İpucu:</strong> İlk yayından önce gizli ya da liste dışı bir YouTube testi yapmak, ses ve sahne doğrulaması için çok yararlıdır.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-effects',
+            titleKey: 'help.broadcast_room_effects.title',
+            contentKey: 'help.broadcast_room_effects.content',
+            title: 'Efekt Katmanı',
+            content: `
+                <h3>Efekt Katmanı Ne Zaman Kullanılır?</h3>
+                <p>Efekt katmanı; jingle, geçiş videosu, kısa ses efekti veya görselli efekt tetiklemek istediğiniz yayınlarda kullanılır. Özellikle canlı program açılışı, ara anonslar ve kapanışlarda çok faydalıdır.</p>
+                <ol>
+                    <li>Önceden bir efekt profili oluşturun ya da mevcut profili seçin.</li>
+                    <li>Slotlara ses, video ve gerekiyorsa görsel bağlayın.</li>
+                    <li>Yayın Odasında ilgili efekt profilini etkinleştirin.</li>
+                    <li>Yayında doğru anda slotu tetikleyin.</li>
+                </ol>
+                <p>Efekt katmanında oynayan içerik kayıt ve yayın akışına gider. Kullanım amacına göre başlangıç, ara ve bitiş efektlerini farklı slotlarda tutmak işinizi kolaylaştırır.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-screen-share',
+            titleKey: 'help.broadcast_room_screen_share.title',
+            contentKey: 'help.broadcast_room_screen_share.content',
+            title: 'Ekran Paylaşımı',
+            content: `
+                <h3>Host ve Konuk Paylaşımı</h3>
+                <p>Hem host hem konuk ekran paylaşabilir. Fakat paylaşımın ne zaman ve hangi kurallarla açılacağını host belirler.</p>
+                <h3>Host Paylaşımı</h3>
+                <ol>
+                    <li><strong>Alt+S</strong> ile paylaşım bölümünü açın.</li>
+                    <li>Kaynak olarak tüm ekran, pencere veya uygun yerel kaynağı seçin.</li>
+                    <li>Gerekirse sistem sesini de dahil edin.</li>
+                    <li>Paylaşım başladıktan sonra sahne düzeninde bunu büyük veya küçük alan olarak konumlandırın.</li>
+                </ol>
+                <h3>Konuk Paylaşımı</h3>
+                <p>Konuk paylaşım başlattığında tarayıcının kendi paylaşım penceresi açılır. Pencere, sekme veya tüm ekran seçimi oradan yapılır. Eğer tarayıcı ve işletim sistemi destekliyorsa paylaşım sesi de aynı akışta eklenir.</p>
+                <p>Paylaşım başladığında host tarafında anons gelir ve hızlı sahne önerileri görünür.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-participants',
+            titleKey: 'help.broadcast_room_participants.title',
+            contentKey: 'help.broadcast_room_participants.content',
+            title: 'Katılımcı Yönetimi ve Sohbet',
+            content: `
+                <h3>Katılımcı Listesi</h3>
+                <p><strong>Alt+U</strong> ile katılımcı listesine gidebilirsiniz. Liste içinde yukarı ve aşağı oklarla gezilir. <strong>Sağ ok</strong> seçili katılımcının menüsünü açar, <strong>Sol ok</strong> menüyü kapatır.</p>
+                <p>Katılımcı menüsünde şu işlemler bulunur:</p>
+                <ul>
+                    <li>Odadan çıkar</li>
+                    <li>Özel mesaj gönder</li>
+                    <li>Sesini aç veya kapat</li>
+                    <li>Videosunu aç veya kapat</li>
+                    <li>Kamera, mikrofon ve ekran paylaşım izinlerini açıp kapat</li>
+                    <li>Söz isteğini görüldü olarak işaretleme</li>
+                </ul>
+                <h3>Sohbet ve Söz İsteme</h3>
+                <p><strong>Alt+C</strong> ile sohbet alanına geçebilirsiniz. Host hem herkese mesaj gönderebilir hem de katılımcı menüsünden özel mesaj yazabilir. Konuk tarafında da herkese gönder ve yöneticiye gönder akışları bulunur.</p>
+                <p>Konuklar <strong>Söz İste</strong> ile taleplerini iletebilir. Bu istek host tarafında duyurulur ve ayrıca söz isteyenler alanında görünür.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-shortcuts',
+            titleKey: 'help.broadcast_room_shortcuts.title',
+            contentKey: 'help.broadcast_room_shortcuts.content',
+            title: 'Temel Kısayollar',
+            content: `
+                <h3>Host Kısayolları</h3>
+                <ul>
+                    <li><strong>Alt+A:</strong> Host mikrofonunu aç veya kapat.</li>
+                    <li><strong>Alt+V:</strong> Host videosunu aç veya kapat.</li>
+                    <li><strong>Alt+S:</strong> Paylaşım bölümünü aç; paylaşım aktifse durdur.</li>
+                    <li><strong>Alt+Y:</strong> Düzen seçimine git.</li>
+                    <li><strong>Alt+U:</strong> Katılımcı listesine git veya listeyi görünür hale getir.</li>
+                    <li><strong>Alt+C:</strong> Sohbet paneline git.</li>
+                    <li><strong>Alt+O:</strong> Oda Yönetimini aç veya kapat.</li>
+                    <li><strong>Alt+Q:</strong> Odayı kapat.</li>
+                    <li><strong>Alt+R:</strong> Kaydı başlat veya durdur.</li>
+                    <li><strong>Alt+L:</strong> Bölge Listesine git.</li>
+                </ul>
+                <h3>Konuk Web Kısayolları</h3>
+                <ul>
+                    <li><strong>Ctrl+D:</strong> Mikrofonu aç veya kapat.</li>
+                    <li><strong>Ctrl+E:</strong> Videoyu aç veya kapat.</li>
+                    <li><strong>Ctrl+Shift+E:</strong> Ekran paylaşımını başlat veya durdur.</li>
+                    <li><strong>Ctrl+Shift+H:</strong> Odadan ayrıl.</li>
+                </ul>
+                <p><strong>İpucu:</strong> Pek çok düğme odaklandığında kısayol bilgisini de okur; böylece akışı kullanırken kısayolları doğal olarak öğrenebilirsiniz.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-ai-review',
+            titleKey: 'help.broadcast_room_ai_review.title',
+            contentKey: 'help.broadcast_room_ai_review.content',
+            title: 'Yapay Zekadan Görüş Al',
+            content: `
+                <h3>AI Görüşü Ne İşe Yarar?</h3>
+                <p>Canlı Görüntü Önizlemesi içindeki <strong>Yapay zekadan görüş al</strong> düğmesi, mevcut gerçek kareyi analiz edip erişilebilir bir değerlendirme verir.</p>
+                <p>AI özellikle şu sorulara bakar:</p>
+                <ul>
+                    <li>Host ve seçili konuk yüzleri gerçekten görünüyor mu?</li>
+                    <li>Ekran paylaşımı varsa paylaşım ile yüzler seçilen düzene uygun mu?</li>
+                    <li>Yüzler çok küçük, kesilmiş veya yanlış yerde mi?</li>
+                    <li>Ekranda fazladan kontrol, siyah boşluk veya istenmeyen bir öğe var mı?</li>
+                </ul>
+                <p>Bu özellik özellikle total kör kullanıcılar için yayın öncesi son kontrol katmanı olarak düşünülmelidir. Düzeni seçin, gerekirse paylaşımı başlatın, sonra AI görüşünü alın.</p>
+            `
+        },
+        {
+            id: 'broadcast-room-troubleshooting',
+            titleKey: 'help.broadcast_room_troubleshooting.title',
+            contentKey: 'help.broadcast_room_troubleshooting.content',
+            title: 'Yayın Odası İçin Sorun Giderme',
+            content: `
+                <h3>En Sık Karşılaşılan Durumlar</h3>
+                <ul>
+                    <li><strong>Konuk bağlandı ama ses yok:</strong> Kamera ve mikrofon izinlerini, tarayıcı site izinlerini ve seçili cihazları kontrol edin.</li>
+                    <li><strong>Paylaşım görüntüsü yok:</strong> Konuğun gerçekten paylaşım başlatıp başlatmadığını ve tanı alanında paylaşım akışının bağlanıp bağlanmadığını kontrol edin.</li>
+                    <li><strong>Paylaşım sesi yok:</strong> Tarayıcının paylaşılan kaynak için ses sunup sunmadığına bakın. Bazı tarayıcılar yalnız belirli paylaşım türlerinde ses verir.</li>
+                    <li><strong>Kayıtta kontrol düğmeleri görünüyorsa:</strong> Temiz sahne ve yayın çıkışı akışının aktif olduğundan emin olun, kısa test kaydı alın.</li>
+                    <li><strong>Katılımcı listesi veya sohbet garip davranıyorsa:</strong> Odayı kapatmadan önce uygulamayı yeniden açıp hızlı bir prova yapın.</li>
+                </ul>
+                <p><strong>Tanı ve Olay Geçmişi</strong> alanı, özellikle paylaşım sesi, video akışı ve katılımcı olayları için ilk bakılacak yerdir.</p>
+            `
         }
     ],
 
@@ -7440,9 +9463,12 @@ const Dialogs = {
             if (displayShortcut) {
                 const isMac = navigator.userAgent.includes('Mac');
                 if (isMac) {
-                    displayShortcut = displayShortcut.replace(/Mod/g, 'Cmd').replace(/Alt/g, 'Option');
+                    displayShortcut = displayShortcut
+                        .replace(/Mod/g, 'Cmd')
+                        .replace(/Meta/g, 'Cmd')
+                        .replace(/Alt/g, 'Option');
                 } else {
-                    displayShortcut = displayShortcut.replace(/Mod/g, 'Ctrl');
+                    displayShortcut = displayShortcut.replace(/Mod/g, 'Ctrl').replace(/Meta/g, 'Ctrl');
                 }
             }
 

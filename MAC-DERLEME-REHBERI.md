@@ -3,6 +3,28 @@
 
 Bu rehber, uygulama geliştirme ortamını kurarak kendi bilgisayarınızda (özellikle Apple Silicon M1/M2/M3 işlemcili Mac'lerde) **yerel ve hatasız** bir sürüm üretmeniz için hazırlanmıştır.
 
+## Kritik Not: Türkçe Karakter ve İmza Hatası
+
+Mac paketlerinde imzalanan gerçek dosya ve bundle adları ASCII tutulmalıdır. Özellikle `ü` gibi karakterler macOS veya Electron paketleme sırasında farklı Unicode biçimlerine dönüşebilir; örneğin tek karakter `ü` yerine `u` + birleşen aksan işareti oluşabilir. Gözle aynı görünse bile kod imzası bu iki adı farklı kabul edebilir ve uygulama açılışta imza/geçersiz paket hatasıyla kapanabilir.
+
+Bu nedenle Mac build sırasında imzalanan dosya adı `Engelsiz Video Duzenleyicisi` olarak ayarlanır. Kullanıcıya görünen uygulama adı ve arayüz metinleri Türkçe kalabilir: `Engelsiz Video Düzenleyicisi`.
+
+Bu pakette bu ayar `package.json` içinde hazırdır. Ayrıca `build/prepare-mac-build-config.js` her Mac build öncesinde bu ayarı tekrar güvenceye alır.
+
+## Kritik Not: app.asar Bütünlük Hash'i
+
+Electron bazı paketlerde `Info.plist` içindeki `ElectronAsarIntegrity` alanıyla `Contents/Resources/app.asar` dosyasının SHA-256 hash'ini karşılaştırır. Bazı electron-builder akışlarında bu hash, `app.asar` son haline gelmeden önce yazılabildiği için uygulama açılışında güven doğrulaması sorunları yaşanabilir.
+
+Bu pakette `build/afterPackFixes.js` bu değeri imzalama aşamasından hemen önce yeniden hesaplar ve `Info.plist` içine doğru hash'i yazar. Bu nedenle build alırken aşağıdaki `npm run build:mac:dmg` komutunu kullanın; doğrudan `npx electron-builder ...` çalıştırırsanız hazırlık adımlarını atlayabilirsiniz.
+
+## Electron Sürümü Hakkında
+
+Kurtarma raporunda Electron sürümünün güncellendiği yazıyor; ancak kök neden Electron sürümü değildi. Bu kaynak paketinde Electron 28.3.3 korunmuştur. Önce mevcut sürümle derleyip doğrulama yapmanız önerilir; Electron yükseltmesi ayrı bir test konusu olarak ele alınmalıdır.
+
+## 4.7 Sonrası Görüntü/Renk Düzeltmeleri
+
+Bu kaynak pakete 4.7 sonrasında eklenen HDR/renk koruma düzeltmeleri de dahil edilmiştir. HDR/HLG/BT.2020 kaynak videolar altyazı, overlay, geçiş veya slideshow işlemlerinden geçerken SDR/BT.709'a doğru ton eşleme ile dönüştürülür. Böylece iPhone HDR videolarda görülebilen soluk/gri çıktı sorunu azaltılır.
+
 ⚠️ **KRİTİK UYARI:** Paylaşılan son hata raporu (Crash Report), uygulamanın **Intel (x86_64)** mimarisinde çalıştığını kanıtlamaktadır (`Code Type: X86-64 (Translated)`). Bu, arkadaşınızın **arm64** sürümünü kurduğunu düşünse bile, sistemin arka planda Intel sürümünü (veya Intel için derlenmiş dosyaları) kullandığını gösterir.
 
 Bunun en büyük sebebi **Terminal uygulamasının Rosetta (Intel) modunda çalışıyor olmasıdır.** Lütfen aşağıdaki adımları sırasıyla uygulayarak bu durumu düzelttiklerinden emin olun.
@@ -51,18 +73,19 @@ En güvenli ve sorunsuz yöntem, uygulamanın kendi bilgisayarınızın mimarisi
 Terminalde şu komutu çalıştırın:
 
 ```bash
-# Sadece mevcut sistem mimarisi için (Örn: M1/M2 Mac için arm64) derleme yapar
-npx electron-builder --mac --arm64
+# Hazırlık adımı + arm64 DMG build
+npm run build:mac:dmg
 ```
 
-Eğer Intel işlemcili bir Mac kullanıyorsanız:
-```bash
-npx electron-builder --mac --x64
-```
-
-Veya her iki sürümü de üretmek isterseniz (uzun sürebilir):
+Sadece `.app` klasörü üretmek ve DMG oluşturmamak isterseniz:
 ```bash
 npm run build:mac
+```
+
+Intel işlemcili bir Mac için ayrı test gerekiyorsa, hazırlık adımını çalıştırıp sonra x64 build alabilirsiniz:
+```bash
+npm run prepare:mac
+npx electron-builder --mac dir --x64
 ```
 
 ---
@@ -73,7 +96,7 @@ Derleme işlemi bittikten sonra:
 
 1.  Proje klasöründe `dist` adlı bir klasör oluşacaktır.
 2.  Bu klasörü açın (`open dist`).
-3.  İçerisinde **`Engelsiz Video Düzenleyicisi...arm64.dmg`** (veya benzeri) isimli dosyayı bulun.
+3.  İçerisinde **`Engelsiz Video Duzenleyicisi-4.7.0-arm64.dmg`** (veya benzeri) isimli dosyayı bulun.
     *   **DİKKAT:** Dosya isminde **arm64** yazdığından emin olun (Apple Silicon işlemciler için).
     *   Eğer **x64** yazan dosyayı kurarsanız uygulama yine çökecektir.
 4.  DMG dosyasını açıp uygulamayı kurun.
@@ -86,7 +109,7 @@ Kendi derlediğiniz uygulama imzalı olmadığı için açılırken hata verebil
 
 Eğer hala açılmıyorsa Terminal'de şu komutu uygulayın:
 ```bash
-xattr -cr /Applications/"Engelsiz Video Düzenleyicisi.app"
+xattr -cr /Applications/"Engelsiz Video Duzenleyicisi.app"
 ```
 
 Bu adımlarla çökme sorunu yaşamadan uygulamayı kullanabilirsiniz.

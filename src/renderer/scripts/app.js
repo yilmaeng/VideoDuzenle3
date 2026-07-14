@@ -258,7 +258,7 @@ const App = {
         return trimmedFolder ? `${trimmedFolder}${separator}${fileName}` : fileName;
     },
 
-    buildVerticalClipFromSelection() {
+    buildVerticalClipFromRange(selection, options = {}) {
         if (!VideoPlayer.hasVideo()) {
             return {
                 success: false,
@@ -266,14 +266,6 @@ const App = {
             };
         }
 
-        if (!Selection.hasSelection()) {
-            return {
-                success: false,
-                message: this.t('runtime.vertical.select_area_first', 'Önce dikey videoya dönüştürmek istediğiniz alanı seçin.')
-            };
-        }
-
-        const selection = Selection.getSelection();
         if (!selection || selection.end <= selection.start) {
             return {
                 success: false,
@@ -313,8 +305,13 @@ const App = {
             };
         }
 
-        const startTime = Timeline.timelineToSource(selection.start);
-        const endTime = Timeline.timelineToSource(selection.end);
+        const speed = segment.speed || 1;
+        const segmentDuration = Math.max(0, (segment.end - segment.start) / speed);
+        const clampedStartOffset = Math.min(Math.max(startInfo.offsetInSegment, 0), segmentDuration);
+        const selectionDuration = Math.max(0, selection.end - selection.start);
+        const clampedEndOffset = Math.min(clampedStartOffset + selectionDuration, segmentDuration);
+        const startTime = segment.start + (clampedStartOffset * speed);
+        const endTime = segment.start + (clampedEndOffset * speed);
         const duration = Math.max(0, endTime - startTime);
         if (duration <= 0.05) {
             return {
@@ -339,9 +336,50 @@ const App = {
                 }),
                 filenameSuffix: `${startLabel.replace(/:/g, '-')}_${endLabel.replace(/:/g, '-')}`,
                 selectionStart: selection.start,
-                selectionEnd: selection.end
+                selectionEnd: selection.end,
+                markerStartId: options.markerStartId || null,
+                markerEndId: options.markerEndId || null
             }
         };
+    },
+
+    buildVerticalClipFromSelection() {
+        if (!Selection.hasSelection()) {
+            return {
+                success: false,
+                message: this.t('runtime.vertical.select_area_first', 'Önce dikey videoya dönüştürmek istediğiniz alanı seçin.')
+            };
+        }
+
+        return this.buildVerticalClipFromRange(Selection.getSelection());
+    },
+
+    canAppendVerticalClip(clip) {
+        if (!clip) {
+            return false;
+        }
+
+        if (this.verticalClipQueue.length > 0) {
+            const firstSourcePath = this.verticalClipQueue[0].sourcePath;
+            if (firstSourcePath !== clip.sourcePath) {
+                Accessibility.alert(this.t('runtime.vertical.queue_mixed_source_not_supported', 'Seçim listesi şimdilik tek bir kaynak video için kullanılabilir. Farklı bir videodan eklemeden önce listeyi temizleyin.'));
+                return false;
+            }
+        }
+
+        return true;
+    },
+
+    hasVerticalClipQueueMarkerPair(markerStartId, markerEndId, sourcePath) {
+        if (!markerStartId || !markerEndId || !sourcePath) {
+            return false;
+        }
+
+        return this.verticalClipQueue.some((clip) =>
+            clip?.sourcePath === sourcePath
+            && clip?.markerStartId === markerStartId
+            && clip?.markerEndId === markerEndId
+        );
     },
 
     addSelectionToVerticalQueue() {
@@ -351,12 +389,8 @@ const App = {
             return null;
         }
 
-        if (this.verticalClipQueue.length > 0) {
-            const firstSourcePath = this.verticalClipQueue[0].sourcePath;
-            if (firstSourcePath !== built.clip.sourcePath) {
-                Accessibility.alert(this.t('runtime.vertical.queue_mixed_source_not_supported', 'Seçim listesi şimdilik tek bir kaynak video için kullanılabilir. Farklı bir videodan eklemeden önce listeyi temizleyin.'));
-                return null;
-            }
+        if (!this.canAppendVerticalClip(built.clip)) {
+            return null;
         }
 
         this.verticalClipQueue.push(built.clip);
@@ -365,6 +399,83 @@ const App = {
             count: String(this.verticalClipQueue.length)
         }));
         return built.clip;
+    },
+
+    addMarkerPairsToVerticalQueue() {
+        if (!VideoPlayer.hasVideo()) {
+            Accessibility.alert(this.t('runtime.vertical.open_video_first', 'Önce bir video açmalısınız.'));
+            return { addedCount: 0, totalCount: this.verticalClipQueue.length };
+        }
+
+        const markers = (typeof Markers !== 'undefined' && typeof Markers.getAll === 'function')
+            ? Markers.getAll()
+            : [];
+
+        if (markers.length < 2) {
+            Accessibility.alert(this.t('runtime.vertical.marker_pairs_need_two', 'İşaretçilerden seçim listesi oluşturmak için en az 2 işaretçi gerekir.'));
+            return { addedCount: 0, totalCount: this.verticalClipQueue.length };
+        }
+
+        const pairCount = Math.floor(markers.length / 2);
+        let addedCount = 0;
+
+        for (let i = 0; i < pairCount; i++) {
+            const startMarker = markers[i * 2];
+            const endMarker = markers[i * 2 + 1];
+            if (!startMarker || !endMarker) {
+                continue;
+            }
+
+            const selection = {
+                start: Math.min(startMarker.time, endMarker.time),
+                end: Math.max(startMarker.time, endMarker.time)
+            };
+
+            const built = this.buildVerticalClipFromRange(selection, {
+                markerStartId: startMarker.id,
+                markerEndId: endMarker.id
+            });
+
+            if (!built.success) {
+                Accessibility.alert(built.message);
+                return { addedCount, totalCount: this.verticalClipQueue.length };
+            }
+
+            if (!this.canAppendVerticalClip(built.clip)) {
+                return { addedCount, totalCount: this.verticalClipQueue.length };
+            }
+
+            if (this.hasVerticalClipQueueMarkerPair(startMarker.id, endMarker.id, built.clip.sourcePath)) {
+                continue;
+            }
+
+            this.verticalClipQueue.push(built.clip);
+            addedCount++;
+        }
+
+        if (addedCount === 0) {
+            const messageKey = markers.length % 2 === 1
+                ? 'runtime.vertical.marker_pairs_no_new_need_more'
+                : 'runtime.vertical.marker_pairs_no_new';
+            const fallback = markers.length % 2 === 1
+                ? 'İşaretçilerden eklenecek yeni seçim alanı bulunamadı. Son seçim alanını oluşturmak için bir işaretçi daha ekleyin.'
+                : 'İşaretçilerden eklenecek yeni seçim alanı bulunamadı.';
+            Accessibility.alert(this.t(messageKey, fallback));
+            return { addedCount, totalCount: this.verticalClipQueue.length };
+        }
+
+        const messageKey = markers.length % 2 === 1
+            ? 'runtime.vertical.marker_pairs_added_need_more'
+            : 'runtime.vertical.marker_pairs_added';
+        const fallback = markers.length % 2 === 1
+            ? '{added} seçim alanı işaretçilerden seçim listesine eklendi. Listede artık toplam {count} öğe var. Bir seçim alanı daha oluşturmak için bir işaretçi daha ekleyin.'
+            : '{added} seçim alanı işaretçilerden seçim listesine eklendi. Listede artık toplam {count} öğe var.';
+        Accessibility.announce(this.t(messageKey, fallback, {
+            added: String(addedCount),
+            count: String(this.verticalClipQueue.length)
+        }));
+
+        return { addedCount, totalCount: this.verticalClipQueue.length };
     },
 
     openVerticalWizardFromSelection() {
@@ -389,7 +500,7 @@ const App = {
         const firstClip = this.verticalClipQueue[0];
         window.api.openVerticalWizard({
             filePath: firstClip.sourcePath,
-            clipQueue: this.verticalClipQueue
+            clipQueue: this.getVerticalClipQueueSnapshot()
         });
     },
 
@@ -417,13 +528,68 @@ const App = {
         return targetIndex;
     },
 
+    getVerticalClipQueueSnapshot() {
+        return Array.isArray(this.verticalClipQueue)
+            ? this.verticalClipQueue.map((clip) => ({ ...clip }))
+            : [];
+    },
+
+    queueClipMatchesSelection(clip, selection = null) {
+        if (!clip || typeof Selection === 'undefined' || typeof Selection.hasSelection !== 'function' || !Selection.hasSelection()) {
+            return false;
+        }
+
+        const currentSelection = selection || Selection.getSelection();
+        if (!currentSelection) {
+            return false;
+        }
+
+        const clipSourcePath = String(clip.sourcePath || '');
+        const currentSourcePath = String(this.currentFilePath || '');
+        if (!clipSourcePath || !currentSourcePath || clipSourcePath !== currentSourcePath) {
+            return false;
+        }
+
+        const clipStart = Number.isFinite(clip.selectionStart) ? clip.selectionStart : clip.startTime;
+        const clipEnd = Number.isFinite(clip.selectionEnd) ? clip.selectionEnd : clip.endTime;
+        if (!Number.isFinite(clipStart) || !Number.isFinite(clipEnd)) {
+            return false;
+        }
+
+        return Math.abs(currentSelection.start - clipStart) < 0.001
+            && Math.abs(currentSelection.end - clipEnd) < 0.001;
+    },
+
+    syncSelectionAfterQueueMutation(removedClips = []) {
+        if (typeof Selection === 'undefined' || typeof Selection.hasSelection !== 'function' || !Selection.hasSelection()) {
+            return;
+        }
+
+        const currentSelection = Selection.getSelection();
+        if (!currentSelection) {
+            return;
+        }
+
+        const normalizedRemovedClips = Array.isArray(removedClips) ? removedClips.filter(Boolean) : [];
+        const matchedRemovedClip = normalizedRemovedClips.find((clip) => this.queueClipMatchesSelection(clip, currentSelection));
+        if (!matchedRemovedClip) {
+            return;
+        }
+
+        const stillExistsInQueue = this.verticalClipQueue.some((clip) => this.queueClipMatchesSelection(clip, currentSelection));
+        if (!stillExistsInQueue) {
+            Selection.clear(true);
+        }
+    },
+
     removeVerticalClipQueueItem(index) {
         const currentIndex = Number(index);
         if (!Number.isInteger(currentIndex) || currentIndex < 0 || currentIndex >= this.verticalClipQueue.length) {
             return -1;
         }
 
-        this.verticalClipQueue.splice(currentIndex, 1);
+        const [removedClip] = this.verticalClipQueue.splice(currentIndex, 1);
+        this.syncSelectionAfterQueueMutation([removedClip]);
         Accessibility.announce(this.t('runtime.selection_queue.item_removed', 'Seçim listeden kaldırıldı.'));
 
         if (this.verticalClipQueue.length === 0) {
@@ -539,7 +705,9 @@ const App = {
     },
 
     clearVerticalClipQueue(shouldAnnounce = true) {
-        this.verticalClipQueue = [];
+        const removedClips = this.getVerticalClipQueueSnapshot();
+        this.verticalClipQueue.length = 0;
+        this.syncSelectionAfterQueueMutation(removedClips);
         if (shouldAnnounce) {
             Accessibility.announce(this.t('runtime.vertical.queue_cleared', 'Seçim listesi temizlendi.'));
         }
@@ -898,6 +1066,9 @@ const App = {
         window.api.onVerticalVideoQueueAddSelection(() => {
             this.addSelectionToVerticalQueue();
         });
+        window.api.onVerticalVideoQueueAddMarkerPairs(() => {
+            this.addMarkerPairsToVerticalQueue();
+        });
         window.api.onVerticalVideoQueueOpen(() => {
             this.openVerticalWizardFromQueue();
         });
@@ -1130,6 +1301,18 @@ const App = {
         // Gemini API anahtarı
         window.api.onEditGeminiApiKey(() => {
             Dialogs.showGeminiApiKeyDialog();
+        });
+
+        window.api.onEditOpenAiApiKey(() => {
+            Dialogs.showOpenAiApiKeyDialog();
+        });
+
+        window.api.onEditElevenLabsApiKey(() => {
+            Dialogs.showElevenLabsApiKeyDialog();
+        });
+
+        window.api.onShowInstantVoiceTranslation(() => {
+            Dialogs.showInstantVoiceTranslationDialog();
         });
 
         // Bulunduğun konumu betimle (Akıllı 5 Saniye)
@@ -1370,8 +1553,8 @@ const App = {
             const result = await window.api.openFileDialog({
                 title: this.t('messages.open_video', 'Video Dosyası Aç'),
                 filters: [
-                    { name: this.t('messages.media_files_filter', 'Medya Dosyaları'), extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'wma'] },
-                    { name: this.t('runtime.app.video_files_filter', 'Video Dosyaları'), extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv'] },
+                    { name: this.t('messages.media_files_filter', 'Medya Dosyaları'), extensions: ['mp4', 'wmv', 'avi', 'mkv', 'mov', 'webm', 'flv', '3gp', 'mpg', 'mpeg', 'vob', 'm4v', 'ts', 'mts', 'm2ts', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'wma'] },
+                    { name: this.t('runtime.app.video_files_filter', 'Video Dosyaları'), extensions: ['mp4', 'wmv', 'avi', 'mkv', 'mov', 'webm', 'flv', '3gp', 'mpg', 'mpeg', 'vob', 'm4v', 'ts', 'mts', 'm2ts'] },
                     { name: this.t('dialog.sync.audio_files_filter', 'Ses Dosyaları'), extensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'wma'] },
                     { name: this.t('dialog.common.all_files', 'Tüm Dosyalar'), extensions: ['*'] }
                 ],
@@ -1526,6 +1709,7 @@ const App = {
             this.currentFilePath = playbackPath;
             this.originalFilePath = filePath;
             this.hasChanges = false;
+            window.api.addRecentFile?.(filePath).catch(() => {});
 
             // Timeline'ı sekmedeki ile senkronize et
             Timeline.segments = tab.timeline.segments.map(s => ({ ...s }));
@@ -1537,6 +1721,7 @@ const App = {
             if (resetUI) {
                 Markers.clearAll();
                 Selection.clear(true);
+                this.clearVerticalClipQueue(false);
             }
 
             // Dosya bilgilerini hazırla
@@ -1747,6 +1932,7 @@ const App = {
         // Diğer modülleri temizle
         Markers.clearAll();
         Selection.clear(true);
+        this.clearVerticalClipQueue(false);
         VideoPlayer.showEmptyState();
 
         // UI güncelle
@@ -2171,6 +2357,23 @@ const App = {
 
             if (!renderResult.success) {
                 throw new Error(`Render hatası: ${renderResult.error}`);
+            }
+
+            const expectedOutputDuration = renderSegments.reduce((sum, segment) => {
+                const start = Number(segment.start || 0);
+                const end = Number(segment.end || 0);
+                const speed = Number(segment.speed || 1) || 1;
+                return sum + Math.max(0, end - start) / speed;
+            }, 0);
+
+            if (expectedOutputDuration > 5 && window.api.getVideoMetadata) {
+                const outputMetaResponse = await window.api.getVideoMetadata(outputPath);
+                const outputMeta = outputMetaResponse?.success ? outputMetaResponse.data : outputMetaResponse;
+                const actualOutputDuration = Number(outputMeta?.duration || 0);
+                const missingDuration = expectedOutputDuration - actualOutputDuration;
+                if (!actualOutputDuration || (missingDuration > 2 && actualOutputDuration < expectedOutputDuration * 0.75)) {
+                    throw new Error(this.t('runtime.app.export_duration_validation_failed', 'Dışa aktarma tamamlanmış görünse de çıktı süresi beklenenden çok kısa. Dosya korunması için işlem başarısız sayıldı. Lütfen yeniden deneyin veya güvenli dışa aktar kullanın.'));
+                }
             }
 
             // CTA Overlay'leri uygula
@@ -2894,6 +3097,7 @@ const App = {
             startTime = 0,
             shadow = 'none',
             ttsEnabled = false,
+            ttsService = 'system',
             ttsVoice = null,
             ttsSpeed = 1.0,
             ttsVolume = 1.0,
@@ -2945,6 +3149,7 @@ const App = {
                 startTime: effectiveStartTime,
                 endTime: effectiveStartTime + actualDuration,
                 ttsEnabled: ttsEnabled,
+                ttsService: ttsService,
                 ttsVoice: ttsVoice,
                 ttsSpeed: ttsSpeed,
                 ttsVolume: ttsVolume,
@@ -2962,8 +3167,10 @@ const App = {
                 // TTS ses dosyası oluştur
                 const ttsResult = await window.api.generateTts({
                     text: text,
+                    service: ttsService,
                     voice: ttsVoice,
-                    speed: ttsSpeed
+                    speed: ttsSpeed,
+                    volume: Math.round(ttsVolume * 100)
                 });
 
                 if (!ttsResult.success) {
@@ -3218,6 +3425,7 @@ const App = {
                     // TTS parametreleri - Options içinden al
                     shadow: opts.shadow || 'none',
                     ttsEnabled: opts.ttsEnabled || false,
+                    ttsService: opts.ttsService || 'system',
                     ttsVoice: opts.ttsVoice || null,
                     ttsSpeed: opts.ttsSpeed || 1.0,
                     ttsVolume: opts.ttsVolume || 1.0,
@@ -3630,6 +3838,7 @@ const App = {
 
                 const ttsRes = await window.api.generateTts({
                     text: sub.text,
+                    service: ttsOptions.service || 'system',
                     voice: ttsOptions.voice,
                     speed: ttsOptions.speed,
                     volume: ttsOptions.volume
@@ -4229,6 +4438,7 @@ const App = {
         // İşaretçileri ve seçimi temizle
         Markers.clearAll();
         Selection.clear();
+        this.clearVerticalClipQueue(false);
 
         // UI'ı güncelle
         document.getElementById('current-time').textContent = '00:00:00';
@@ -4557,6 +4767,12 @@ const App = {
             const ctaOverlays = typeof CtaOverlayPreview !== 'undefined'
                 ? CtaOverlayPreview.exportForProject()
                 : [];
+            const currentSelection = (typeof Selection !== 'undefined' && Selection.hasSelection && Selection.hasSelection())
+                ? Selection.getSelection()
+                : null;
+            const playbackPosition = (typeof VideoPlayer !== 'undefined' && typeof VideoPlayer.getTimelineTime === 'function')
+                ? Number(VideoPlayer.getTimelineTime() || 0)
+                : 0;
 
             const projectData = {
                 videoPath: this.currentFilePath,
@@ -4565,11 +4781,17 @@ const App = {
                     sourceFile: Timeline.sourceFile,
                     sourceDuration: Timeline.sourceDuration
                 },
+                selection: currentSelection ? {
+                    start: currentSelection.start,
+                    end: currentSelection.end
+                } : null,
+                playbackPosition,
+                verticalClipQueue: this.getVerticalClipQueueSnapshot(),
                 insertionQueue: InsertionQueue.getItems(),
                 transitions: Transitions.getAll(),
                 markers: Markers.getAll ? Markers.getAll() : [],
                 ctaOverlays: ctaOverlays,
-                version: '1.2'
+                version: '1.3'
             };
 
             const result = await window.api.showSaveDialog({
@@ -4608,12 +4830,19 @@ const App = {
         try {
             const result = await window.api.openFileDialog({
                 title: this.t('runtime.app.open_project_title', 'Proje Aç'),
-                filters: [{ name: this.t('runtime.app.project_file_filter', 'Korcul Proje Dosyası'), extensions: ['kve'] }],
+                filters: [{ name: this.t('messages.project_filters.all_projects', 'Tüm Projeler (*.kve, *.eng)'), extensions: ['kve', 'eng'] }],
                 properties: ['openFile']
             });
 
             if (result.canceled || result.filePaths.length === 0) return;
-            await this.loadProjectFromPath(result.filePaths[0]);
+            const projectPath = result.filePaths[0];
+            const extension = String(projectPath || '').toLowerCase().split('.').pop();
+            if (extension === 'eng') {
+                window.api.addRecentFile?.(projectPath).catch(() => {});
+                window.api.send('slideshow-open-project-file', projectPath);
+                return;
+            }
+            await this.loadProjectFromPath(projectPath);
         } catch (error) {
             console.error('Project load error:', error);
             Accessibility.announce(this.t('runtime.app.project_load_failed', 'Proje yüklenemedi: {error}', {
@@ -4633,6 +4862,7 @@ const App = {
             }
 
             const projectData = JSON.parse(contentResult.content);
+            window.api.addRecentFile?.(projectPath).catch(() => {});
 
             if (projectData.videoPath) {
                 let videoToLoad = projectData.videoPath;
@@ -4668,7 +4898,7 @@ const App = {
                     if (userChoice) {
                         const manualSelect = await window.api.openFileDialog({
                             title: this.t('runtime.app.find_video_file', 'Video Dosyasını Bul'),
-                            filters: [{ name: this.t('runtime.app.video_files_filter', 'Video Dosyaları'), extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm'] }],
+                            filters: [{ name: this.t('runtime.app.video_files_filter', 'Video Dosyaları'), extensions: ['mp4', 'wmv', 'avi', 'mkv', 'mov', 'webm', 'flv', '3gp', 'mpg', 'mpeg', 'vob', 'm4v', 'ts', 'mts', 'm2ts'] }],
                             properties: ['openFile']
                         });
 
@@ -4702,6 +4932,29 @@ const App = {
                 );
             }
 
+            if (typeof Selection !== 'undefined' && typeof Selection.clear === 'function') {
+                Selection.clear(true);
+            }
+            if (projectData.selection
+                && Number.isFinite(projectData.selection.start)
+                && Number.isFinite(projectData.selection.end)
+                && projectData.selection.end > projectData.selection.start
+                && typeof Selection !== 'undefined'
+                && typeof Selection.setSelection === 'function') {
+                Selection.setSelection(projectData.selection.start, projectData.selection.end);
+            }
+
+            this.verticalClipQueue.length = 0;
+            if (Array.isArray(projectData.verticalClipQueue) && projectData.verticalClipQueue.length > 0) {
+                this.verticalClipQueue.push(...projectData.verticalClipQueue
+                    .filter((clip) => clip && clip.sourcePath && Number.isFinite(clip.startTime) && Number.isFinite(clip.endTime))
+                    .map((clip, index) => ({
+                        ...clip,
+                        id: clip.id || `vertical_clip_restored_${Date.now()}_${index + 1}`,
+                        label: clip.label || this.t('runtime.app.selection_item_label', 'Seçim {index}', { index: String(index + 1) })
+                    })));
+            }
+
             if (projectData.insertionQueue) {
                 InsertionQueue.restore(projectData.insertionQueue);
             }
@@ -4725,6 +4978,12 @@ const App = {
                     markersModule: typeof Markers !== 'undefined',
                     hasRestore: Markers && !!Markers.restore
                 });
+            }
+
+            if (Number.isFinite(projectData.playbackPosition)
+                && typeof VideoPlayer !== 'undefined'
+                && typeof VideoPlayer.seekToTimelineTime === 'function') {
+                VideoPlayer.seekToTimelineTime(projectData.playbackPosition);
             }
 
             Accessibility.announce(this.t('runtime.app.project_loaded', 'Proje başarıyla yüklendi.'));

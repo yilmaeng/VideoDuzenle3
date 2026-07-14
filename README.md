@@ -55,6 +55,37 @@ npm run dev
 npm run build:win   # Windows
 npm run build:mac   # Mac
 npm run build:linux # Linux
+
+# Yayın odası web/backend dağıtımı
+npm run deploy:broadcast-room
+```
+
+`deploy:broadcast-room` komutu güncel `dist/evd-yayinodasi-server` dosyalarını denetler, yalnız değişen dosyaları sunucuya kopyalar, ardından Node uygulamasını `.env` ile yeniden başlatır ve sağlık kontrolü yapar. Varsayılan durumda SSH parolası komut sırasında istenir.
+
+SSH anahtarı ile parolasız kullanım için:
+
+```powershell
+$env:EVD_DEPLOY_IDENTITY_FILE="C:\Users\engin\.ssh\id_ed25519"
+npm run deploy:broadcast-room
+```
+
+İsterseniz doğrudan script'e de parametre geçebilirsiniz:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File build\deploy-broadcast-room.ps1 -IdentityFile "C:\Users\engin\.ssh\id_ed25519"
+```
+
+Yararlı ek seçenekler:
+
+```powershell
+# Tüm dosyaları zorla yeniden yükle
+npm run deploy:broadcast-room -- -ForceFullUpload
+
+# Yalnız yeniden başlat
+npm run deploy:broadcast-room -- -RestartOnly
+
+# Yükle ama yeniden başlatma
+npm run deploy:broadcast-room -- -SkipRestart
 ```
 
 ## 📄 Lisans

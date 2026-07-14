@@ -113,8 +113,19 @@
             cursor: pointer;
         }
 
-        .image-option:hover {
+        .image-option:hover,
+        .image-option:focus {
             background: #2d2d2d;
+        }
+
+        .image-option.selected {
+            background: #1a3a5c;
+            border-color: #0078d4;
+        }
+
+        .image-option:focus {
+            outline: 2px solid #0078d4;
+            outline-offset: -2px;
         }
 
         .image-option input[type="checkbox"] {
@@ -297,14 +308,14 @@
             <textarea id="text-content" rows="3" placeholder="Eklenecek yazıyı girin..." data-i18n-placeholder="dialog.text_overlay_window.content_placeholder" autofocus></textarea>
         </div>
 
-        <!-- Hangi resimlerde gösterilecek -->
+        <!-- Hangi medya öğelerinde gösterilecek -->
         <div class="form-group">
-            <label data-i18n="dialog.slideshow_text_overlay.target_images">Images to Show On</label>
+            <label data-i18n="dialog.slideshow_text_overlay.target_media">Medya öğeleri</label>
             <button class="select-all-btn" id="select-all-btn" type="button" data-i18n="dialog.slideshow_text_overlay.select_all">Select All</button>
-            <div class="image-selection" id="image-selection" role="group" aria-label="Resim seçimi" data-i18n-aria="dialog.slideshow_text_overlay.image_selection_aria">
-                <p style="color: #666; font-size: 13px;" data-i18n="dialog.slideshow_text_overlay.loading_images">Loading image list...</p>
+            <div class="image-selection" id="image-selection" role="listbox" aria-multiselectable="true" tabindex="0" aria-label="Medya seçimi" data-i18n-aria="dialog.slideshow_text_overlay.media_selection_aria">
+                <p style="color: #666; font-size: 13px;" data-i18n="dialog.slideshow_text_overlay.loading_media">Medya listesi yükleniyor...</p>
             </div>
-            <p class="hint" data-i18n="dialog.slideshow_text_overlay.target_images_hint">Choose the images where this text should appear. You must select at least one image.</p>
+            <p class="hint" data-i18n="dialog.slideshow_text_overlay.target_media_hint">Yazının gösterileceği fotoğraf veya video öğelerini seçin. En az bir öğe seçmelisiniz.</p>
         </div>
 
         <!-- Stil ayarları -->
@@ -520,6 +531,7 @@
         const liveRegion = document.getElementById('live-region');
 
         let imageList = [];
+        let focusedMediaIndex = 0;
 
         // Ekran okuyucu duyurusu
         function announce(message) {
@@ -532,17 +544,84 @@
         // Resim listesini render et
         function renderImageSelection() {
             if (imageList.length === 0) {
-                imageSelection.innerHTML = `<p style="color: #888; font-size: 13px;">${t('dialog.slideshow_text_overlay.no_images', 'No images have been added yet.')}</p>`;
+                imageSelection.innerHTML = `<p style="color: #888; font-size: 13px;">${t('dialog.slideshow_text_overlay.no_media', 'Henüz fotoğraf veya video eklenmedi.')}</p>`;
                 return;
             }
 
             imageSelection.innerHTML = imageList.map((img, index) => `
-                <label class="image-option">
-                    <input type="checkbox" value="${img.id}" data-index="${index}">
-                    <span class="image-option-label">${index + 1}. ${img.shortDescription || img.filename}</span>
-                </label>
+                <div class="image-option" role="option" tabindex="${index === focusedMediaIndex ? '0' : '-1'}" aria-selected="false" data-index="${index}">
+                    <input type="checkbox" value="${img.id}" data-index="${index}" tabindex="-1" aria-hidden="true">
+                    <span class="image-option-label">${index + 1}. ${img.shortDescription || img.filename} (${img.type === 'video' ? t('dialog.slideshow_text_overlay.media_type_video', 'Video') : t('dialog.slideshow_text_overlay.media_type_image', 'Fotoğraf')})</span>
+                </div>
             `).join('');
+            refreshMediaOptionState();
         }
+
+        function refreshMediaOptionState() {
+            const options = Array.from(imageSelection.querySelectorAll('.image-option'));
+            options.forEach((option, index) => {
+                const checkbox = option.querySelector('input[type="checkbox"]');
+                const checked = Boolean(checkbox?.checked);
+                option.setAttribute('aria-selected', checked ? 'true' : 'false');
+                option.setAttribute('tabindex', index === focusedMediaIndex ? '0' : '-1');
+                option.classList.toggle('selected', checked);
+            });
+        }
+
+        function focusMediaOption(index) {
+            const options = Array.from(imageSelection.querySelectorAll('.image-option'));
+            if (options.length === 0) return;
+            focusedMediaIndex = Math.max(0, Math.min(index, options.length - 1));
+            refreshMediaOptionState();
+            options[focusedMediaIndex]?.focus();
+        }
+
+        function toggleFocusedMediaOption() {
+            const option = imageSelection.querySelector(`.image-option[data-index="${focusedMediaIndex}"]`);
+            const checkbox = option?.querySelector('input[type="checkbox"]');
+            if (!checkbox) return;
+            checkbox.checked = !checkbox.checked;
+            refreshMediaOptionState();
+            validateForm();
+            const item = imageList[focusedMediaIndex];
+            announce(checkbox.checked
+                ? t('runtime.slideshow_text_overlay.media_item_selected', '{name} seçildi.', { name: item?.shortDescription || item?.filename || '' })
+                : t('runtime.slideshow_text_overlay.media_item_unselected', '{name} seçimi kaldırıldı.', { name: item?.shortDescription || item?.filename || '' }));
+        }
+
+        imageSelection.addEventListener('keydown', (e) => {
+            const options = Array.from(imageSelection.querySelectorAll('.image-option'));
+            if (options.length === 0) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                focusMediaOption(focusedMediaIndex + 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                focusMediaOption(focusedMediaIndex - 1);
+            } else if (e.key === 'Home') {
+                e.preventDefault();
+                focusMediaOption(0);
+            } else if (e.key === 'End') {
+                e.preventDefault();
+                focusMediaOption(options.length - 1);
+            } else if (e.key === ' ' || e.key === 'Spacebar') {
+                e.preventDefault();
+                toggleFocusedMediaOption();
+            }
+        });
+
+        imageSelection.addEventListener('click', (e) => {
+            const option = e.target.closest('.image-option');
+            if (!option) return;
+            focusedMediaIndex = Number(option.dataset.index || 0);
+            const checkbox = option.querySelector('input[type="checkbox"]');
+            if (checkbox && e.target !== checkbox) {
+                checkbox.checked = !checkbox.checked;
+            }
+            refreshMediaOptionState();
+            validateForm();
+            option.focus();
+        });
 
         let editMode = false;
         let editIndex = -1;
@@ -565,6 +644,7 @@
                                 validateForm();
                             }
                         });
+                        refreshMediaOptionState();
                     }, 100);
                 }
 
@@ -600,6 +680,7 @@
                                 cb.checked = true;
                             }
                         });
+                        refreshMediaOptionState();
                     }, 100);
 
                     addBtn.textContent = t('dialog.text_overlay_window.update', 'Update');
@@ -616,7 +697,7 @@
                     }));
                 }
             } else {
-                imageSelection.innerHTML = `<p style="color: #888; font-size: 13px;">${t('dialog.slideshow_text_overlay.no_images', 'No images have been added yet.')}</p>`;
+                imageSelection.innerHTML = `<p style="color: #888; font-size: 13px;">${t('dialog.slideshow_text_overlay.no_media', 'Henüz fotoğraf veya video eklenmedi.')}</p>`;
                 announce(t('runtime.slideshow_text_overlay.add_opened', 'Text add dialog opened. Enter the text content.'));
             }
             textContent.focus();
@@ -637,6 +718,7 @@
 
         // Resim seçimi değiştiğinde kontrol et
         imageSelection.addEventListener('change', validateForm);
+        imageSelection.addEventListener('change', refreshMediaOptionState);
 
         // Önizleme güncelle
         function updatePreview() {
@@ -675,6 +757,7 @@
             checkboxes.forEach(cb => {
                 cb.checked = !allChecked;
             });
+            refreshMediaOptionState();
 
             selectAllBtn.textContent = allChecked
                 ? t('dialog.slideshow_text_overlay.select_all', 'Select All')
@@ -778,7 +861,7 @@
 
             const selectedImages = getSelectedImagePaths();
             if (selectedImages.length === 0) {
-                alert(t('dialog.slideshow_text_overlay.select_image_first', 'Please select at least one image or add images.'));
+                alert(t('dialog.slideshow_text_overlay.select_media_first', 'Lütfen en az bir fotoğraf veya video seçin.'));
                 return;
             }
 

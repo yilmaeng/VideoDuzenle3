@@ -72,6 +72,7 @@
             padding: 15px;
             display: flex;
             align-items: center;
+            flex-wrap: wrap;
             gap: 20px;
             border-top: 1px solid #333;
         }
@@ -131,6 +132,18 @@
             align-items: center;
             justify-content: center;
         }
+
+        .ai-description-panel {
+            background: #111;
+            color: #f3f3f3;
+            border-top: 1px solid #333;
+            padding: 14px 18px;
+            white-space: pre-wrap;
+            overflow-y: auto;
+            max-height: 28vh;
+            font-size: 14px;
+            line-height: 1.5;
+        }
     </style>
 </head>
 
@@ -149,18 +162,24 @@
 
     <div class="controls">
         <button id="play-btn" class="play-btn" disabled data-i18n="dialog.slideshow_preview.play">Play</button>
+        <button id="describe-btn" class="play-btn" disabled data-i18n="dialog.slideshow_preview.describe_ai_button">Describe with AI</button>
         <div class="progress-container" id="progress-container">
             <div class="progress-bar" id="progress-bar"></div>
         </div>
         <div class="time-display" id="time-display">00:00 / 00:00</div>
         <button id="close-btn" class="play-btn" style="background: #444;" data-i18n="dialog.common.close">Close</button>
     </div>
+    <div id="ai-description-panel" class="ai-description-panel" hidden data-i18n-aria="dialog.slideshow_preview.description_panel_label"></div>
 
     <script>
         const { ipcRenderer } = require('electron');
+        const { pathToFileURL } = require('url');
         let currentLang = 'tr';
         let i18nCache = {};
-        let projectData, previewOptions, audio, isPlaying = false, currentTime = 0, duration = 0, startTime = 0, endTime = 0, imageTimings = [];
+        let projectData, previewOptions, isPlaying = false, currentTime = 0, duration = 0, startTime = 0, endTime = 0, imageTimings = [], mediaTimings = [];
+        let previewAudioClips = [];
+        let audioStartTimers = [];
+        const MAX_PREVIEW_SECONDS = 5;
 
         function getPathValue(obj, key) {
             return key.split('.').reduce((acc, part) => (acc && acc[part] !== undefined ? acc[part] : null), obj);
@@ -177,6 +196,10 @@
             document.querySelectorAll('[data-i18n]').forEach((el) => {
                 const value = t(el.getAttribute('data-i18n'), null);
                 if (value) el.textContent = value;
+            });
+            document.querySelectorAll('[data-i18n-aria]').forEach((el) => {
+                const value = t(el.getAttribute('data-i18n-aria'), null);
+                if (value) el.setAttribute('aria-label', value);
             });
             const titleEl = document.querySelector('title[data-i18n]');
             if (titleEl) {
@@ -200,6 +223,699 @@
             }, 50);
         }
 
+        function toMediaSrc(filePath) {
+            if (!filePath) return '';
+            try {
+                return pathToFileURL(filePath).href;
+            } catch (error) {
+                console.warn('Preview media URL conversion failed:', filePath, error);
+                return `file://${filePath}`;
+            }
+        }
+
+        function getVisualOrientation(width, height) {
+            const safeWidth = Number(width || 0);
+            const safeHeight = Number(height || 0);
+            if (!(safeWidth > 0) || !(safeHeight > 0)) return 'unknown';
+            if (safeWidth === safeHeight) return 'square';
+            return safeWidth > safeHeight ? 'landscape' : 'portrait';
+        }
+
+        function getProjectVisualFitMode() {
+            return ['blur', 'crop', 'fit'].includes(projectData.visualFitMode)
+                ? projectData.visualFitMode
+                : (projectData.fillFrame === false ? 'fit' : 'blur');
+        }
+
+        function shouldPreviewFillFrame(image) {
+            return getProjectVisualFitMode() === 'crop';
+        }
+
+        function getImageTimingById(imageId) {
+            return imageTimings.find(item => item.id === imageId) || null;
+        }
+
+        function getMediaTimingById(mediaId) {
+            return mediaTimings.find(item => item.id === mediaId) || null;
+        }
+
+        function getOrderedMediaItems() {
+            const mediaItems = Array.isArray(projectData?.mediaItems) && projectData.mediaItems.length > 0
+                ? projectData.mediaItems
+                : (projectData?.images || []).map((image, index) => ({
+                    ...image,
+                    type: 'image',
+                    sourceImageId: image.id,
+                    order: index + 1
+                }));
+
+            return [...mediaItems].sort((a, b) => {
+                const orderA = Number.isFinite(Number(a?.order)) ? Number(a.order) : Number.MAX_SAFE_INTEGER;
+                const orderB = Number.isFinite(Number(b?.order)) ? Number(b.order) : Number.MAX_SAFE_INTEGER;
+                if (orderA !== orderB) return orderA - orderB;
+                return String(a?.id || '').localeCompare(String(b?.id || ''));
+            });
+        }
+
+        function isPinnedMediaItem(item) {
+            return item?.placementMode === 'pinned'
+                && Number.isFinite(Number(item?.manualStart))
+                && Number.isFinite(Number(item?.manualEnd))
+                && Number(item.manualEnd) > Number(item.manualStart);
+        }
+
+        function buildMediaTimings(items, targetDuration = 0) {
+            const orderedItems = Array.isArray(items) ? items : [];
+            const safeTargetDuration = Math.max(0, Number(targetDuration || 0));
+
+            const results = [];
+            let cursor = 0;
+            let currentSegment = [];
+
+            const getItemDuration = (item) => Math.max(0.1, Number(item?.duration || item?.originalDuration || 5));
+            const isFlexibleAutoItem = (item) => (
+                item?.type !== 'video'
+                && !item?.manualDuration
+                && !item?.pairedAudioId
+            );
+
+            const placeSegment = (segmentItems, segmentEnd = null) => {
+                if (!Array.isArray(segmentItems) || segmentItems.length === 0) return [];
+
+                const boundedEnd = Number.isFinite(Number(segmentEnd)) ? Math.max(cursor, Number(segmentEnd)) : null;
+                const availableDuration = boundedEnd !== null ? Math.max(0, boundedEnd - cursor) : 0;
+                const fixedDuration = segmentItems.reduce((sum, item) => (
+                    isFlexibleAutoItem(item) ? sum : sum + getItemDuration(item)
+                ), 0);
+                const canPlaceFlexibleItems = boundedEnd === null || fixedDuration < availableDuration - 0.05;
+                const itemsToPlace = canPlaceFlexibleItems
+                    ? segmentItems
+                    : segmentItems.filter(item => !isFlexibleAutoItem(item));
+                const deferredItems = canPlaceFlexibleItems
+                    ? []
+                    : segmentItems.filter(isFlexibleAutoItem);
+                const flexibleItems = itemsToPlace.filter(isFlexibleAutoItem);
+                const flexibleDuration = boundedEnd !== null && flexibleItems.length > 0
+                    ? Math.max(0.1 * flexibleItems.length, availableDuration - fixedDuration)
+                    : 0;
+                const flexibleDurationPerItem = flexibleItems.length > 0 && flexibleDuration > 0
+                    ? flexibleDuration / flexibleItems.length
+                    : 0;
+
+                itemsToPlace.forEach((item) => {
+                    const itemDuration = isFlexibleAutoItem(item) && flexibleDurationPerItem > 0
+                        ? flexibleDurationPerItem
+                        : getItemDuration(item);
+                    const start = cursor;
+                    const end = start + itemDuration;
+                    results.push({
+                        ...item,
+                        duration: itemDuration,
+                        start,
+                        end
+                    });
+                    cursor = end;
+                });
+
+                return deferredItems;
+            };
+
+            orderedItems.forEach((item) => {
+                if (!isPinnedMediaItem(item)) {
+                    currentSegment.push(item);
+                    return;
+                }
+
+                const pinnedStart = Number(item.manualStart);
+                const pinnedEnd = Number(item.manualEnd);
+                currentSegment = placeSegment(currentSegment, pinnedStart);
+
+                if (cursor < pinnedStart) {
+                    cursor = pinnedStart;
+                }
+                const pinnedDuration = Math.max(0.1, Number(item.pinnedDuration || (pinnedEnd - pinnedStart) || item.duration || item.originalDuration || 5));
+                results.push({
+                    ...item,
+                    duration: pinnedDuration,
+                    start: pinnedStart,
+                    end: pinnedEnd
+                });
+                cursor = Math.max(cursor, pinnedEnd);
+            });
+
+            placeSegment(currentSegment, safeTargetDuration > cursor ? safeTargetDuration : null);
+
+            return results.sort((a, b) => {
+                if (Number(a.start) !== Number(b.start)) return Number(a.start) - Number(b.start);
+                const orderA = Number.isFinite(Number(a?.order)) ? Number(a.order) : Number.MAX_SAFE_INTEGER;
+                const orderB = Number.isFinite(Number(b?.order)) ? Number(b.order) : Number.MAX_SAFE_INTEGER;
+                if (orderA !== orderB) return orderA - orderB;
+                return String(a?.id || '').localeCompare(String(b?.id || ''));
+            });
+        }
+
+        function findActiveImageAtTime(absTime) {
+            return imageTimings.find(item => absTime >= item.start && absTime < item.end)
+                || imageTimings.find(item => absTime === endTime && item.end === endTime)
+                || imageTimings[imageTimings.length - 1]
+                || null;
+        }
+
+        function findActiveMediaAtTime(absTime) {
+            return mediaTimings.find(item => absTime >= item.start && absTime < item.end)
+                || mediaTimings.find(item => absTime === endTime && item.end === endTime)
+                || mediaTimings[mediaTimings.length - 1]
+                || null;
+        }
+
+        function getActiveTextsForImage(imageId) {
+            if (!imageId) return [];
+            return (projectData.textOverlays || []).filter(txt => Array.isArray(txt.targetImages) && txt.targetImages.includes(imageId));
+        }
+
+        function getCurrentSceneState() {
+            const absTime = startTime + currentTime;
+            const activeMedia = findActiveMediaAtTime(absTime);
+            const activeImage = activeMedia?.type === 'image' ? activeMedia : findActiveImageAtTime(absTime);
+            const activeTexts = getActiveTextsForImage(activeImage?.id);
+            const videoFillFrameApplied = activeMedia?.type === 'video' && activeMedia?.fitMode === 'crop';
+            const visualFitMode = activeMedia?.type === 'video'
+                ? (['blur', 'crop', 'fit'].includes(activeMedia.fitMode) ? activeMedia.fitMode : 'fit')
+                : getProjectVisualFitMode();
+            return {
+                absTime,
+                activeMedia,
+                activeImage,
+                activeTexts,
+                visualFitMode,
+                previewFillFrameApplied: activeMedia?.type === 'image' && activeImage
+                    ? shouldPreviewFillFrame(activeImage)
+                    : videoFillFrameApplied
+            };
+        }
+
+        function getPreviewRenderSize() {
+            return projectData.aspectRatio === '16:9'
+                ? { width: 1280, height: 720 }
+                : { width: 720, height: 1280 };
+        }
+
+        function computeMediaRect(sourceWidth, sourceHeight, targetWidth, targetHeight, fillFrame) {
+            const safeSourceWidth = Math.max(1, Number(sourceWidth || targetWidth));
+            const safeSourceHeight = Math.max(1, Number(sourceHeight || targetHeight));
+            const scale = fillFrame
+                ? Math.max(targetWidth / safeSourceWidth, targetHeight / safeSourceHeight)
+                : Math.min(targetWidth / safeSourceWidth, targetHeight / safeSourceHeight);
+            const drawWidth = safeSourceWidth * scale;
+            const drawHeight = safeSourceHeight * scale;
+
+            return {
+                x: (targetWidth - drawWidth) / 2,
+                y: (targetHeight - drawHeight) / 2,
+                width: drawWidth,
+                height: drawHeight
+            };
+        }
+
+        function wrapCanvasText(ctx, text, maxWidth) {
+            const rawText = String(text || '').trim();
+            if (!rawText) return [];
+            const words = rawText.split(/\s+/);
+            const lines = [];
+            let currentLine = '';
+
+            words.forEach((word) => {
+                const candidate = currentLine ? `${currentLine} ${word}` : word;
+                if (!currentLine || ctx.measureText(candidate).width <= maxWidth) {
+                    currentLine = candidate;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = word;
+                }
+            });
+
+            if (currentLine) {
+                lines.push(currentLine);
+            }
+            return lines;
+        }
+
+        function renderSceneToDataUrl(scene) {
+            if (!scene?.activeMedia?.id) return null;
+
+            const activeMediaEl = document.getElementById('media-' + scene.activeMedia.id);
+            if (!activeMediaEl) return null;
+
+            const { width, height } = getPreviewRenderSize();
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, width, height);
+
+            const sourceWidth = activeMediaEl.videoWidth || activeMediaEl.naturalWidth || scene.activeMedia.width || width;
+            const sourceHeight = activeMediaEl.videoHeight || activeMediaEl.naturalHeight || scene.activeMedia.height || height;
+            if (scene.visualFitMode === 'blur') {
+                const bgRect = computeMediaRect(sourceWidth, sourceHeight, width, height, true);
+                ctx.save();
+                ctx.filter = 'blur(18px) brightness(0.92)';
+                ctx.drawImage(activeMediaEl, bgRect.x, bgRect.y, bgRect.width, bgRect.height);
+                ctx.restore();
+            }
+            const mediaRect = computeMediaRect(
+                sourceWidth,
+                sourceHeight,
+                width,
+                height,
+                scene.visualFitMode === 'crop'
+            );
+            ctx.drawImage(activeMediaEl, mediaRect.x, mediaRect.y, mediaRect.width, mediaRect.height);
+
+            scene.activeTexts.forEach((txt) => {
+                const fontSize = Number(txt.fontSize || 48);
+                const fontPx = Math.max(20, fontSize);
+                const lineHeight = Math.round(fontPx * 1.2);
+                const maxWidth = width * 0.9;
+                ctx.font = `${fontPx}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                const lines = wrapCanvasText(ctx, txt.content, maxWidth - 24);
+                if (lines.length === 0) return;
+
+                const blockHeight = lines.length * lineHeight + 20;
+                let centerY = height * 0.9 - (blockHeight / 2);
+                if (txt.position === 'top') {
+                    centerY = height * 0.1 + (blockHeight / 2);
+                } else if (txt.position === 'center') {
+                    centerY = height * 0.5;
+                }
+
+                const blockTop = centerY - (blockHeight / 2);
+                if (txt.background === 'black') {
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillRect((width - maxWidth) / 2, blockTop, maxWidth, blockHeight);
+                } else if (txt.background === 'white') {
+                    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                    ctx.fillRect((width - maxWidth) / 2, blockTop, maxWidth, blockHeight);
+                }
+
+                ctx.fillStyle = txt.background === 'white' ? '#000000' : (txt.fontColor || '#ffffff');
+                ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+                ctx.lineWidth = Math.max(2, fontPx * 0.08);
+
+                lines.forEach((line, index) => {
+                    const y = blockTop + 10 + (lineHeight / 2) + (index * lineHeight);
+                    ctx.strokeText(line, width / 2, y);
+                    ctx.fillText(line, width / 2, y);
+                });
+            });
+
+            return canvas.toDataURL('image/png');
+        }
+
+        function getClassicAudioSegments() {
+            const tracks = Array.isArray(projectData.audioTracks) ? projectData.audioTracks : [];
+            if (tracks.length === 0) return [];
+
+            if (tracks.length === 1) {
+                return [{
+                    id: tracks[0].id,
+                    path: tracks[0].path,
+                    start: 0,
+                    end: Number(tracks[0].duration || projectData.totalDuration || 0)
+                }];
+            }
+
+            let cursor = 0;
+            return tracks.map((track) => {
+                const durationSeconds = Number(track.duration || 0);
+                const segment = {
+                    id: track.id,
+                    path: track.path,
+                    start: cursor,
+                    end: cursor + durationSeconds
+                };
+                cursor += durationSeconds;
+                return segment;
+            });
+        }
+
+        function getPairedAudioSegments() {
+            const segments = [];
+            const tracks = Array.isArray(projectData.audioTracks) ? projectData.audioTracks : [];
+            const trackMap = new Map(tracks.map(track => [track.id, track]));
+            const groupedImages = new Map();
+
+            imageTimings.forEach((imageTiming) => {
+                if (!imageTiming.pairedAudioId) return;
+                if (!groupedImages.has(imageTiming.pairedAudioId)) {
+                    groupedImages.set(imageTiming.pairedAudioId, []);
+                }
+                groupedImages.get(imageTiming.pairedAudioId).push(imageTiming);
+            });
+
+            groupedImages.forEach((items, audioId) => {
+                const track = trackMap.get(audioId);
+                if (!track?.path) return;
+
+                let sourceOffset = 0;
+                items.forEach((item) => {
+                    const itemDuration = Math.max(0, Number(item.duration || (item.end - item.start) || 0));
+                    segments.push({
+                        audioId,
+                        path: track.path,
+                        isBackgroundTrack: false,
+                        timelineStart: item.start,
+                        timelineEnd: item.end,
+                        sourceStart: sourceOffset,
+                        sourceEnd: sourceOffset + itemDuration
+                    });
+                    sourceOffset += itemDuration;
+                });
+            });
+
+            return segments;
+        }
+
+        function buildPreviewScope() {
+            const totalDuration = Number(projectData.totalDuration || 0);
+            const mode = previewOptions?.mode || 'full';
+            const targetId = previewOptions?.targetId || null;
+
+            if (mode === 'image' && targetId) {
+                const imageTiming = getImageTimingById(targetId);
+                if (imageTiming) {
+                    return {
+                        start: imageTiming.start,
+                        end: Math.min(imageTiming.end, imageTiming.start + MAX_PREVIEW_SECONDS)
+                    };
+                }
+            }
+
+            if (mode === 'video' && targetId) {
+                const mediaTiming = getMediaTimingById(targetId);
+                if (mediaTiming) {
+                    return {
+                        start: mediaTiming.start,
+                        end: Math.min(mediaTiming.end, mediaTiming.start + MAX_PREVIEW_SECONDS)
+                    };
+                }
+            }
+
+            if (mode === 'text' && targetId) {
+                const textOverlay = (projectData.textOverlays || []).find(item => item.id === targetId);
+                if (textOverlay) {
+                    const targets = imageTimings.filter(item => textOverlay.targetImages.includes(item.id));
+                    if (targets.length > 0) {
+                        const start = targets[0].start;
+                        const lastEnd = targets[targets.length - 1].end;
+                        return {
+                            start,
+                            end: Math.min(lastEnd, start + MAX_PREVIEW_SECONDS)
+                        };
+                    }
+                }
+            }
+
+            if (mode === 'audio' && targetId) {
+                const pairedTargets = imageTimings.filter(item => item.pairedAudioId === targetId);
+                if (pairedTargets.length > 0) {
+                    const start = pairedTargets[0].start;
+                    return {
+                        start,
+                        end: Math.min(pairedTargets[0].end, start + MAX_PREVIEW_SECONDS)
+                    };
+                }
+
+                const tracks = Array.isArray(projectData.audioTracks) ? projectData.audioTracks : [];
+                const selectedIndex = tracks.findIndex(track => track.id === targetId);
+                if (selectedIndex >= 0) {
+                    const hasPairedImages = imageTimings.some(item => !!item.pairedAudioId);
+                    if (!hasPairedImages) {
+                        const classicSegments = getClassicAudioSegments();
+                        const segment = classicSegments.find(item => item.id === targetId);
+                        if (segment) {
+                            return {
+                                start: segment.start,
+                                end: Math.min(segment.end, segment.start + MAX_PREVIEW_SECONDS)
+                            };
+                        }
+                    }
+
+                    return {
+                        start: 0,
+                        end: Math.min(totalDuration || MAX_PREVIEW_SECONDS, MAX_PREVIEW_SECONDS)
+                    };
+                }
+            }
+
+            if (mode === 'timing-range' && targetId) {
+                const tracks = Array.isArray(projectData.audioTracks) ? projectData.audioTracks : [];
+                const targetTrack = tracks.find(track => track.id === targetId);
+                const rangeId = previewOptions?.rangeId || null;
+                const targetRange = Array.isArray(targetTrack?.timingRanges)
+                    ? targetTrack.timingRanges.find(range => range?.id === rangeId)
+                    : null;
+                if (targetRange) {
+                    return {
+                        start: Number(targetRange.start || 0),
+                        end: Math.min(Number(targetRange.end || 0), Number(targetRange.start || 0) + MAX_PREVIEW_SECONDS)
+                    };
+                }
+            }
+
+            return {
+                start: 0,
+                end: Math.min(totalDuration || MAX_PREVIEW_SECONDS, MAX_PREVIEW_SECONDS)
+            };
+        }
+
+        function buildPreviewAudioClips(scopeStart, scopeEnd) {
+            const clips = [];
+            const hasPairedImages = imageTimings.some(item => !!item.pairedAudioId);
+
+            if (hasPairedImages) {
+                const pairedSegments = getPairedAudioSegments();
+                pairedSegments.forEach((segment) => {
+                    const overlapStart = Math.max(scopeStart, segment.timelineStart);
+                    const overlapEnd = Math.min(scopeEnd, segment.timelineEnd);
+                    if (overlapEnd <= overlapStart) return;
+
+                    clips.push({
+                        path: segment.path,
+                        sourceStart: Math.max(0, segment.sourceStart + (overlapStart - segment.timelineStart)),
+                        clipStart: overlapStart - scopeStart
+                    });
+                });
+
+                const globalTracks = (projectData.audioTracks || []).filter(track => {
+                    return !imageTimings.some(item => item.pairedAudioId === track.id);
+                });
+
+                globalTracks.forEach((track) => {
+                    clips.push({
+                        path: track.path,
+                        isBackgroundTrack: true,
+                        sourceStart: Math.max(0, scopeStart),
+                        clipStart: 0
+                    });
+                });
+
+                return clips;
+            }
+
+            const classicSegments = getClassicAudioSegments();
+            classicSegments.forEach((segment) => {
+                const overlapStart = Math.max(scopeStart, segment.start);
+                const overlapEnd = Math.min(scopeEnd, segment.end);
+                if (overlapEnd <= overlapStart) return;
+
+                clips.push({
+                    path: segment.path,
+                    isBackgroundTrack: true,
+                    sourceStart: Math.max(0, overlapStart - segment.start),
+                    clipStart: overlapStart - scopeStart
+                });
+            });
+
+            return clips;
+        }
+
+        function stopPreviewAudio() {
+            audioStartTimers.forEach(timerId => clearTimeout(timerId));
+            audioStartTimers = [];
+            previewAudioClips.forEach((clip) => {
+                if (clip.audio) {
+                    try {
+                        clip.audio.pause();
+                        clip.audio.currentTime = 0;
+                    } catch (error) { }
+                }
+            });
+            mediaTimings.forEach((mediaItem) => {
+                if (mediaItem?.type !== 'video') return;
+                const videoEl = document.getElementById('media-' + mediaItem.id);
+                if (!videoEl) return;
+                try {
+                    videoEl.pause();
+                    videoEl.currentTime = 0;
+                } catch (error) { }
+            });
+        }
+
+        function startPreviewAudio() {
+            stopPreviewAudio();
+            previewAudioClips.forEach((clip) => {
+                if (!clip.audio) {
+                    clip.audio = new Audio(toMediaSrc(clip.path));
+                }
+                const timerId = setTimeout(() => {
+                    if (!isPlaying) return;
+                    try {
+                        clip.audio.currentTime = Math.max(0, clip.sourceStart + currentTime - clip.clipStart);
+                        clip.audio.play();
+                    } catch (error) {
+                        console.warn('Preview audio play failed:', error);
+                    }
+                }, Math.max(0, clip.clipStart - currentTime) * 1000);
+                audioStartTimers.push(timerId);
+            });
+        }
+
+        function syncPreviewAudioPositions() {
+            const absTime = startTime + currentTime;
+            const activeMedia = findActiveMediaAtTime(absTime);
+            const backgroundLevel = activeMedia?.type === 'video'
+                ? (() => {
+                    const mode = activeMedia.backgroundAudioMode || (activeMedia.duckBackgroundAudio ? 'duck' : 'keep');
+                    if (activeMedia.muteVideoAudio) return 1;
+                    if (mode === 'stop') return 0;
+                    if (mode === 'duck') return Math.max(0, Math.min(1, Number(activeMedia.backgroundAudioLevelDuringVideo || 35) / 100));
+                    return 1;
+                })()
+                : 1;
+
+            previewAudioClips.forEach((clip) => {
+                if (!clip.audio) return;
+                clip.audio.volume = clip.isBackgroundTrack ? backgroundLevel : 1;
+                const clipRelativeTime = currentTime - clip.clipStart;
+                if (clipRelativeTime >= 0) {
+                    const targetTime = Math.max(0, clip.sourceStart + clipRelativeTime);
+                    if (Math.abs((clip.audio.currentTime || 0) - targetTime) > 0.35) {
+                        try {
+                            clip.audio.currentTime = targetTime;
+                        } catch (error) { }
+                    }
+                }
+            });
+        }
+
+        function syncPreviewVideoPlayback(absTime) {
+            mediaTimings.forEach((mediaItem) => {
+                if (mediaItem?.type !== 'video') return;
+                const videoEl = document.getElementById('media-' + mediaItem.id);
+                if (!videoEl) return;
+
+                const isActive = absTime >= mediaItem.start && absTime < mediaItem.end;
+                if (!isActive) {
+                    try {
+                        videoEl.pause();
+                        if (videoEl.currentTime !== 0) {
+                            videoEl.currentTime = 0;
+                        }
+                    } catch (error) { }
+                    return;
+                }
+
+                const rawTargetTime = Math.max(0, absTime - mediaItem.start + Number(mediaItem.trimStart || 0));
+                const intrinsicDuration = Number(videoEl.duration || mediaItem.originalDuration || mediaItem.duration || 0);
+                const maxPlayableTime = intrinsicDuration > 0 ? Math.max(0, intrinsicDuration - 0.05) : rawTargetTime;
+                const targetTime = Math.min(rawTargetTime, maxPlayableTime);
+                if (Math.abs((videoEl.currentTime || 0) - targetTime) > 0.35) {
+                    try {
+                        videoEl.currentTime = targetTime;
+                    } catch (error) { }
+                }
+
+                videoEl.muted = Boolean(mediaItem.muteVideoAudio);
+                if (mediaItem.muteVideoAudio) {
+                    videoEl.volume = 0;
+                } else {
+                    videoEl.volume = 1;
+                }
+
+                if (isPlaying && videoEl.paused) {
+                    videoEl.play().catch(() => { });
+                }
+                if (!isPlaying && !videoEl.paused) {
+                    videoEl.pause();
+                }
+            });
+        }
+
+        function formatSceneDescription(result) {
+            const sections = [
+                t('runtime.slideshow_preview.scene_summary_short', 'Short description: {text}', { text: result.short || '-' }),
+                t('runtime.slideshow_preview.scene_summary_detailed', 'Detailed description: {text}', { text: result.detailed || result.short || '-' }),
+                t('runtime.slideshow_preview.scene_summary_text', 'Visible text: {text}', { text: result.visibleText || '-' }),
+                t('runtime.slideshow_preview.scene_summary_orientation', 'Orientation: {text}', { text: result.orientationMessage || '-' }),
+                t('runtime.slideshow_preview.scene_summary_crop', 'Cropping check: {text}', { text: result.cropMessage || '-' })
+            ];
+            return sections.join('\n\n');
+        }
+
+        async function describeCurrentScene() {
+            const describeBtn = document.getElementById('describe-btn');
+            const panel = document.getElementById('ai-description-panel');
+
+            if (isPlaying) {
+                pause();
+            }
+
+            const scene = getCurrentSceneState();
+            if (!scene.activeMedia?.path) {
+                const message = t('runtime.slideshow_preview.no_active_scene', 'There is no visible media item to describe right now.');
+                document.getElementById('status-msg').textContent = message;
+                announce(message);
+                return;
+            }
+
+            describeBtn.disabled = true;
+            describeBtn.textContent = t('dialog.slideshow_preview.describe_ai_busy', 'Describing...');
+            document.getElementById('status-msg').textContent = t('runtime.slideshow_preview.describing_scene', 'AI is describing the current preview scene...');
+
+            try {
+                const frameDataUrl = renderSceneToDataUrl(scene);
+                if (!frameDataUrl) {
+                    throw new Error(t('runtime.slideshow_preview.frame_capture_failed', 'Preview frame could not be captured.'));
+                }
+
+                const result = await ipcRenderer.invoke('describe-slideshow-preview-frame-ai', {
+                    frameDataUrl,
+                    visibleTexts: scene.activeTexts.map(item => item.content).filter(Boolean),
+                    targetAspectRatio: projectData.aspectRatio
+                });
+
+                panel.hidden = false;
+                panel.textContent = formatSceneDescription(result);
+                document.getElementById('status-msg').textContent = t('runtime.slideshow_preview.scene_description_ready', 'Scene description is ready.');
+                announce(result.detailed || result.short || t('runtime.slideshow_preview.scene_description_ready', 'Scene description is ready.'));
+            } catch (error) {
+                const message = t('runtime.slideshow_preview.scene_description_failed', 'Scene description failed: {error}', {
+                    error: error.message || error
+                });
+                document.getElementById('status-msg').textContent = message;
+                announce(message);
+            } finally {
+                describeBtn.disabled = false;
+                describeBtn.textContent = t('dialog.slideshow_preview.describe_ai_button', 'Describe with AI');
+            }
+        }
+
         ipcRenderer.on('preview-init', async (event, data) => {
             projectData = data.projectData;
             previewOptions = data.options;
@@ -207,15 +923,36 @@
         });
 
         async function setupPreview() {
-            // Preload images
-            const imagesToLoad = projectData.images.length;
+            const mediaItems = getOrderedMediaItems();
+            const mediaToLoad = mediaItems.length;
             let loaded = 0;
-            const promises = projectData.images.map(img => {
+            const promises = mediaItems.map((item) => {
                 return new Promise(res => {
-                    const i = new Image();
-                    i.onload = () => { loaded++; document.getElementById('load-info').textContent = t('runtime.slideshow_preview.images_loading', 'Loading images: {loaded}/{total}', { loaded, total: imagesToLoad }); res(); };
-                    i.onerror = res;
-                    i.src = img.path;
+                    let settled = false;
+                    const finish = (state) => {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(timeoutId);
+                        loaded++;
+                        document.getElementById('load-info').textContent = t('runtime.slideshow_preview.images_loading', 'Loading media: {loaded}/{total}', { loaded, total: mediaToLoad });
+                        if (state !== 'loaded') {
+                            console.warn('Preview media preload issue:', state, item.path);
+                        }
+                        res();
+                    };
+                    const timeoutId = setTimeout(() => finish('timeout'), 10000);
+                    if (item.type === 'video') {
+                        const video = document.createElement('video');
+                        video.preload = 'auto';
+                        video.onloadedmetadata = () => finish('loaded');
+                        video.onerror = () => finish('error');
+                        video.src = toMediaSrc(item.path);
+                    } else {
+                        const image = new Image();
+                        image.onload = () => finish('loaded');
+                        image.onerror = () => finish('error');
+                        image.src = toMediaSrc(item.path);
+                    }
                 });
             });
             await Promise.all(promises);
@@ -229,39 +966,24 @@
             canvasArea.style.height = (h * scale) + 'px';
 
             // Timings
-            let t = 0;
-            imageTimings = projectData.images.map(img => {
-                const o = { ...img, start: t, end: t + img.duration };
-                t += img.duration;
-                return o;
-            });
+            const targetAudioDuration = Array.isArray(projectData.audioTracks)
+                ? projectData.audioTracks.reduce((sum, track) => sum + Math.max(0, Number(track?.duration || 0)), 0)
+                : 0;
+            mediaTimings = buildMediaTimings(mediaItems, targetAudioDuration);
+            imageTimings = mediaTimings.filter(item => item.type === 'image');
 
-            // Target scope
-            if (previewOptions.mode === 'image') {
-                const it = imageTimings.find(i => i.id === previewOptions.targetId);
-                startTime = it.start; endTime = it.end;
-            } else if (previewOptions.mode === 'text') {
-                const txt = projectData.textOverlays.find(x => x.id === previewOptions.targetId);
-                const targets = imageTimings.filter(i => txt.targetImages.includes(i.id));
-                startTime = Math.min(...targets.map(i => i.start));
-                endTime = Math.max(...targets.map(i => i.end));
-            } else if (previewOptions.mode === 'audio') {
-                startTime = 0; endTime = projectData.totalDuration;
-            } else {
-                startTime = 0; endTime = projectData.totalDuration;
-            }
+            const scope = buildPreviewScope();
+            startTime = scope.start;
+            endTime = scope.end;
 
             duration = endTime - startTime;
             if (duration <= 0) duration = 0.1;
+            previewAudioClips = buildPreviewAudioClips(startTime, endTime);
 
             renderElements(canvasArea, scale / (projectData.aspectRatio === '16:9' ? (1280 / 1920) : (720 / 1080))); // fix scale for font
 
-            if (projectData.audioTracks.length > 0) {
-                audio = new Audio(projectData.audioTracks[0].path);
-                audio.currentTime = startTime;
-            }
-
             document.getElementById('play-btn').disabled = false;
+            document.getElementById('describe-btn').disabled = false;
             document.getElementById('status-msg').textContent = t('runtime.slideshow_preview.mode_preview', '{mode} preview', { mode: previewOptions.mode.toUpperCase() });
             updateUI();
 
@@ -274,10 +996,24 @@
 
         function renderElements(container, fontScale) {
             container.innerHTML = '';
-            projectData.images.forEach(img => {
-                const el = document.createElement('img');
-                el.src = img.path; el.id = 'img-' + img.id; el.className = 'slide-image' + (projectData.fillFrame ? ' fill' : '');
-                container.appendChild(el);
+            mediaTimings.forEach((item) => {
+                if (item.type === 'video') {
+                    const videoEl = document.createElement('video');
+                    videoEl.src = toMediaSrc(item.path);
+                    videoEl.id = 'media-' + item.id;
+                    videoEl.className = 'slide-image' + (item.fitMode === 'crop' ? ' fill' : '');
+                    videoEl.preload = 'auto';
+                    videoEl.playsInline = true;
+                    videoEl.muted = Boolean(item.muteVideoAudio);
+                    container.appendChild(videoEl);
+                    return;
+                }
+
+                const imageEl = document.createElement('img');
+                imageEl.src = toMediaSrc(item.path);
+                imageEl.id = 'media-' + item.id;
+                imageEl.className = 'slide-image' + (shouldPreviewFillFrame(item) ? ' fill' : '');
+                container.appendChild(imageEl);
             });
             projectData.textOverlays.forEach(txt => {
                 const el = document.createElement('div');
@@ -299,17 +1035,18 @@
             document.getElementById('progress-bar').style.width = (currentTime / duration * 100) + '%';
             document.getElementById('time-display').textContent = formatTime(currentTime) + ' / ' + formatTime(duration);
 
-            imageTimings.forEach(it => {
-                const el = document.getElementById('img-' + it.id);
+            mediaTimings.forEach(it => {
+                const el = document.getElementById('media-' + it.id);
                 if (absT >= it.start && absT < it.end) el.classList.add('active'); else el.classList.remove('active');
             });
+            syncPreviewVideoPlayback(absT);
 
             projectData.textOverlays.forEach(txt => {
                 const el = document.getElementById('txt-' + txt.id);
                 let show = false;
                 txt.targetImages.forEach(id => {
                     const it = imageTimings.find(x => x.id === id);
-                    if (absT >= it.start && absT < it.end) show = true;
+                    if (it && absT >= it.start && absT < it.end) show = true;
                 });
                 if (show) el.classList.add('visible'); else el.classList.remove('visible');
             });
@@ -327,6 +1064,7 @@
             lastTick = now;
             currentTime += delta;
             if (currentTime >= duration) { currentTime = duration; pause(); }
+            syncPreviewAudioPositions();
             updateUI();
             if (isPlaying) requestAnimationFrame(tick);
         }
@@ -334,26 +1072,36 @@
         function play() {
             if (currentTime >= duration) currentTime = 0;
             isPlaying = true; document.getElementById('play-btn').textContent = t('dialog.slideshow_preview.pause', 'Pause');
-            if (audio) { audio.currentTime = startTime + currentTime; audio.play(); }
+            startPreviewAudio();
             lastTick = performance.now();
             requestAnimationFrame(tick);
         }
 
-        function pause() { isPlaying = false; document.getElementById('play-btn').textContent = t('dialog.slideshow_preview.play', 'Play'); if (audio) audio.pause(); }
+        function pause() {
+            isPlaying = false;
+            document.getElementById('play-btn').textContent = t('dialog.slideshow_preview.play', 'Play');
+            stopPreviewAudio();
+        }
 
         document.getElementById('play-btn').onclick = () => isPlaying ? pause() : play();
-        document.getElementById('close-btn').onclick = () => { if (audio) audio.pause(); window.close(); };
+        document.getElementById('describe-btn').onclick = () => { describeCurrentScene(); };
+        document.getElementById('close-btn').onclick = () => {
+            stopPreviewAudio();
+            window.close();
+        };
         document.getElementById('progress-container').onclick = (e) => {
             const pct = e.offsetX / e.currentTarget.offsetWidth;
             currentTime = pct * duration;
-            if (audio) audio.currentTime = startTime + currentTime;
+            if (isPlaying) {
+                startPreviewAudio();
+            }
             updateUI();
         };
 
         // Klavye kısayolları (Escape ve Boşluk)
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                if (audio) audio.pause();
+                stopPreviewAudio();
                 window.close();
             } else if (e.key === ' ') {
                 e.preventDefault();

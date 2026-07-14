@@ -1,17 +1,90 @@
 const { Menu, dialog, shell, app } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const i18n = require('./i18n');
 
 // Son açılan dosyalar listesi
 let recentFiles = [];
 const MAX_RECENT_FILES = 10;
+const RECENT_FILES_STORE_KEY = 'recent_files';
 
-function addToRecentFiles(filePath) {
-    recentFiles = recentFiles.filter(f => f !== filePath);
-    recentFiles.unshift(filePath);
+function normalizeRecentFiles(files) {
+    const seen = new Set();
+    const list = Array.isArray(files) ? files : [];
+
+    return list
+        .map(filePath => String(filePath || '').trim())
+        .filter(filePath => {
+            if (!filePath) {
+                return false;
+            }
+            const key = process.platform === 'win32' ? filePath.toLowerCase() : filePath;
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        })
+        .slice(0, MAX_RECENT_FILES);
+}
+
+function loadRecentFiles() {
+    if (!i18n.store) {
+        return recentFiles;
+    }
+    recentFiles = normalizeRecentFiles(i18n.store.get(RECENT_FILES_STORE_KEY, recentFiles));
+    return recentFiles;
+}
+
+function saveRecentFiles() {
+    if (!i18n.store) {
+        return;
+    }
+    i18n.store.set(RECENT_FILES_STORE_KEY, recentFiles);
+}
+
+function openMediaOrProject(mainWindow, filePath) {
+    if (!mainWindow || mainWindow.isDestroyed() || !filePath) {
+        return;
+    }
+
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.eng') {
+        const { openProjectFile } = require('./slideshow-handler');
+        openProjectFile(mainWindow, filePath);
+        return;
+    }
+    if (ext === '.kve') {
+        mainWindow.webContents.send('project-open-file', filePath);
+        return;
+    }
+    mainWindow.webContents.send('file-open', filePath);
+}
+
+function rebuildApplicationMenu(mainWindow) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        return;
+    }
+    Menu.setApplicationMenu(createMenu(mainWindow));
+}
+
+function addToRecentFiles(filePath, mainWindow = null) {
+    if (!filePath) return;
+    const normalizedPath = path.resolve(filePath);
+    loadRecentFiles();
+    recentFiles = recentFiles.filter(f => {
+        const current = process.platform === 'win32' ? f.toLowerCase() : f;
+        const next = process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath;
+        return current !== next;
+    });
+    recentFiles.unshift(normalizedPath);
     if (recentFiles.length > MAX_RECENT_FILES) {
         recentFiles = recentFiles.slice(0, MAX_RECENT_FILES);
+    }
+    saveRecentFiles();
+    if (mainWindow) {
+        rebuildApplicationMenu(mainWindow);
     }
 }
 
@@ -37,20 +110,27 @@ async function announceDialogForAccessibility(targetWindow, options = {}) {
 
     try {
         targetWindow.webContents.send('accessibility-dialog-announce', payload);
-        await new Promise((resolve) => setTimeout(resolve, 90));
+        await new Promise((resolve) => setTimeout(resolve, 420));
     } catch (error) {
         console.warn('Menu dialog accessibility announcement failed:', error.message);
     }
 }
 
 function getShortcutTokenMap(lang) {
+    const isMac = process.platform === 'darwin';
+    const modKey = isMac ? 'Cmd' : 'Ctrl';
+    const altKey = isMac ? 'Option' : 'Alt';
     if (lang === 'tr') {
         return {
-            CmdOrCtrl: 'Ctrl',
-            Cmd: 'Ctrl',
+            CmdOrCtrl: modKey,
+            CommandOrControl: modKey,
+            Cmd: 'Cmd',
+            Command: 'Cmd',
+            Meta: 'Cmd',
             Ctrl: 'Ctrl',
             Control: 'Ctrl',
-            Alt: 'Alt',
+            Alt: altKey,
+            Option: 'Option',
             Shift: 'Shift',
             Space: 'Bosluk',
             Enter: 'Enter',
@@ -69,11 +149,15 @@ function getShortcutTokenMap(lang) {
     }
 
     return {
-        CmdOrCtrl: 'Ctrl',
-        Cmd: 'Ctrl',
+        CmdOrCtrl: modKey,
+        CommandOrControl: modKey,
+        Cmd: 'Cmd',
+        Command: 'Cmd',
+        Meta: 'Cmd',
         Ctrl: 'Ctrl',
         Control: 'Ctrl',
-        Alt: 'Alt',
+        Alt: altKey,
+        Option: 'Option',
         Shift: 'Shift',
         Space: 'Space',
         Enter: 'Enter',
@@ -133,6 +217,147 @@ function withShortcutHint(label, shortcut, lang) {
     return `${label} (${shortcutText})`;
 }
 
+async function isEditableFocused(mainWindow) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        return false;
+    }
+    try {
+        return Boolean(await mainWindow.webContents.executeJavaScript(`
+            (() => {
+                const el = document.activeElement;
+                if (!el) return false;
+                const tag = String(el.tagName || '').toLowerCase();
+                if (tag === 'textarea') return true;
+                if (tag === 'input') {
+                    const type = String(el.type || 'text').toLowerCase();
+                    return !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'file', 'color'].includes(type);
+                }
+                return Boolean(el.isContentEditable);
+            })()
+        `, true));
+    } catch (_error) {
+        return false;
+    }
+}
+
+function createTextAwareEditClick(mainWindow, action, nativeAction) {
+    return async () => {
+        if (await isEditableFocused(mainWindow)) {
+            if (typeof mainWindow.webContents[nativeAction] === 'function') {
+                mainWindow.webContents[nativeAction]();
+            }
+            return;
+        }
+        mainWindow.webContents.send(action);
+    };
+}
+
+function buildRecentFilesSubmenu(mainWindow) {
+    loadRecentFiles();
+    const existingFiles = recentFiles.filter(filePath => {
+        try {
+            return filePath && fs.existsSync(filePath);
+        } catch (_error) {
+            return false;
+        }
+    });
+
+    if (existingFiles.length !== recentFiles.length) {
+        recentFiles = existingFiles;
+        saveRecentFiles();
+    }
+
+    if (existingFiles.length === 0) {
+        return [{
+            label: t('menu.file.no_recent_files', 'Son açılan dosya yok'),
+            enabled: false
+        }];
+    }
+
+    return existingFiles.map((filePath, index) => ({
+        label: `${index + 1}. ${path.basename(filePath)}`,
+        toolTip: filePath,
+        click: () => {
+            addToRecentFiles(filePath, mainWindow);
+            openMediaOrProject(mainWindow, filePath);
+        }
+    }));
+}
+
+function formatEmergencyStopResultDetail(result) {
+    const lines = [];
+    const obs = result?.obs || {};
+    const youtube = result?.youtube || {};
+
+    if (obs.success === false) {
+        lines.push(t('menu.record.emergency_stop_obs_failed', 'OBS yayını durdurulamadı: {error}', {
+            error: obs.error || t('menu.record.emergency_stop_unknown_error', 'Bilinmeyen hata')
+        }));
+    } else if (obs.stopped) {
+        lines.push(t('menu.record.emergency_stop_obs_stopped', 'OBS canlı yayın gönderimi durduruldu.'));
+    } else {
+        lines.push(t('menu.record.emergency_stop_obs_inactive', 'OBS tarafında aktif canlı yayın gönderimi bulunamadı.'));
+    }
+
+    if (youtube.success === false) {
+        lines.push(t('menu.record.emergency_stop_youtube_failed', 'YouTube yayını tamamlanamadı: {error}', {
+            error: youtube.error || t('menu.record.emergency_stop_unknown_error', 'Bilinmeyen hata')
+        }));
+    } else if (youtube.completed) {
+        const title = youtube.broadcast?.title || youtube.session?.title || '';
+        lines.push(title
+            ? t('menu.record.emergency_stop_youtube_completed_with_title', 'YouTube yayını tamamlandı: {title}', { title })
+            : t('menu.record.emergency_stop_youtube_completed', 'YouTube yayını tamamlandı.'));
+    } else {
+        lines.push(t('menu.record.emergency_stop_youtube_not_tracked', 'Tamamlanacak kayıtlı bir YouTube canlı yayın kimliği bulunamadı.'));
+    }
+
+    return lines.join('\n');
+}
+
+async function runEmergencyStopLiveBroadcast(mainWindow) {
+    const title = t('menu.record.emergency_stop_live_broadcast_result_title', 'Acil canlı yayın durdurma');
+    const message = t('menu.record.emergency_stop_live_broadcast_running', 'Devam eden canlı yayın güvenli biçimde durdurulmaya çalışılıyor.');
+    await announceDialogForAccessibility(mainWindow, { title, message });
+
+    let result = null;
+    try {
+        const { emergencyStopLiveBroadcast } = require('./emergency-broadcast-handler');
+        result = await emergencyStopLiveBroadcast();
+    } catch (error) {
+        result = {
+            success: false,
+            obs: { success: false, error: error.message || String(error) },
+            youtube: { success: true, completed: false }
+        };
+    }
+
+    const resultTitle = result?.success
+        ? t('menu.record.emergency_stop_live_broadcast_done_title', 'Acil durdurma tamamlandı')
+        : t('menu.record.emergency_stop_live_broadcast_warning_title', 'Acil durdurma kısmen tamamlandı');
+    const resultMessage = result?.success
+        ? t('menu.record.emergency_stop_live_broadcast_done', 'Acil canlı yayın durdurma komutu çalıştırıldı.')
+        : t('menu.record.emergency_stop_live_broadcast_partial', 'Acil durdurma çalıştı ancak bazı adımlar tamamlanamadı.');
+    const detail = formatEmergencyStopResultDetail(result);
+
+    await announceDialogForAccessibility(mainWindow, {
+        title: resultTitle,
+        message: resultMessage,
+        detail
+    });
+
+    await dialog.showMessageBox(mainWindow, {
+        type: result?.success ? 'info' : 'warning',
+        title: resultTitle,
+        message: resultMessage,
+        detail,
+        buttons: [t('common.close', 'Kapat')],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true
+    });
+}
+
 function openAdditionalEvdWindow() {
     const args = [];
 
@@ -174,9 +399,7 @@ function createMenu(mainWindow) {
                         const result = await dialog.showOpenDialog(mainWindow, {
                             title: t('messages.open_project_title', 'Open Project'),
                             filters: [
-                                { name: t('messages.project_filters.all_projects', 'All Projects'), extensions: ['kve', 'eng'] },
-                                { name: t('messages.project_filters.video_project', 'Video Project'), extensions: ['kve'] },
-                                { name: t('messages.project_filters.slideshow_project', 'Slideshow Project'), extensions: ['eng'] }
+                                { name: t('messages.project_filters.all_projects', 'All Projects (*.kve, *.eng)'), extensions: ['kve', 'eng'] }
                             ],
                             properties: ['openFile']
                         });
@@ -186,6 +409,7 @@ function createMenu(mainWindow) {
                             const ext = path.extname(filePath).toLowerCase();
 
                             if (ext === '.eng') {
+                                addToRecentFiles(filePath, mainWindow);
                                 const { openProjectFile } = require('./slideshow-handler');
                                 // openProjectFile might expect to open dialog itself if no arg. 
                                 // We will modify it or call a specific loader if available.
@@ -193,6 +417,7 @@ function createMenu(mainWindow) {
                                 openProjectFile(mainWindow, filePath);
                             } else {
                                 // .kve dosyasını renderer'a gönder
+                                addToRecentFiles(filePath, mainWindow);
                                 mainWindow.webContents.send('project-open-file', filePath);
                             }
                         }
@@ -242,7 +467,7 @@ function createMenu(mainWindow) {
                         });
                         if (!result.canceled && result.filePaths.length > 0) {
                             const filePath = result.filePaths[0];
-                            addToRecentFiles(filePath);
+                            addToRecentFiles(filePath, mainWindow);
                             mainWindow.webContents.send('file-open', filePath);
                         }
                     }
@@ -353,6 +578,42 @@ function createMenu(mainWindow) {
                         }
                     }
                 },
+                {
+                    // No default accelerator: this can process long media and is safer as an explicit menu action.
+                    label: t('menu.file.elevenlabs_dubbing_import', 'ElevenLabs ile Dublaj İçin Dosya İçe Aktar...'),
+                    click: async () => {
+                        const result = await dialog.showOpenDialog(mainWindow, {
+                            title: t('elevenlabs_dubbing_tool.import_dialog_title', 'ElevenLabs dublaj için dosya seçin'),
+                            filters: [
+                                { name: t('runtime.app.video_files_filter', 'Video Files'), extensions: ['mp4', 'wmv', 'avi', 'mkv', 'mov', 'webm', 'flv', 'm4v'] },
+                                { name: t('dialog.common.all_files', 'All Files'), extensions: ['*'] }
+                            ],
+                            properties: ['openFile']
+                        });
+                        if (result.canceled || !result.filePaths?.[0]) {
+                            return;
+                        }
+                        const { hasElevenLabsApiKey } = require('./elevenlabs-handler');
+                        if (!hasElevenLabsApiKey()) {
+                            const options = {
+                                type: 'warning',
+                                title: t('elevenlabs_dubbing_tool.api_key_missing_title', 'ElevenLabs API Anahtarı Gerekli'),
+                                message: t('elevenlabs_dubbing_tool.api_key_missing_message', 'ElevenLabs API anahtarı bulunamadı.'),
+                                detail: t('elevenlabs_dubbing_tool.api_key_missing_detail', 'Yapay Zeka menüsünden ElevenLabs API Anahtarı öğesini açıp anahtarınızı ekleyin. Anahtarı ElevenLabs hesabınızda API Keys bölümünden alabilirsiniz.'),
+                                buttons: [t('messages.ok', 'Tamam')],
+                                defaultId: 0,
+                                cancelId: 0
+                            };
+                            await announceDialogForAccessibility(mainWindow, options);
+                            await dialog.showMessageBox(mainWindow, options);
+                            return;
+                        }
+                        const { openElevenLabsDubbingTool } = require('./dialog-windows');
+                        openElevenLabsDubbingTool(mainWindow, {
+                            filePath: result.filePaths[0]
+                        });
+                    }
+                },
                 { type: 'separator' },
                 {
                     label: t('menu.file.sync_external_audio', 'Harici Sesi Videoyla Senkronla...'),
@@ -371,7 +632,7 @@ function createMenu(mainWindow) {
                 { type: 'separator' },
                 {
                     label: t('menu.file.recent_files', 'Son Açılan Dosyalar'),
-                    submenu: [] // Dinamik olarak doldurulacak
+                    submenu: buildRecentFilesSubmenu(mainWindow)
                 },
                 { type: 'separator' },
                 {
@@ -399,7 +660,7 @@ function createMenu(mainWindow) {
                 { type: 'separator' },
                 {
                     label: t('menu.file.quit', 'Çıkış'),
-                    accelerator: 'Alt+F4',
+                    accelerator: process.platform === 'darwin' ? 'Command+Q' : 'Alt+F4',
                     click: () => {
                         mainWindow.webContents.send('app-quit-request');
                     }
@@ -429,30 +690,22 @@ function createMenu(mainWindow) {
                 {
                     label: t('menu.edit.cut', 'Kes'),
                     accelerator: 'CmdOrCtrl+X',
-                    click: () => {
-                        mainWindow.webContents.send('edit-cut');
-                    }
+                    click: createTextAwareEditClick(mainWindow, 'edit-cut', 'cut')
                 },
                 {
                     label: t('menu.edit.copy', 'Kopyala'),
                     accelerator: 'CmdOrCtrl+C',
-                    click: () => {
-                        mainWindow.webContents.send('edit-copy');
-                    }
+                    click: createTextAwareEditClick(mainWindow, 'edit-copy', 'copy')
                 },
                 {
                     label: t('menu.edit.paste', 'Yapıştır'),
                     accelerator: 'CmdOrCtrl+V',
-                    click: () => {
-                        mainWindow.webContents.send('edit-paste');
-                    }
+                    click: createTextAwareEditClick(mainWindow, 'edit-paste', 'paste')
                 },
                 {
                     label: t('menu.edit.delete', 'Sil'),
                     accelerator: 'Delete',
-                    click: () => {
-                        mainWindow.webContents.send('edit-delete');
-                    }
+                    click: createTextAwareEditClick(mainWindow, 'edit-delete', 'delete')
                 },
                 {
                     label: t('menu.edit.split', 'Böl'),
@@ -468,9 +721,7 @@ function createMenu(mainWindow) {
                         {
                             label: t('menu.edit.select_all', 'Tümünü Seç'),
                             accelerator: 'CmdOrCtrl+A',
-                            click: () => {
-                                mainWindow.webContents.send('select-all');
-                            }
+                            click: createTextAwareEditClick(mainWindow, 'select-all', 'selectAll')
                         },
                         {
                             label: t('menu.edit.clear_selection', 'Seçimi Temizle'),
@@ -683,7 +934,8 @@ function createMenu(mainWindow) {
                         const result = await dialog.showOpenDialog(mainWindow, {
                             title: t('messages.select_video_file', 'Select Video File'),
                             filters: [
-                                { name: t('runtime.app.video_files_filter', 'Video Files'), extensions: ['mp4', 'wmv', 'avi', 'mkv', 'mov'] }
+                                { name: t('runtime.app.video_files_filter', 'Video Files'), extensions: ['mp4', 'wmv', 'avi', 'mkv', 'mov', 'webm', 'flv', '3gp', 'mpg', 'mpeg', 'vob', 'm4v', 'ts', 'mts', 'm2ts'] },
+                                { name: t('dialog.common.all_files', 'All Files'), extensions: ['*'] }
                             ],
                             properties: ['openFile']
                         });
@@ -709,6 +961,12 @@ function createMenu(mainWindow) {
                     label: t('menu.insert.vertical_video_add_selection_to_queue', 'Seçili Alanı Kısa Video Listesine Ekle'),
                     click: () => {
                         mainWindow.webContents.send('vertical-video-queue-add-selection');
+                    }
+                },
+                {
+                    label: t('menu.insert.vertical_video_add_marker_pairs_to_queue', 'İşaretçileri Seçim Listesine Ekle'),
+                    click: () => {
+                        mainWindow.webContents.send('vertical-video-queue-add-marker-pairs');
                     }
                 },
                 {
@@ -982,11 +1240,28 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    label: t('menu.record.broadcast_room', 'Yayın Odası...'),
+                    click: () => {
+                        const { openBroadcastRoom } = require('./dialog-windows');
+                        openBroadcastRoom(mainWindow);
+                    }
+                },
+                {
                     label: t('menu.record.resume_active_broadcast', 'Etkin Canlı Yayına Geri Dön'),
                     enabled: hasActiveRecordingWizardSession(),
                     click: () => {
                         const { resumeActiveRecordingWizard } = require('./dialog-windows');
                         resumeActiveRecordingWizard(mainWindow);
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: t('menu.record.emergency_stop_live_broadcast', 'Acil Canlı Yayını Durdur'),
+                    click: () => {
+                        // Intentionally menu-only: this command can terminate an active live stream, so it should not have a default shortcut.
+                        runEmergencyStopLiveBroadcast(mainWindow).catch((error) => {
+                            console.error('Emergency live broadcast stop failed:', error);
+                        });
                     }
                 }
             ]
@@ -1117,11 +1392,29 @@ function createMenu(mainWindow) {
                         mainWindow.webContents.send('intelligent-selection');
                     }
                 },
+                {
+                    label: t('menu.ai.instant_voice_translation', 'Anlık Sesli Çeviri...'),
+                    click: () => {
+                        mainWindow.webContents.send('show-instant-voice-translation');
+                    }
+                },
                 { type: 'separator' },
                 {
                     label: t('menu.ai.api_key', 'Gemini API Anahtarı...'),
                     click: () => {
                         mainWindow.webContents.send('edit-gemini-api-key');
+                    }
+                },
+                {
+                    label: t('menu.ai.openai_api_key', 'OpenAI API Anahtarı...'),
+                    click: () => {
+                        mainWindow.webContents.send('edit-openai-api-key');
+                    }
+                },
+                {
+                    label: t('menu.ai.elevenlabs_api_key', 'ElevenLabs API Anahtarı...'),
+                    click: () => {
+                        mainWindow.webContents.send('edit-elevenlabs-api-key');
                     }
                 }
             ]
@@ -1187,7 +1480,7 @@ function createMenu(mainWindow) {
     // Windows ekran okuyucularında native menu semantics daha güvenilir çalışıyor.
     // Alt menü öğelerinin label/accelerator yapısını değiştirmek, ilk öğede
     // odakla eylem arasında "hayalet" bir adım oluşmasına neden olabiliyor.
-    const finalTemplate = process.platform === 'win32'
+    const finalTemplate = process.platform === 'win32' || process.platform === 'darwin'
         ? template
         : addShortcutHints(template, currentLanguage);
 
