@@ -16,7 +16,6 @@ pkg.build = pkg.build || {};
 // to avoid Unicode normalization mismatches such as "ü" vs "u" + combining mark.
 pkg.build.productName = asciiProductName;
 pkg.build.executableName = asciiProductName;
-pkg.build.electronLanguages = ['tr'];
 pkg.build.afterPack = 'build/afterPackFixes.js';
 
 pkg.build.mac = {
