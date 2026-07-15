@@ -65,7 +65,7 @@
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "extendInfo": {
         "CFBundleDisplayName": "Engelsiz Video Düzenleyicisi",
-        "CFBundleName": "Engelsiz Video Düzenleyicisi"
+        "CFBundleName": "Engelsiz Video Duzenleyicisi"
       }
     },
     "linux": {

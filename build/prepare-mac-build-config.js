@@ -33,7 +33,9 @@ pkg.build.mac = {
     extendInfo: {
         ...((pkg.build.mac && pkg.build.mac.extendInfo) || {}),
         CFBundleDisplayName: displayProductName,
-        CFBundleName: displayProductName
+        // Electron derives Helper.app names from CFBundleName during startup.
+        // Keep it identical to the ASCII executable name; only the display name is localized.
+        CFBundleName: asciiProductName
     }
 };
 

@@ -80,6 +80,26 @@ jobs:
           echo "Starting Mac ARM64 DMG build..."
           npm run build:mac:dmg 2>&1 | tee build_output.log
 
+
+      - name: Verify macOS bundle names and signature
+        run: |
+          APP_PATH="$(find dist/mac-arm64 -maxdepth 1 -type d -name '*.app' -print -quit)"
+          if [ -z "$APP_PATH" ]; then
+            echo "Built macOS app bundle was not found."
+            exit 1
+          fi
+          BUNDLE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP_PATH/Contents/Info.plist")"
+          DISPLAY_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Contents/Info.plist")"
+          echo "CFBundleName=$BUNDLE_NAME"
+          echo "CFBundleDisplayName=$DISPLAY_NAME"
+          if [ "$BUNDLE_NAME" != "Engelsiz Video Duzenleyicisi" ]; then
+            echo "CFBundleName must match the ASCII executable and Helper bundle prefix."
+            exit 1
+          fi
+          for HELPER in "Engelsiz Video Duzenleyicisi Helper.app" "Engelsiz Video Duzenleyicisi Helper (Renderer).app" "Engelsiz Video Duzenleyicisi Helper (GPU).app" "Engelsiz Video Duzenleyicisi Helper (Plugin).app"; do
+            test -d "$APP_PATH/Contents/Frameworks/$HELPER" || { echo "Missing Helper bundle: $HELPER"; exit 1; }
+          done
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
       - name: Sign, notarize, and staple DMG
         env:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
