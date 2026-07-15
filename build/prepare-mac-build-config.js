@@ -8,7 +8,6 @@ const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 const asciiProductName = 'Engelsiz Video Duzenleyicisi';
 const displayProductName = 'Engelsiz Video Düzenleyicisi';
 const signingEnabled = process.env.EVD_MAC_SIGNING_ENABLED === '1';
-const signingIdentity = String(process.env.EVD_MAC_SIGN_IDENTITY || '').trim();
 
 pkg.build = pkg.build || {};
 
@@ -40,11 +39,8 @@ pkg.build.mac = {
 
 if (signingEnabled) {
     delete pkg.build.mac.type;
-    if (signingIdentity) {
-        pkg.build.mac.identity = signingIdentity;
-    } else {
-        delete pkg.build.mac.identity;
-    }
+    // electron-builder 26 selects the imported Developer ID identity itself.
+    delete pkg.build.mac.identity;
 } else {
     pkg.build.mac.identity = null;
     pkg.build.mac.type = 'development';

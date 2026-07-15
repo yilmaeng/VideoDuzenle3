@@ -16,10 +16,10 @@ jobs:
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22.12.0'
           cache: 'npm'
@@ -79,6 +79,7 @@ jobs:
 
       - name: Build Mac DMG (ARM64 Only)
         run: |
+          set -o pipefail
           echo "Starting Mac ARM64 DMG build..."
           npm run build:mac:dmg 2>&1 | tee build_output.log
 
@@ -110,7 +111,7 @@ jobs:
           ls -R dist/
 
       - name: Upload Mac ARM64 DMG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: evd-mac-arm64-dmg-v4.7.0
           path: dist/*.dmg
