@@ -483,6 +483,18 @@ const Keyboard = {
             return;
         }
 
+        // Reading the current position is a safe, non-editing command. Keep it
+        // available while focus is in a list or form field.
+        if (!dialogOpen && this.check('announceCurrentTime', e)) {
+            const time = VideoPlayer.getTimelineTime();
+            Accessibility.announce(this.t('runtime.app.current_position_announce', 'Current position: {time}', {
+                time: Utils.formatTimeForSpeech(time)
+            }));
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return;
+        }
+
         // --- Diyalog/Input Engelleme Kuralları ---
         // Bu kurallar, diyaloğa veya input'a odaklıyken video kontrollerinin çalışmasını engeller
         // ancak Copy/Paste gibi temel kısayollara izin verir.
@@ -551,11 +563,6 @@ const Keyboard = {
         else if (this.check('help', e)) { Dialogs.showHelpDialog(); handled = true; }
         else if (this.check('sendFeedback', e)) { window.App?.openFeedbackDraft?.(); handled = true; }
         else if (this.check('contextMenu', e) || this.check('contextMenuAlt', e)) { this.showContextMenu(); handled = true; }
-        else if (this.check('announceCurrentTime', e)) {
-            const time = VideoPlayer.getTimelineTime();
-            Accessibility.announce(`Şu anki konum: ${Utils.formatTimeForSpeech(time)}`);
-            handled = true;
-        }
 
         // Dosya
         else if (this.check('newProject', e)) { App.newProject(); handled = true; }

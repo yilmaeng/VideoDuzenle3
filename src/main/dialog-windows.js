@@ -115,6 +115,33 @@ function openTextOverlayDialog(parentWindow, data = {}) {
 /**
  * IPC handler'ları kur
  */
+function openVideoTickerDialog(parentWindow, data = {}) {
+    if (activeDialogWindow && !activeDialogWindow.isDestroyed()) { activeDialogWindow.focus(); return; }
+    parentWindow.webContents.send('keyboard-disable');
+    activeDialogWindow = new BrowserWindow({
+        width: 920, height: 860, parent: parentWindow, modal: false, show: false,
+        resizable: true, minimizable: false,
+        title: data.editItem ? i18n.t('dialog.slideshow_ticker_overlay.title_edit') : i18n.t('dialog.slideshow_ticker_overlay.title_add'),
+        webPreferences: { nodeIntegration: true, contextIsolation: false }
+    });
+    activeDialogWindow.loadFile(path.join(__dirname, '../renderer/dialogs/slideshow-ticker-overlay.html'));
+    activeDialogWindow.webContents.once('did-finish-load', () => {
+        if (!activeDialogWindow || activeDialogWindow.isDestroyed()) return;
+        const editItem = data.editItem || null;
+        activeDialogWindow.webContents.send('slideshow-ticker-init', {
+            ...data, mode: 'video', editTicker: editItem?.options || data.editTicker || null,
+            editItemId: editItem?.id ?? data.editItemId ?? null
+        });
+    });
+    activeDialogWindow.once('ready-to-show', () => { activeDialogWindow.show(); activeDialogWindow.focus(); });
+    activeDialogWindow.once('closed', () => {
+        if (parentWindow && !parentWindow.isDestroyed()) {
+            parentWindow.webContents.send('keyboard-enable'); parentWindow.focus();
+        }
+        activeDialogWindow = null;
+    });
+}
+
 function setupDialogHandlers(mainWindow) {
     mainWindowRef = mainWindow;
 
@@ -125,6 +152,20 @@ function setupDialogHandlers(mainWindow) {
     });
 
     // Listeye ekle
+    ipcMain.handle('open-video-ticker-dialog', async (_event, data = {}) => {
+        openVideoTickerDialog(mainWindow, data);
+        return { opened: true };
+    });
+    ipcMain.on('video-ticker-add-to-list', (_event, options) => {
+        mainWindow.webContents.send('insertion-queue-add', { type: 'ticker', options });
+    });
+    ipcMain.on('video-ticker-update', (_event, { id, options }) => {
+        mainWindow.webContents.send('insertion-queue-update', { id, options });
+    });
+    ipcMain.on('video-ticker-apply', (_event, options) => {
+        mainWindow.webContents.send('ticker-overlay-direct-apply', options);
+    });
+
     ipcMain.on('text-overlay-add-to-list', (event, options) => {
         console.log('Listeye ekleniyor:', options);
         mainWindow.webContents.send('insertion-queue-add', { type: 'text', options });
@@ -575,6 +616,7 @@ function openElevenLabsDubbingTool(parentWindow, options = {}) {
 
 module.exports = {
     openTextOverlayDialog,
+    openVideoTickerDialog,
     openSyncWizard,
     openVerticalWizard,
     openRecordingWizard,

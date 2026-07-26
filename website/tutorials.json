@@ -1,40 +1,8 @@
 {
   "playlistId": "PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ",
   "playlistUrl": "https://www.youtube.com/playlist?list=PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ",
-  "updatedAt": "2026-04-26T14:57:19.990Z",
+  "updatedAt": "2026-04-14T06:27:38.668Z",
   "items": [
-    {
-      "videoId": "o2aDut8cWOA",
-      "title": "Efekt Katmanı",
-      "published": "2026-04-24T20:04:46+00:00",
-      "description": "EVD yalnızca bir video düzenleme programı değil artık. Aynı zamanda içerik üretebileceğiniz çok boyutlu bir yapı. Erişilebilir kayıt menüsüyle ister çevrim dışı, ister canlı olarak yayınlar yapabilir, bu yayınlara efektler ekleyebilirsiniz. Şöyle düşünün: diyelim bir haber bülteni ya da program hazırladınız. Siz bunu sunarken araya videolar, müzikler yani VTR’ler de eklersiniz öyle değil mi? İşte efekt katmanı bu ayarları önceden yapmanızı sağlıyor. Sizler yayınızda kullanacağınız içerikleri seçiyorsunuz ve yayın sırasında hızlıca ve erişilebilir biçimde yeri geldiğinde bunları oynatıyorsunuz.",
-      "thumbnail": "https://i.ytimg.com/vi/o2aDut8cWOA/hqdefault.jpg",
-      "url": "https://www.youtube.com/watch?v=o2aDut8cWOA"
-    },
-    {
-      "videoId": "a6DcThVt4b8",
-      "title": "EVD ile çoklu seçim işlemleri",
-      "published": "2026-04-21T21:03:47+00:00",
-      "description": "EVD ile yatay bir dosyayı dikey bir Youtube videosu haline getirebiliyoruz. Peki 4.0 ile bunu mevcut bir dosya içinden de yapabileceğinizi söylesem? Üstelik aynı anda çoklu bölgeleri. Şöyle düşünün: elinizde 1 saatlik bir video var ve içinden 5 ayrı kısa video çıkarmak istediniz. Tek yapmanız gereken bu videoyu açmak ve kısa video yapacağınız alanları seçerek seçim listesine eklemek. Sonrası videomuzda.\nBununla da kalmıyor. Sizce bir futbol maçının 3 dakikalık özetini nasıl hazırlıyorlardır? Siz de elinizdeki videonun sadece belirli bölümlerini seçerek yeni bir klipte birleştirip kendi özetinizi hazırlayabilirsiniz.\nVeya videonuzdaki seçtiğiniz farklı bölümleri ayrı klipler olarak kaydedebilirsiniz. Tıpkı bir albümün 1, 3 ve 5 numaralı parçalarını kaydetmek gibi. Tüm bunların detaylarını merak edenleri bekliyorum.",
-      "thumbnail": "https://i.ytimg.com/vi/a6DcThVt4b8/hqdefault.jpg",
-      "url": "https://www.youtube.com/watch?v=a6DcThVt4b8"
-    },
-    {
-      "videoId": "Og5uODVEvts",
-      "title": "Harici Sesi Videoyla Senkronlama",
-      "published": "2026-04-21T06:47:17+00:00",
-      "description": "Selamlar Bu videomuzda EVD’nin pek bilinmeyen ama meraklıları için çok kullanışlı olabilecek bir özelliğini ele alıyoruz: Harici sesle videoyu eş zamanlama. Ne gerek var diyenlere kısa bir bilgi. Elinizde temiz stüdyo ortamında profesyonel bir ses kaydınız var. ama bunu mevcut görüntünüzle eşlemek istiyorsunuz. Ya da mevcut bir dış çekim var buna dublaj yapmak istediniz. Veya popüler biçimde play back yapmak istiyorsunuz. İşte Harici ses senkronlama bunları tam ve erişilebilir biçimde yapmanızı ince ayarlarla video ve harici sesi tam olarak senkronlamanızı sağlıyor. Nasılı videomuzda.\nNot: çekim sırasındaki sağ solla oynatımdaki sağ sol karışmış olabilir idare edin 😊",
-      "thumbnail": "https://i.ytimg.com/vi/Og5uODVEvts/hqdefault.jpg",
-      "url": "https://www.youtube.com/watch?v=Og5uODVEvts"
-    },
-    {
-      "videoId": "7Se1Ujx9u6c",
-      "title": "EVD İle Temel Dolaşım ve düzenleme işlemleri",
-      "published": "2026-04-20T11:58:48+00:00",
-      "description": "Merhabalar. Bu videoda EVD’yi en temelden inceliyoruz. Video dosyası nasıl açılır? İçinde kolay ve pratik biçimde nasıl gezinilir? Temel seçme, yer işareti koyma, silme ve düzenleme komutlarını ele alıyoruz. Bununla da yetinmiyor. Ses düzeyi ayarlarını değiştirme, gürültü temizleme, boşlukları silme, seçili bir bölümü hızlandırma gibi noktalara da bakış atıyoruz. EVD’yi ilk kez kullanacaksanız bu video sizin için iyi bir başlangıç olacak.",
-      "thumbnail": "https://i.ytimg.com/vi/7Se1Ujx9u6c/hqdefault.jpg",
-      "url": "https://www.youtube.com/watch?v=7Se1Ujx9u6c"
-    },
     {
       "videoId": "aCy0-7SKi9A",
       "title": "EVD ile Nesne İşlemleri ve Nesne Gizleme süreçleri",
@@ -42,6 +10,38 @@
       "description": "Selamlar bu videoda EVD ile mevcut bir videodaki nesneler nasıl gizlenebilir konusunu ele aldık. ekran okuyucu sesi bir tık boğuk çıkmış. kusura bakmayın. iyi kullanımlar",
       "thumbnail": "https://i.ytimg.com/vi/aCy0-7SKi9A/hqdefault.jpg",
       "url": "https://www.youtube.com/watch?v=aCy0-7SKi9A"
+    },
+    {
+      "videoId": "rZVhbbrbA0Q",
+      "title": "EVD İle Videomuza Metin, Görsel ve Ses Ekleme",
+      "published": "2026-03-02T10:18:29+00:00",
+      "description": "Selamlar. Engelsiz Video Düzenleyicisi anlatım serisinin bu bölümünde bir videoya nasıl metin, görsel ve ses eklenir, bunlar eklenirken boyut ve konum için yapay zekadan nasıl yararlanılır konularını ele aldım. Siz de izlerken benim gibi heyecan ve hayranlık duyarsınız umarım.",
+      "thumbnail": "https://i.ytimg.com/vi/rZVhbbrbA0Q/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=rZVhbbrbA0Q"
+    },
+    {
+      "videoId": "2vuKouiif0s",
+      "title": "Bir videonun seçili kısmını\"Engelsiz video düzenleyicisi 3.6 ile hızlandırma",
+      "published": "2026-02-28T12:37:29+00:00",
+      "description": "Merhabalar. elinizdeki videonun bir noktasını daha hızlı çekimde göstermek istediğinizi var sayın. örneğin, bir yemek tarifi videosundaki yemeğin pişme süresini atmak istemiyorsunuz, ama 10 dakika yerine 1 dakikada geçsin istiyorsunuz. İşte bu videoda engelsiz video düzenleyicisi kullanarak seçili bir alanın hızını nasıl arttırıp sonra dışa aktarım yapabileceğinizi göreceksiniz. Ayrıca dilerseniz, fon ekle yaparak hızlanmış bölümdeki sesi tamamen atıp orada başka bir fon çalmasını da sağlayabiliyorsunuz. İyi kullanımlar..",
+      "thumbnail": "https://i.ytimg.com/vi/2vuKouiif0s/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=2vuKouiif0s"
+    },
+    {
+      "videoId": "CCTQ2fI8FWU",
+      "title": "Engelsiz Video Düzenleyicisi Slide Show projelerinde resim ve ses eşleme",
+      "published": "2026-02-25T01:26:49+00:00",
+      "description": "3.5 sürümümüzdeki bir başka yenilik ise Slide show projelerinde resim ve sesleri eşleme. Şu ana dek resimlere yazılar ekleyip eşleyebiliyorduk. Ama birden fazla sesle farklı resimleri eşlemek ancak süreleri düzenleyerek olabiliyordu. Artık bu durum çok daha erişilebilir ve pratik.",
+      "thumbnail": "https://i.ytimg.com/vi/CCTQ2fI8FWU/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=CCTQ2fI8FWU"
+    },
+    {
+      "videoId": "Yrbia2y5H0E",
+      "title": "Engelsiz Video Düzenleyicisi Erişilebilir Kayıt sihirbazı",
+      "published": "2026-02-25T01:18:21+00:00",
+      "description": "Merhabalar. Engelsiz Video Düzenleyicisi 3.5 sürümüne heyecan verici bir özellik ekledik. OBS ile erişilebilir kayıt sihirbazı. Açık Kaynak kodlu OBS’nin kayıt özellikleriyle erişilebilirliğin gücünü birleştirdik. Böylece artık ekranda kendi kameranızın ve pencerenin konumumu erişilebilir biçimde yerleştirip kayıt yapmanız mümkün hale geldi. Bu video olayınn nasılını anlatıyor. Engelsiz Video Düzenleyicisi güncel sürümlerini aşağıdaki bağlantıdan indirebilirsiniz:\nhttps://www.drenginyilmaz.net/engelsiz-video-duzenleyicisi/",
+      "thumbnail": "https://i.ytimg.com/vi/Yrbia2y5H0E/hqdefault.jpg",
+      "url": "https://www.youtube.com/watch?v=Yrbia2y5H0E"
     }
   ]
 }

@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const { spawn, execFile, execFileSync } = require('child_process');
+const nativeAudioPlatform = require('./native-audio-platform');
 let WebSocketImpl = globalThis.WebSocket;
 if (!WebSocketImpl) {
     try {
@@ -395,19 +396,7 @@ async function closeGeminiLiveTranslateSessionsForWebContents(webContentsId, { r
 }
 
 function resolveNativeAudioHelperPath() {
-    if (process.platform !== 'win32') {
-        return '';
-    }
-    const exeName = 'EvdProcessLoopbackCapture.exe';
-    const candidates = [
-        process.resourcesPath ? path.join(process.resourcesPath, 'native-audio', exeName) : '',
-        process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Release', 'net8.0-windows', 'win-x64', 'publish', exeName) : '',
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Release', 'net8.0-windows', 'win-x64', exeName),
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Release', 'net8.0-windows', 'win-x64', 'publish', exeName),
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Release', 'net8.0-windows', exeName),
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Debug', 'net8.0-windows', exeName)
-    ].filter(Boolean);
-    return candidates.find((candidate) => fs.existsSync(candidate)) || '';
+    return nativeAudioPlatform.resolveNativeAudioHelperPath();
 }
 
 function runNativeAudioSessionVolumeCommand({
@@ -837,7 +826,7 @@ function isTeamsAudioWindow(targetWindowTitle = '', targetProcessName = '') {
     return inferProcessNamesFromWindowTitle(targetWindowTitle, targetProcessName).includes('msedgewebview2');
 }
 
-function startGeminiLiveNativeAudioCapture(session, captureMode = 'native-microphone', targetProcessId = 0, targetWindowTitle = '', targetProcessName = '', targetWindowSourceId = '', microphoneDeviceId = '') {
+function startGeminiLiveNativeAudioCapture(session, captureMode = 'native-microphone', targetProcessId = 0, targetWindowTitle = '', targetProcessName = '', targetWindowSourceId = '', targetBundleId = '', microphoneDeviceId = '') {
     const helperPath = resolveNativeAudioHelperPath();
     if (!helperPath) {
         throw new Error('native_microphone_helper_missing');
@@ -846,7 +835,14 @@ function startGeminiLiveNativeAudioCapture(session, captureMode = 'native-microp
     if (captureMode === 'native-microphone' && microphoneDeviceId) {
         args.push('--microphone-device-id', String(microphoneDeviceId));
     }
-    if (captureMode === 'native-system-audio') {
+    if (process.platform === 'darwin') {
+        args = nativeAudioPlatform.buildCaptureArgs({
+            captureMode,
+            targetProcessId,
+            targetBundleId,
+            includeSelfExclusion: captureMode === 'native-system-audio'
+        });
+    } else if (captureMode === 'native-system-audio') {
         args = ['--output-loopback'];
     } else if (captureMode === 'native-window-audio') {
         const pid = resolveNativeAudioTargetProcessId(targetProcessId, targetWindowTitle, targetProcessName, targetWindowSourceId);
@@ -1485,6 +1481,7 @@ function setupGeminiHandlers(mainWindow) {
                     payload.targetWindowTitle,
                     payload.targetProcessName,
                     payload.targetWindowSourceId,
+                    payload.targetBundleId,
                     payload.microphoneDeviceId
                 );
             }

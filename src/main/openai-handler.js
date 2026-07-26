@@ -2,6 +2,7 @@ const { ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { spawn, execFileSync } = require('child_process');
+const nativeAudioPlatform = require('./native-audio-platform');
 
 let WebSocketImpl = globalThis.WebSocket;
 if (!WebSocketImpl) {
@@ -258,19 +259,7 @@ function sendNativeRealtimeTranslateEvent(session, payload) {
 }
 
 function resolveNativeAudioHelperPath() {
-    if (process.platform !== 'win32') {
-        return '';
-    }
-    const exeName = 'EvdProcessLoopbackCapture.exe';
-    const candidates = [
-        process.resourcesPath ? path.join(process.resourcesPath, 'native-audio', exeName) : '',
-        process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Release', 'net8.0-windows', 'win-x64', 'publish', exeName) : '',
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Release', 'net8.0-windows', 'win-x64', 'publish', exeName),
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Release', 'net8.0-windows', 'win-x64', exeName),
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Release', 'net8.0-windows', exeName),
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Debug', 'net8.0-windows', exeName)
-    ].filter(Boolean);
-    return candidates.find((candidate) => fs.existsSync(candidate)) || '';
+    return nativeAudioPlatform.resolveNativeAudioHelperPath();
 }
 
 function runPowerShellJson(command, timeout = 8000) {
@@ -437,7 +426,7 @@ function appendNativeRealtimeTranslateAudio(session, audioBase64) {
     }));
 }
 
-function startNativeRealtimeTranslateCapture(session, captureMode = 'native-microphone', targetProcessId = 0, targetWindowTitle = '', targetProcessName = '', targetWindowSourceId = '', microphoneDeviceId = '') {
+function startNativeRealtimeTranslateCapture(session, captureMode = 'native-microphone', targetProcessId = 0, targetWindowTitle = '', targetProcessName = '', targetWindowSourceId = '', targetBundleId = '', microphoneDeviceId = '') {
     const helperPath = resolveNativeAudioHelperPath();
     if (!helperPath) {
         throw new Error('native_microphone_helper_missing');
@@ -446,7 +435,14 @@ function startNativeRealtimeTranslateCapture(session, captureMode = 'native-micr
     if (captureMode === 'native-microphone' && microphoneDeviceId) {
         args.push('--microphone-device-id', String(microphoneDeviceId));
     }
-    if (captureMode === 'native-system-audio') {
+    if (process.platform === 'darwin') {
+        args = nativeAudioPlatform.buildCaptureArgs({
+            captureMode,
+            targetProcessId,
+            targetBundleId,
+            includeSelfExclusion: captureMode === 'native-system-audio'
+        });
+    } else if (captureMode === 'native-system-audio') {
         args = ['--output-loopback'];
     } else if (captureMode === 'native-window-audio') {
         const useOutputLoopbackForTeams = isTeamsAudioWindow(targetWindowTitle, targetProcessName);
@@ -1062,6 +1058,7 @@ function setupOpenAiHandlers() {
                     payload.targetWindowTitle,
                     payload.targetProcessName,
                     payload.targetWindowSourceId,
+                    payload.targetBundleId,
                     payload.microphoneDeviceId
                 );
             }

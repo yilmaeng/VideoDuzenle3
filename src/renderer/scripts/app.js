@@ -1045,7 +1045,6 @@ const App = {
         window.api.onSelectRangeDialog(() => Dialogs.showRangeDialog());
         window.api.onSelectBetweenMarkers(() => Selection.selectBetweenMarkers());
         window.api.onShowSpeedDialog(() => Dialogs.showSpeedDialog());
-        window.api.onIntelligentSelection(() => Dialogs.showAIDialog());
 
         // Ekleme işlemleri
         window.api.onInsertAudio((filePath) => {
@@ -1152,6 +1151,20 @@ const App = {
             // Dialog artık kendi içinde listeye ekliyor veya doğrudan uyguluyor
         });
 
+        window.api.onInsertTickerDialog(async () => {
+            if (!VideoPlayer.hasVideo()) {
+                Accessibility.alert(this.t('runtime.app.open_video_first', 'Open a video first'));
+                return;
+            }
+            const video = VideoPlayer.videoElement;
+            await window.api.openVideoTickerDialog({
+                projectDuration: VideoPlayer.getDuration(), startTime: VideoPlayer.getTimelineTime(),
+                aspectRatio: video && video.videoHeight > video.videoWidth ? '9:16' : '16:9',
+                previewMedia: { path: this.currentFilePath, type: 'video', fitMode: 'fit' },
+                videoPath: this.currentFilePath
+            });
+        });
+
         window.api.onInsertImages((filePaths) => {
             Dialogs.showImagesDialog(filePaths);
         });
@@ -1178,16 +1191,11 @@ const App = {
         const canControlVideo = () => !isDialogOpen() && !Keyboard.isInputFocused();
 
         // Navigasyon işlemleri
-        window.api.onGotoTimeDialog(() => Dialogs.showGotoDialog());
-        window.api.onGotoStart(() => { if (!isDialogOpen()) VideoPlayer.goToStart(); });
 
         // Video Yolu İsteği (Main Process için)
         window.api.onGetCurrentVideoPath(() => {
             window.api.sendCurrentVideoPath(VideoPlayer.currentFilePath);
         });
-
-        window.api.onGotoEnd(() => { if (!isDialogOpen()) VideoPlayer.goToEnd(); });
-        window.api.onGotoMiddle(() => { if (!isDialogOpen()) VideoPlayer.goToMiddle(); });
         window.api.onGotoNextMarker(() => { if (!isDialogOpen()) Markers.goToNext(); });
         window.api.onGotoPrevMarker(() => { if (!isDialogOpen()) Markers.goToPrevious(); });
         window.api.onGotoSelectionStart(() => { if (!isDialogOpen()) Selection.jumpToStart(); });
@@ -1403,8 +1411,10 @@ const App = {
             InsertionQueue.addItem(data.type, data.options);
             Accessibility.announce(this.t('runtime.app.queue_item_added', '{type} listeye eklendi. Toplam: {count} öğe', {
                 type: data.type === 'text'
-                    ? this.t('runtime.app.queue_item_text', 'Yazı')
-                    : this.t('runtime.app.queue_item_audio', 'Ses'),
+                    ? this.t('runtime.app.queue_item_text', 'Text')
+                    : (data.type === 'ticker'
+                        ? this.t('runtime.app.queue_item_ticker', 'Ticker')
+                        : this.t('runtime.app.queue_item_audio', 'Audio')),
                 count: InsertionQueue.getCount()
             }));
         });
@@ -1446,10 +1456,11 @@ const App = {
             await this.addTextToVideo(options);
         });
 
-        // Video yolu isteği (Gemini için)
-        window.api.onGetCurrentVideoPath(() => {
-            window.api.sendCurrentVideoPath(this.currentFilePath);
+        window.api.onTickerOverlayDirectApply(async (options) => {
+            await this.addTickerToVideo(options);
         });
+
+        // Video yolu isteği (Gemini için)
 
         // === VIDEO KATMANI (Picture-in-Picture) ===
         window.api.onOpenVideoLayerWizard((filePath) => {
@@ -1527,7 +1538,7 @@ const App = {
                 Accessibility.announce(this.t('runtime.app.video_repaired_reloaded', 'Video onarıldı ve tekrar yüklendi.'));
             } else {
                 Accessibility.announceError(this.t('runtime.app.repair_failed', 'Onarım başarısız: {error}', {
-                    error: result.error
+                    error: localizeMediaError(result.error)
                 }));
             }
         }
@@ -1587,6 +1598,9 @@ const App = {
      */
     async _openFileInternal(filePath, resetUI = true) {
         console.log('İç dosya açma akışı başladı:', filePath, 'resetUI=', resetUI);
+        const localizeMediaError = (message) => message === 'primary_video_stream_missing'
+            ? this.t('runtime.app.primary_video_stream_missing', 'Dosyada açılabilir bir ana video akışı bulunamadı.')
+            : message;
         // Media compatibility status listener'ı kur
         const statusHandler = (status) => {
             console.log('Media Compat Status:', status);
@@ -1613,7 +1627,7 @@ const App = {
                     break;
                 case 'error':
                     this.hideProgress();
-                    Accessibility.announceError(status.message || this.t('runtime.app.generic_error', 'Bir hata oluştu'));
+                    Accessibility.announceError(localizeMediaError(status.message) || this.t('runtime.app.generic_error', 'Bir hata oluştu'));
                     break;
             }
         };
@@ -1648,7 +1662,7 @@ const App = {
 
             if (!result.success) {
                 Accessibility.announceError(this.t('runtime.app.video_open_failed', 'Video açılamadı: {error}', {
-                    error: result.error
+                    error: localizeMediaError(result.error)
                 }));
                 return;
             }
@@ -3079,8 +3093,29 @@ const App = {
     },
 
     /**
-     * Videoya yazı ekle
-     * @param {Object} options - Yazı ekleme seçenekleri
+     * Add a moving ticker to the current video.
+     * @param {Object} options - Ticker timing and style options
+     */
+    async addTickerToVideo(options) {
+        if (!VideoPlayer.hasVideo()) return;
+        this.showProgress(this.t('runtime.app.adding_ticker_overlay', 'Adding ticker...'));
+        try {
+            const outputPath = await window.api.getTempPath(`ticker_${Date.now()}.mp4`);
+            const result = await window.api.addTickerOverlay({ videoPath: this.currentFilePath, outputPath, options });
+            this.hideProgress();
+            if (!result.success) throw new Error(result.error || this.t('runtime.app.ticker_add_failed', 'Ticker could not be added.'));
+            Accessibility.announceComplete(this.t('runtime.app.ticker_add_operation', 'Ticker addition'));
+            await this.openFile(result.outputPath);
+            Accessibility.announce(this.t('runtime.app.ticker_added_video_loaded', 'The video with the ticker has been loaded.'));
+        } catch (error) {
+            this.hideProgress();
+            Accessibility.announceError(error.message);
+        }
+    },
+
+    /**
+     * Add static text to the current video.
+     * @param {Object} options - Text overlay options
      */
     async addTextToVideo(options) {
         if (!VideoPlayer.hasVideo()) return;
@@ -3237,6 +3272,7 @@ const App = {
         const objectItems = items.filter(i => i.type === 'object');
         const overlayItems = items.filter(i => i.type === 'overlay');
         const textItems = items.filter(i => i.type === 'text');
+        const tickerItems = items.filter(i => i.type === 'ticker');
         const audioItems = items.filter(i => i.type === 'audio');
         const imageItems = items.filter(i => i.type === 'image');
 
@@ -3252,7 +3288,7 @@ const App = {
 
             let currentVideoPath = this.currentFilePath;
             let stepCount = 0;
-            const totalSteps = transitionItems.length + objectItems.length + overlayItems.length + textItems.length + audioItems.length + imageItems.length;
+            const totalSteps = transitionItems.length + objectItems.length + overlayItems.length + textItems.length + tickerItems.length + audioItems.length + imageItems.length;
             const resolveAssetPath = (assetPath) => {
                 if (!assetPath || typeof assetPath !== 'string') {
                     return assetPath;
@@ -3440,6 +3476,15 @@ const App = {
             }
 
             // Sonra sesleri uygula
+            for (const item of tickerItems) {
+                stepCount++;
+                this.updateProgress(this.t('runtime.app.adding_ticker_progress', 'Adding ticker ({current}/{total})', { current: stepCount, total: totalSteps }), (stepCount / totalSteps) * 100);
+                const outputPath = await window.api.getTempPath(`ticker_${stepCount}_${Date.now()}.mp4`);
+                const result = await window.api.addTickerOverlay({ videoPath: currentVideoPath, outputPath, options: item.options });
+                if (result.success && result.outputPath) currentVideoPath = result.outputPath;
+                else throw new Error(result.error || this.t('runtime.app.ticker_add_failed', 'Ticker could not be added.'));
+            }
+
             for (const item of audioItems) {
                 stepCount++;
                 this.updateProgress(`Ses ekleniyor (${stepCount}/${totalSteps})`, (stepCount / totalSteps) * 100);

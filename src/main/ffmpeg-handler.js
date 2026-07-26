@@ -1088,6 +1088,102 @@ async function _addTextOverlay(videoPath, output, text, options) {
     }
 }
 
+function _escapeTickerDrawtextPath(filePath) {
+    return String(filePath || '').replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
+}
+
+function _tickerColor(value, fallback) {
+    const color = /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : fallback;
+    return `0x${color.slice(1)}`;
+}
+
+function _tickerFontOption(fontFamily = 'sans') {
+    const family = ['serif', 'monospace'].includes(fontFamily) ? fontFamily : 'sans';
+    const candidates = process.platform === 'darwin' ? {
+        sans: ['/System/Library/Fonts/Supplemental/Arial.ttf', '/System/Library/Fonts/Helvetica.ttc'],
+        serif: ['/System/Library/Fonts/Supplemental/Times New Roman.ttf', '/System/Library/Fonts/Times.ttc'],
+        monospace: ['/System/Library/Fonts/Supplemental/Courier New.ttf', '/System/Library/Fonts/SFNSMono.ttf']
+    } : {
+        sans: ['C:/Windows/Fonts/segoeui.ttf', 'C:/Windows/Fonts/arial.ttf'],
+        serif: ['C:/Windows/Fonts/times.ttf'], monospace: ['C:/Windows/Fonts/cour.ttf']
+    };
+    const names = { sans: 'Arial', serif: 'Times New Roman', monospace: 'Courier New' };
+    const fontPath = candidates[family].find(candidate => fs.existsSync(candidate));
+    return fontPath ? `fontfile='${_escapeTickerDrawtextPath(fontPath)}'` : `font='${names[family]}'`;
+}
+
+function _tickerPosition(options = {}) {
+    const presets = {
+        'top-left': [5, 8], 'top-center': [50, 8], 'top-right': [95, 8],
+        'middle-left': [5, 50], center: [50, 50], 'middle-right': [95, 50],
+        'bottom-left': [5, 90], 'bottom-center': [50, 90], 'bottom-right': [95, 90]
+    };
+    const value = presets[options.positionPreset];
+    return {
+        x: value ? value[0] : Math.min(100, Math.max(0, Number(options.xPercent ?? 50))),
+        y: value ? value[1] : Math.min(100, Math.max(0, Number(options.yPercent ?? 90)))
+    };
+}
+
+async function _addTickerOverlay(videoPath, output, options = {}, onProgress) {
+    const input = _getSafePath(videoPath);
+    const target = _getSafePath(output);
+    if (!input || !target) throw new Error('ticker_invalid_paths');
+    if (!String(options.content || '').trim()) throw new Error('ticker_text_required');
+
+    const metadata = await _getVideoMetadata(input);
+    const duration = Math.max(0.1, Number(metadata.duration || 0.1));
+    const start = Math.max(0, Number(options.wholeProject ? 0 : options.startTime || 0));
+    const requestedEnd = options.wholeProject || options.endMode === 'project' ? duration : Number(options.endTime);
+    const end = Math.min(duration, Number.isFinite(requestedEnd) ? requestedEnd : duration);
+    if (end <= start) throw new Error('ticker_invalid_time');
+
+    const nonce = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const textFile = path.join(os.tmpdir(), `evd_ticker_${nonce}.txt`);
+    const filterFile = path.join(os.tmpdir(), `evd_ticker_${nonce}.ffscript`);
+    const cleanup = () => { for (const file of [textFile, filterFile]) { try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch (_) {} } };
+
+    fs.writeFileSync(textFile, String(options.content), 'utf8');
+    const fontSize = Math.min(240, Math.max(12, Number(options.fontSize || 52)));
+    const speed = Math.min(1000, Math.max(20, Number(options.speed || 140)));
+    const position = _tickerPosition(options);
+    const dh = `(t-${start.toFixed(3)})*(${speed}*w/1920)`;
+    const dv = `(t-${start.toFixed(3)})*(${speed}*h/1080)`;
+    const loop = options.loop !== false;
+    let x = `(w-tw)*${(position.x / 100).toFixed(4)}`;
+    let y = `(h-th)*${(position.y / 100).toFixed(4)}`;
+    if (options.direction === 'left-to-right') x = loop ? `-tw+(${dh}-(w+tw)*floor(${dh}/(w+tw)))` : `-tw+${dh}`;
+    else if (options.direction === 'bottom-to-top') y = loop ? `h-(${dv}-(h+th)*floor(${dv}/(h+th)))` : `h-${dv}`;
+    else if (options.direction === 'top-to-bottom') y = loop ? `-th+(${dv}-(h+th)*floor(${dv}/(h+th)))` : `-th+${dv}`;
+    else x = loop ? `w-(${dh}-(w+tw)*floor(${dh}/(w+tw)))` : `w-${dh}`;
+
+    let drawtext = `drawtext=textfile='${_escapeTickerDrawtextPath(textFile)}':${_tickerFontOption(options.fontFamily)}:fontsize=${fontSize}:fontcolor=${_tickerColor(options.fontColor, '#ffffff')}`;
+    const opacity = Math.min(100, Math.max(0, Number(options.backgroundOpacity ?? 55))) / 100;
+    if (opacity > 0) drawtext += `:box=1:boxcolor=${_tickerColor(options.backgroundColor, '#000000')}@${opacity.toFixed(2)}:boxborderw=10`;
+    const shadows = { small: ':shadowx=1:shadowy=1:shadowcolor=black@0.75', medium: ':shadowx=2:shadowy=2:shadowcolor=black@0.85', large: ':shadowx=4:shadowy=4:shadowcolor=black@0.9' };
+    drawtext += shadows[options.shadow] || '';
+    const border = Math.min(12, Math.max(0, Number(options.borderWidth || 0)));
+    if (border > 0) drawtext += `:borderw=${border}:bordercolor=${_tickerColor(options.borderColor, '#000000')}`;
+    drawtext += `:x='${x}':y='${y}':enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`;
+
+    const chain = _joinVideoFilters(_buildHdrToSdrFilter(metadata), drawtext);
+    fs.writeFileSync(filterFile, `[0:v]${chain}[outv]`, 'utf8');
+    return new Promise((resolve, reject) => {
+        const command = ffmpeg(input)
+            .inputOptions([])
+            .outputOptions([
+                '-filter_complex_script', filterFile, '-map', '[outv]', '-map', '0:a?',
+                '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'copy', '-pix_fmt', 'yuv420p',
+                '-max_muxing_queue_size', '9999', ..._buildProcessedVideoColorOutputOptions(metadata)
+            ])
+            .output(target)
+            .on('progress', progress => { if (typeof onProgress === 'function') onProgress(Math.max(0, Math.min(100, Number(progress.percent || 0)))); })
+            .on('end', () => { cleanup(); resolve({ success: true, outputPath: target }); })
+            .on('error', error => { cleanup(); reject(error); });
+        command.run();
+    });
+}
+
 async function _addTransition(videoPath, output, options) {
     const sIn = _getSafePath(videoPath);
     const sourceMetadata = await _getVideoMetadata(sIn).catch(() => ({}));
@@ -2820,6 +2916,7 @@ module.exports = {
     overlayImageToVideo: async function () { const args = cleanArgs(arguments); return _overlayLayerJudge(args[0], args[1], args[2], args[3]); },
     addImageOverlay: async function () { const args = cleanArgs(arguments); return _overlayLayerJudge(args[0], args[1], args[2], args[3]); },
     addTextOverlay: async function () { const args = cleanArgs(arguments); return _addTextOverlay(args[0], args[1], args[2], args[3]); },
+    addTickerOverlay: async function () { const args = cleanArgs(arguments); return _addTickerOverlay(args[0], args[1], args[2], args[3], args[4]); },
     addTransition: async function () { const args = cleanArgs(arguments); return _addTransition(args[0], args[1], args[2]); },
     safeConvertVideo: async function () {
         const args = cleanArgs(arguments);
@@ -2912,6 +3009,25 @@ async function _replaceAudio(videoPath, audioPath, offsetMs, muteOriginal, outpu
     const sAud = _getSafePath(audioPath);
     console.log(`[ReplaceAudio] Vid: ${sVid}, Aud: ${sAud}, Offset: ${offsetMs}, Mute: ${muteOriginal}`);
 
+    let hasOriginalAudio = false;
+    if (!muteOriginal) {
+        const metadata = await new Promise((resolve, reject) => {
+            ffmpeg.ffprobe(sVid, (error, result) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(result);
+            });
+        });
+        hasOriginalAudio = Array.isArray(metadata.streams)
+            && metadata.streams.some((stream) => stream.codec_type === 'audio');
+
+        if (!hasOriginalAudio) {
+            console.log('[ReplaceAudio] Original audio mix requested, but the video has no audio stream. External audio will be used alone.');
+        }
+    }
+
     return new Promise((resolve, reject) => {
         const cmd = ffmpeg(sVid).input(sAud);
 
@@ -2930,18 +3046,12 @@ async function _replaceAudio(videoPath, audioPath, offsetMs, muteOriginal, outpu
         }
 
         // 2. Decide Output Audio
-        if (muteOriginal) {
+        if (muteOriginal || !hasOriginalAudio) {
             // Completely replace: Just use the delayed new audio
             // Note: If video has no audio stream [0:a], this is safe.
             // We map the new audio directly.
             audioMap = '[aud_delayed]';
         } else {
-            // Mix: We need [0:a]. 
-            // Warning: If [0:a] does not exist, this will fail.
-            // Ideally we check metadata, but for speed, let's assume video has audio if user didn't mute it.
-            // If we want robustness, we can use 'amovie' or check 'streams'.
-            // For now, assume [0:a] exists.
-
             complex.push(`[0:a]volume=1.0[aud_orig]`);
             complex.push(`[aud_orig][aud_delayed]amix=inputs=2:duration=first:dropout_transition=0[aud_mixed]`);
             audioMap = '[aud_mixed]';
@@ -2963,8 +3073,6 @@ async function _replaceAudio(videoPath, audioPath, offsetMs, muteOriginal, outpu
             .on('end', () => resolve(outputPath))
             .on('error', (err) => {
                 console.error("[ReplaceAudio] Error:", err.message);
-                // Fallback: If map [0:a] failed (maybe video has no audio), retry with muteOriginal=true logic?
-                // Too complex for now, just reject.
                 reject(err);
             })
             .run();
@@ -4656,6 +4764,7 @@ const _legacy_exports = {
     previewAudioSegment: _previewAudio, // Helper for audio preview
     burnSubtitles: _burnSubtitles,
     addTextOverlay: _addTextOverlay,
+    addTickerOverlay: _addTickerOverlay,
     addImageOverlay: _overlayImageToVideo, // Helper for simple image overlay
     addTransition: _addTransition,
 

@@ -681,7 +681,11 @@
             <div class="tab-content" id="text-panel" role="tabpanel" aria-labelledby="text-tab">
                 <div class="list-header">
                     <h3><span data-i18n="dialog.slideshow_editor.text_list">Text List</span> (<span id="text-count">0</span>)</h3>
-                    <button class="add-btn" id="add-text-btn" data-i18n="dialog.slideshow_editor.add_text">+ Add Text</button>
+                    <div class="button-row">
+                        <button class="add-btn" id="add-text-btn" data-i18n="dialog.slideshow_editor.add_text">+ Add Text</button>
+                        <button class="add-btn" id="add-ticker-btn" data-i18n="dialog.slideshow_editor.add_ticker">+ Add Ticker</button>
+                        <button class="add-btn" id="add-karaoke-btn" style="background: #a05a2c;" data-i18n="dialog.slideshow_karaoke.open_button">+ Karaoke</button>
+                    </div>
                 </div>
                 <div class="list-container">
                     <ul class="item-list" id="text-list" role="listbox"
@@ -797,6 +801,9 @@
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="timing-editor">
             <span data-i18n="dialog.slideshow_editor.menu.timing_editor">Zamanlayarak Yerleştir</span>
+        </div>
+        <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="karaoke-editor">
+            <span data-i18n="dialog.slideshow_karaoke.audio_menu">Karaoke sözlerini zamanla</span>
         </div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" role="menuitem" tabindex="-1" data-action="delete" style="color: #ff6b6b;">
@@ -1138,6 +1145,7 @@
             mediaItems: [],
             audioTracks: [],
             textOverlays: [],
+            karaokeTracks: [],
             totalDuration: 0
         };
 
@@ -1388,6 +1396,7 @@
                 ? data.audioTracks.map((audio, audioIndex) => normalizeAudioTrack(audio, audioIndex)).filter(Boolean)
                 : [];
             normalized.textOverlays = Array.isArray(data?.textOverlays) ? data.textOverlays : [];
+            normalized.karaokeTracks = Array.isArray(data?.karaokeTracks) ? data.karaokeTracks : [];
             normalized.mediaItems = Array.isArray(data?.mediaItems)
                 ? data.mediaItems.map((item, itemIndex) => normalizeMediaItem(item, itemIndex)).filter(Boolean)
                 : [];
@@ -3108,6 +3117,13 @@
             }));
         });
 
+        ipcRenderer.on('slideshow-karaoke-result', (_event, karaokeTracks) => {
+            projectData.karaokeTracks = Array.isArray(karaokeTracks) ? karaokeTracks : [];
+            updateStats();
+            announce(t('dialog.slideshow_karaoke.saved', 'Karaoke sözleri projeye kaydedildi. Toplam karaoke grubu: {count}.', {
+                count: projectData.karaokeTracks.length
+            }));
+        });
         // Video oluşturma ilerleme durumu
         let exportProgressInterval = null;
         let lastAnnouncedPercent = -1;
@@ -3205,11 +3221,12 @@
             const mediaCount = getOrderedMediaItems().length;
             document.getElementById('stats-images').textContent = formatStatsLabel('images', mediaCount);
             document.getElementById('stats-audio').textContent = formatStatsLabel('audio', projectData.audioTracks.length);
-            document.getElementById('stats-text').textContent = formatStatsLabel('text', projectData.textOverlays.length);
+            const totalTextLayers = projectData.textOverlays.length + (projectData.karaokeTracks || []).filter(track => Array.isArray(track?.segments) && track.segments.length > 0).length;
+            document.getElementById('stats-text').textContent = formatStatsLabel('text', totalTextLayers);
 
             document.getElementById('image-count').textContent = mediaCount;
             document.getElementById('audio-count').textContent = projectData.audioTracks.length;
-            document.getElementById('text-count').textContent = projectData.textOverlays.length;
+            document.getElementById('text-count').textContent = totalTextLayers;
 
             // Boş mesajları göster/gizle
             document.getElementById('images-empty').style.display =
@@ -3217,7 +3234,7 @@
             document.getElementById('audio-empty').style.display =
                 projectData.audioTracks.length === 0 ? 'block' : 'none';
             document.getElementById('text-empty').style.display =
-                projectData.textOverlays.length === 0 ? 'block' : 'none';
+                totalTextLayers === 0 ? 'block' : 'none';
 
             // Tümünü Betimle düğmesini aktif/pasif yap
             document.getElementById('describe-all-btn').disabled = projectData.images.length === 0;
@@ -4764,6 +4781,7 @@
             });
 
             projectData.audioTracks.splice(index, 1);
+            projectData.karaokeTracks = (projectData.karaokeTracks || []).filter(track => track.audioTrackId !== audio.id);
 
             if (selectedAudioIndex >= projectData.audioTracks.length) {
                 selectedAudioIndex = projectData.audioTracks.length - 1;
@@ -4803,6 +4821,7 @@
                 }
             });
             projectData.audioTracks = projectData.audioTracks.filter(track => !selectedSet.has(track.id));
+            projectData.karaokeTracks = (projectData.karaokeTracks || []).filter(track => !selectedSet.has(track.audioTrackId));
             selectedAudioIndex = Math.min(index, projectData.audioTracks.length - 1);
             selectedAudioIds = new Set();
             if (selectedAudioIndex >= 0 && projectData.audioTracks[selectedAudioIndex]) {
@@ -4933,6 +4952,9 @@
                 case 'timing-editor':
                     openAudioTimingDialog(selectedAudioIndex);
                     break;
+                case 'karaoke-editor':
+                    openKaraokeEditor(projectData.audioTracks[selectedAudioIndex]?.id || null);
+                    break;
                 case 'delete':
                     deleteSelectedAudioItems(selectedAudioIndex);
                     break;
@@ -5048,16 +5070,10 @@
                 }));
 
                 try {
-                    const result = await ipcRenderer.invoke('describe-image-ai', {
-                        path: img.path,
-                        rotation: img.rotation || 0
-                    });
-                    img.shortDescription = result.short;
-                    img.longDescription = result.long;
-                    img.orientationStatus = result.orientationStatus || null;
-                    img.orientationMessage = result.orientationMessage || null;
+                    await describeImageRecord(img);
                     describedCount++;
 
+                    syncMediaItemsFromImages();
                     renderImageList();
                 } catch (error) {
                     console.error(`Description error (${img.filename}):`, error);
@@ -5068,11 +5084,15 @@
                 }
             }
 
+            syncMediaItemsFromImages();
+            renderImageList();
+            updateStats();
             btn.disabled = false;
             btn.textContent = t('dialog.slideshow_editor.describe_all', 'Describe All');
             announce(t('runtime.slideshow_editor.describe_all_completed', '{count} images were described.', {
                 count: describedCount
             }));
+            restoreFocus();
         });
 
         // Projeyi Kaydet
@@ -5124,7 +5144,44 @@
             });
         });
 
+        function getTickerDialogContext() {
+            const previewMedia = getOrderedMediaItems().find(item => item?.path);
+            return {
+                projectDuration: Number(projectData.totalDuration || 0),
+                aspectRatio: projectData.aspectRatio || '16:9',
+                visualFitMode: projectData.visualFitMode || 'blur',
+                previewMedia: previewMedia ? {
+                    path: previewMedia.path,
+                    type: previewMedia.type || 'image',
+                    fitMode: previewMedia.fitMode || projectData.visualFitMode || 'blur'
+                } : null
+            };
+        }
+
+        // Akan yazı proje zaman çizelgesinde bağımsız bir katmandır; global kısayol gerektirmez.
+        document.getElementById('add-ticker-btn').addEventListener('click', () => {
+            ipcRenderer.send('slideshow-add-ticker', getTickerDialogContext());
+        });
+
         // Yazı listesini render et
+        function openKaraokeEditor(audioTrackId = null) {
+            if (!Array.isArray(projectData.audioTracks) || projectData.audioTracks.length === 0) {
+                announce(t('dialog.slideshow_karaoke.audio_required', 'Karaoke zamanlaması için önce bir ses parçası ekleyin.'));
+                return;
+            }
+            const selectedId = audioTrackId || projectData.audioTracks[selectedAudioIndex]?.id || projectData.audioTracks[0]?.id || null;
+            ipcRenderer.send('slideshow-open-karaoke-editor', {
+                audioTracks: projectData.audioTracks,
+                karaokeTracks: projectData.karaokeTracks || [],
+                selectedAudioTrackId: selectedId,
+                aspectRatio: projectData.aspectRatio || '16:9'
+            });
+        }
+
+        // Karaoke düzenleyicisi kendi zamanlama penceresinde bağlama duyarlı kısayollar kullanır.
+        document.getElementById('add-karaoke-btn').addEventListener('click', () => {
+            openKaraokeEditor();
+        });
         function renderTextList() {
             textList.innerHTML = '';
 
@@ -5142,18 +5199,40 @@
                 const shortContent = text.content.length > 40
                     ? text.content.substring(0, 40) + '...'
                     : text.content;
-                const targetSummary = formatTextTargetSummary(text.targetImages || []);
-                const positionLabel = formatTextPosition(text.position);
+                const isTicker = text.kind === 'ticker';
+                const targetSummary = isTicker
+                    ? t('dialog.slideshow_editor.ticker_independent_layer', 'Independent overlay')
+                    : formatTextTargetSummary(text.targetImages || []);
+                const positionLabel = isTicker
+                    ? t(`dialog.slideshow_ticker_overlay.direction_${String(text.direction || 'right-to-left').replaceAll('-', '_')}`, text.direction || 'right-to-left')
+                    : formatTextPosition(text.position);
+                const typeLabel = isTicker
+                    ? t('dialog.slideshow_editor.ticker_type', 'Ticker')
+                    : t('dialog.slideshow_editor.static_text_type', 'Static text');
+                const timingLabel = isTicker
+                    ? (text.wholeProject || text.endMode === 'project'
+                        ? t('dialog.slideshow_editor.ticker_whole_project', 'Throughout the video')
+                        : t('dialog.slideshow_editor.ticker_time_range', '{start} - {end}', {
+                            start: formatSecondsAsClock(Number(text.startTime || 0)),
+                            end: formatSecondsAsClock(Number(text.endTime || 0))
+                        }))
+                    : targetSummary;
 
                 li.innerHTML = `
                     <div class="item-title">${shortContent}</div>
                     <div class="item-info">
-                        ${targetSummary} • ${t('dialog.slideshow_editor.text_position', 'Position')}: ${positionLabel}
+                        ${typeLabel} • ${timingLabel} • ${positionLabel}
                     </div>
                 `;
 
-                li.setAttribute('aria-label',
-                    t('runtime.slideshow_editor.text_item_aria', '{index}. "{content}", {targets}, konum {position}', {
+                li.setAttribute('aria-label', isTicker
+                    ? t('runtime.slideshow_editor.ticker_item_aria', '{index}. Ticker: "{content}", {timing}, {direction}', {
+                        index: index + 1,
+                        content: shortContent,
+                        timing: timingLabel,
+                        direction: positionLabel
+                    })
+                    : t('runtime.slideshow_editor.text_item_aria', '{index}. "{content}", {targets}, position {position}', {
                         index: index + 1,
                         content: shortContent,
                         targets: targetSummary,
@@ -5220,6 +5299,28 @@
             }));
         }
 
+        function openTextOverlayEditor(index) {
+            const text = projectData.textOverlays[index];
+            if (!text) return;
+
+            if (text.kind === 'ticker') {
+                announce(t('runtime.slideshow_editor.ticker_edit_opening', 'Opening ticker edit dialog...'));
+                ipcRenderer.send('slideshow-edit-ticker', {
+                    ...getTickerDialogContext(),
+                    editTicker: text,
+                    editIndex: index
+                });
+                return;
+            }
+
+            announce(t('runtime.slideshow_editor.text_edit_opening', 'Opening text edit dialog...'));
+            ipcRenderer.send('slideshow-edit-text', {
+                images: getTextOverlayTargets(),
+                editText: text,
+                editIndex: index
+            });
+        }
+
         // Yazı listesi klavye navigasyonu
         textList.addEventListener('keydown', (e) => {
             if (projectData.textOverlays.length === 0) return;
@@ -5255,13 +5356,7 @@
                     // Enter tuşu ile düzenleme
                     e.preventDefault();
                     if (currentIndex >= 0 && projectData.textOverlays[currentIndex]) {
-                        const text = projectData.textOverlays[currentIndex];
-                        announce(t('runtime.slideshow_editor.text_edit_opening', 'Opening text edit dialog...'));
-                        ipcRenderer.send('slideshow-edit-text', {
-                            images: getTextOverlayTargets(),
-                            editText: text,
-                            editIndex: currentIndex
-                        });
+                        openTextOverlayEditor(currentIndex);
                     }
                     break;
                 case 'ContextMenu':
@@ -5300,14 +5395,7 @@
 
             switch (action) {
                 case 'edit-text':
-                    // Yazıyı düzenlemek için diyaloğu aç
-                    ipcRenderer.send('slideshow-edit-text', {
-                        images: getTextOverlayTargets(),
-                        editText: text,
-                        editIndex: selectedTextIndex
-                    });
-
-                    announce(t('runtime.slideshow_editor.text_edit_opening', 'Opening text edit dialog...'));
+                    openTextOverlayEditor(selectedTextIndex);
                     break;
                 case 'delete':
                     deleteText(selectedTextIndex);

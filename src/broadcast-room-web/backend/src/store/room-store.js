@@ -419,6 +419,8 @@ class RoomStore {
                 hostShareActive: false,
                 hostShareLabel: '',
                 hostShareMonitorAudioEnabled: false,
+                youtubeWatchUrl: '',
+                youtubeLiveActive: false,
                 updatedAt: Date.now()
             };
             room.accessibleShare = createEmptyAccessibleShare();
@@ -457,6 +459,8 @@ class RoomStore {
             hostShareActive: false,
             hostShareLabel: '',
             hostShareMonitorAudioEnabled: false,
+            youtubeWatchUrl: '',
+            youtubeLiveActive: false,
             sessionEndedAt: now,
             updatedAt: now
         };
@@ -643,6 +647,12 @@ class RoomStore {
             hostShareMonitorAudioEnabled: settings?.hostShareMonitorAudioEnabled !== undefined
                 ? settings.hostShareMonitorAudioEnabled === true
                 : room.settings?.hostShareMonitorAudioEnabled === true,
+            youtubeWatchUrl: settings?.youtubeWatchUrl !== undefined
+                ? String(settings.youtubeWatchUrl || '').trim()
+                : String(room.settings?.youtubeWatchUrl || '').trim(),
+            youtubeLiveActive: settings?.youtubeLiveActive !== undefined
+                ? settings.youtubeLiveActive === true
+                : room.settings?.youtubeLiveActive === true,
             persistentRoom: settings?.persistentRoom !== undefined
                 ? settings.persistentRoom === true
                 : room.settings?.persistentRoom === true,

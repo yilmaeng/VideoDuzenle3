@@ -470,17 +470,16 @@
                             style="width: 80px; text-align: center;">
                         <button id="btn-offset-inc" aria-label="Milisaniyeyi arttır / Gecikmeyi ileri çek" data-i18n-aria="dialog.sync_wizard.offset_increase_aria">+</button>
                     </div>
+                    <label for="offset-adjust-input" data-i18n="dialog.sync_wizard.offset_adjust_label">Offset adjustment value (ms)</label>
+                    <input type="number" id="offset-adjust-input" step="1" inputmode="decimal"
+                        data-i18n-placeholder="dialog.sync_wizard.offset_adjust_placeholder"
+                        placeholder="Example: -300 or 1200" aria-describedby="offset-adjust-hint">
+                    <p id="offset-adjust-hint" class="hint" data-i18n="dialog.sync_wizard.offset_adjust_hint">Type a value and press Enter. Negative moves earlier; positive moves later.</p>
                 </div>
                 <div class="control-panel">
-                    <p style="font-size: 0.9em; margin-bottom: 5px;" aria-hidden="true">
-                <strong data-i18n="dialog.sync_wizard.controls">Controls:</strong><br>
-                        10ms: Alt + Sağ/Sol<br>
-                        100ms: Alt + Shift + Sağ/Sol<br>
-                        1ms: Win + Ctrl + Sağ/Sol
-                    </p>
                     <label data-i18n="dialog.sync_wizard.controls">Controls:</label>
                     <button type="button" id="btn-sync-play" class="primary"
-                        aria-description="Boşluk tuşu ile oynat/duraklat. İnce ayar için Alt+Ok tuşlarını kullanın." data-i18n="dialog.sync_wizard.play_button">Play (Space)</button>
+                        aria-describedby="sync-shortcuts-offset" data-i18n="dialog.sync_wizard.play_button">Play (Space)</button>
                 </div>
                 <div class="control-panel">
                     <label data-i18n="dialog.sync_wizard.loop">Loop:</label>
@@ -492,7 +491,7 @@
                 style="border: 1px solid #444; padding: 10px; font-size: 0.9em; background: #222;">
                 <strong data-i18n="dialog.sync_wizard.shortcuts_title">Keyboard Shortcuts:</strong><br>
                 <span data-i18n="dialog.sync_wizard.shortcuts_playback">Playback: Space/K Play-Pause, J 5 sec back, L 5 sec forward, S Stop and Reset, O Loop</span><br>
-                <span data-i18n="dialog.sync_wizard.shortcuts_offset">Offset: Alt+Right/Left ±10 ms, Alt+Shift+Right/Left ±100 ms, Ctrl+Alt+Right/Left ±1 ms</span><br>
+                <span id="sync-shortcuts-offset" data-i18n="dialog.sync_wizard.shortcuts_offset">Offset: Alt+Right/Left +/-10 ms, Alt+Shift+Right/Left +/-100 ms, G/H +/-1 ms; use the millisecond field for exact values</span><br>
                 <span data-i18n="dialog.sync_wizard.shortcuts_modes">1/2/3: Audio Mode (Mixed / Video / Clean)</span>
             </div>
         </div>
@@ -503,7 +502,8 @@
             <p data-i18n="dialog.sync_wizard.render_ready_desc">Synchronization is complete. The output is ready to be created.</p>
 
             <div class="form-group checkbox-group">
-                <label><input type="checkbox" id="mute-original" checked disabled> <span data-i18n="dialog.sync_wizard.mute_original">Mute Original Video Audio</span></label>
+                <label><input type="checkbox" id="mute-original" checked aria-describedby="mute-original-hint"> <span data-i18n="dialog.sync_wizard.mute_original">Mute Original Video Audio</span></label>
+                <p id="mute-original-hint" class="hint" data-i18n="dialog.sync_wizard.mute_original_hint">When selected, only the external audio is used. Clear this option to mix the original video audio with the external audio.</p>
             </div>
 
             <div class="form-group checkbox-group">

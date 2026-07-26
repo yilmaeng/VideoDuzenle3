@@ -1,6 +1,9 @@
 (function () {
-    const SHORTCUT = 'Alt+Ctrl+D';
-    const SHOW_SHORTCUT = 'Alt+Ctrl+A';
+    const IS_MAC = window.api?.platform === 'darwin';
+    const SHORTCUT = IS_MAC ? 'CommandOrControl+Alt+D' : 'Alt+Ctrl+D';
+    const SHOW_SHORTCUT = IS_MAC ? 'CommandOrControl+Alt+A' : 'Alt+Ctrl+A';
+    const SHORTCUT_LABEL = IS_MAC ? 'Command+Option+D' : 'Alt+Ctrl+D';
+    const SHOW_SHORTCUT_LABEL = IS_MAC ? 'Command+Option+A' : 'Alt+Ctrl+A';
     const SERVICE_STORAGE_KEY = 'evd.instantVoiceTranslation.service';
     const TEXT_ONLY_ANNOUNCE_DELAY_MS = 900;
     const TEXT_ONLY_MAX_BUFFER_MS = 2600;
@@ -17,6 +20,7 @@
     ];
     const state = {
         running: false,
+        nativeAudioCapabilities: null,
         outputContext: null,
         outputDestination: null,
         outputElement: null,
@@ -45,6 +49,11 @@
         nextPlayTime: 0,
         originalUnderlayNextPlayTime: 0,
         shortcutToneContext: null,
+        rendererMicrophoneStream: null,
+        rendererMicrophoneContext: null,
+        rendererMicrophoneSource: null,
+        rendererMicrophoneProcessor: null,
+        rendererMicrophoneSilentGain: null,
         currentShortcut: SHORTCUT,
         receivedAudioCount: 0,
         transcriptEntries: [],
@@ -174,7 +183,7 @@
         if (incomingSourceSelect) incomingSourceSelect.disabled = state.running;
         if (sourceSelect) sourceSelect.disabled = state.running;
         if (sourceVolumeSelect) sourceVolumeSelect.disabled = false;
-        if (conversationMode) conversationMode.disabled = state.running;
+        if (conversationMode) conversationMode.disabled = IS_MAC || state.running;
         if (textOnlyMode) textOnlyMode.disabled = state.running;
         if (conversationVoiceModeSelect) conversationVoiceModeSelect.disabled = state.running;
         if (originalUnderlay) originalUnderlay.disabled = state.running;
@@ -279,17 +288,23 @@
         if (!select) return;
         const previousValue = select.value;
         select.innerHTML = '';
-        const result = await window.api.getDesktopSources?.({
-            types: ['window'],
-            fetchWindowIcons: false,
-            thumbnailSize: { width: 0, height: 0 }
-        });
+        const result = IS_MAC
+            ? await window.api.getWindowProcessSources?.()
+            : await window.api.getDesktopSources?.({
+                types: ['window'],
+                fetchWindowIcons: false,
+                thumbnailSize: { width: 0, height: 0 }
+            });
+        if (IS_MAC && result?.success === false) {
+            throw new Error(result.error || 'native_audio_source_list_failed');
+        }
         const sources = (Array.isArray(result?.sources) ? result.sources : [])
             .map((source) => ({
                 id: String(source.id || ''),
                 name: String(source.name || '').trim(),
                 pid: extractWindowPid(source),
-                processName: String(source.processName || '').trim()
+                processName: String(source.processName || '').trim(),
+                bundleId: String(source.bundleId || source.bundleID || '').trim()
             }))
             .filter((source) => source.name);
 
@@ -303,11 +318,12 @@
 
         sources.forEach((source) => {
             const option = document.createElement('option');
-            option.value = String(source.pid);
+            option.value = String(source.pid || 0);
             option.textContent = source.name;
             option.dataset.sourceId = source.id;
             option.dataset.windowTitle = source.name;
             option.dataset.processName = source.processName || '';
+            option.dataset.bundleId = source.bundleId || '';
             select.appendChild(option);
         });
         if (previousValue && [...select.options].some((option) => option.value === previousValue)) {
@@ -419,7 +435,7 @@
         const showIncomingWindowList = conversationMode && incomingSourceSelect?.value === 'native-window-audio';
         const showMicrophoneList = conversationMode && (!sourceSelect || sourceSelect.value === 'native-microphone');
         group?.classList.toggle('hidden', !showWindowList);
-        sourceVolumeGroup?.classList.toggle('hidden', conversationMode || !showWindowList);
+        sourceVolumeGroup?.classList.toggle('hidden', conversationMode || !showWindowList || state.nativeAudioCapabilities?.sessionVolume === false);
         incomingWindowGroup?.classList.toggle('hidden', !showIncomingWindowList);
         microphoneGroup?.classList.toggle('hidden', !showMicrophoneList);
         originalUnderlayGroup?.classList.toggle('hidden', !conversationMode);
@@ -472,6 +488,161 @@
                     error: error?.message || error
                 }));
             });
+        }
+    }
+
+    function floatSamplesToPcm16Base64(samples, inputSampleRate, outputSampleRate) {
+        const inputRate = Math.max(1, Number(inputSampleRate) || 48000);
+        const outputRate = Math.max(1, Number(outputSampleRate) || inputRate);
+        const outputLength = Math.max(1, Math.round(samples.length * outputRate / inputRate));
+        const buffer = new ArrayBuffer(outputLength * 2);
+        const view = new DataView(buffer);
+        for (let index = 0; index < outputLength; index += 1) {
+            const sourceIndex = Math.min(samples.length - 1, Math.floor(index * inputRate / outputRate));
+            const sample = Math.max(-1, Math.min(1, Number(samples[sourceIndex]) || 0));
+            view.setInt16(index * 2, Math.round(sample < 0 ? sample * 0x8000 : sample * 0x7fff), true);
+        }
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let index = 0; index < bytes.length; index += 1) {
+            binary += String.fromCharCode(bytes[index]);
+        }
+        return btoa(binary);
+    }
+
+    function stopRendererMicrophoneCapture() {
+        if (state.rendererMicrophoneProcessor) {
+            state.rendererMicrophoneProcessor.onaudioprocess = null;
+            try { state.rendererMicrophoneProcessor.disconnect(); } catch (_error) {}
+        }
+        try { state.rendererMicrophoneSource?.disconnect(); } catch (_error) {}
+        try { state.rendererMicrophoneSilentGain?.disconnect(); } catch (_error) {}
+        for (const track of state.rendererMicrophoneStream?.getTracks?.() || []) {
+            try { track.stop(); } catch (_error) {}
+        }
+        if (state.rendererMicrophoneContext && state.rendererMicrophoneContext.state !== 'closed') {
+            state.rendererMicrophoneContext.close().catch(() => {});
+        }
+        state.rendererMicrophoneStream = null;
+        state.rendererMicrophoneContext = null;
+        state.rendererMicrophoneSource = null;
+        state.rendererMicrophoneProcessor = null;
+        state.rendererMicrophoneSilentGain = null;
+    }
+
+    async function startRendererMicrophoneCapture(service, microphoneDeviceId = 'default') {
+        stopRendererMicrophoneCapture();
+        const audio = {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+        };
+        if (microphoneDeviceId && microphoneDeviceId !== 'default') {
+            audio.deviceId = { exact: microphoneDeviceId };
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio, video: false });
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) {
+            for (const track of stream.getTracks()) track.stop();
+            throw new Error('audio_context_unavailable');
+        }
+
+        const context = new AudioContextClass();
+        await context.resume();
+        const source = context.createMediaStreamSource(stream);
+        const processor = context.createScriptProcessor(4096, 1, 1);
+        const silentGain = context.createGain();
+        silentGain.gain.value = 0;
+        source.connect(processor);
+        processor.connect(silentGain);
+        silentGain.connect(context.destination);
+
+        state.rendererMicrophoneStream = stream;
+        state.rendererMicrophoneContext = context;
+        state.rendererMicrophoneSource = source;
+        state.rendererMicrophoneProcessor = processor;
+        state.rendererMicrophoneSilentGain = silentGain;
+
+        processor.onaudioprocess = (event) => {
+            if (state.rendererMicrophoneStream !== stream) return;
+            const samples = event.inputBuffer.getChannelData(0);
+            const outputSampleRate = service === 'openai' ? 24000 : context.sampleRate;
+            const payload = {
+                channel: 'primary',
+                sampleRate: outputSampleRate,
+                audioBase64: floatSamplesToPcm16Base64(samples, context.sampleRate, outputSampleRate)
+            };
+            if (service === 'openai') {
+                window.api.sendOpenAiLiveTranslateAudioChunk?.(payload);
+            } else {
+                window.api.sendGeminiLiveTranslateAudioChunk?.(payload);
+            }
+        };
+    }
+
+    async function applyPlatformCapabilities() {
+        const startButton = el('instant-voice-translation-start');
+        const hideButton = el('instant-voice-translation-hide-to-tray');
+        const intro = el('instant-voice-intro');
+        if (startButton) {
+            startButton.textContent = t(
+                'dialog.instant_voice_translation.start_with_shortcut',
+                'Canlı dinlemeyi başlat (' + SHORTCUT_LABEL + ')',
+                { shortcut: SHORTCUT_LABEL }
+            );
+        }
+        if (hideButton) {
+            hideButton.textContent = IS_MAC
+                ? t('dialog.instant_voice_translation.hide_to_menu_bar', 'Menü çubuğuna gizle (' + SHOW_SHORTCUT_LABEL + ' ile geri getir)', { shortcut: SHOW_SHORTCUT_LABEL })
+                : t('dialog.instant_voice_translation.hide_to_tray', 'Sistem tepsisine küçült (' + SHOW_SHORTCUT_LABEL + ' ile geri getir)', { shortcut: SHOW_SHORTCUT_LABEL });
+        }
+        const introKey = IS_MAC
+            ? 'dialog.instant_voice_translation.startup_intro_mac'
+            : 'dialog.instant_voice_translation.startup_intro';
+        if (intro) intro.textContent = t(introKey, intro.textContent, { shortcut: SHORTCUT_LABEL });
+        if (!IS_MAC) {
+            state.nativeAudioCapabilities = { systemAudio: true, applicationAudio: true, sessionVolume: true };
+            return;
+        }
+
+        const capabilities = await window.api.getNativeAudioCapabilities?.().catch(() => null);
+        state.nativeAudioCapabilities = capabilities || {
+            systemAudio: false,
+            applicationAudio: false,
+            sessionVolume: false,
+            helperAvailable: false
+        };
+        const sourceSelect = el('instant-voice-translation-source');
+        if (sourceSelect) {
+            for (const option of sourceSelect.options) {
+                if (option.value === 'native-system-audio') option.disabled = state.nativeAudioCapabilities.systemAudio !== true;
+                if (option.value === 'native-window-audio') option.disabled = state.nativeAudioCapabilities.applicationAudio !== true;
+            }
+            if (sourceSelect.selectedOptions?.[0]?.disabled) sourceSelect.value = 'native-microphone';
+        }
+        const conversationMode = el('instant-voice-translation-conversation-mode');
+        if (conversationMode) {
+            conversationMode.checked = false;
+            conversationMode.disabled = true;
+            conversationMode.setAttribute('aria-describedby', 'instant-voice-translation-mac-limit-hint');
+        }
+        const nativeAudioReady = state.nativeAudioCapabilities.systemAudio === true
+            && state.nativeAudioCapabilities.applicationAudio === true;
+        const probeFailed = state.nativeAudioCapabilities.probeSuccess === false;
+        const probeError = String(state.nativeAudioCapabilities.probeError || 'native_audio_helper_failed');
+        const hint = el('instant-voice-translation-mac-limit-hint');
+        if (hint) {
+            hint.textContent = probeFailed
+                ? t('dialog.instant_voice_translation.mac_native_audio_probe_failed_hint', 'Mac ses yardımcısı kullanılamıyor: {error}', { error: probeError })
+                : nativeAudioReady
+                    ? t('dialog.instant_voice_translation.mac_native_audio_ready_hint', 'Mac sürümünde bilgisayar ve uygulama sesi etkin. Karşılıklı konuşma için sanal ses yönlendirme desteği henüz eklenmemiştir.')
+                    : t('dialog.instant_voice_translation.mac_native_audio_unavailable_hint', 'Bilgisayar ve uygulama sesi için macOS 14.2 veya üzeri ve imzalı EVD ses yardımcısı gereklidir. Şimdilik mikrofon kullanılabilir.');
+            if (probeFailed) {
+                announce(hint.textContent);
+            }
+            hint.classList.remove('hidden');
         }
     }
 
@@ -1523,6 +1694,9 @@
         const targetLanguage = el('instant-voice-translation-target-language')?.value || 'tr';
         const myLanguage = el('instant-voice-translation-my-language')?.value || 'tr';
         const captureMode = el('instant-voice-translation-source')?.value || 'native-microphone';
+        const providerCaptureMode = IS_MAC && captureMode === 'native-microphone'
+            ? 'renderer-microphone'
+            : captureMode;
         const conversationMode = isConversationModeEnabled();
         const outputDeviceSelect = el('instant-voice-translation-output-device');
         const outputDeviceId = outputDeviceSelect?.value || 'default';
@@ -1535,12 +1709,14 @@
         const selectedWindowTitle = String(selectedWindowOption?.dataset?.windowTitle || selectedWindowOption?.textContent || '').trim();
         const selectedWindowProcessName = String(selectedWindowOption?.dataset?.processName || '').trim();
         const selectedWindowSourceId = String(selectedWindowOption?.dataset?.sourceId || '').trim();
+        const selectedWindowBundleId = String(selectedWindowOption?.dataset?.bundleId || '').trim();
         const selectedWindowPid = Number(windowSelect?.value || 0);
         const incomingWindowSelect = el('instant-voice-translation-incoming-window');
         const incomingWindowOption = incomingWindowSelect?.selectedOptions?.[0] || null;
         const incomingWindowTitle = String(incomingWindowOption?.dataset?.windowTitle || incomingWindowOption?.textContent || '').trim();
         const incomingWindowProcessName = String(incomingWindowOption?.dataset?.processName || '').trim();
         const incomingWindowSourceId = String(incomingWindowOption?.dataset?.sourceId || '').trim();
+        const incomingWindowBundleId = String(incomingWindowOption?.dataset?.bundleId || '').trim();
         const incomingWindowPid = Number(incomingWindowSelect?.value || 0);
         if (captureMode === 'native-window-audio' && !selectedWindowTitle) {
             setStatus(t('dialog.instant_voice_translation.window_required', 'Önce dinlenecek pencere veya uygulamayı seçin.'));
@@ -1595,18 +1771,31 @@
             channel: 'primary',
             sourceLanguage: 'auto',
             targetLanguage,
-            captureMode,
+            captureMode: providerCaptureMode,
             microphoneDeviceId: captureMode === 'native-microphone' && microphoneDeviceId !== 'default' ? microphoneDeviceId : undefined,
             targetProcessId: captureMode === 'native-window-audio' ? selectedWindowPid : undefined,
             targetWindowTitle: captureMode === 'native-window-audio' ? selectedWindowTitle : undefined,
             targetProcessName: captureMode === 'native-window-audio' ? selectedWindowProcessName : undefined,
-            targetWindowSourceId: captureMode === 'native-window-audio' ? selectedWindowSourceId : undefined
+            targetWindowSourceId: captureMode === 'native-window-audio' ? selectedWindowSourceId : undefined,
+            targetBundleId: captureMode === 'native-window-audio' ? selectedWindowBundleId : undefined
         });
         if (!startResult?.success) {
             throw new Error(startResult?.error || `${service}_live_translate_start_failed`);
         }
+        if (providerCaptureMode === 'renderer-microphone') {
+            try {
+                await startRendererMicrophoneCapture(service, microphoneDeviceId);
+            } catch (error) {
+                await stopProviderTranslationChannel(service, 'primary');
+                throw new Error(t(
+                    'dialog.instant_voice_translation.mac_microphone_capture_failed',
+                    'Mikrofon başlatılamadı: {error}',
+                    { error: error?.message || error || 'microphone_capture_failed' }
+                ));
+            }
+        }
         let sourceVolumeResult = null;
-        if (!conversationMode && captureMode === 'native-window-audio') {
+        if (!conversationMode && captureMode === 'native-window-audio' && state.nativeAudioCapabilities?.sessionVolume !== false) {
             sourceVolumeResult = await applySourceAudioSessionVolume(
                 selectedWindowPid,
                 selectedWindowTitle,
@@ -1626,7 +1815,8 @@
                 targetProcessId: incomingCaptureMode === 'native-window-audio' ? incomingWindowPid : undefined,
                 targetWindowTitle: incomingCaptureMode === 'native-window-audio' ? incomingWindowTitle : undefined,
                 targetProcessName: incomingCaptureMode === 'native-window-audio' ? incomingWindowProcessName : undefined,
-                targetWindowSourceId: incomingCaptureMode === 'native-window-audio' ? incomingWindowSourceId : undefined
+                targetWindowSourceId: incomingCaptureMode === 'native-window-audio' ? incomingWindowSourceId : undefined,
+                targetBundleId: incomingCaptureMode === 'native-window-audio' ? incomingWindowBundleId : undefined
             });
             if (!incomingResult?.success) {
                 await stopProviderTranslationChannel(service, 'primary');
@@ -1666,6 +1856,7 @@
         state.incomingRunning = false;
         state.transcriptStoppedAt = new Date().toISOString();
         flushTextOnlyAnnouncement({ force: true });
+        stopRendererMicrophoneCapture();
         await restoreSourceAudioSessionVolume();
         await stopAllProviderTranslations();
         renderState();
@@ -1888,7 +2079,16 @@
             }));
             renderState();
         });
-        el('instant-voice-translation-source')?.addEventListener('change', updateSourceControls);
+        el('instant-voice-translation-source')?.addEventListener('change', () => {
+            updateSourceControls();
+            if (el('instant-voice-translation-source')?.value === 'native-window-audio') {
+                refreshWindowSources().catch((error) => {
+                    setStatus(t('dialog.instant_voice_translation.window_refresh_failed', 'Pencere listesi alınamadı: {error}', {
+                        error: error?.message || error
+                    }));
+                });
+            }
+        });
         el('instant-voice-translation-incoming-source')?.addEventListener('change', updateSourceControls);
         el('instant-voice-translation-conversation-mode')?.addEventListener('change', updateSourceControls);
         el('instant-voice-translation-text-only')?.addEventListener('change', renderState);
@@ -1953,10 +2153,22 @@
             })));
         });
         el('instant-voice-translation-hide-to-tray')?.addEventListener('click', async () => {
-            setStatus(t('dialog.instant_voice_translation.hide_to_tray_status', 'Anlık Sesli Çeviri sistem tepsisine küçültüldü. Alt+Ctrl+D ile dinlemeyi başlatıp durdurabilir, Alt+Ctrl+A ile pencereyi geri getirebilirsiniz.'));
+            const statusKey = IS_MAC
+                ? 'dialog.instant_voice_translation.hide_to_menu_bar_status'
+                : 'dialog.instant_voice_translation.hide_to_tray_status';
+            const statusFallback = IS_MAC
+                ? 'Anlık Sesli Çeviri menü çubuğuna gizlendi. ' + SHORTCUT_LABEL + ' ile dinlemeyi başlatıp durdurabilir, ' + SHOW_SHORTCUT_LABEL + ' ile pencereyi geri getirebilirsiniz.'
+                : 'Anlık Sesli Çeviri sistem tepsisine küçültüldü. ' + SHORTCUT_LABEL + ' ile dinlemeyi başlatıp durdurabilir, ' + SHOW_SHORTCUT_LABEL + ' ile pencereyi geri getirebilirsiniz.';
+            setStatus(t(statusKey, statusFallback, {
+                shortcut: SHORTCUT_LABEL,
+                showShortcut: SHOW_SHORTCUT_LABEL
+            }));
             const result = await window.api.hideInstantVoiceTranslationToTray?.();
             if (!result?.success) {
-                setStatus(t('dialog.instant_voice_translation.hide_to_tray_failed', 'Sistem tepsisine küçültülemedi: {error}', {
+                const errorKey = IS_MAC
+                    ? 'dialog.instant_voice_translation.hide_to_menu_bar_failed'
+                    : 'dialog.instant_voice_translation.hide_to_tray_failed';
+                setStatus(t(errorKey, 'Uygulama arka plana gizlenemedi: {error}', {
                     error: result?.error || 'unknown_error'
                 }));
             }
@@ -1981,6 +2193,7 @@
             }
         });
         window.addEventListener('beforeunload', () => {
+            stopRendererMicrophoneCapture();
             restoreSourceAudioSessionVolume().catch(() => {});
             window.api.unregisterGlobalShortcut?.(SHORTCUT).catch(() => {});
             window.api.unregisterGlobalShortcut?.(SHOW_SHORTCUT).catch(() => {});
@@ -1990,6 +2203,7 @@
 
     async function init() {
         await window.i18nHelper?.init?.();
+        await applyPlatformCapabilities();
         populateLanguages();
         restoreSelectedTranslationService();
         bindEvents();
@@ -1997,7 +2211,12 @@
         await refreshMicrophoneDevices();
         await refreshOutputDevices();
         await registerShortcut();
-        announce(t('dialog.instant_voice_translation.startup_intro', 'Anlık çeviriye hoş geldiniz. Gemini veya OpenAI API anahtarınızı girdiyseniz servis ve hedef dil seçip doğrudan Alt+Ctrl+D ile çeviriyi başlatabilirsiniz. Dinleme kaynağı varsayılan olarak mikrofondur. İsterseniz bilgisayar sesini veya herhangi bir uygulamayı dinleme kaynağı olarak seçip yalnızca bu kaynaktan gelen sesleri de çevirtebilirsiniz. İyi kullanımlar.'));
+        const introKey = IS_MAC
+            ? 'dialog.instant_voice_translation.startup_intro_mac'
+            : 'dialog.instant_voice_translation.startup_intro';
+        announce(t(introKey, el('instant-voice-intro')?.textContent || '', {
+            shortcut: SHORTCUT_LABEL
+        }));
         await ensureApiKey();
         renderState();
     }

@@ -26,6 +26,8 @@ pkg.build.mac = {
         }
     ],
     artifactName: '${productName}-${version}-${arch}.${ext}',
+    minimumSystemVersion: '14.2',
+    binaries: ['Contents/Resources/native-audio/EvdMacAudioCapture'],
     hardenedRuntime: signingEnabled,
     gatekeeperAssess: false,
     entitlements: 'entitlements.mac.plist',
@@ -35,7 +37,8 @@ pkg.build.mac = {
         CFBundleDisplayName: displayProductName,
         // Electron derives Helper.app names from CFBundleName during startup.
         // Keep it identical to the ASCII executable name; only the display name is localized.
-        CFBundleName: asciiProductName
+        CFBundleName: asciiProductName,
+        NSAudioCaptureUsageDescription: 'Accessible Video Editor needs system audio recording access for instant translation and broadcast room computer audio sharing.'
     }
 };
 
@@ -55,7 +58,10 @@ pkg.build.extraResources = extraResources.filter((entry) => {
     if (!from) {
         return false;
     }
-    if (to === 'native-audio' || from.includes('EvdProcessLoopbackCapture')) {
+    if (from.includes('EvdProcessLoopbackCapture') || from.includes('net8.0-windows')) {
+        return false;
+    }
+    if (from.includes('build/native-audio/mac-arm64') || from.includes('macos-info-plist-evd')) {
         return false;
     }
     if (to === 'obs-studio' || from.includes('obs-studio')) {
@@ -63,6 +69,10 @@ pkg.build.extraResources = extraResources.filter((entry) => {
     }
     return fs.existsSync(path.join(projectRoot, from));
 });
+pkg.build.extraResources.push(
+    { from: 'build/macos-info-plist-evd', to: '.' },
+    { from: 'build/native-audio/mac-arm64', to: 'native-audio' }
+);
 
 fs.writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8');
 

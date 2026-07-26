@@ -653,7 +653,9 @@ function createEmptySnapshot() {
             hostRecordingActive: state.roomSettings.hostRecordingActive === true,
             hostShareActive: state.roomSettings.hostShareActive === true,
             hostShareLabel: state.roomSettings.hostShareLabel || '',
-            hostShareMonitorAudioEnabled: state.roomSettings.hostShareMonitorAudioEnabled === true
+            hostShareMonitorAudioEnabled: state.roomSettings.hostShareMonitorAudioEnabled === true,
+            youtubeWatchUrl: state.roomSettings.youtubeWatchUrl || '',
+            youtubeLiveActive: state.roomSettings.youtubeLiveActive === true
         },
         participants: [],
         participantSources: [],
@@ -702,7 +704,9 @@ const state = {
         hostRecordingActive: false,
         hostShareActive: false,
         hostShareLabel: '',
-        hostShareMonitorAudioEnabled: false
+        hostShareMonitorAudioEnabled: false,
+        youtubeWatchUrl: '',
+        youtubeLiveActive: false
     },
     lastGuestHostActivityKey: '',
     persistentRooms: [],
@@ -1314,6 +1318,7 @@ const els = {
     youtubeChatVisualPanel: document.getElementById('youtube-chat-visual-panel-room'),
     youtubeLiveStats: document.getElementById('youtube-live-stats-room'),
     youtubeChatList: document.getElementById('youtube-chat-list-room'),
+    youtubeChatHelp: document.getElementById('youtube-chat-help-room'),
     youtubeChatComposer: document.getElementById('youtube-chat-composer-room'),
     btnYoutubeChatSend: document.getElementById('btn-youtube-chat-send-room'),
     btnCloseYouTubeChatPanel: document.getElementById('btn-close-youtube-chat-panel-room'),
@@ -1542,9 +1547,9 @@ const ROOM_SECTION_DEFINITIONS = [
 ];
 
 const GUEST_HIDDEN_ROOM_SECTION_IDS = new Set([
+    'scene_layout',
     'scene_background',
-    'live_effects',
-    'youtube_stream'
+    'live_effects'
 ]);
 
 function announce(message) {
@@ -1657,6 +1662,9 @@ function getAvailableRoomSectionDefinition(sectionId) {
 }
 
 function getRoomSectionLabel(section) {
+    if (section?.id === 'youtube_stream' && getLocalRoomRole() === 'guest') {
+        return t('recording_wizard.chat.title', 'Canlı Sohbet');
+    }
     return t(section.labelKey, section.fallback);
 }
 
@@ -1855,26 +1863,26 @@ async function setLocalMicrophoneEnabled(enabled) {
     }
 }
 
-function applyDeviceControlLabelsForLocalRole() {
+function applyDeviceControlLabels() {
     const isGuestMode = getLocalRoomRole() === 'guest';
     const labelConfigs = [
         {
             control: els.hostCameraDevice,
             label: document.querySelector('label[for="host-camera-device"]'),
-            key: isGuestMode ? 'broadcast_room.guest_camera_device_label' : 'broadcast_room.host_camera_device_label',
-            fallback: isGuestMode ? 'Kamera' : 'Host kamerası'
+            key: 'broadcast_room.camera_device_label',
+            fallback: 'Kamera'
         },
         {
             control: els.hostMicrophoneDevice,
             label: document.querySelector('label[for="host-microphone-device"]'),
-            key: isGuestMode ? 'broadcast_room.guest_microphone_device_label' : 'broadcast_room.host_microphone_device_label',
-            fallback: isGuestMode ? 'Mikrofon' : 'Host mikrofonu'
+            key: 'broadcast_room.microphone_device_label',
+            fallback: 'Mikrofon'
         },
         {
             control: els.hostSpeakerDevice,
             label: document.querySelector('label[for="host-speaker-device"]'),
-            key: isGuestMode ? 'broadcast_room.guest_speaker_device_label' : 'broadcast_room.host_speaker_device_label',
-            fallback: isGuestMode ? 'Hoparlör' : 'Host hoparlörü'
+            key: 'broadcast_room.speaker_device_label',
+            fallback: 'Hoparlör'
         },
         {
             control: els.hostShareSourceSelect,
@@ -6508,15 +6516,24 @@ function getLiveBroadcastRoomWebSocketUrl(pathname) {
     return url;
 }
 
-function shouldUseHostShareMonitorAudioSocket() {
+function isLocalShareMonitorAudioSenderActive() {
     const preferredShare = getPreferredHostShareSource();
-    return isLocalRoomHost()
-        && state.roomState.mode === 'live'
-        && !!state.roomState.roomId
-        && state.hostShareMonitorAudioEnabled !== false
-        && !!preferredShare
+    return !!preferredShare
         && state.activeLocalShareSourceIds.includes(preferredShare.id)
         && state.hostLocalShareAudioById[preferredShare.id] === true;
+}
+
+function isShareMonitorAudioEnabledForLocalRole() {
+    return isLocalRoomHost()
+        ? state.hostShareMonitorAudioEnabled !== false
+        : state.roomSettings.hostShareMonitorAudioEnabled === true;
+}
+
+function shouldUseHostShareMonitorAudioSocket() {
+    return state.roomState.mode === 'live'
+        && !!state.roomState.roomId
+        && isShareMonitorAudioEnabledForLocalRole()
+        && isLocalShareMonitorAudioSenderActive();
 }
 
 function closeHostShareMonitorAudioSocket() {
@@ -6670,11 +6687,11 @@ function playGuestShareMonitorAudioChunk(arrayBuffer) {
 }
 
 function shouldUseGuestShareMonitorAudioSocket() {
-    return getLocalRoomRole() === 'guest'
-        && state.roomState.mode === 'live'
+    return state.roomState.mode === 'live'
         && !!state.roomState.roomId
         && !!state.roomState.hostIdentity
-        && state.roomSettings.hostShareMonitorAudioEnabled === true;
+        && state.roomSettings.hostShareMonitorAudioEnabled === true
+        && !isLocalShareMonitorAudioSenderActive();
 }
 
 function ensureGuestShareMonitorAudioSocket() {
@@ -7083,35 +7100,56 @@ function refreshObsAudioBridgeForActiveOutput() {
 }
 
 async function resolveHostNativeLoopbackCaptureCommand() {
-    if (process.platform !== 'win32') {
-        return null;
-    }
-    const exeName = 'EvdProcessLoopbackCapture.exe';
-    const candidates = [
-        process.resourcesPath ? path.join(process.resourcesPath, 'native-audio', exeName) : '',
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Release', 'net8.0-windows', 'win-x64', 'publish', exeName),
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Release', 'net8.0-windows', exeName),
-        path.join(process.cwd(), 'tools', 'EvdProcessLoopbackCapture', 'bin', 'Debug', 'net8.0-windows', exeName)
-    ].filter(Boolean);
-    const exePath = candidates.find((candidate) => fs.existsSync(candidate));
-    if (!exePath) {
-        return null;
-    }
-    let targetPid = Number(process.ppid || 0) || Number(process.pid || 0);
     try {
-        const processInfo = await ipcRenderer.invoke('get-main-process-info');
-        const mainPid = Number(processInfo?.pid || 0);
-        if (mainPid > 0) {
-            targetPid = mainPid;
+        const result = await ipcRenderer.invoke('resolve-native-audio-capture-command', {
+            captureMode: 'native-system-audio',
+            includeSelfExclusion: true
+        });
+        if (!result?.success || !result.command || !Array.isArray(result.args)) {
+            return null;
         }
+        return {
+            command: result.command,
+            args: result.args,
+            targetPid: Number(result.targetPid || 0)
+        };
     } catch (_error) {
-        // Fallback to the renderer parent process when IPC is not available.
+        return null;
     }
-    return {
-        command: exePath,
-        args: ['--pid', String(targetPid), '--exclude-tree'],
-        targetPid
-    };
+}
+
+const HOST_NATIVE_LOOPBACK_MIN_WINDOWS_BUILD = 20348;
+
+function getHostNativeLoopbackWindowsCompatibility() {
+    if (process.platform !== 'win32') {
+        return { supported: true };
+    }
+    const release = String(os.release() || '');
+    const build = Number.parseInt(release.split('.')[2] || '', 10);
+    if (!Number.isFinite(build) || build < HOST_NATIVE_LOOPBACK_MIN_WINDOWS_BUILD) {
+        return {
+            supported: false,
+            build: Number.isFinite(build) ? build : (release || 'unknown'),
+            minimumBuild: HOST_NATIVE_LOOPBACK_MIN_WINDOWS_BUILD
+        };
+    }
+    return { supported: true, build };
+}
+
+function reportHostNativeLoopbackWindowsCompatibility(compatibility) {
+    const warningKey = `${compatibility.build}:${compatibility.minimumBuild}`;
+    logBroadcastRoomDebug('host-native-loopback-unsupported-windows-build', compatibility);
+    if (state.liveRoom.nativeLoopbackCompatibilityWarningKey === warningKey) {
+        return;
+    }
+    state.liveRoom.nativeLoopbackCompatibilityWarningKey = warningKey;
+    const message = t(
+        'broadcast_room.status_host_native_loopback_windows_build_unsupported',
+        'Bu Windows sürümü yankısız sistem sesi paylaşımını desteklemiyor. Ekran paylaşımı görüntülü ve sessiz olarak sürdürülecek. Mevcut build: {build}, gereken en düşük build: {minimumBuild}.',
+        compatibility
+    );
+    setPassiveStatus(message);
+    addDiagnosticEvent('source', message);
 }
 
 async function buildHostShareMonitorAudioWebSocketUrl() {
@@ -7221,6 +7259,11 @@ function createNativeLoopbackOutputTrack() {
 async function startHostNativeLoopbackAudioTrack() {
     stopHostNativeLoopbackAudio();
     logBroadcastRoomDebug('host-native-loopback-start');
+    const compatibility = getHostNativeLoopbackWindowsCompatibility();
+    if (!compatibility.supported) {
+        reportHostNativeLoopbackWindowsCompatibility(compatibility);
+        return null;
+    }
     const helper = await resolveHostNativeLoopbackCaptureCommand();
     if (!helper) {
         logBroadcastRoomDebug('host-native-loopback-helper-missing');
@@ -7318,7 +7361,13 @@ async function startHostNativeLoopbackAudioTrack() {
 
 async function startHostNativeLoopbackMonitorAudio() {
     stopHostNativeLoopbackAudio();
+    closeGuestShareMonitorAudioSocket();
     logBroadcastRoomDebug('host-native-loopback-monitor-start');
+    const compatibility = getHostNativeLoopbackWindowsCompatibility();
+    if (!compatibility.supported) {
+        reportHostNativeLoopbackWindowsCompatibility(compatibility);
+        return false;
+    }
     const helper = await resolveHostNativeLoopbackCaptureCommand();
     const wsUrl = await buildHostShareMonitorAudioWebSocketUrl();
     if (!helper || !wsUrl) {
@@ -8602,15 +8651,14 @@ async function renderHostRemoteParticipantMedia() {
         return;
     }
 
-    if (els.remoteParticipantAudioHost) {
-        els.remoteParticipantAudioHost.querySelectorAll('audio').forEach((audioEl) => {
-            clearAttachedMediaElement(audioEl);
-            audioEl.remove();
-        });
-    }
-
     const participants = Object.values(state.liveRoom.remoteParticipants || {});
+    const activeAudioKeys = [];
     if (!participants.length) {
+        pruneStageMediaElements(
+            els.remoteParticipantAudioHost,
+            'audio[data-stage-media-key]',
+            activeAudioKeys
+        );
         els.remoteParticipantMediaList.innerHTML = `<p>${escapeHtml(t('broadcast_room.no_remote_media', 'Henüz canlı katılımcı medyası gelmedi.'))}</p>`;
         recordRecordingTimelineEvent('participant_media');
         return;
@@ -8665,43 +8713,65 @@ async function renderHostRemoteParticipantMedia() {
 
         if (audioTracks.length > 0 && els.remoteParticipantAudioHost) {
             for (const trackState of audioTracks) {
-                const audio = document.createElement('audio');
-                audio.autoplay = true;
-                audio.muted = false;
-                audio.defaultMuted = false;
-                audio.playsInline = true;
+                const audioKey = getStableStageMediaKey(
+                    'host-remote-audio',
+                    participantState.identity || 'remote',
+                    trackState
+                );
+                activeAudioKeys.push(audioKey);
+                let audio = findStageMediaElement(
+                    els.remoteParticipantAudioHost,
+                    'audio[data-stage-media-key]',
+                    audioKey
+                );
+                const audioCreated = !audio;
+                if (!audio) {
+                    audio = document.createElement('audio');
+                    audio.autoplay = true;
+                    audio.muted = false;
+                    audio.defaultMuted = false;
+                    audio.playsInline = true;
+                    audio.dataset.stageMediaKey = audioKey;
+                    els.remoteParticipantAudioHost.appendChild(audio);
+                }
                 audio.dataset.participantIdentity = participantState.identity || '';
                 safelyAttachTrackToElement(trackState.track, audio);
                 await applyHostSpeakerSelectionToElement(audio);
                 audio.volume = state.liveRoom.remoteAudioMonitorContext ? 0 : getHostRemoteAudioOutputVolume(participantState.identity || '');
-                els.remoteParticipantAudioHost.appendChild(audio);
-                audio.play?.()
-                    .then(() => {
-                        logBroadcastRoomDebug('host-remote-audio-element-playing', {
-                            participantIdentity: participantState.identity || '',
-                            sid: trackState.sid || '',
-                            paused: !!audio.paused,
-                            muted: !!audio.muted,
-                            volume: audio.volume,
-                            sinkId: audio.sinkId || ''
+                if (audioCreated) {
+                    audio.play?.()
+                        .then(() => {
+                            logBroadcastRoomDebug('host-remote-audio-element-playing', {
+                                participantIdentity: participantState.identity || '',
+                                sid: trackState.sid || '',
+                                paused: !!audio.paused,
+                                muted: !!audio.muted,
+                                volume: audio.volume,
+                                sinkId: audio.sinkId || ''
+                            });
+                        })
+                        .catch((error) => {
+                            logBroadcastRoomDebug('host-remote-audio-element-play-failed', {
+                                participantIdentity: participantState.identity || '',
+                                sid: trackState.sid || '',
+                                error: error?.message || String(error || ''),
+                                paused: !!audio.paused,
+                                muted: !!audio.muted,
+                                volume: audio.volume,
+                                sinkId: audio.sinkId || ''
+                            });
                         });
-                    })
-                    .catch((error) => {
-                        logBroadcastRoomDebug('host-remote-audio-element-play-failed', {
-                            participantIdentity: participantState.identity || '',
-                            sid: trackState.sid || '',
-                            error: error?.message || String(error || ''),
-                            paused: !!audio.paused,
-                            muted: !!audio.muted,
-                            volume: audio.volume,
-                            sinkId: audio.sinkId || ''
-                        });
-                    });
+                }
             }
         }
 
         els.remoteParticipantMediaList.appendChild(wrapper);
     }
+    pruneStageMediaElements(
+        els.remoteParticipantAudioHost,
+        'audio[data-stage-media-key]',
+        activeAudioKeys
+    );
     applyTranslationMonitorMix();
     refreshHostRemoteAudioMonitorGraph();
     await syncStageOutputWindowMedia();
@@ -8951,6 +9021,7 @@ async function syncHostLiveKitShareMedia() {
     if (!client?.Room || !room) {
         return;
     }
+    const localIsHost = isLocalRoomHost();
 
     logBroadcastRoomDebug('host-share-sync-start', {
         hasRoom: !!room,
@@ -8988,7 +9059,9 @@ async function syncHostLiveKitShareMedia() {
         state.liveRoom.localShareAudioMixKey = '';
         state.liveRoom.localShareAudioPublishPending = false;
         state.liveRoom.localShareSourceId = '';
-        refreshObsAudioBridgeGraph();
+        if (localIsHost) {
+            refreshObsAudioBridgeGraph();
+        }
         logBroadcastRoomDebug('host-share-unpublish-existing-done');
     };
 
@@ -9155,18 +9228,20 @@ async function syncHostLiveKitShareMedia() {
     state.liveRoom.localShareAudioTrack = audioTrack;
     state.liveRoom.localShareSourceId = source.id;
     state.liveRoom.localShareAudioMixKey = nextAudioMixKey;
-    refreshObsAudioBridgeGraph();
-    if (
-        state.youtube.liveActive === true
-        && state.liveRoom.obsAudioBridgePeer
-        && state.liveRoom.obsAudioBridgeDestination
-    ) {
-        logBroadcastRoomDebug('obs-audio-bridge-source-refresh-skipped-youtube-share-audio', {
-            sourceId: source.id,
-            audioAvailable: !!audioTrack
-        });
-    } else {
-        refreshObsAudioBridgeForActiveOutput();
+    if (localIsHost) {
+        refreshObsAudioBridgeGraph();
+        if (
+            state.youtube.liveActive === true
+            && state.liveRoom.obsAudioBridgePeer
+            && state.liveRoom.obsAudioBridgeDestination
+        ) {
+            logBroadcastRoomDebug('obs-audio-bridge-source-refresh-skipped-youtube-share-audio', {
+                sourceId: source.id,
+                audioAvailable: !!audioTrack
+            });
+        } else {
+            refreshObsAudioBridgeForActiveOutput();
+        }
     }
     logBroadcastRoomDebug('host-share-local-tracks-installed', {
         sourceId: source.id,
@@ -9174,6 +9249,10 @@ async function syncHostLiveKitShareMedia() {
     });
 
     const syncShareStageForObs = async () => {
+        if (!localIsHost) {
+            logBroadcastRoomDebug('guest-share-stage-and-obs-sync-skipped', { sourceId: source.id });
+            return;
+        }
         logBroadcastRoomDebug('host-share-stage-sync-start', { sourceId: source.id });
         await withTimeout(
             syncStageOutputWindowMedia(),
@@ -10543,6 +10622,7 @@ function buildSceneSourceAnchor(source) {
 }
 
 function applyScenePresetAssignments(presetId, slotSourceMap = {}, options = {}) {
+    if (!isLocalRoomHost()) return false;
     const normalizedPresetId = String(presetId || '');
     const preset = state.scenePresets.find((item) => item.id === normalizedPresetId) || null;
     if (!preset) {
@@ -11790,7 +11870,7 @@ function applySpeakersMainSceneSuggestion() {
 
 function renderRoomState() {
     updateHostMediaActionButtons();
-    applyDeviceControlLabelsForLocalRole();
+    applyDeviceControlLabels();
     renderRoomSectionList();
     els.roomStatus.textContent = state.roomState.roomId
         ? (isLocalRoomHost()
@@ -11967,7 +12047,9 @@ function buildLiveBackendSnapshot(roomPayload = {}) {
             hostRecordingActive: roomPayload.settings?.hostRecordingActive === true,
             hostShareActive: roomPayload.settings?.hostShareActive === true,
             hostShareLabel: String(roomPayload.settings?.hostShareLabel || ''),
-            hostShareMonitorAudioEnabled: roomPayload.settings?.hostShareMonitorAudioEnabled === true
+            hostShareMonitorAudioEnabled: roomPayload.settings?.hostShareMonitorAudioEnabled === true,
+            youtubeWatchUrl: String(roomPayload.settings?.youtubeWatchUrl || ''),
+            youtubeLiveActive: roomPayload.settings?.youtubeLiveActive === true
         },
         participants: participants.map((participant) => ({
             id: String(participant.identity || ''),
@@ -12839,7 +12921,9 @@ async function syncLiveRoomSettings() {
                 hostRecordingActive: state.recording.active === true,
                 hostShareActive: !!activeHostShare,
                 hostShareLabel: activeHostShare?.name || '',
-                hostShareMonitorAudioEnabled: state.hostShareMonitorAudioEnabled !== false
+                hostShareMonitorAudioEnabled: state.hostShareMonitorAudioEnabled !== false,
+                youtubeWatchUrl: String(state.youtube.preparedWatchUrl || ''),
+                youtubeLiveActive: state.youtube.liveActive === true
             })
         });
         if (payload?.inviteUrl) {
@@ -15484,6 +15568,56 @@ function renderLocalShareSelector() {
     updateHostShareButtonState();
 }
 
+function renderRoleScopedRoomControls() {
+    const isGuestMode = getLocalRoomRole() === 'guest';
+    const setContainerHidden = (element, hidden) => {
+        const container = element?.closest('.form-group, .grid, .toolbar, [data-role-control-group]') || element?.parentElement;
+        if (container) container.hidden = hidden;
+    };
+
+    [
+        els.translationEnabled,
+        els.translationService,
+        els.translationCaptionOverlayEnabled,
+        els.translationAutoAnnounceEnabled,
+        els.translationMonitorDubEnabled,
+        els.liveInterpreterOutputChannel,
+        els.btnCheckTranslationKey,
+        els.translationOpenAiStatus,
+        els.translationSummary
+    ].forEach((element) => setContainerHidden(element, isGuestMode));
+    document.querySelectorAll('[data-translation-host-controls]').forEach((element) => {
+        element.hidden = isGuestMode;
+    });
+    document.querySelectorAll('[data-youtube-host-controls]').forEach((element) => {
+        element.hidden = isGuestMode;
+    });
+    const youtubeHeading = document.querySelector('[data-room-section-id="youtube_stream"] > .toolbar h2');
+    if (els.youtubeChatHelp) {
+        const key = isGuestMode ? 'broadcast_room.youtube_guest_chat_help' : 'recording_wizard.chat.help';
+        const fallback = isGuestMode
+            ? 'Yukarı ve aşağı oklarla mesajlar arasında gezinin. Otomatik okuma ve arka plan bildirimlerini tercihinize göre açabilirsiniz.'
+            : 'Alt+Ctrl+C ile sohbet listesine geçin. Yukarı ve aşağı oklarla mesajlar arasında gezin. Tab ile yazma alanına geçin. Enter gönderir, Shift+Enter yeni satır ekler.';
+        els.youtubeChatHelp.setAttribute('data-i18n', key);
+        els.youtubeChatHelp.textContent = t(key, fallback);
+    }
+    if (youtubeHeading) {
+        const key = isGuestMode ? 'recording_wizard.chat.title' : 'broadcast_room.youtube_section';
+        const fallback = isGuestMode ? 'Canlı Sohbet' : 'YouTube Canlı Yayın';
+        youtubeHeading.setAttribute('data-i18n', key);
+        youtubeHeading.textContent = t(key, fallback);
+    }
+    if (isGuestMode) {
+        const originalText = String(state.liveCaption?.originalText || state.liveCaption?.text || '').trim();
+        const translatedText = String(state.liveCaption?.translatedText || state.liveCaption?.text || '').trim();
+        if (els.translationOriginalTranscript) {
+            els.translationOriginalTranscript.value = originalText || t('broadcast_room.translation_transcript_empty', 'Henüz canlı çeviri dökümü yok.');
+        }
+        if (els.translationTranslatedTranscript) {
+            els.translationTranslatedTranscript.value = translatedText || t('broadcast_room.translation_transcript_empty', 'Henüz canlı çeviri dökümü yok.');
+        }
+    }
+}
 function renderAll() {
     renderStageFocusMode();
     renderRoomState();
@@ -15524,6 +15658,7 @@ function renderAll() {
     renderParticipantListPanelState();
     renderHostSharePanelState();
     refreshHostShortcutLabels();
+    renderRoleScopedRoomControls();
 }
 
 function localInputToIso(value) {
@@ -17456,6 +17591,7 @@ async function prepareYouTubeBroadcast() {
         resetYouTubeChatState();
         renderAll();
         await refreshYouTubeLiveStats();
+        await syncLiveRoomSettings();
         syncYouTubeStatusText(t('broadcast_room.youtube_prepared', 'YouTube yayını hazırlandı: {title}', {
             title: state.youtube.preparedBroadcastTitle || t('broadcast_room.youtube_broadcast_untitled', 'Adsız yayın')
         }));
@@ -17671,6 +17807,7 @@ async function startYouTubeLive() {
 
         state.youtube.liveActive = true;
         state.youtube.lastLiveState = 'active';
+        await syncLiveRoomSettings();
         state.stageCapturePreparing = false;
         startYouTubeHealthDiagnostics();
         await enforceYoutubeTranslationServicePolicy();
@@ -17772,6 +17909,7 @@ async function stopYouTubeLive() {
         state.youtube.liveActive = false;
         state.youtube.lastLiveState = 'stopped';
         stopYouTubeHealthDiagnostics();
+        await syncLiveRoomSettings();
         await ipcRenderer.invoke('youtube-clear-active-live-broadcast').catch(() => {});
         await updateObsCaptionOverlay({ force: true }).catch(() => {});
         await releaseIdleObsCameraSource();
@@ -19300,8 +19438,26 @@ function applyRoomSnapshot(snapshot) {
         hostRecordingActive: snapshot.roomSettings?.hostRecordingActive === true,
         hostShareActive: snapshot.roomSettings?.hostShareActive === true,
         hostShareLabel: String(snapshot.roomSettings?.hostShareLabel || ''),
-        hostShareMonitorAudioEnabled: snapshot.roomSettings?.hostShareMonitorAudioEnabled === true
+        hostShareMonitorAudioEnabled: snapshot.roomSettings?.hostShareMonitorAudioEnabled === true,
+        youtubeWatchUrl: String(snapshot.roomSettings?.youtubeWatchUrl || ''),
+        youtubeLiveActive: snapshot.roomSettings?.youtubeLiveActive === true
     };
+    if (getLocalRoomRole() === 'guest') {
+        const nextWatchUrl = state.roomSettings.youtubeWatchUrl;
+        if (nextWatchUrl !== state.youtube.preparedWatchUrl) {
+            stopYouTubeChatPolling();
+            state.youtube.liveChatId = '';
+            state.youtube.chatNextPageToken = '';
+            state.youtube.chatMessages = [];
+            state.youtube.preparedWatchUrl = nextWatchUrl;
+            if (nextWatchUrl) {
+                ensureYouTubeChatSessionLoaded().then((loaded) => {
+                    if (loaded) pollYouTubeChatMessages({ initial: true }).catch(() => {});
+                }).catch(() => {});
+            }
+        }
+        state.youtube.liveActive = state.roomSettings.youtubeLiveActive;
+    }
     announceGuestHostActivityChange(previousRoomSettings, state.roomSettings);
     ensureGuestShareMonitorAudioSocket();
     const nextParticipants = Array.isArray(snapshot.participants) ? snapshot.participants : [];
@@ -19409,6 +19565,7 @@ function applyInitOptions(options = {}) {
 }
 
 function assignSelectedSourceToSelectedSlot(sourceId = '') {
+    if (!isLocalRoomHost()) return false;
     if (sourceId) {
         state.selectedSceneSourceId = String(sourceId || '');
     }
@@ -19461,6 +19618,7 @@ function assignSelectedSourceToSelectedSlot(sourceId = '') {
 }
 
 function clearSelectedSceneSlot() {
+    if (!isLocalRoomHost()) return;
     const preset = getActiveScenePreset();
     const slot = preset?.slots.find((item) => item.id === state.selectedSceneSlotId);
     if (!slot) {
@@ -19697,29 +19855,16 @@ function updateSelectedAudioDevice(type, value) {
     };
 
     const selected = sourceLists[type].find((item) => item.deviceId === value);
-    const isGuestMode = getLocalRoomRole() === 'guest';
-    const keyMap = isGuestMode
-        ? {
-            camera: 'broadcast_room.status_guest_camera_device_selected',
-            microphone: 'broadcast_room.status_guest_microphone_device_selected',
-            speaker: 'broadcast_room.status_guest_speaker_device_selected'
-        }
-        : {
-            camera: 'broadcast_room.status_camera_device_selected',
-            microphone: 'broadcast_room.status_microphone_device_selected',
-            speaker: 'broadcast_room.status_speaker_device_selected'
-        };
-    const fallbackMap = isGuestMode
-        ? {
-            camera: 'Seçili kamera değiştirildi: {name}',
-            microphone: 'Seçili mikrofon değiştirildi: {name}',
-            speaker: 'Seçili hoparlör değiştirildi: {name}'
-        }
-        : {
-            camera: 'Host kamerası değiştirildi: {name}',
-            microphone: 'Host mikrofonu değiştirildi: {name}',
-            speaker: 'Host hoparlörü değiştirildi: {name}'
-        };
+    const keyMap = {
+        camera: 'broadcast_room.status_camera_device_selected',
+        microphone: 'broadcast_room.status_microphone_device_selected',
+        speaker: 'broadcast_room.status_speaker_device_selected'
+    };
+    const fallbackMap = {
+        camera: 'Seçili kamera değiştirildi: {name}',
+        microphone: 'Seçili mikrofon değiştirildi: {name}',
+        speaker: 'Seçili hoparlör değiştirildi: {name}'
+    };
 
     setStatus(t(keyMap[type], fallbackMap[type], {
         name: selected?.label || t('broadcast_room.unknown_device', 'Bilinmeyen aygıt')
@@ -20250,6 +20395,7 @@ async function startHostLocalShare() {
     state.hostLocalShareAudioById[selectedId] = !!els.hostShareAudioEnabled?.checked;
 
     const selected = state.availableLocalShareSources.find((item) => item.id === selectedId);
+    const localIsHost = isLocalRoomHost();
     try {
         logBroadcastRoomDebug('host-share-start-click', {
             selectedId,
@@ -20257,15 +20403,21 @@ async function startHostLocalShare() {
             selectedName: selected?.name || ''
         });
         renderSources();
-        applyHostShareSceneBehavior(selectedId);
+        if (localIsHost) {
+            applyHostShareSceneBehavior(selectedId);
+        }
         updateHostShareButtonState();
-        renderAdvancedLayoutPanelState();
+        if (localIsHost) {
+            renderAdvancedLayoutPanelState();
+        }
         await reapplyHostSpeakerSelectionToRemoteAudio();
         await syncHostLiveKitShareMedia();
-        await syncLiveRoomSettings().catch(() => {});
-        await syncStageOutputWindowMedia().catch(() => {});
-        recordRecordingTimelineEvent('host_share_started');
-        refreshObsSceneForActiveOutputAfterShareChange();
+        if (localIsHost) {
+            await syncLiveRoomSettings().catch(() => {});
+            await syncStageOutputWindowMedia().catch(() => {});
+            recordRecordingTimelineEvent('host_share_started');
+            refreshObsSceneForActiveOutputAfterShareChange();
+        }
         if (state.hostLocalShareAudioById[selectedId]) {
             addDiagnosticEvent('source', t('broadcast_room.status_host_share_started_with_audio', 'Host yerel paylaşımı başladı: {name}. Kaynak sesi dahil ediliyor.', {
                 name: selected?.name || t('broadcast_room.unknown_device', 'Bilinmeyen aygıt')
@@ -20287,9 +20439,13 @@ async function startHostLocalShare() {
         state.activeLocalShareSourceIds = state.activeLocalShareSourceIds.filter((item) => item !== selectedId);
         delete state.hostLocalShareAudioById[selectedId];
         renderSources();
-        restoreHostShareAutoSceneSnapshot(selectedId);
+        if (localIsHost) {
+            restoreHostShareAutoSceneSnapshot(selectedId);
+        }
         updateHostShareButtonState();
-        renderAdvancedLayoutPanelState();
+        if (localIsHost) {
+            renderAdvancedLayoutPanelState();
+        }
         setStatus(t('broadcast_room.status_host_share_start_failed', 'Host yerel paylaşımı başlatılamadı: {error}', {
             error: error?.message || error || 'unknown_error'
         }));
@@ -20306,16 +20462,23 @@ async function stopHostLocalShareById(sourceId) {
     state.activeLocalShareSourceIds = state.activeLocalShareSourceIds.filter((item) => item !== selectedId);
     delete state.hostLocalShareAudioById[selectedId];
     const selected = state.availableLocalShareSources.find((item) => item.id === selectedId);
+    const localIsHost = isLocalRoomHost();
     renderSources();
-    restoreHostShareAutoSceneSnapshot(selectedId);
+    if (localIsHost) {
+        restoreHostShareAutoSceneSnapshot(selectedId);
+    }
     updateHostShareButtonState();
-    renderAdvancedLayoutPanelState();
+    if (localIsHost) {
+        renderAdvancedLayoutPanelState();
+    }
     await syncHostLiveKitShareMedia();
     await reapplyHostSpeakerSelectionToRemoteAudio();
-    await syncStageOutputWindowMedia().catch(() => {});
-    syncLiveRoomSettings().catch(() => {});
-    recordRecordingTimelineEvent('host_share_stopped');
-    refreshObsSceneForActiveOutputAfterShareChange();
+    if (localIsHost) {
+        await syncStageOutputWindowMedia().catch(() => {});
+        syncLiveRoomSettings().catch(() => {});
+        recordRecordingTimelineEvent('host_share_stopped');
+        refreshObsSceneForActiveOutputAfterShareChange();
+    }
     addDiagnosticEvent('source', t('broadcast_room.status_host_share_stopped', 'Host yerel paylaşımı durduruldu: {name}', {
         name: selected?.name || t('broadcast_room.unknown_device', 'Bilinmeyen aygıt')
     }));
@@ -20498,6 +20661,7 @@ function renderSceneSlotContextMenu() {
 }
 
 function openSceneSlotContextMenu() {
+    if (!isLocalRoomHost()) return;
     const preset = getActiveScenePreset();
     const slot = preset?.slots.find((item) => item.id === state.selectedSceneSlotId) || null;
     if (!slot || !els.sceneSlotContextMenu || !els.sceneSlotContextMenuPanel) {
@@ -20580,6 +20744,7 @@ async function handleRecordingShortcut() {
 }
 
 function focusScenePresetShortcut() {
+    if (!isLocalRoomHost()) return;
     els.scenePresetSelect?.focus();
     setStatus(t('broadcast_room.status_scene_preset_focused', 'Sahne düzeni seçimi odaklandı.'));
 }
@@ -21514,6 +21679,10 @@ function bindEvents() {
         }
     });
     els.scenePresetSelect?.addEventListener('change', () => {
+        if (!isLocalRoomHost()) {
+            renderScenePresetSelector();
+            return;
+        }
         state.activeScenePresetId = String(els.scenePresetSelect.value || '');
         state.selectedSceneSlotId = '';
         if (state.activeScenePresetId === 'six-gallery') {

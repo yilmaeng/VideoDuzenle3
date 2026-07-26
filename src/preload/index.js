@@ -29,6 +29,8 @@ ipcRenderer.on('accessibility-dialog-announce', (_event, payload) => {
 
 // Güvenli API'yi renderer'a aç
 contextBridge.exposeInMainWorld('api', {
+    platform: process.platform,
+
     // Video işlemleri
     getVideoMetadata: (filePath) => ipcRenderer.invoke('get-video-metadata', filePath),
     cutVideo: (params) => ipcRenderer.invoke('cut-video', params),
@@ -46,6 +48,7 @@ contextBridge.exposeInMainWorld('api', {
     mixAudioAdvanced: (params) => ipcRenderer.invoke('mix-audio-advanced', params),
     burnSubtitles: (params) => ipcRenderer.invoke('burn-subtitles', params),
     addTextOverlay: (params) => ipcRenderer.invoke('add-text-overlay', params),
+    addTickerOverlay: (params) => ipcRenderer.invoke('add-ticker-overlay', params),
     addImageOverlay: (params) => ipcRenderer.invoke('add-image-overlay', params),
     addTransition: (params) => ipcRenderer.invoke('add-transition', params),
     applyTransitionsSmart: (params) => ipcRenderer.invoke('apply-transitions-smart', params),
@@ -87,6 +90,7 @@ contextBridge.exposeInMainWorld('api', {
     showSaveDialog: (params) => ipcRenderer.invoke('show-save-dialog', params),
     openFileDialog: (options) => ipcRenderer.invoke('open-file-dialog', options),
     openTextOverlayDialog: (params) => ipcRenderer.invoke('open-text-overlay-dialog', params),
+    openVideoTickerDialog: (params) => ipcRenderer.invoke('open-video-ticker-dialog', params),
 
     saveFileContent: (params) => ipcRenderer.invoke('save-file-content', params),
     readFileContent: (filePath) => ipcRenderer.invoke('read-file-content', filePath),
@@ -151,6 +155,7 @@ contextBridge.exposeInMainWorld('api', {
     onAddToTimeline: (callback) => ipcRenderer.on('add-to-timeline', (event, filePath) => callback(filePath)),
 
     onInsertTextDialog: (callback) => ipcRenderer.on('insert-text-dialog', () => callback()),
+    onInsertTickerDialog: (callback) => ipcRenderer.on('insert-ticker-dialog', () => callback()),
     onInsertImages: (callback) => ipcRenderer.on('insert-images', (event, filePaths) => callback(filePaths)),
     onOpenImageWizard: (callback) => ipcRenderer.on('open-image-wizard', () => callback()),
     onOpenVideoLayerWizard: (callback) => ipcRenderer.on('open-video-layer-wizard', (event, filePath) => callback(filePath)),
@@ -170,6 +175,7 @@ contextBridge.exposeInMainWorld('api', {
     onInsertionQueueUpdate: (callback) => ipcRenderer.on('insertion-queue-update', (event, data) => callback(data)),
     onShowInsertionQueue: (callback) => ipcRenderer.on('show-insertion-queue', () => callback()),
     onTextOverlayDirectApply: (callback) => ipcRenderer.on('text-overlay-direct-apply', (event, options) => callback(options)),
+    onTickerOverlayDirectApply: (callback) => ipcRenderer.on('ticker-overlay-direct-apply', (event, options) => callback(options)),
 
     // Geçiş olayları
     onShowCtaLibrary: (callback) => ipcRenderer.on('show-cta-library', () => callback()),
@@ -180,10 +186,6 @@ contextBridge.exposeInMainWorld('api', {
     onApplyAllTransitions: (callback) => ipcRenderer.on('apply-all-transitions', () => callback()),
 
     // Navigasyon olayları
-    onGotoTimeDialog: (callback) => ipcRenderer.on('goto-time-dialog', () => callback()),
-    onGotoStart: (callback) => ipcRenderer.on('goto-start', () => callback()),
-    onGotoEnd: (callback) => ipcRenderer.on('goto-end', () => callback()),
-    onGotoMiddle: (callback) => ipcRenderer.on('goto-middle', () => callback()),
     onGotoNextMarker: (callback) => ipcRenderer.on('goto-next-marker', () => callback()),
     onGotoPrevMarker: (callback) => ipcRenderer.on('goto-prev-marker', () => callback()),
     onGotoSelectionStart: (callback) => ipcRenderer.on('goto-selection-start', () => callback()),
@@ -275,6 +277,7 @@ contextBridge.exposeInMainWorld('api', {
     saveInstantVoiceTranslationAudio: (params) => ipcRenderer.invoke('save-instant-voice-translation-audio', params),
     getDesktopSources: (options) => ipcRenderer.invoke('get-desktop-sources', options),
     getWindowProcessSources: () => ipcRenderer.invoke('get-window-process-sources'),
+    getNativeAudioCapabilities: () => ipcRenderer.invoke('get-native-audio-capabilities'),
     hideInstantVoiceTranslationToTray: () => ipcRenderer.invoke('instant-voice-translation-hide-to-tray'),
     registerGlobalShortcut: (registration) => ipcRenderer.invoke('register-global-shortcut', registration),
     unregisterGlobalShortcut: (accelerator) => ipcRenderer.invoke('unregister-global-shortcut', accelerator),
@@ -288,6 +291,7 @@ contextBridge.exposeInMainWorld('api', {
     openAiLiveTranslateStart: (params) => ipcRenderer.invoke('openai-live-translate-start', params),
     openAiLiveTranslateStop: () => ipcRenderer.invoke('openai-live-translate-stop'),
     openAiLiveTranslateStopChannel: (params) => ipcRenderer.invoke('openai-live-translate-stop-channel', params),
+    sendOpenAiLiveTranslateAudioChunk: (params) => ipcRenderer.send('openai-live-translate-audio-chunk', params),
     onOpenAiLiveTranslateEvent: (callback) => ipcRenderer.on('openai-live-translate-event', (event, payload) => callback(payload)),
     onEditOpenAiApiKey: (callback) => ipcRenderer.on('edit-openai-api-key', () => callback()),
     saveElevenLabsApiKey: (params) => ipcRenderer.invoke('save-elevenlabs-api-key', params),
@@ -337,12 +341,9 @@ contextBridge.exposeInMainWorld('api', {
 
     // Ses Kaydı
     saveTempRecording: (buffer) => ipcRenderer.invoke('save-temp-recording', buffer),
-    onInsertAudioRequest: (callback) => ipcRenderer.on('insert-audio-request', () => callback()),
 
     // Global Kısayollar
-    registerGlobalShortcut: (registration) => ipcRenderer.invoke('register-global-shortcut', registration),
     unregisterAllGlobalShortcuts: () => ipcRenderer.invoke('unregister-all-global-shortcuts'),
-    onGlobalShortcutTriggered: (callback) => ipcRenderer.on('global-shortcut-triggered', (event, accelerator) => callback(accelerator)),
 
     // Genel Send
     send: (channel, ...args) => ipcRenderer.send(channel, ...args),

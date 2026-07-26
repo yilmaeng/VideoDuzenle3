@@ -63,8 +63,38 @@
             pointer-events: none;
         }
 
+
+        .text-overlay.ticker-overlay {
+            width: max-content;
+            max-width: none;
+            white-space: nowrap;
+            transform: none;
+            text-align: left;
+        }
         .text-overlay.visible {
             display: block;
+        }
+
+        .karaoke-overlay {
+            position: absolute;
+            left: 5%;
+            width: 90%;
+            z-index: 12;
+            display: none;
+            box-sizing: border-box;
+            padding: 10px 18px;
+            text-align: center;
+            line-height: 1.35;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+        }
+
+        .karaoke-overlay.visible {
+            display: block;
+        }
+
+        .karaoke-overlay .karaoke-word {
+            transition: color 80ms linear;
         }
 
         .controls {
@@ -388,16 +418,31 @@
                 || null;
         }
 
-        function getActiveTextsForImage(imageId) {
-            if (!imageId) return [];
-            return (projectData.textOverlays || []).filter(txt => Array.isArray(txt.targetImages) && txt.targetImages.includes(imageId));
+        function getTickerEndTime(ticker) {
+            if (ticker.wholeProject || ticker.endMode === 'project') {
+                return Number(projectData.totalDuration || endTime || 0);
+            }
+            return Number(ticker.endTime || 0);
+        }
+
+        function isTickerActive(ticker, absTime) {
+            const start = Math.max(0, Number(ticker.startTime || 0));
+            const end = getTickerEndTime(ticker);
+            return absTime >= start && absTime <= end;
+        }
+
+        function getActiveTextsForImage(imageId, absTime) {
+            return (projectData.textOverlays || []).filter(txt => {
+                if (txt.kind === 'ticker') return isTickerActive(txt, absTime);
+                return Boolean(imageId) && Array.isArray(txt.targetImages) && txt.targetImages.includes(imageId);
+            });
         }
 
         function getCurrentSceneState() {
             const absTime = startTime + currentTime;
             const activeMedia = findActiveMediaAtTime(absTime);
             const activeImage = activeMedia?.type === 'image' ? activeMedia : findActiveImageAtTime(absTime);
-            const activeTexts = getActiveTextsForImage(activeImage?.id);
+            const activeTexts = getActiveTextsForImage(activeImage?.id, absTime);
             const videoFillFrameApplied = activeMedia?.type === 'video' && activeMedia?.fitMode === 'crop';
             const visualFitMode = activeMedia?.type === 'video'
                 ? (['blur', 'crop', 'fit'].includes(activeMedia.fitMode) ? activeMedia.fitMode : 'fit')
@@ -496,6 +541,30 @@
 
             scene.activeTexts.forEach((txt) => {
                 const fontSize = Number(txt.fontSize || 48);
+                if (txt.kind === 'ticker') {
+                    const family = txt.fontFamily === 'serif'
+                        ? 'serif'
+                        : (txt.fontFamily === 'monospace' ? 'monospace' : 'sans-serif');
+                    ctx.font = `${Math.max(20, fontSize)}px ${family}`;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    const textWidth = ctx.measureText(String(txt.content || '')).width + 20;
+                    const textHeight = Math.max(20, fontSize) * 1.4;
+                    const coords = computeTickerCoordinates(txt, scene.absTime, width, height, textWidth, textHeight);
+                    const opacity = Math.min(100, Math.max(0, Number(txt.backgroundOpacity ?? 55))) / 100;
+                    if (opacity > 0) {
+                        ctx.fillStyle = hexToRgba(txt.backgroundColor || '#000000', opacity * 100);
+                        ctx.fillRect(coords.x, coords.y, textWidth, textHeight);
+                    }
+                    ctx.fillStyle = txt.fontColor || '#ffffff';
+                    ctx.strokeStyle = txt.borderColor || '#000000';
+                    ctx.lineWidth = Math.max(0, Number(txt.borderWidth || 0)) * 2;
+                    if (ctx.lineWidth > 0) {
+                        ctx.strokeText(String(txt.content || ''), coords.x + 10, coords.y + textHeight / 2);
+                    }
+                    ctx.fillText(String(txt.content || ''), coords.x + 10, coords.y + textHeight / 2);
+                    return;
+                }
                 const fontPx = Math.max(20, fontSize);
                 const lineHeight = Math.round(fontPx * 1.2);
                 const maxWidth = width * 0.9;
@@ -629,7 +698,15 @@
             if (mode === 'text' && targetId) {
                 const textOverlay = (projectData.textOverlays || []).find(item => item.id === targetId);
                 if (textOverlay) {
-                    const targets = imageTimings.filter(item => textOverlay.targetImages.includes(item.id));
+                    if (textOverlay.kind === 'ticker') {
+                        const start = Math.max(0, Number(textOverlay.startTime || 0));
+                        const tickerEnd = getTickerEndTime(textOverlay);
+                        return {
+                            start,
+                            end: Math.min(tickerEnd, start + MAX_PREVIEW_SECONDS)
+                        };
+                    }
+                    const targets = imageTimings.filter(item => Array.isArray(textOverlay.targetImages) && textOverlay.targetImages.includes(item.id));
                     if (targets.length > 0) {
                         const start = targets[0].start;
                         const lastEnd = targets[targets.length - 1].end;
@@ -994,6 +1071,79 @@
             }, 500);
         }
 
+        function getTickerPositionPercent(ticker) {
+            const presets = {
+                'top-left': [5, 8], 'top-center': [50, 8], 'top-right': [95, 8],
+                'middle-left': [5, 50], center: [50, 50], 'middle-right': [95, 50],
+                'bottom-left': [5, 90], 'bottom-center': [50, 90], 'bottom-right': [95, 90]
+            };
+            const preset = presets[ticker.positionPreset];
+            return preset || [Number(ticker.xPercent ?? 50), Number(ticker.yPercent ?? 90)];
+        }
+
+        function computeTickerCoordinates(ticker, absTime, width, height, textWidth, textHeight) {
+            const [xPercent, yPercent] = getTickerPositionPercent(ticker);
+            const start = Math.max(0, Number(ticker.startTime || 0));
+            const elapsed = Math.max(0, absTime - start);
+            const speed = Math.min(1000, Math.max(20, Number(ticker.speed || 140)));
+            const horizontalDistance = elapsed * speed * width / 1920;
+            const verticalDistance = elapsed * speed * height / 1080;
+            const wrap = (distance, span) => span > 0 ? distance - span * Math.floor(distance / span) : 0;
+            let x = (width - textWidth) * Math.min(100, Math.max(0, xPercent)) / 100;
+            let y = (height - textHeight) * Math.min(100, Math.max(0, yPercent)) / 100;
+
+            if (ticker.direction === 'left-to-right') {
+                x = -textWidth + (ticker.loop === false ? horizontalDistance : wrap(horizontalDistance, width + textWidth));
+            } else if (ticker.direction === 'bottom-to-top') {
+                y = height - (ticker.loop === false ? verticalDistance : wrap(verticalDistance, height + textHeight));
+            } else if (ticker.direction === 'top-to-bottom') {
+                y = -textHeight + (ticker.loop === false ? verticalDistance : wrap(verticalDistance, height + textHeight));
+            } else {
+                x = width - (ticker.loop === false ? horizontalDistance : wrap(horizontalDistance, width + textWidth));
+            }
+            return { x, y };
+        }
+
+        function hexToRgba(hex, opacityPercent) {
+            const match = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+            if (!match) return 'transparent';
+            const value = parseInt(match[1], 16);
+            return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${Math.min(100, Math.max(0, Number(opacityPercent || 0))) / 100})`;
+        }
+
+        function getKaraokeTrackTimelineOffset(audioTrackId) {
+            const pairedItems = mediaTimings
+                .filter(item => item?.pairedAudioId === audioTrackId)
+                .sort((a, b) => Number(a.start || 0) - Number(b.start || 0));
+            if (pairedItems.length) return Number(pairedItems[0].start || 0);
+
+            const pairedIds = new Set(mediaTimings.filter(item => item?.pairedAudioId).map(item => item.pairedAudioId));
+            const globalTracks = (projectData.audioTracks || []).filter(track => !pairedIds.has(track.id));
+            let offset = 0;
+            for (const track of globalTracks) {
+                if (track.id === audioTrackId) return offset;
+                offset += Math.max(0, Number(track.duration || 0));
+            }
+            return 0;
+        }
+
+        function getPreviewKaraokeWords(segment) {
+            if (Array.isArray(segment?.words) && segment.words.length) {
+                return [...segment.words].sort((a, b) => Number(a.start || 0) - Number(b.start || 0));
+            }
+            const tokens = String(segment?.text || '').trim().split(/\s+/).filter(Boolean);
+            const start = Number(segment?.start || 0);
+            const end = Math.max(start + 0.05, Number(segment?.end || start + 2));
+            const weights = tokens.map(token => Math.max(1, Array.from(token).length));
+            const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+            let cursor = start;
+            return tokens.map((text, index) => {
+                const word = { text, start: cursor };
+                cursor += (end - start) * weights[index] / totalWeight;
+                return word;
+            });
+        }
+
         function renderElements(container, fontScale) {
             container.innerHTML = '';
             mediaTimings.forEach((item) => {
@@ -1015,17 +1165,51 @@
                 imageEl.className = 'slide-image' + (shouldPreviewFillFrame(item) ? ' fill' : '');
                 container.appendChild(imageEl);
             });
-            projectData.textOverlays.forEach(txt => {
+            (projectData.textOverlays || []).forEach(txt => {
                 const el = document.createElement('div');
-                el.id = 'txt-' + txt.id; el.className = 'text-overlay'; el.textContent = txt.content;
+                el.id = 'txt-' + txt.id;
+                el.className = 'text-overlay' + (txt.kind === 'ticker' ? ' ticker-overlay' : '');
+                el.textContent = txt.content;
                 el.style.fontSize = (txt.fontSize || 48) * (parseFloat(container.style.height) / 1080) + 'px';
                 el.style.color = txt.fontColor || 'white';
-                if (txt.background === 'black') el.style.background = 'rgba(0,0,0,0.6)';
-                else if (txt.background === 'white') el.style.background = 'rgba(255,255,255,0.6)', el.style.color = 'black';
 
-                if (txt.position === 'top') el.style.top = '10%';
-                else if (txt.position === 'center') el.style.top = '50%', el.style.transform = 'translate(-50%, -50%)';
-                else el.style.bottom = '10%';
+                if (txt.kind === 'ticker') {
+                    el.style.fontFamily = txt.fontFamily === 'serif'
+                        ? 'Georgia, serif'
+                        : (txt.fontFamily === 'monospace' ? 'Consolas, monospace' : 'Arial, sans-serif');
+                    el.style.background = hexToRgba(txt.backgroundColor || '#000000', txt.backgroundOpacity ?? 55);
+                    el.style.webkitTextStroke = `${Math.max(0, Number(txt.borderWidth || 0))}px ${txt.borderColor || '#000000'}`;
+                    const shadows = { small: '1px 1px 2px rgba(0,0,0,0.75)', medium: '2px 2px 4px rgba(0,0,0,0.85)', large: '4px 4px 7px rgba(0,0,0,0.9)' };
+                    el.style.textShadow = shadows[txt.shadow] || 'none';
+                } else {
+                    if (txt.background === 'black') el.style.background = 'rgba(0,0,0,0.6)';
+                    else if (txt.background === 'white') {
+                        el.style.background = 'rgba(255,255,255,0.6)';
+                        el.style.color = 'black';
+                    }
+                    if (txt.position === 'top') el.style.top = '10%';
+                    else if (txt.position === 'center') {
+                        el.style.top = '50%';
+                        el.style.transform = 'translate(-50%, -50%)';
+                    } else el.style.bottom = '10%';
+                }
+                container.appendChild(el);
+            });
+            (projectData.karaokeTracks || []).forEach(track => {
+                const style = track.style || {};
+                const el = document.createElement('div');
+                el.id = 'karaoke-' + track.id;
+                el.className = 'karaoke-overlay';
+                el.style.fontFamily = style.fontFamily || 'Arial, sans-serif';
+                el.style.fontSize = (Number(style.fontSize || 54) * fontScale) + 'px';
+                el.style.color = style.inactiveColor || '#ffffff';
+                el.style.webkitTextStroke = `${Math.max(0, Number(style.outlineWidth ?? 3)) * fontScale}px ${style.outlineColor || '#000000'}`;
+                el.style.background = hexToRgba(style.backgroundColor || '#000000', style.backgroundOpacity ?? 35);
+                if (style.position === 'top') el.style.top = '6%';
+                else if (style.position === 'center') {
+                    el.style.top = '50%';
+                    el.style.transform = 'translateY(-50%)';
+                } else el.style.bottom = '7%';
                 container.appendChild(el);
             });
         }
@@ -1041,17 +1225,66 @@
             });
             syncPreviewVideoPlayback(absT);
 
-            projectData.textOverlays.forEach(txt => {
+            const canvasArea = document.getElementById('canvas-area');
+            (projectData.textOverlays || []).forEach(txt => {
                 const el = document.getElementById('txt-' + txt.id);
+                if (!el) return;
                 let show = false;
-                txt.targetImages.forEach(id => {
-                    const it = imageTimings.find(x => x.id === id);
-                    if (it && absT >= it.start && absT < it.end) show = true;
-                });
+                if (txt.kind === 'ticker') {
+                    show = isTickerActive(txt, absT);
+                    if (show) {
+                        const coords = computeTickerCoordinates(
+                            txt,
+                            absT,
+                            canvasArea.clientWidth,
+                            canvasArea.clientHeight,
+                            el.offsetWidth,
+                            el.offsetHeight
+                        );
+                        el.style.left = `${coords.x}px`;
+                        el.style.top = `${coords.y}px`;
+                    }
+                } else {
+                    (txt.targetImages || []).forEach(id => {
+                        const it = imageTimings.find(x => x.id === id);
+                        if (it && absT >= it.start && absT < it.end) show = true;
+                    });
+                }
                 if (show) el.classList.add('visible'); else el.classList.remove('visible');
             });
-        }
 
+            (projectData.karaokeTracks || []).forEach(track => {
+                const el = document.getElementById('karaoke-' + track.id);
+                if (!el) return;
+                const trackOffset = getKaraokeTrackTimelineOffset(track.audioTrackId)
+                    + Number(track.offsetMs || 0) / 1000;
+                const localTime = absT - trackOffset;
+                const segment = (track.segments || []).find(item => (
+                    localTime >= Number(item.start || 0) && localTime < Number(item.end || 0)
+                ));
+                if (!segment) {
+                    el.classList.remove('visible');
+                    el.replaceChildren();
+                    return;
+                }
+
+                const words = getPreviewKaraokeWords(segment);
+                const activeColor = track.style?.activeColor || '#ffd700';
+                const inactiveColor = track.style?.inactiveColor || '#ffffff';
+                const fragment = document.createDocumentFragment();
+                words.forEach((word, index) => {
+                    const span = document.createElement('span');
+                    span.className = 'karaoke-word';
+                    span.textContent = word.text + (index < words.length - 1 ? ' ' : '');
+                    span.style.color = localTime >= Number(word.start || segment.start)
+                        ? activeColor
+                        : inactiveColor;
+                    fragment.appendChild(span);
+                });
+                el.replaceChildren(fragment);
+                el.classList.add('visible');
+            });
+        }
         function formatTime(s) {
             const m = Math.floor(s / 60), sc = Math.floor(s % 60);
             return m.toString().padStart(2, '0') + ':' + sc.toString().padStart(2, '0');

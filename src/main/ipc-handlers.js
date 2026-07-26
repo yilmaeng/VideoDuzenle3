@@ -11,6 +11,7 @@ const { execFile } = require('child_process');
 const http = require('http');
 const logger = require('./logger');
 const broadcastRoomHandler = require('./broadcast-room-handler');
+const nativeAudioPlatform = require('./native-audio-platform');
 
 // const geminiHandler = require('./gemini-handler'); // Removed to prevent duplicate registration
 
@@ -715,6 +716,22 @@ function setupIpcHandlers(mainWindow) {
         platform: process.platform
     }));
 
+    ipcMain.handle('get-native-audio-capabilities', async () => nativeAudioPlatform.getNativeAudioCapabilities());
+
+    ipcMain.handle('resolve-native-audio-capture-command', async (_event, options = {}) => {
+        const helperPath = nativeAudioPlatform.resolveNativeAudioHelperPath();
+        if (!helperPath) return { success: false, error: 'native_audio_helper_missing' };
+        const args = process.platform === 'win32'
+            ? ['--pid', String(process.pid), '--exclude-tree']
+            : nativeAudioPlatform.buildCaptureArgs({
+                captureMode: options.captureMode || 'native-system-audio',
+                targetProcessId: options.targetProcessId,
+                targetBundleId: options.targetBundleId,
+                includeSelfExclusion: options.includeSelfExclusion !== false
+            });
+        return { success: true, command: helperPath, args, targetPid: process.pid };
+    });
+
     ipcMain.handle('obs-audio-bridge-ensure', async (_event, { token = 'default' } = {}) => {
         const port = await ensureObsAudioBridgeServer();
         const bridgeToken = String(token || 'default');
@@ -1309,6 +1326,25 @@ function setupIpcHandlers(mainWindow) {
     });
 
     // Görsel overlay ekle
+    ipcMain.handle('add-ticker-overlay', async (_event, params = {}) => {
+        try {
+            const { videoPath, outputPath, options = {} } = params;
+            await ffmpegHandler.addTickerOverlay(videoPath, outputPath, options, percent => {
+                mainWindow.webContents.send('ffmpeg-progress', { operation: 'add-ticker', percent });
+            });
+            mainWindow.webContents.send('ffmpeg-progress', { operation: 'add-ticker', percent: 100 });
+            return { success: true, outputPath };
+        } catch (error) {
+            const errorKeys = {
+                ticker_invalid_paths: ['runtime.app.ticker_invalid_paths', 'The video or output path is invalid.'],
+                ticker_text_required: ['runtime.app.ticker_text_required', 'Enter the ticker text first.'],
+                ticker_invalid_time: ['runtime.app.ticker_invalid_time', 'The ticker end time must be after its start time.']
+            };
+            const localized = errorKeys[error.message];
+            return { success: false, error: localized ? t(localized[0], localized[1]) : error.message };
+        }
+    });
+
     ipcMain.handle('add-image-overlay', async (event, params) => {
         try {
             const { videoPath, imagePath, outputPath, options } = params;
@@ -2768,6 +2804,9 @@ function setupIpcHandlers(mainWindow) {
     ipcMain.handle('get-window-process-sources', async () => {
         let scriptPath = '';
         try {
+            if (process.platform === 'darwin') {
+                return await nativeAudioPlatform.listNativeAudioSources();
+            }
             if (process.platform !== 'win32') {
                 return { success: true, sources: [] };
             }

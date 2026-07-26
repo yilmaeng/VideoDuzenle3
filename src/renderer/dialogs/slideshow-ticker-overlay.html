@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="dialog.slideshow_ticker_overlay.title_add">Akan Yazı Ekle</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: #f4f0e6;
+            background:
+                radial-gradient(circle at 85% 10%, rgba(213, 148, 58, 0.18), transparent 34%),
+                linear-gradient(145deg, #152322, #0c1518 62%, #11191f);
+            font-family: "Segoe UI", sans-serif;
+        }
+        header { padding: 22px 26px 12px; border-bottom: 1px solid rgba(255,255,255,.12); }
+        h1 { margin: 0 0 6px; font-family: Georgia, serif; font-size: 25px; color: #ffd38d; }
+        header p { margin: 0; color: #bdc8c5; line-height: 1.5; }
+        main { padding: 20px 26px 28px; }
+        fieldset {
+            border: 1px solid #42625d;
+            border-radius: 10px;
+            margin: 0 0 18px;
+            padding: 16px;
+            background: rgba(6, 15, 17, .52);
+        }
+        legend { color: #ffd38d; font-weight: 700; padding: 0 8px; }
+        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
+        .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .field { display: flex; flex-direction: column; gap: 6px; }
+        .wide { grid-column: 1 / -1; }
+        label { font-weight: 650; }
+        input, select, textarea, button {
+            font: inherit;
+            color: #fff;
+            background: #15282a;
+            border: 1px solid #5c7772;
+            border-radius: 6px;
+            padding: 9px 10px;
+        }
+        textarea { resize: vertical; min-height: 92px; }
+        input[type="color"] { min-height: 42px; padding: 3px; width: 100%; }
+        input[type="checkbox"] { width: 20px; height: 20px; margin: 0; }
+        input:focus, select:focus, textarea:focus, button:focus, #ticker-preview:focus {
+            outline: 3px solid #f2b45e;
+            outline-offset: 2px;
+        }
+        .check { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
+        .hint { color: #b8c5c2; font-size: 13px; line-height: 1.45; margin: 4px 0 0; }
+        .preview-shell {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            overflow: hidden;
+            border: 2px solid #6a8b84;
+            border-radius: 10px;
+            background:
+                linear-gradient(135deg, rgba(255,255,255,.06) 25%, transparent 25%) 0 0 / 28px 28px,
+                linear-gradient(315deg, rgba(255,255,255,.04) 25%, transparent 25%) 0 0 / 28px 28px,
+                #142024;
+        }
+        .preview-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+        .preview-media.fit { object-fit: contain; background: #000; }
+        .safe-area { position: absolute; inset: 5%; border: 1px dashed rgba(255,211,141,.48); pointer-events: none; z-index: 1; }
+        .ai-controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+        .ai-response { width: 100%; min-height: 130px; }
+        .ai-loading { color: #ffd38d; min-height: 24px; }
+        #ticker-preview {
+            position: absolute;
+            z-index: 2;
+            max-width: none;
+            width: max-content;
+            white-space: pre;
+            padding: 7px 12px;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+        }
+        #ticker-preview.dragging { cursor: grabbing; }
+        .status { min-height: 24px; color: #ffd38d; margin-top: 8px; }
+        .actions { display: flex; justify-content: flex-end; gap: 12px; position: sticky; bottom: 0; padding-top: 12px; background: linear-gradient(transparent, #0c1518 24%); }
+        button.primary { background: #bc6d20; border-color: #e0a35f; font-weight: 750; }
+        button.secondary { background: #253638; }
+        button:disabled { opacity: .5; cursor: not-allowed; }
+        [hidden] { display: none !important; }
+        @media (max-width: 720px) { .grid, .grid.three { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 id="dialog-title" data-i18n="dialog.slideshow_ticker_overlay.title_add">Akan Yazı Ekle</h1>
+        <p data-i18n="dialog.slideshow_ticker_overlay.description">Bu yazı medya öğelerinden bağımsız olarak proje zaman çizelgesi üzerinde hareket eder.</p>
+    </header>
+    <main>
+        <fieldset>
+            <legend data-i18n="dialog.slideshow_ticker_overlay.content_group">İçerik ve hareket</legend>
+            <div class="grid">
+                <div class="field wide">
+                    <label for="ticker-content" data-i18n="dialog.slideshow_ticker_overlay.content_label">Akan yazı metni</label>
+                    <textarea id="ticker-content" data-i18n-placeholder="dialog.slideshow_ticker_overlay.content_placeholder" placeholder="Akan yazıyı buraya yazın"></textarea>
+                </div>
+                <div class="field">
+                    <label for="direction" data-i18n="dialog.slideshow_ticker_overlay.direction_label">Hareket yönü</label>
+                    <select id="direction">
+                        <option value="right-to-left" data-i18n="dialog.slideshow_ticker_overlay.direction_right_to_left">Sağdan sola</option>
+                        <option value="left-to-right" data-i18n="dialog.slideshow_ticker_overlay.direction_left_to_right">Soldan sağa</option>
+                        <option value="bottom-to-top" data-i18n="dialog.slideshow_ticker_overlay.direction_bottom_to_top">Aşağıdan yukarı</option>
+                        <option value="top-to-bottom" data-i18n="dialog.slideshow_ticker_overlay.direction_top_to_bottom">Yukarıdan aşağı</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="speed" data-i18n="dialog.slideshow_ticker_overlay.speed_label">Akış hızı, piksel/saniye</label>
+                    <input id="speed" type="number" min="20" max="1000" step="10" value="140">
+                    <p class="hint" data-i18n="dialog.slideshow_ticker_overlay.speed_hint">Düşük değer daha yavaş, yüksek değer daha hızlı hareket eder.</p>
+                </div>
+                <div class="wide">
+                    <div class="check">
+                        <input id="loop" type="checkbox" checked>
+                        <label for="loop" data-i18n="dialog.slideshow_ticker_overlay.loop_label">Bitiş zamanına kadar sürekli döndür</label>
+                    </div>
+                    <div class="check">
+                        <input id="whole-project" type="checkbox" checked>
+                        <label for="whole-project" data-i18n="dialog.slideshow_ticker_overlay.whole_project_label">Video boyunca sürekli göster</label>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend data-i18n="dialog.slideshow_ticker_overlay.timing_group">Zamanlama</legend>
+            <div class="grid">
+                <div class="field">
+                    <label for="start-time" data-i18n="dialog.slideshow_ticker_overlay.start_time_label">Başlangıç zamanı</label>
+                    <input id="start-time" type="text" value="00:00:00" inputmode="decimal" aria-describedby="time-format-hint">
+                </div>
+                <div class="field">
+                    <label for="end-time" data-i18n="dialog.slideshow_ticker_overlay.end_time_label">Bitiş zamanı</label>
+                    <input id="end-time" type="text" value="00:00:10" inputmode="decimal" aria-describedby="time-format-hint">
+                </div>
+            </div>
+            <p class="hint" id="time-format-hint" data-i18n="dialog.slideshow_ticker_overlay.time_format_hint">Zamanı saat:dakika:saniye biçiminde yazın. Video boyunca göster seçiliyse proje sonu kullanılır.</p>
+        </fieldset>
+
+        <fieldset>
+            <legend data-i18n="dialog.slideshow_ticker_overlay.position_group">Konum</legend>
+            <div class="grid three">
+                <div class="field">
+                    <label for="position-preset" data-i18n="dialog.slideshow_ticker_overlay.position_preset_label">Konum ön ayarı</label>
+                    <select id="position-preset">
+                        <option value="top-left" data-i18n="dialog.text_overlay_window.pos_top_left">Sol üst</option>
+                        <option value="top-center" data-i18n="dialog.text_overlay_window.pos_top_center">Üst orta</option>
+                        <option value="top-right" data-i18n="dialog.text_overlay_window.pos_top_right">Sağ üst</option>
+                        <option value="middle-left" data-i18n="dialog.text_overlay_window.pos_middle_left">Sol orta</option>
+                        <option value="center" data-i18n="dialog.text_overlay_window.pos_center">Orta</option>
+                        <option value="middle-right" data-i18n="dialog.text_overlay_window.pos_middle_right">Sağ orta</option>
+                        <option value="bottom-left" data-i18n="dialog.text_overlay_window.pos_bottom_left">Sol alt</option>
+                        <option value="bottom-center" selected data-i18n="dialog.text_overlay_window.pos_bottom_center">Alt orta</option>
+                        <option value="bottom-right" data-i18n="dialog.text_overlay_window.pos_bottom_right">Sağ alt</option>
+                        <option value="custom" data-i18n="dialog.slideshow_ticker_overlay.position_custom">Özel konum</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="x-percent" data-i18n="dialog.slideshow_ticker_overlay.horizontal_position_label">Yatay konum, yüzde</label>
+                    <input id="x-percent" type="number" min="0" max="100" step="1" value="50">
+                </div>
+                <div class="field">
+                    <label for="y-percent" data-i18n="dialog.slideshow_ticker_overlay.vertical_position_label">Dikey konum, yüzde</label>
+                    <input id="y-percent" type="number" min="0" max="100" step="1" value="90">
+                </div>
+            </div>
+            <p class="hint" id="position-hint" data-i18n="dialog.slideshow_ticker_overlay.position_hint">Önizlemedeki yazıyı fareyle sürükleyebilir veya yazıya odaklanıp ok tuşlarıyla yüzde 1, Shift+ok ile yüzde 5 taşıyabilirsiniz.</p>
+        </fieldset>
+
+        <fieldset>
+            <legend data-i18n="dialog.slideshow_ticker_overlay.style_group">Yazı ve görünüm</legend>
+            <div class="grid three">
+                <div class="field">
+                    <label for="font-family" data-i18n="dialog.slideshow_ticker_overlay.font_family_label">Yazı tipi</label>
+                    <select id="font-family">
+                        <option value="sans" data-i18n="dialog.slideshow_ticker_overlay.font_sans">Sade</option>
+                        <option value="serif" data-i18n="dialog.slideshow_ticker_overlay.font_serif">Serif</option>
+                        <option value="monospace" data-i18n="dialog.slideshow_ticker_overlay.font_monospace">Eş aralıklı</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="font-size" data-i18n="dialog.text_overlay_window.size">Yazı boyutu</label>
+                    <input id="font-size" type="number" min="12" max="240" step="2" value="52">
+                </div>
+                <div class="field">
+                    <label for="font-color" data-i18n="dialog.text_overlay_window.color">Yazı rengi</label>
+                    <input id="font-color" type="color" value="#ffffff">
+                </div>
+                <div class="field">
+                    <label for="background-color" data-i18n="dialog.slideshow_ticker_overlay.background_color_label">Arka plan rengi</label>
+                    <input id="background-color" type="color" value="#000000">
+                </div>
+                <div class="field">
+                    <label for="background-opacity" data-i18n="dialog.slideshow_ticker_overlay.background_opacity_label">Arka plan saydamlığı, yüzde</label>
+                    <input id="background-opacity" type="number" min="0" max="100" step="5" value="55">
+                </div>
+                <div class="field">
+                    <label for="shadow" data-i18n="dialog.text_overlay_window.shadow">Gölge</label>
+                    <select id="shadow">
+                        <option value="none" data-i18n="dialog.text_overlay_window.shadow_none">Yok</option>
+                        <option value="small" data-i18n="dialog.text_overlay_window.shadow_small">Hafif</option>
+                        <option value="medium" selected data-i18n="dialog.text_overlay_window.shadow_medium">Orta</option>
+                        <option value="large" data-i18n="dialog.text_overlay_window.shadow_large">Güçlü</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="border-width" data-i18n="dialog.slideshow_ticker_overlay.border_width_label">Kenar kalınlığı</label>
+                    <input id="border-width" type="number" min="0" max="12" step="1" value="1">
+                </div>
+                <div class="field">
+                    <label for="border-color" data-i18n="dialog.slideshow_ticker_overlay.border_color_label">Kenar rengi</label>
+                    <input id="border-color" type="color" value="#000000">
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend data-i18n="dialog.slideshow_ticker_overlay.preview_group">Hareketli önizleme ve konumlandırma</legend>
+            <div class="preview-shell" id="preview-shell">
+                <div id="preview-media-container"></div>
+                <div class="safe-area"></div>
+                <div id="ticker-preview" tabindex="0" role="group" aria-describedby="position-hint" data-i18n-aria="dialog.slideshow_ticker_overlay.preview_aria">Örnek akan yazı</div>
+            </div>
+            <div class="status" id="position-status" role="status" aria-live="polite"></div>
+        </fieldset>
+
+        <fieldset>
+            <legend data-i18n="dialog.slideshow_ticker_overlay.ai_group">Yapay zekâ önerisi</legend>
+            <p class="hint" data-i18n="dialog.slideshow_ticker_overlay.ai_hint">Yapay zekâ gerçek önizleme karesini, yazının görünürlüğünü ve bütün hareket ayarlarını değerlendirir. Siz onaylamadan hiçbir ayar değiştirilmez.</p>
+            <div class="ai-controls">
+                <button id="ai-suggest-btn" type="button" class="secondary" data-i18n="dialog.slideshow_ticker_overlay.ai_suggest_button">Yapay zekâdan öneri al</button>
+                <button id="ai-apply-btn" type="button" class="primary" disabled data-i18n="dialog.slideshow_ticker_overlay.ai_apply_button">Öneriyi uygula</button>
+            </div>
+            <div id="ai-loading" class="ai-loading" role="status" aria-live="polite"></div>
+            <div class="field">
+                <label for="ai-response" data-i18n="dialog.slideshow_ticker_overlay.ai_response_label">Yapay zekâ değerlendirmesi</label>
+                <textarea id="ai-response" class="ai-response" readonly></textarea>
+            </div>
+        </fieldset>
+
+        <div id="live-region" aria-live="assertive" aria-atomic="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden"></div>
+        <div class="actions">
+            <button id="cancel-btn" class="secondary" type="button" data-i18n="dialog.cancel">İptal</button>
+            <button id="apply-video-btn" class="primary" type="button" hidden disabled data-i18n="dialog.slideshow_ticker_overlay.apply_to_video_button">Apply to Video</button>
+            <button id="save-btn" class="primary" type="button" disabled data-i18n="dialog.slideshow_ticker_overlay.add_button">Akan Yazıyı Ekle</button>
+        </div>
+    </main>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        const { pathToFileURL } = require('url');
+        let currentLang = 'tr';
+        let i18nCache = {};
+        let editMode = false;
+        let editIndex = -1;
+        let videoMode = false;
+        let editItemId = null;
+        let projectDuration = 10;
+        let animationStartedAt = performance.now();
+        let dragging = false;
+        let previewMediaData = null;
+        let previewMediaElement = null;
+        let pendingAiSuggestion = null;
+        let projectAspectRatio = '16:9';
+
+        const $ = (id) => document.getElementById(id);
+        const controls = {
+            content: $('ticker-content'), direction: $('direction'), speed: $('speed'), loop: $('loop'),
+            wholeProject: $('whole-project'), startTime: $('start-time'), endTime: $('end-time'),
+            preset: $('position-preset'), x: $('x-percent'), y: $('y-percent'), family: $('font-family'),
+            fontSize: $('font-size'), fontColor: $('font-color'), backgroundColor: $('background-color'),
+            backgroundOpacity: $('background-opacity'), shadow: $('shadow'), borderWidth: $('border-width'),
+            borderColor: $('border-color')
+        };
+        const previewShell = $('preview-shell');
+        const previewText = $('ticker-preview');
+
+        function getPathValue(obj, key) {
+            return key.split('.').reduce((value, part) => value && value[part] !== undefined ? value[part] : null, obj);
+        }
+        function t(key, fallback = key, params = {}) {
+            const template = getPathValue(i18nCache, key) ?? fallback;
+            return Object.entries(params).reduce((text, [name, value]) => String(text).replace(new RegExp(`{${name}}`, 'g'), value), template);
+        }
+        function translateDocument() {
+            document.querySelectorAll('[data-i18n]').forEach((element) => {
+                const value = t(element.dataset.i18n, element.textContent);
+                if (value) element.textContent = value;
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => {
+                const value = t(element.dataset.i18nPlaceholder, element.placeholder);
+                if (value) element.placeholder = value;
+            });
+            document.querySelectorAll('[data-i18n-aria]').forEach((element) => {
+                const value = t(element.dataset.i18nAria, element.getAttribute('aria-label'));
+                if (value) element.setAttribute('aria-label', value);
+            });
+            document.documentElement.lang = currentLang;
+        }
+        async function initI18n() {
+            currentLang = await ipcRenderer.invoke('i18n-get-language');
+            i18nCache = await ipcRenderer.invoke('i18n-get-all');
+            translateDocument();
+        }
+        function announce(message) {
+            const live = $('live-region');
+            live.textContent = '';
+            setTimeout(() => { live.textContent = message; }, 30);
+        }
+        function clamp(value, min, max) { return Math.min(max, Math.max(min, Number(value) || 0)); }
+        function parseClock(value) {
+            const parts = String(value || '').trim().split(':').map(Number);
+            if (parts.some(Number.isNaN)) return NaN;
+            if (parts.length === 1) return Math.max(0, parts[0]);
+            if (parts.length === 2) return Math.max(0, parts[0] * 60 + parts[1]);
+            if (parts.length === 3) return Math.max(0, parts[0] * 3600 + parts[1] * 60 + parts[2]);
+            return NaN;
+        }
+        function formatClock(value) {
+            const total = Math.max(0, Number(value) || 0);
+            const hours = Math.floor(total / 3600);
+            const minutes = Math.floor((total % 3600) / 60);
+            const seconds = (total % 60).toFixed(2).padStart(5, '0');
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${seconds}`;
+        }
+        const presets = {
+            'top-left': [10, 10], 'top-center': [50, 10], 'top-right': [90, 10],
+            'middle-left': [10, 50], 'center': [50, 50], 'middle-right': [90, 50],
+            'bottom-left': [10, 90], 'bottom-center': [50, 90], 'bottom-right': [90, 90]
+        };
+        function applyPreset() {
+            const point = presets[controls.preset.value];
+            if (!point) return;
+            controls.x.value = point[0];
+            controls.y.value = point[1];
+            updatePositionStatus(false);
+        }
+        function setCustomPosition(x, y, shouldAnnounce = false) {
+            controls.x.value = Math.round(clamp(x, 0, 100));
+            controls.y.value = Math.round(clamp(y, 0, 100));
+            controls.preset.value = 'custom';
+            updatePositionStatus(shouldAnnounce);
+        }
+        function updatePositionStatus(shouldAnnounce = false) {
+            const message = t('runtime.slideshow_ticker_overlay.position_changed', 'Konum: yatay yüzde {x}, dikey yüzde {y}.', {
+                x: controls.x.value, y: controls.y.value
+            });
+            $('position-status').textContent = message;
+            if (shouldAnnounce) announce(message);
+        }
+        function updateTimingState() {
+            const wholeProject = controls.wholeProject.checked;
+            controls.startTime.disabled = wholeProject;
+            controls.endTime.disabled = wholeProject;
+            if (wholeProject) {
+                controls.startTime.value = formatClock(0);
+                controls.endTime.value = formatClock(projectDuration);
+            }
+            validate();
+        }
+        function updatePreviewStyle() {
+            const content = controls.content.value.trim() || t('dialog.slideshow_ticker_overlay.preview_sample', 'Örnek akan yazı');
+            previewText.textContent = content;
+            previewText.style.fontSize = `${Math.max(12, Number(controls.fontSize.value) || 52) * 0.42}px`;
+            previewText.style.color = controls.fontColor.value;
+            previewText.style.fontFamily = controls.family.value === 'serif' ? 'Georgia, serif' : (controls.family.value === 'monospace' ? 'Consolas, monospace' : 'Segoe UI, sans-serif');
+            previewText.style.backgroundColor = hexToRgba(controls.backgroundColor.value, clamp(controls.backgroundOpacity.value, 0, 100) / 100);
+            const border = clamp(controls.borderWidth.value, 0, 12);
+            previewText.style.webkitTextStroke = border > 0 ? `${Math.max(1, border * 0.42)}px ${controls.borderColor.value}` : '0 transparent';
+            const shadows = { none: 'none', small: '1px 1px 2px #000', medium: '2px 2px 4px #000', large: '4px 4px 7px #000' };
+            previewText.style.textShadow = shadows[controls.shadow.value] || 'none';
+            animationStartedAt = performance.now();
+            validate();
+        }
+        function hexToRgba(hex, alpha) {
+            const value = String(hex || '#000000').replace('#', '');
+            const number = parseInt(value, 16);
+            return `rgba(${(number >> 16) & 255}, ${(number >> 8) & 255}, ${number & 255}, ${alpha})`;
+        }
+        function setupPreviewMedia(media) {
+            previewMediaData = media && media.path ? media : null;
+            const container = $('preview-media-container');
+            container.innerHTML = '';
+            previewMediaElement = null;
+            previewShell.style.aspectRatio = projectAspectRatio === '9:16' ? '9 / 16' : '16 / 9';
+            if (!previewMediaData) return;
+
+            const isVideo = previewMediaData.type === 'video';
+            const element = document.createElement(isVideo ? 'video' : 'img');
+            element.className = 'preview-media' + (previewMediaData.fitMode === 'fit' ? ' fit' : '');
+            element.src = pathToFileURL(previewMediaData.path).href;
+            if (isVideo) {
+                element.muted = true;
+                element.loop = true;
+                element.autoplay = true;
+                element.playsInline = true;
+                element.addEventListener('loadeddata', () => element.play().catch(() => {}), { once: true });
+            }
+            container.appendChild(element);
+            previewMediaElement = element;
+        }
+
+        function getCurrentTickerSettings() {
+            const wholeProject = controls.wholeProject.checked;
+            return {
+                content: controls.content.value.trim(),
+                direction: controls.direction.value,
+                speed: clamp(controls.speed.value, 20, 1000),
+                loop: controls.loop.checked,
+                wholeProject,
+                startTime: wholeProject ? 0 : parseClock(controls.startTime.value),
+                endTime: wholeProject ? projectDuration : parseClock(controls.endTime.value),
+                positionPreset: controls.preset.value,
+                xPercent: clamp(controls.x.value, 0, 100),
+                yPercent: clamp(controls.y.value, 0, 100),
+                fontFamily: controls.family.value,
+                fontSize: clamp(controls.fontSize.value, 12, 240),
+                fontColor: controls.fontColor.value,
+                backgroundColor: controls.backgroundColor.value,
+                backgroundOpacity: clamp(controls.backgroundOpacity.value, 0, 100),
+                shadow: controls.shadow.value,
+                borderWidth: clamp(controls.borderWidth.value, 0, 12),
+                borderColor: controls.borderColor.value
+            };
+        }
+
+        function drawPreviewMedia(ctx, width, height) {
+            ctx.fillStyle = '#142024';
+            ctx.fillRect(0, 0, width, height);
+            const element = previewMediaElement;
+            const sourceWidth = element?.videoWidth || element?.naturalWidth || 0;
+            const sourceHeight = element?.videoHeight || element?.naturalHeight || 0;
+            if (!element || !sourceWidth || !sourceHeight) return;
+
+            const fit = previewMediaData?.fitMode === 'fit';
+            const scale = fit
+                ? Math.min(width / sourceWidth, height / sourceHeight)
+                : Math.max(width / sourceWidth, height / sourceHeight);
+            const drawWidth = sourceWidth * scale;
+            const drawHeight = sourceHeight * scale;
+            ctx.drawImage(element, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+        }
+
+        async function ensurePreviewMediaReady() {
+            if (!previewMediaElement) return;
+            const hasDimensions = () => Boolean(
+                previewMediaElement.videoWidth
+                || previewMediaElement.naturalWidth
+            );
+            if (hasDimensions()) return;
+            const readyEvent = previewMediaData?.type === 'video' ? 'loadeddata' : 'load';
+            await new Promise((resolve) => {
+                const timer = setTimeout(resolve, 3000);
+                previewMediaElement.addEventListener(readyEvent, () => {
+                    clearTimeout(timer);
+                    resolve();
+                }, { once: true });
+                previewMediaElement.addEventListener('error', () => {
+                    clearTimeout(timer);
+                    resolve();
+                }, { once: true });
+            });
+            if (!hasDimensions()) {
+                throw new Error(t('runtime.slideshow_ticker_overlay.preview_not_ready', 'The preview media is not ready yet. Please try again.'));
+            }
+        }
+
+        function captureAiPreviewFrame() {
+            const settings = getCurrentTickerSettings();
+            const vertical = projectAspectRatio === '9:16';
+            const width = vertical ? 720 : 1280;
+            const height = vertical ? 1280 : 720;
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            drawPreviewMedia(ctx, width, height);
+
+            const family = settings.fontFamily === 'serif'
+                ? 'Georgia, serif'
+                : (settings.fontFamily === 'monospace' ? 'Consolas, monospace' : 'Arial, sans-serif');
+            ctx.font = `${settings.fontSize}px ${family}`;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            const textWidth = ctx.measureText(settings.content).width + 24;
+            const textHeight = settings.fontSize * 1.5;
+            let x = (width - textWidth) * settings.xPercent / 100;
+            let y = (height - textHeight) * settings.yPercent / 100;
+            if (settings.direction === 'right-to-left' || settings.direction === 'left-to-right') {
+                x = (width - textWidth) / 2;
+            } else {
+                y = (height - textHeight) / 2;
+            }
+
+            const opacity = settings.backgroundOpacity / 100;
+            if (opacity > 0) {
+                ctx.fillStyle = hexToRgba(settings.backgroundColor, opacity);
+                ctx.fillRect(x, y, textWidth, textHeight);
+            }
+            const shadowSizes = { none: 0, small: 2, medium: 4, large: 7 };
+            const shadowSize = shadowSizes[settings.shadow] || 0;
+            ctx.shadowColor = shadowSize ? 'rgba(0,0,0,0.9)' : 'transparent';
+            ctx.shadowBlur = shadowSize;
+            ctx.shadowOffsetX = shadowSize / 2;
+            ctx.shadowOffsetY = shadowSize / 2;
+            ctx.fillStyle = settings.fontColor;
+            ctx.strokeStyle = settings.borderColor;
+            ctx.lineWidth = settings.borderWidth * 2;
+            if (settings.borderWidth > 0) ctx.strokeText(settings.content, x + 12, y + textHeight / 2);
+            ctx.fillText(settings.content, x + 12, y + textHeight / 2);
+            return canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+        }
+
+        function parseAiSuggestion(text) {
+            const cleaned = String(text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+            const match = cleaned.match(/\{[\s\S]*\}/);
+            if (!match) throw new Error(t('runtime.slideshow_ticker_overlay.ai_invalid_response', 'AI did not return a valid suggestion.'));
+            return JSON.parse(match[0]);
+        }
+
+        function normalizeAiSuggestion(raw) {
+            const current = getCurrentTickerSettings();
+            const allowed = (value, values, fallback) => values.includes(value) ? value : fallback;
+            const color = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || '')) ? value : fallback;
+            const number = (value, min, max, fallback) => Number.isFinite(Number(value))
+                ? Math.min(max, Math.max(min, Number(value)))
+                : fallback;
+            const wholeProject = typeof raw.wholeProject === 'boolean' ? raw.wholeProject : current.wholeProject;
+            const startTime = wholeProject ? 0 : number(raw.startTime, 0, projectDuration, current.startTime);
+            const endTime = wholeProject
+                ? projectDuration
+                : number(raw.endTime, startTime + 0.1, projectDuration, Math.max(startTime + 0.1, current.endTime));
+            return {
+                assessment: String(raw.assessment || raw.reason || ''),
+                reason: String(raw.reason || raw.assessment || ''),
+                visible: raw.visible !== false,
+                direction: allowed(raw.direction, ['right-to-left', 'left-to-right', 'bottom-to-top', 'top-to-bottom'], current.direction),
+                speed: number(raw.speed, 20, 1000, current.speed),
+                loop: typeof raw.loop === 'boolean' ? raw.loop : current.loop,
+                wholeProject,
+                startTime,
+                endTime,
+                positionPreset: allowed(raw.positionPreset, ['top-left', 'top-center', 'top-right', 'middle-left', 'center', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right', 'custom'], current.positionPreset),
+                xPercent: number(raw.xPercent, 0, 100, current.xPercent),
+                yPercent: number(raw.yPercent, 0, 100, current.yPercent),
+                fontFamily: allowed(raw.fontFamily, ['sans', 'serif', 'monospace'], current.fontFamily),
+                fontSize: number(raw.fontSize, 12, 240, current.fontSize),
+                fontColor: color(raw.fontColor, current.fontColor),
+                backgroundColor: color(raw.backgroundColor, current.backgroundColor),
+                backgroundOpacity: number(raw.backgroundOpacity, 0, 100, current.backgroundOpacity),
+                shadow: allowed(raw.shadow, ['none', 'small', 'medium', 'large'], current.shadow),
+                borderWidth: number(raw.borderWidth, 0, 12, current.borderWidth),
+                borderColor: color(raw.borderColor, current.borderColor)
+            };
+        }
+
+        function formatAiSuggestion(suggestion) {
+            return t('runtime.slideshow_ticker_overlay.ai_response_template', 'Assessment: {assessment}\nVisible: {visible}\nDirection: {direction}\nSpeed: {speed}\nPosition: {position}; X {x}%, Y {y}%\nFont: {font}, {size}px\nColors: {fontColor} / {backgroundColor}\nBackground: {opacity}%\nShadow: {shadow}; outline {border}px\nTiming: {start} - {end}\nReason: {reason}', {
+                assessment: suggestion.assessment,
+                visible: suggestion.visible ? t('dialog.slideshow_ticker_overlay.yes_label', 'Yes') : t('dialog.slideshow_ticker_overlay.no_label', 'No'),
+                direction: t(`dialog.slideshow_ticker_overlay.direction_${suggestion.direction.replaceAll('-', '_')}`, suggestion.direction),
+                speed: suggestion.speed,
+                position: suggestion.positionPreset === 'custom'
+                    ? t('dialog.slideshow_ticker_overlay.position_custom', 'Custom position')
+                    : t(`dialog.text_overlay_window.pos_${suggestion.positionPreset.replaceAll('-', '_')}`, suggestion.positionPreset),
+                x: suggestion.xPercent,
+                y: suggestion.yPercent,
+                font: t(`dialog.slideshow_ticker_overlay.font_${suggestion.fontFamily}`, suggestion.fontFamily),
+                size: suggestion.fontSize,
+                fontColor: suggestion.fontColor,
+                backgroundColor: suggestion.backgroundColor,
+                opacity: suggestion.backgroundOpacity,
+                shadow: t(`dialog.text_overlay_window.shadow_${suggestion.shadow}`, suggestion.shadow),
+                border: suggestion.borderWidth,
+                start: formatClock(suggestion.startTime),
+                end: formatClock(suggestion.endTime),
+                reason: suggestion.reason
+            });
+        }
+
+        async function requestAiSuggestion() {
+            const settings = getCurrentTickerSettings();
+            if (!settings.content) {
+                announce(t('runtime.slideshow_ticker_overlay.enter_text_first', 'Enter the ticker text first.'));
+                controls.content.focus();
+                return;
+            }
+
+            const button = $('ai-suggest-btn');
+            button.disabled = true;
+            $('ai-apply-btn').disabled = true;
+            $('ai-loading').textContent = t('runtime.slideshow_ticker_overlay.ai_loading', 'AI is evaluating the ticker preview...');
+            announce($('ai-loading').textContent);
+            try {
+                const apiData = await ipcRenderer.invoke('get-gemini-api-data');
+                if (!apiData?.apiKey) {
+                    throw new Error(t('runtime.slideshow_ticker_overlay.ai_key_missing', 'Gemini API key was not found. Add it from the AI menu.'));
+                }
+                await ensurePreviewMediaReady();
+                const imageBase64 = captureAiPreviewFrame();
+                const languageNames = { tr: 'Turkish', en: 'English', de: 'German', es: 'Spanish', fr: 'French' };
+                const prompt = `You are evaluating a moving ticker overlay for an accessible video editor. Analyze the supplied real preview frame and the settings below. Determine whether the text is actually visible, readable, clipped, too small, too large, poorly positioned, or lacking contrast. Suggest a complete coherent configuration, not isolated tips. Keep timing inside 0 and ${projectDuration} seconds. Respond ONLY with valid JSON. Write assessment and reason in ${languageNames[currentLang] || 'English'}.
+
+Current settings:
+${JSON.stringify(settings, null, 2)}
+Project aspect ratio: ${projectAspectRatio}
+Project duration: ${projectDuration}
+
+Required JSON schema:
+{
+  "assessment": "short user-facing assessment",
+  "visible": true,
+  "direction": "right-to-left|left-to-right|bottom-to-top|top-to-bottom",
+  "speed": 140,
+  "loop": true,
+  "wholeProject": true,
+  "startTime": 0,
+  "endTime": ${projectDuration},
+  "positionPreset": "top-left|top-center|top-right|middle-left|center|middle-right|bottom-left|bottom-center|bottom-right|custom",
+  "xPercent": 50,
+  "yPercent": 90,
+  "fontFamily": "sans|serif|monospace",
+  "fontSize": 52,
+  "fontColor": "#ffffff",
+  "backgroundColor": "#000000",
+  "backgroundOpacity": 55,
+  "shadow": "none|small|medium|large",
+  "borderWidth": 1,
+  "borderColor": "#000000",
+  "reason": "brief reason for the full recommendation"
+}`;
+                const result = await ipcRenderer.invoke('gemini-vision-request', {
+                    apiKey: apiData.apiKey,
+                    model: apiData.model || 'gemini-2.5-flash',
+                    imageBase64,
+                    prompt,
+                    history: [],
+                    systemInstruction: 'Return only one valid JSON object matching the requested schema.'
+                });
+                if (!result?.success) throw new Error(result?.error || 'ai_request_failed');
+                pendingAiSuggestion = normalizeAiSuggestion(parseAiSuggestion(result.text));
+                const response = formatAiSuggestion(pendingAiSuggestion);
+                $('ai-response').value = response;
+                $('ai-apply-btn').disabled = false;
+                $('ai-loading').textContent = t('runtime.slideshow_ticker_overlay.ai_ready', 'AI suggestion is ready.');
+                announce(t('runtime.slideshow_ticker_overlay.ai_ready_announce', 'AI suggestion is ready. {response}', { response }));
+                $('ai-response').focus();
+            } catch (error) {
+                pendingAiSuggestion = null;
+                const message = t('runtime.slideshow_ticker_overlay.ai_failed', 'AI suggestion could not be received: {error}', { error: error.message || error });
+                $('ai-response').value = message;
+                $('ai-loading').textContent = '';
+                announce(message);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function applyAiSuggestion() {
+            const suggestion = pendingAiSuggestion;
+            if (!suggestion) return;
+            controls.direction.value = suggestion.direction;
+            controls.speed.value = suggestion.speed;
+            controls.loop.checked = suggestion.loop;
+            controls.wholeProject.checked = suggestion.wholeProject;
+            controls.startTime.value = formatClock(suggestion.startTime);
+            controls.endTime.value = formatClock(suggestion.endTime);
+            controls.preset.value = suggestion.positionPreset;
+            controls.x.value = suggestion.xPercent;
+            controls.y.value = suggestion.yPercent;
+            controls.family.value = suggestion.fontFamily;
+            controls.fontSize.value = suggestion.fontSize;
+            controls.fontColor.value = suggestion.fontColor;
+            controls.backgroundColor.value = suggestion.backgroundColor;
+            controls.backgroundOpacity.value = suggestion.backgroundOpacity;
+            controls.shadow.value = suggestion.shadow;
+            controls.borderWidth.value = suggestion.borderWidth;
+            controls.borderColor.value = suggestion.borderColor;
+            updateTimingState();
+            updatePreviewStyle();
+            updatePositionStatus(false);
+            announce(t('runtime.slideshow_ticker_overlay.ai_applied', 'AI suggestion was applied to all ticker settings.'));
+            $('ai-apply-btn').disabled = true;
+        }
+
+        function validate() {
+            const start = parseClock(controls.startTime.value);
+            const end = controls.wholeProject.checked ? projectDuration : parseClock(controls.endTime.value);
+            const invalid = !controls.content.value.trim() || !Number.isFinite(start) || !Number.isFinite(end) || end <= start;
+            $('save-btn').disabled = invalid;
+            $('apply-video-btn').disabled = invalid;
+        }
+        function animate(now) {
+            const shellRect = previewShell.getBoundingClientRect();
+            const textRect = previewText.getBoundingClientRect();
+            const elapsed = (now - animationStartedAt) / 1000;
+            const speed = Math.max(20, Number(controls.speed.value) || 140) * (shellRect.width / 1920);
+            const xAnchor = (shellRect.width - textRect.width) * clamp(controls.x.value, 0, 100) / 100;
+            const yAnchor = (shellRect.height - textRect.height) * clamp(controls.y.value, 0, 100) / 100;
+            let x = xAnchor;
+            let y = yAnchor;
+            const repeatDistance = (distance, extent) => controls.loop.checked
+                ? distance % Math.max(1, extent)
+                : distance;
+            if (controls.direction.value === 'right-to-left') {
+                const extent = shellRect.width + textRect.width;
+                x = shellRect.width - repeatDistance(elapsed * speed, extent);
+            } else if (controls.direction.value === 'left-to-right') {
+                const extent = shellRect.width + textRect.width;
+                x = -textRect.width + repeatDistance(elapsed * speed, extent);
+            } else if (controls.direction.value === 'bottom-to-top') {
+                const extent = shellRect.height + textRect.height;
+                y = shellRect.height - repeatDistance(elapsed * speed, extent);
+            } else {
+                const extent = shellRect.height + textRect.height;
+                y = -textRect.height + repeatDistance(elapsed * speed, extent);
+            }
+            if (!dragging) {
+                previewText.style.left = `${x}px`;
+                previewText.style.top = `${y}px`;
+            }
+            requestAnimationFrame(animate);
+        }
+        function pointerToPercent(event) {
+            const rect = previewShell.getBoundingClientRect();
+            setCustomPosition((event.clientX - rect.left) / rect.width * 100, (event.clientY - rect.top) / rect.height * 100, false);
+            const textRect = previewText.getBoundingClientRect();
+            previewText.style.left = `${event.clientX - rect.left - textRect.width / 2}px`;
+            previewText.style.top = `${event.clientY - rect.top - textRect.height / 2}px`;
+        }
+
+        previewText.addEventListener('pointerdown', (event) => {
+            dragging = true;
+            previewText.classList.add('dragging');
+            previewText.setPointerCapture(event.pointerId);
+            pointerToPercent(event);
+        });
+        previewText.addEventListener('pointermove', (event) => { if (dragging) pointerToPercent(event); });
+        previewText.addEventListener('pointerup', (event) => {
+            dragging = false;
+            previewText.classList.remove('dragging');
+            previewText.releasePointerCapture(event.pointerId);
+            animationStartedAt = performance.now();
+            updatePositionStatus(true);
+        });
+        previewText.addEventListener('keydown', (event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+            event.preventDefault();
+            const step = event.shiftKey ? 5 : 1;
+            let x = Number(controls.x.value); let y = Number(controls.y.value);
+            if (event.key === 'ArrowLeft') x -= step;
+            if (event.key === 'ArrowRight') x += step;
+            if (event.key === 'ArrowUp') y -= step;
+            if (event.key === 'ArrowDown') y += step;
+            setCustomPosition(x, y, true);
+            animationStartedAt = performance.now();
+        });
+
+        Object.values(controls).forEach((control) => {
+            control.addEventListener('input', updatePreviewStyle);
+            control.addEventListener('change', updatePreviewStyle);
+        });
+        controls.preset.addEventListener('change', applyPreset);
+        controls.wholeProject.addEventListener('change', updateTimingState);
+        controls.x.addEventListener('input', () => setCustomPosition(controls.x.value, controls.y.value));
+        controls.y.addEventListener('input', () => setCustomPosition(controls.x.value, controls.y.value));
+
+        ipcRenderer.on('slideshow-ticker-init', (_event, data = {}) => {
+            videoMode = data.mode === 'video';
+            editItemId = data.editItemId ?? null;
+            projectDuration = Math.max(0.1, Number(data.projectDuration || 10));
+            projectAspectRatio = data.aspectRatio === '9:16' ? '9:16' : '16:9';
+            setupPreviewMedia(data.previewMedia);
+            controls.endTime.value = formatClock(projectDuration);
+            if (videoMode) {
+                $('apply-video-btn').hidden = false;
+                $('save-btn').dataset.i18n = 'dialog.slideshow_ticker_overlay.add_to_queue_button';
+                $('save-btn').textContent = t('dialog.slideshow_ticker_overlay.add_to_queue_button', 'Add to Insertion Queue');
+                controls.startTime.value = formatClock(Math.max(0, Number(data.startTime || 0)));
+                controls.wholeProject.checked = false;
+            }
+            if (data.editTicker) {
+                editMode = true;
+                editIndex = Number(data.editIndex);
+                const item = data.editTicker;
+                controls.content.value = item.content || '';
+                controls.direction.value = item.direction || 'right-to-left';
+                controls.speed.value = Number(item.speed || 140);
+                controls.loop.checked = item.loop !== false;
+                controls.wholeProject.checked = item.wholeProject === true || item.endMode === 'project';
+                controls.startTime.value = formatClock(item.startTime || 0);
+                controls.endTime.value = formatClock(item.endTime ?? projectDuration);
+                controls.preset.value = item.positionPreset || 'custom';
+                controls.x.value = clamp(item.xPercent ?? 50, 0, 100);
+                controls.y.value = clamp(item.yPercent ?? 90, 0, 100);
+                controls.family.value = item.fontFamily || 'sans';
+                controls.fontSize.value = Number(item.fontSize || 52);
+                controls.fontColor.value = item.fontColor || '#ffffff';
+                controls.backgroundColor.value = item.backgroundColor || '#000000';
+                controls.backgroundOpacity.value = Number(item.backgroundOpacity ?? 55);
+                controls.shadow.value = ['none', 'small', 'medium', 'large'].includes(item.shadow) ? item.shadow : (item.shadow === false ? 'none' : 'medium');
+                controls.borderWidth.value = Number(item.borderWidth ?? 1);
+                controls.borderColor.value = item.borderColor || '#000000';
+                $('dialog-title').dataset.i18n = 'dialog.slideshow_ticker_overlay.title_edit';
+                $('dialog-title').textContent = t('dialog.slideshow_ticker_overlay.title_edit', 'Akan Yazıyı Düzenle');
+                document.title = $('dialog-title').textContent;
+                $('save-btn').dataset.i18n = videoMode
+                    ? 'dialog.slideshow_ticker_overlay.update_queue_button'
+                    : 'dialog.slideshow_ticker_overlay.update_button';
+                $('save-btn').textContent = videoMode
+                    ? t('dialog.slideshow_ticker_overlay.update_queue_button', 'Update Ticker in Queue')
+                    : t('dialog.slideshow_ticker_overlay.update_button', 'Update Ticker');
+                if (videoMode) $('apply-video-btn').hidden = true;
+            }
+            updateTimingState();
+            updatePreviewStyle();
+            updatePositionStatus(false);
+            controls.content.focus();
+            announce(editMode
+                ? t('runtime.slideshow_ticker_overlay.edit_opened', 'Akan yazı düzenleme penceresi açıldı.')
+                : t('runtime.slideshow_ticker_overlay.add_opened', 'Akan yazı ekleme penceresi açıldı. Metin alanındasınız.'));
+        });
+
+        $('ai-suggest-btn').addEventListener('click', requestAiSuggestion);
+        $('ai-apply-btn').addEventListener('click', applyAiSuggestion);
+
+        function collectTickerData() {
+            const wholeProject = controls.wholeProject.checked;
+            return {
+                id: editMode ? undefined : `ticker_${Date.now()}`, kind: 'ticker', content: controls.content.value.trim(), targetImages: [],
+                direction: controls.direction.value, speed: clamp(controls.speed.value, 20, 1000), loop: controls.loop.checked, wholeProject,
+                startTime: wholeProject ? 0 : parseClock(controls.startTime.value), endMode: wholeProject ? 'project' : 'fixed',
+                endTime: wholeProject ? null : parseClock(controls.endTime.value), positionPreset: controls.preset.value,
+                xPercent: clamp(controls.x.value, 0, 100), yPercent: clamp(controls.y.value, 0, 100),
+                fontFamily: controls.family.value, fontSize: clamp(controls.fontSize.value, 12, 240), fontColor: controls.fontColor.value,
+                backgroundColor: controls.backgroundColor.value, backgroundOpacity: clamp(controls.backgroundOpacity.value, 0, 100),
+                shadow: controls.shadow.value, borderWidth: clamp(controls.borderWidth.value, 0, 12), borderColor: controls.borderColor.value
+            };
+        }
+        $('save-btn').addEventListener('click', () => {
+            const tickerData = collectTickerData();
+            if (videoMode) ipcRenderer.send(editMode ? 'video-ticker-update' : 'video-ticker-add-to-list', editMode ? { id: editItemId, options: tickerData } : tickerData);
+            else ipcRenderer.send(editMode ? 'slideshow-ticker-updated' : 'slideshow-ticker-added', editMode ? { editIndex, tickerData } : tickerData);
+            window.close();
+        });
+        $('apply-video-btn').addEventListener('click', () => { ipcRenderer.send('video-ticker-apply', collectTickerData()); window.close(); });
+        $('cancel-btn').addEventListener('click', () => window.close());
+        document.addEventListener('keydown', (event) => { if (event.key === 'Escape') window.close(); });
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initI18n();
+            updatePreviewStyle();
+            updatePositionStatus(false);
+            requestAnimationFrame(animate);
+        });
+    </script>
+</body>
+</html>

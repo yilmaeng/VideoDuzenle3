@@ -122,6 +122,7 @@ const els = {
 
     // Sync UI
     offsetDisplay: document.getElementById('offset-display'),
+    offsetAdjustInput: document.getElementById('offset-adjust-input'),
 
     // Recording
     cameraPreview: document.getElementById('camera-preview'),
@@ -859,6 +860,20 @@ function adjustOffset(deltaMs) {
 document.getElementById('btn-offset-inc').onclick = () => adjustOffset(10);
 document.getElementById('btn-offset-dec').onclick = () => adjustOffset(-10);
 
+els.offsetAdjustInput?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rawValue = String(els.offsetAdjustInput.value || '').trim().replace(',', '.');
+    const deltaMs = rawValue === '' ? Number.NaN : Number(rawValue);
+    if (!Number.isFinite(deltaMs)) {
+        announce(t('runtime.sync_wizard.offset_adjust_invalid', 'Enter a valid millisecond value.'));
+        return;
+    }
+    adjustOffset(deltaMs);
+    els.offsetAdjustInput.value = '';
+});
+
 
 // --- RECORDING LOGIC (Mode B) ---
 async function initCameraSetup() {
@@ -1147,57 +1162,8 @@ window.addEventListener('keydown', (e) => {
         return;
     }
 
-    // Sync Engine Shortcuts
-    const isSyncActive = document.getElementById('step-SyncEngine').classList.contains('active');
-
-    if (isSyncActive) {
-        if (e.code === 'Space') {
-            e.preventDefault();
-            togglePlay();
-        }
-        else if (e.code === 'ArrowRight') {
-            e.preventDefault();
-            if (e.altKey) {
-                // Windows Key (Meta) + Ctrl + Alt + Arrow is tricky.
-                // User asked for Win+Ctrl+Arrow for 1ms.
-                const isWinCtrl = e.metaKey && e.ctrlKey;
-                const isAltShift = e.altKey && e.shiftKey;
-
-                let multi = 10; // Default Alt
-                if (isWinCtrl) multi = 1;
-                else if (isAltShift) multi = 100;
-
-                adjustOffset(multi);
-            } else {
-                els.refVideo.currentTime += 5;
-                syncAudio(true);
-            }
-        }
-        else if (e.code === 'ArrowLeft') {
-            e.preventDefault();
-            if (e.altKey) {
-                const isWinCtrl = e.metaKey && e.ctrlKey;
-                const isAltShift = e.altKey && e.shiftKey;
-
-                let multi = 10;
-                if (isWinCtrl) multi = 1;
-                else if (isAltShift) multi = 100;
-
-                adjustOffset(-multi);
-            } else {
-                els.refVideo.currentTime -= 5;
-                syncAudio(true);
-            }
-        }
-        else if (e.key === 'L' || e.key === 'l') {
-            // Loop toggle logic is now handled in the click handler logic replication
-            document.getElementById('btn-toggle-loop').click();
-            e.preventDefault();
-        }
-        else if (e.key === '1') { document.getElementById('listen-mode').value = 'ref'; updateListeningMode(); announce('Mod: Sadece Video'); }
-        else if (e.key === '2') { document.getElementById('listen-mode').value = 'clean'; updateListeningMode(); announce('Mod: Sadece Temiz Ses'); }
-        else if (e.key === '3') { document.getElementById('listen-mode').value = 'mix'; updateListeningMode(); announce('Mod: Karışık'); }
-    }
+    // Sync Engine shortcuts are handled once by the document listener below.
+    // Keeping them out of this listener prevents every offset command from running twice.
 
     // Recording Shortcuts
     const isRecActive = document.getElementById('step-B3').classList.contains('active');
@@ -1415,10 +1381,19 @@ document.addEventListener('keydown', (e) => {
         e.preventDefault();
         seekSync(5);
     }
-    // O - Loop toggle (L'den değiştirildi)
+    // O - Loop toggle
     else if (key === 'o' && !e.altKey && !e.ctrlKey && !e.shiftKey) {
         e.preventDefault();
         document.getElementById('btn-toggle-loop')?.click();
+    }
+    // G/H are contextual wizard shortcuts, so they intentionally stay out of the global shortcut manager.
+    else if (key === 'g' && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
+        e.preventDefault();
+        adjustOffset(-1);
+    }
+    else if (key === 'h' && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
+        e.preventDefault();
+        adjustOffset(1);
     }
     // Alt+Arrow - offset ±10ms
     else if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
@@ -1440,16 +1415,7 @@ document.addEventListener('keydown', (e) => {
             adjustOffset(-100);
         }
     }
-    // Win+Ctrl+Arrow veya Ctrl+Alt+Arrow - offset ±1ms
-    else if ((e.ctrlKey && e.altKey) || (e.metaKey && e.ctrlKey)) {
-        if (e.key === 'ArrowRight') {
-            e.preventDefault();
-            adjustOffset(1);
-        } else if (e.key === 'ArrowLeft') {
-            e.preventDefault();
-            adjustOffset(-1);
-        }
-    }
+    // Exact and sub-10 ms adjustments are entered in the millisecond field.
     // 1/2/3 - Dinleme modu
     else if ((key === '1' || key === '2' || key === '3') && !e.altKey && !e.ctrlKey) {
         const listenModeSelect = document.getElementById('listen-mode');

@@ -408,6 +408,29 @@ const VideoPlayer = {
     },
 
     /**
+     * Preserve the active timeline segment when copied segments reuse the
+     * same source-file time range. Source time alone is not unique.
+     */
+    findTimelineSegmentIndex(currentTime, currentSource, startTolerance = 0.1, endTolerance = 0.1) {
+        const segments = Timeline.segments || [];
+        const matches = (index) => {
+            const seg = segments[index];
+            if (!seg) return false;
+            const segSource = seg.sourceFile || Timeline.sourceFile;
+            return segSource === currentSource
+                && currentTime >= seg.start - startTolerance
+                && currentTime <= seg.end + endTolerance;
+        };
+
+        if (Number.isInteger(this._currentTimelineSegmentIndex)
+            && matches(this._currentTimelineSegmentIndex)) {
+            return this._currentTimelineSegmentIndex;
+        }
+
+        return segments.findIndex((_seg, index) => matches(index));
+    },
+
+    /**
      * Oynat
      * Farklı kaynaklı segmentleri destekler
      */
@@ -420,22 +443,8 @@ const VideoPlayer = {
         if (!this.ignoreTimeline && segments && segments.length > 0) {
             const currentTime = this.video.currentTime;
             const currentSource = this.currentFilePath;
-            let inValidSegment = false;
-            let currentSegIndex = -1;
-
-            // Mevcut kaynaktan ve zamandan bir segment içinde miyiz?
-            for (let i = 0; i < segments.length; i++) {
-                const seg = segments[i];
-                const segSource = seg.sourceFile || Timeline.sourceFile;
-
-                if (segSource === currentSource) {
-                    if (currentTime >= seg.start - 0.5 && currentTime <= seg.end + 0.5) {
-                        inValidSegment = true;
-                        currentSegIndex = i;
-                        break;
-                    }
-                }
-            }
+            const currentSegIndex = this.findTimelineSegmentIndex(currentTime, currentSource, 0.5, 0.5);
+            const inValidSegment = currentSegIndex >= 0;
 
             if (!inValidSegment) {
                 // Geçersiz konumdayız - timeline segment indeksimizi kontrol et
@@ -1275,22 +1284,9 @@ const VideoPlayer = {
         }
 
         // Mevcut kaynaktan ve zamandan hangi segment içindeyiz?
-        let foundSegmentIndex = -1;
-        for (let i = 0; i < segments.length; i++) {
-            const seg = segments[i];
-            const segSource = seg.sourceFile || Timeline.sourceFile;
+        // Prefer the tracked timeline index because copied ranges can overlap in source time.
+        let foundSegmentIndex = this.findTimelineSegmentIndex(currentTime, currentSource, 0.1, 0.5);
 
-            // Bu segment mevcut kaynaktan mı?
-            if (segSource === currentSource) {
-                // Mevcut zaman bu segment içinde mi?
-                if (currentTime >= seg.start - 0.1 && currentTime < seg.end) {
-                    foundSegmentIndex = i;
-                    break;
-                }
-            }
-        }
-
-        // Segment bulunamadıysa, belki segment sonundayız?
         if (foundSegmentIndex === -1) {
             // Segment sonuna vardık mı kontrol et
             for (let i = 0; i < segments.length; i++) {

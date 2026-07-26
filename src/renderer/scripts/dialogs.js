@@ -947,6 +947,11 @@ const Dialogs = {
         const input = document.getElementById('goto-time-input');
         // Timeline zamanını kullan
         input.value = Utils.formatTime(VideoPlayer.getTimelineTime());
+        if (this.gotoDialog.open) {
+            input.focus();
+            input.select();
+            return;
+        }
         this.gotoDialog.showModal();
         input.select();
         Accessibility.announce('Zaman koduna git diyaloğu açıldı');
@@ -1825,7 +1830,8 @@ const Dialogs = {
                  <dt>Option + ⌘ + V</dt><dd>Konumu betimle</dd>
                  <dt>Option + ⌘ + D</dt><dd>Seçimi betimle</dd>
                  <dt>⌘ + I</dt><dd>Akıllı seçim</dd>
-                 <dt>F1 / F2</dt><dd>Kısayollar / Yardım</dd>
+                 <dt>⌘ + B</dt><dd>${this.t('dialog.shortcuts.announce_current_time', 'Read current position')}</dd>
+                 <dt>F1 / F2</dt><dd>${this.t('dialog.shortcuts.tools_help', 'Shortcuts / Help')}</dd>
                  <dt>Ctrl + Tık / ⌘ + .</dt><dd>Sağ tık menüsü</dd>
              </dl>
           </section>
@@ -3116,6 +3122,16 @@ const Dialogs = {
 
                 label = `Yazı ekleme: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}", `;
                 label += `zaman aralığı ${Utils.formatTime(startTime)} - ${endTime === 'son' ? 'son' : Utils.formatTime(endTime)}`;
+            } else if (item.type === 'ticker') {
+                const content = String(item.options.content || '');
+                const end = item.options.wholeProject || item.options.endMode === 'project'
+                    ? this.t('runtime.insertion_queue.video_end', 'video end')
+                    : Utils.formatTime(item.options.endTime || 0);
+                const direction = this.t(`dialog.slideshow_ticker_overlay.direction_${String(item.options.direction || 'right-to-left').replaceAll('-', '_')}`, item.options.direction || 'right-to-left');
+                label = this.t('runtime.insertion_queue.ticker_item', 'Ticker: "{content}", time {start} - {end}, {direction}', {
+                    content: content.substring(0, 40) + (content.length > 40 ? '...' : ''),
+                    start: Utils.formatTime(item.options.startTime || 0), end, direction
+                });
             } else if (item.type === 'audio') {
                 const fileName = item.options.audioPath ? item.options.audioPath.split(/[\\/]/).pop() : 'Ses dosyası';
                 const audioDuration = (item.options.audioTrimEnd || 0) - (item.options.audioTrimStart || 0);
@@ -3154,6 +3170,10 @@ const Dialogs = {
             let shortDesc = '';
             if (item.type === 'text') {
                 shortDesc = `yazı eklemesi: "${(item.options.text || '').substring(0, 20)}"`;
+            } else if (item.type === 'ticker') {
+                shortDesc = this.t('runtime.insertion_queue.ticker_short', 'ticker: "{content}"', {
+                    content: String(item.options.content || '').substring(0, 20)
+                });
             } else if (item.type === 'audio') {
                 shortDesc = `ses eklemesi: ${item.options.audioPath ? item.options.audioPath.split(/[\\/]/).pop() : 'Ses'}`;
             } else if (item.type === 'image') {
@@ -3204,7 +3224,21 @@ const Dialogs = {
         this.setupListContextMenu(newList, 'insertion');
 
         // Klavye navigasyonu (ok tuşları ile gezinme)
-        newList.addEventListener('keydown', (e) => {
+        const openInsertionItemEditor = async (item) => {
+            const video = VideoPlayer.videoElement;
+            if (item.type === 'ticker') {
+                await window.api.openVideoTickerDialog({
+                    projectDuration: VideoPlayer.getDuration(), startTime: VideoPlayer.getTimelineTime(),
+                    aspectRatio: video && video.videoHeight > video.videoWidth ? '9:16' : '16:9',
+                    previewMedia: { path: window.App?.currentFilePath, type: 'video', fitMode: 'fit' },
+                    videoPath: window.App?.currentFilePath, editItem: item
+                });
+            } else {
+                await window.api.openTextOverlayDialog({ startTime: VideoPlayer.getCurrentTime(), editItem: item });
+            }
+        };
+
+        newList.addEventListener('keydown', async (e) => {
             const items = newList.querySelectorAll('.insertion-queue-item');
             const currentIndex = Array.from(items).findIndex(item => item === document.activeElement);
             const focusedElement = document.activeElement;
@@ -3273,10 +3307,7 @@ const Dialogs = {
                     const item = InsertionQueue.getItem(id);
                     if (item) {
                         dialog.close();
-                        window.api.openTextOverlayDialog({
-                            startTime: VideoPlayer.getCurrentTime(),
-                            editItem: item
-                        });
+                        await openInsertionItemEditor(item);
                     }
                 } else if (focusedElement.classList.contains('edit-btn') || focusedElement.classList.contains('delete-btn')) {
                     // Buton üzerinde Enter = tıklama
@@ -3295,10 +3326,7 @@ const Dialogs = {
                 const item = InsertionQueue.getItem(id);
                 if (item) {
                     dialog.close();
-                    await window.api.openTextOverlayDialog({
-                        startTime: VideoPlayer.getCurrentTime(),
-                        editItem: item
-                    });
+                    await openInsertionItemEditor(item);
                 }
             }
 

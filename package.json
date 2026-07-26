@@ -1,6 +1,6 @@
 {
   "name": "evd",
-  "version": "4.7.0",
+  "version": "4.8.0",
   "description": "Bir video oynatıcıyı klavyeyle kontrol eden el ve kulak - Görme engelli kullanıcılar için erişilebilir video düzenleme",
   "main": "src/main/index.js",
   "scripts": {
@@ -12,21 +12,33 @@
     "generate:tutorials": "node build/generate-tutorials-json.js",
     "build:win": "powershell -NoProfile -ExecutionPolicy Bypass -File build\\build-win-release.ps1 -Version %npm_package_version%",
     "build:instant-voice-translation": "powershell -NoProfile -ExecutionPolicy Bypass -File build\\build-instant-voice-translation.ps1 -Version %npm_package_version%",
+    "build:instant-voice-translation:mac": "npm run build:native-audio:mac && electron-builder --config build/instant-voice-translation-mac-builder.js --mac dmg --arm64",
+    "test:instant-voice-translation:mac": "node build/validate-instant-voice-translation-mac.js",
     "build:win:dir": "electron-builder --win dir --x64",
-    "build:mac": "npm run prepare:mac && electron-builder --mac dir --arm64",
-    "build:mac:arm64": "npm run prepare:mac && electron-builder --mac dir --arm64",
-    "build:mac:x64": "electron-builder --mac dir --x64",
-    "build:mac:dmg": "npm run prepare:mac && electron-builder --mac dmg --arm64",
+    "build:mac": "npm run build:native-audio:mac && npm run prepare:mac && electron-builder --mac dmg --arm64",
+    "build:native-audio:mac": "bash build/build-native-audio-mac.sh",
     "build:linux": "electron-builder --linux",
     "build:all": "electron-builder --win --mac --linux",
     "deploy:broadcast-room": "powershell -NoProfile -ExecutionPolicy Bypass -File build\\deploy-broadcast-room.ps1",
-    "test": "echo \"Test komutları henüz eklenmedi\" && exit 0"
+    "test": "echo \"Test komutları henüz eklenmedi\" && exit 0",
+    "build:mac:dmg": "npm run build:native-audio:mac && npm run prepare:mac && electron-builder --mac dmg --arm64"
   },
   "build": {
     "appId": "com.engelsiz.videoeditor",
-    "productName": "Engelsiz Video Duzenleyicisi",
-    "executableName": "Engelsiz Video Duzenleyicisi",
+    "productName": "Engelsiz Video Düzenleyicisi",
     "copyright": "© 2025-2026 Engin Yılmaz",
+    "fileAssociations": [
+      {
+        "ext": "kve",
+        "name": "EVD Video Project",
+        "role": "Editor"
+      },
+      {
+        "ext": "eng",
+        "name": "EVD Slide Show Project",
+        "role": "Editor"
+      }
+    ],
     "win": {
       "target": [
         {
@@ -47,7 +59,7 @@
     "mac": {
       "target": [
         {
-          "target": "dir",
+          "target": "dmg",
           "arch": [
             "x64",
             "arm64"
@@ -59,14 +71,7 @@
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "identity": null,
-      "type": "development",
-      "entitlements": "entitlements.mac.plist",
-      "entitlementsInherit": "entitlements.mac.plist",
-      "artifactName": "${productName}-${version}-${arch}.${ext}",
-      "extendInfo": {
-        "CFBundleDisplayName": "Engelsiz Video Düzenleyicisi",
-        "CFBundleName": "Engelsiz Video Duzenleyicisi"
-      }
+      "type": "development"
     },
     "linux": {
       "target": [
@@ -112,10 +117,17 @@
       {
         "from": "src/resources/rnnoise",
         "to": "rnnoise"
+      },
+      {
+        "from": "src/resources/obs-studio",
+        "to": "obs-studio"
+      },
+      {
+        "from": "tools/EvdProcessLoopbackCapture/bin/Release/net8.0-windows/win-x64/publish",
+        "to": "native-audio"
       }
     ],
     "asar": true,
-    "afterPack": "build/afterPackFixes.js",
     "asarUnpack": [
       "node_modules/@ffmpeg-installer/**/*",
       "node_modules/@ffprobe-installer/**/*",

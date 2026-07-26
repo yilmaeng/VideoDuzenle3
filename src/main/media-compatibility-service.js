@@ -50,6 +50,46 @@ function getFileHash(filePath) {
     const hashInput = `${filePath}:${stats.size}:${stats.mtimeMs}`;
     return crypto.createHash('md5').update(hashInput).digest('hex').substring(0, 12);
 }
+function isKnownMediaCodec(codecName) {
+    const codec = String(codecName || '').trim().toLowerCase();
+    return codec !== '' && codec !== 'none' && codec !== 'unknown';
+}
+
+function selectPrimaryStream(streams, codecType) {
+    const candidates = streams.filter((stream) => {
+        if (stream.codec_type !== codecType || !isKnownMediaCodec(stream.codec_name)) return false;
+        if (codecType === 'video') {
+            return Number(stream.width) > 0 && Number(stream.height) > 0 &&
+                Number(stream.disposition?.attached_pic || 0) !== 1;
+        }
+        return true;
+    });
+
+    candidates.sort((left, right) => {
+        const defaultDifference = Number(right.disposition?.default || 0) -
+            Number(left.disposition?.default || 0);
+        if (defaultDifference !== 0) return defaultDifference;
+        if (codecType === 'video') {
+            const leftPixels = Number(left.width || 0) * Number(left.height || 0);
+            const rightPixels = Number(right.width || 0) * Number(right.height || 0);
+            if (rightPixels !== leftPixels) return rightPixels - leftPixels;
+        } else {
+            const channelDifference = Number(right.channels || 0) - Number(left.channels || 0);
+            if (channelDifference !== 0) return channelDifference;
+        }
+        return Number(left.index || 0) - Number(right.index || 0);
+    });
+
+    return candidates[0] || null;
+}
+
+function isUsableCacheFile(filePath) {
+    try {
+        return fs.statSync(filePath).size > 1024;
+    } catch {
+        return false;
+    }
+}
 
 /**
  * Video dosyasını probe et ve detaylı metadata al
@@ -61,8 +101,9 @@ function probeVideo(filePath) {
                 return reject(err);
             }
 
-            const videoStream = metadata.streams.find(s => s.codec_type === 'video');
-            const audioStream = metadata.streams.find(s => s.codec_type === 'audio');
+            const streams = Array.isArray(metadata.streams) ? metadata.streams : [];
+            const videoStream = selectPrimaryStream(streams, 'video');
+            const audioStream = selectPrimaryStream(streams, 'audio');
 
             // Rotation Logic - Comprehensive Check
             let width = videoStream ? videoStream.width : 0;
@@ -134,6 +175,7 @@ function probeVideo(filePath) {
                 bitrate: metadata.format.bit_rate || 0,
 
                 video: videoStream ? {
+                    streamIndex: Number(videoStream.index),
                     codec: (videoStream.codec_name || '').toLowerCase(),
                     codecTag: (videoStream.codec_tag_string || '').toLowerCase(),
                     width: width,
@@ -144,6 +186,7 @@ function probeVideo(filePath) {
                 } : null,
 
                 audio: audioStream ? {
+                    streamIndex: Number(audioStream.index),
                     codec: (audioStream.codec_name || '').toLowerCase(),
                     channels: audioStream.channels,
                     sampleRate: audioStream.sample_rate
@@ -290,13 +333,18 @@ async function analyzeCompatibility(filePath) {
  * Hızlı remux (container değiştir, codec kopyala)
  * Çok hızlı çünkü yeniden encode yapmıyor
  */
-function quickRemux(inputPath, onProgress) {
+async function quickRemux(inputPath, onProgress, suppliedProbe = null) {
+    const probe = suppliedProbe || await probeVideo(inputPath);
+    if (!probe.video || !Number.isInteger(probe.video.streamIndex)) {
+        throw new Error('primary_video_stream_missing');
+    }
+
     return new Promise((resolve, reject) => {
         const fileHash = getFileHash(inputPath);
         const outputPath = path.join(CACHE_DIR, `${fileHash}_remux.mp4`);
 
         // Cache'de varsa direkt döndür
-        if (fs.existsSync(outputPath)) {
+        if (isUsableCacheFile(outputPath)) {
             console.log('Remux cache hit:', outputPath);
             return resolve({
                 success: true,
@@ -305,16 +353,24 @@ function quickRemux(inputPath, onProgress) {
             });
         }
 
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+
         console.log('Quick remux başlıyor:', inputPath, '->', outputPath);
 
+        const outputOptions = [
+            '-map', `0:${probe.video.streamIndex}`,
+            '-sn',
+            '-dn',
+            '-c:v', 'copy',
+            '-movflags', '+faststart'
+        ];
+        if (probe.audio && Number.isInteger(probe.audio.streamIndex)) {
+            outputOptions.push('-map', `0:${probe.audio.streamIndex}?`, '-c:a', 'copy');
+        }
+        if (probe.video.codec === 'hevc') outputOptions.push('-tag:v', 'hvc1');
+
         ffmpeg(inputPath)
-            .outputOptions([
-                '-map 0:v',          // Sadece video stream'ini al
-                '-map 0:a?',         // Sadece audio stream'ini al (varsa)
-                '-c:v', 'copy',      // Video codec kopyala
-                '-c:a', 'copy',      // Audio codec kopyala
-                '-movflags', '+faststart'  // Web için optimize
-            ])
+            .outputOptions(outputOptions)
             .output(outputPath)
             .on('start', (cmd) => console.log('Remux komutu:', cmd))
             .on('stderr', (stderrLine) => {
@@ -351,46 +407,53 @@ function quickRemux(inputPath, onProgress) {
  * Tam transcode (codec dönüştür)
  * Yavaş ama her formattan H.264/AAC'ye dönüştürür
  */
-function transcode(inputPath, options = {}, onProgress) {
-    return new Promise(async (resolve, reject) => {
-        const fileHash = getFileHash(inputPath);
-        const outputPath = path.join(TRANSCODE_DIR, `${fileHash}_transcoded.mp4`);
+async function transcode(inputPath, options = {}, onProgress, suppliedProbe = null) {
+    const probe = suppliedProbe || await probeVideo(inputPath);
+    if (!probe.video || !Number.isInteger(probe.video.streamIndex)) {
+        throw new Error('primary_video_stream_missing');
+    }
 
-        // Cache'de varsa direkt döndür
-        if (fs.existsSync(outputPath)) {
-            console.log('Transcode cache hit:', outputPath);
-            return resolve({
-                success: true,
-                outputPath,
-                cached: true
-            });
-        }
+    const fileHash = getFileHash(inputPath);
+    const outputPath = path.join(TRANSCODE_DIR, `${fileHash}_transcoded.mp4`);
 
-        console.log('Transcode başlıyor:', inputPath, '->', outputPath);
+    if (isUsableCacheFile(outputPath)) {
+        console.log('Transcode cache hit:', outputPath);
+        return {
+            success: true,
+            outputPath,
+            cached: true
+        };
+    }
+    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
 
-        // Donanım hızlandırma tespiti
-        const hwEncoder = await detectHardwareEncoder();
-        const videoCodec = hwEncoder || 'libx264';
+    console.log('Transcode başlıyor:', inputPath, '->', outputPath);
 
-        const command = ffmpeg(inputPath);
-
-        // Video codec ayarları
-        command.videoCodec(videoCodec);
+    const runWithEncoder = (videoCodec) => new Promise((resolve, reject) => {
+        const command = ffmpeg(inputPath).videoCodec(videoCodec);
 
         if (videoCodec === 'libx264') {
             command.outputOptions(['-preset', 'fast', '-crf', '23']);
         } else if (videoCodec === 'h264_nvenc') {
-            command.outputOptions(['-preset', 'p4', '-cq', '23']);
+            command.outputOptions(['-preset', 'fast', '-cq', '23']);
         } else if (videoCodec === 'h264_qsv') {
             command.outputOptions(['-preset', 'faster', '-global_quality', '23']);
         } else if (videoCodec === 'h264_videotoolbox') {
             command.outputOptions(['-q:v', '65']);
         }
 
+        const streamOptions = [
+            '-map', `0:${probe.video.streamIndex}`,
+            '-sn',
+            '-dn'
+        ];
+        if (probe.audio && Number.isInteger(probe.audio.streamIndex)) {
+            streamOptions.push('-map', `0:${probe.audio.streamIndex}?`);
+        }
+
         command
             .audioCodec('aac')
             .audioBitrate('192k')
-            .outputOptions(['-movflags', '+faststart'])
+            .outputOptions([...streamOptions, '-movflags', '+faststart'])
             .output(outputPath)
             .on('start', (cmd) => console.log('Transcode komutu:', cmd))
             .on('progress', (progress) => {
@@ -401,21 +464,34 @@ function transcode(inputPath, options = {}, onProgress) {
                     speed: progress.speed
                 });
             })
-            .on('end', () => {
-                console.log('Transcode tamamlandı:', outputPath);
-                resolve({
-                    success: true,
-                    outputPath,
-                    cached: false,
-                    encoder: videoCodec
-                });
-            })
-            .on('error', (err) => {
-                console.error('Transcode hatası:', err);
+            .on('end', () => resolve({
+                success: true,
+                outputPath,
+                cached: false,
+                encoder: videoCodec
+            }))
+            .on('error', (err, stdout, stderr) => {
+                if (stderr) console.error('Transcode FFmpeg stderr:', stderr);
                 reject(err);
             })
             .run();
     });
+
+    const hardwareEncoder = await detectHardwareEncoder();
+    if (hardwareEncoder) {
+        try {
+            const result = await runWithEncoder(hardwareEncoder);
+            console.log('Transcode tamamlandı:', outputPath);
+            return result;
+        } catch (hardwareError) {
+            console.warn(`Donanım transcode başarısız (${hardwareEncoder}), libx264 deneniyor:`, hardwareError.message);
+            if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+        }
+    }
+
+    const softwareResult = await runWithEncoder('libx264');
+    console.log('Transcode tamamlandı:', outputPath);
+    return softwareResult;
 }
 
 /**
@@ -520,7 +596,7 @@ async function smartOpen(filePath, onProgress, onStatusChange) {
                 let finalStrategy = 'QUICK_REMUX';
 
                 try {
-                    playbackResult = await quickRemux(filePath, onProgress);
+                    playbackResult = await quickRemux(filePath, onProgress, analysis.probe);
                 } catch (remuxError) {
                     console.warn('Quick remux failed, falling back to transcode:', remuxError);
                     notify('transcoding', 'Hızlı dönüşüm başarısız, tam dönüşüm yapılıyor...', {
@@ -528,7 +604,7 @@ async function smartOpen(filePath, onProgress, onStatusChange) {
                     });
 
                     // Fallback to transcode
-                    playbackResult = await transcode(filePath, {}, onProgress);
+                    playbackResult = await transcode(filePath, {}, onProgress, analysis.probe);
                     finalStrategy = 'TRANSCODE';
                 }
 
@@ -554,7 +630,7 @@ async function smartOpen(filePath, onProgress, onStatusChange) {
                     estimatedTime: analysis.estimatedTime
                 });
 
-                const transcodeResult = await transcode(filePath, {}, onProgress);
+                const transcodeResult = await transcode(filePath, {}, onProgress, analysis.probe);
 
                 notify('ready', 'Dönüştürme tamamlandı', {
                     strategy: 'TRANSCODE',

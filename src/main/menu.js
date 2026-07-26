@@ -871,21 +871,18 @@ function createMenu(mainWindow) {
                 { type: 'separator' },
                 {
                     label: t('menu.play.goto_start', 'Başa Git'),
-                    accelerator: 'CmdOrCtrl+Home',
                     click: () => {
                         mainWindow.webContents.send('goto-start');
                     }
                 },
                 {
                     label: t('menu.play.goto_end', 'Sona Git'),
-                    accelerator: 'CmdOrCtrl+End',
                     click: () => {
                         mainWindow.webContents.send('goto-end');
                     }
                 },
                 {
                     label: t('menu.play.goto_middle', 'Ortaya Git'),
-                    accelerator: 'CmdOrCtrl+Shift+Backspace',
                     click: () => {
                         mainWindow.webContents.send('goto-middle');
                     }
@@ -900,7 +897,8 @@ function createMenu(mainWindow) {
                 { type: 'separator' },
                 {
                     label: t('menu.play.goto_timecode', 'Zaman Koduna Git...'),
-                    accelerator: 'CmdOrCtrl+G',
+                    // Cmd/Ctrl+G is registered once in the Go menu below. Electron can
+                    // handle duplicate accelerators inconsistently on macOS.
                     click: () => {
                         mainWindow.webContents.send('goto-time-dialog');
                     }
@@ -1020,6 +1018,13 @@ function createMenu(mainWindow) {
                     label: t('menu.insert.text', 'Metin Ekle...'),
                     click: () => {
                         mainWindow.webContents.send('insert-text-dialog');
+                    }
+                },
+                {
+                    // Intentionally menu-only: this opens a detailed timing and styling workflow.
+                    label: t('menu.insert.ticker', 'Akan Yaz? Ekle...'),
+                    click: () => {
+                        mainWindow.webContents.send('insert-ticker-dialog');
                     }
                 },
                 {
@@ -1456,6 +1461,29 @@ function createMenu(mainWindow) {
                     label: t('menu.help.startup_welcome', 'Başlangıç Ekranı'),
                     click: () => {
                         mainWindow.webContents.send('show-startup-welcome');
+                    }
+                },
+                {
+                    label: t('menu.help.open_log_folder', 'Log klasörünü aç'),
+                    // Support utility; intentionally omitted from the shortcut manager.
+                    click: async () => {
+                        try {
+                            const logDirectory = path.dirname(require('./logger').logPath);
+                            fs.mkdirSync(logDirectory, { recursive: true });
+                            const openError = await shell.openPath(logDirectory);
+                            if (openError) {
+                                throw new Error(openError);
+                            }
+                        } catch (error) {
+                            const options = {
+                                type: 'error',
+                                title: t('menu.help.log_folder_open_error_title', 'Log klasörü açılamadı'),
+                                message: t('menu.help.log_folder_open_error', 'EVD log klasörü açılamadı.'),
+                                detail: error.message
+                            };
+                            await announceDialogForAccessibility(mainWindow, options);
+                            await dialog.showMessageBox(mainWindow, options);
+                        }
                     }
                 },
                 { type: 'separator' },

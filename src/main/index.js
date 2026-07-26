@@ -24,12 +24,39 @@ function isInstantVoiceTranslationOnlyMode() {
         || process.env.EVD_INSTANT_TRANSLATOR_ONLY === '1'
         || appName.includes('anlık sesli çeviri')
         || appName.includes('anlik-sesli-ceviri')
+        || appName.includes('anlik sesli ceviri')
         || appName.includes('instantvoicetranslation');
+}
+
+if (isInstantVoiceTranslationOnlyMode()) {
+    Menu.setApplicationMenu(null);
 }
 
 function isPortableMode() {
     return Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
 }
+function installInstantTranslationEditingShortcuts(targetWindow) {
+    if (process.platform !== 'darwin' || !targetWindow?.webContents) {
+        return;
+    }
+
+    targetWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.type !== 'keyDown' || !input.meta || input.control || input.alt || input.isComposing) {
+            return;
+        }
+
+        const key = String(input.key || '').toLowerCase();
+        const actions = { v: 'paste', c: 'copy', x: 'cut', a: 'selectAll' };
+        const action = key === 'z' ? (input.shift ? 'redo' : 'undo') : actions[key];
+        if (!action || typeof targetWindow.webContents[action] !== 'function') {
+            return;
+        }
+
+        event.preventDefault();
+        targetWindow.webContents[action]();
+    });
+}
+
 
 function translateOrFallback(key, fallback) {
     const value = i18n.t(key);
@@ -47,7 +74,7 @@ function normalizeArgPath(arg) {
         return null;
     }
 
-    if (arg.startsWith('--') || arg.startsWith('/')) {
+    if (arg.startsWith('-')) {
         return null;
     }
 
@@ -81,7 +108,10 @@ function sendOpenPathToRenderer(filePath) {
     }
 
     const ext = path.extname(filePath).toLowerCase();
-    if (SUPPORTED_PROJECT_EXTENSIONS.has(ext)) {
+    if (ext === '.eng') {
+        const { openProjectFile } = require('./slideshow-handler');
+        openProjectFile(mainWindow, filePath);
+    } else if (ext === '.kve') {
         mainWindow.webContents.send('project-open-file', filePath);
     } else {
         mainWindow.webContents.send('file-open', filePath);
@@ -101,6 +131,15 @@ function queueOrOpenPath(filePath) {
         pendingLaunchPath = null;
     }
 }
+
+// macOS delivers Finder/Open With launches through open-file, often before ready.
+app.on('open-file', (event, filePath) => {
+    event.preventDefault();
+    const normalizedPath = normalizeArgPath(filePath);
+    if (normalizedPath && isSupportedOpenPath(normalizedPath)) {
+        queueOrOpenPath(normalizedPath);
+    }
+});
 
 function showInstantVoiceTranslationWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) {
@@ -213,6 +252,10 @@ app.whenReady().then(async () => {
         }
 
         app.on('activate', () => {
+            if (isInstantVoiceTranslationOnlyMode() && mainWindow && !mainWindow.isDestroyed()) {
+                showInstantVoiceTranslationWindow();
+                return;
+            }
             if (BrowserWindow.getAllWindows().length === 0) {
                 createWindow();
             }
@@ -339,6 +382,10 @@ function createWindow() {
         autoHideMenuBar: false
     });
 
+    if (instantTranslationOnly) {
+        installInstantTranslationEditingShortcuts(mainWindow);
+    }
+
     mainWindow.loadFile(path.join(__dirname, instantTranslationOnly
         ? '../renderer/instant-voice-translation.html'
         : '../renderer/index.html'), {
@@ -393,6 +440,7 @@ function createWindow() {
             accessibilityEnabled: app.accessibilitySupportEnabled,
             appVersion: app.getVersion(),
             isPortable: isPortableMode(),
+            platform: process.platform,
             launchedWithExternalFile,
             instantTranslationOnly
         });

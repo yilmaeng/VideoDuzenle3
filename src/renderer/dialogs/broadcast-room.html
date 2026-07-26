@@ -561,12 +561,12 @@
             </div>
             <div class="grid" style="margin-top: 16px;" data-room-section-id="device_controls">
                 <div>
-                    <label for="host-camera-device" data-i18n="broadcast_room.host_camera_device_label">Host kamerası</label>
-                    <select id="host-camera-device" data-i18n-aria="broadcast_room.host_camera_device_label"></select>
+                    <label for="host-camera-device" data-i18n="broadcast_room.camera_device_label">Kamera</label>
+                    <select id="host-camera-device" data-i18n-aria="broadcast_room.camera_device_label"></select>
                 </div>
                 <div>
-                    <label for="host-microphone-device" data-i18n="broadcast_room.host_microphone_device_label">Host mikrofonu</label>
-                    <select id="host-microphone-device" data-i18n-aria="broadcast_room.host_microphone_device_label"></select>
+                    <label for="host-microphone-device" data-i18n="broadcast_room.microphone_device_label">Mikrofon</label>
+                    <select id="host-microphone-device" data-i18n-aria="broadcast_room.microphone_device_label"></select>
                 </div>
                 <div>
                     <label for="host-microphone-volume" data-i18n="broadcast_room.host_microphone_volume_label">Mikrofon ses düzeyi</label>
@@ -574,8 +574,8 @@
                     <div id="host-microphone-volume-value" class="hint">100%</div>
                 </div>
                 <div>
-                    <label for="host-speaker-device" data-i18n="broadcast_room.host_speaker_device_label">Host hoparlörü</label>
-                    <select id="host-speaker-device" data-i18n-aria="broadcast_room.host_speaker_device_label"></select>
+                    <label for="host-speaker-device" data-i18n="broadcast_room.speaker_device_label">Hoparlör</label>
+                    <select id="host-speaker-device" data-i18n-aria="broadcast_room.speaker_device_label"></select>
                 </div>
                 <div>
                     <label for="host-speaker-volume" data-i18n="broadcast_room.host_speaker_volume_label">Hoparlör ses düzeyi</label>
@@ -1063,7 +1063,7 @@
 
         <section class="card" data-room-section-id="live_translation">
             <h2 data-i18n="broadcast_room.translation_section">Canlı Çeviri</h2>
-            <p class="hint" data-i18n="broadcast_room.translation_hint">Bu bölüm, oda sesinden yazılı otomatik altyazı veya yazılı çeviri üretir. Canlı sesli dublaj bu akışta kullanılmaz; dublaj için kayıt sonrası ElevenLabs dublaj aracını kullanabilirsiniz.</p>
+            <p data-translation-host-controls class="hint" data-i18n="broadcast_room.translation_hint">Bu bölüm, oda sesinden yazılı otomatik altyazı veya yazılı çeviri üretir. Canlı sesli dublaj bu akışta kullanılmaz; dublaj için kayıt sonrası ElevenLabs dublaj aracını kullanabilirsiniz.</p>
             <div class="form-group">
                 <label>
                     <input type="checkbox" id="translation-enabled">
@@ -1192,7 +1192,7 @@
                     <textarea id="translation-translated-transcript" class="value-box" readonly rows="8" data-i18n-aria="broadcast_room.translation_translated_transcript_label"></textarea>
                 </div>
             </div>
-            <p class="hint" style="margin-top: 12px;" data-i18n="broadcast_room.translation_openai_manage_hint">OpenAI anahtarınızı Yapay Zeka menüsündeki OpenAI API Anahtarı, ElevenLabs anahtarınızı da ElevenLabs API Anahtarı öğesinden yönetebilirsiniz.</p>
+            <p data-translation-host-controls class="hint" style="margin-top: 12px;" data-i18n="broadcast_room.translation_openai_manage_hint">OpenAI anahtarınızı Yapay Zeka menüsündeki OpenAI API Anahtarı, ElevenLabs anahtarınızı da ElevenLabs API Anahtarı öğesinden yönetebilirsiniz.</p>
         </section>
 
         <section class="card" data-room-section-id="live_effects">
@@ -1228,6 +1228,7 @@
                 <button id="btn-toggle-youtube-room" type="button" class="secondary" aria-expanded="false" aria-controls="youtube-panel-room" data-i18n="broadcast_room.youtube_toggle_section" data-i18n-aria="broadcast_room.youtube_toggle_section">YouTube</button>
             </div>
             <div id="youtube-panel-room" hidden>
+            <div data-youtube-host-controls>
             <p class="hint" data-i18n="broadcast_room.youtube_hint">Kayıt sihirbazındaki gibi YouTube hesabı bağlayabilir, planlı bir yayın hazırlayabilir veya mevcut planlı yayını seçebilirsiniz.</p>
             <div class="toolbar">
                 <button id="btn-youtube-connect-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_connect" data-i18n-aria="broadcast_room.youtube_connect">YouTube Hesabını Bağla</button>
@@ -1305,6 +1306,7 @@
                     <button id="btn-youtube-copy-watch-link-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_copy_watch_link" data-i18n-aria="broadcast_room.youtube_copy_watch_link">Bağlantıyı Kopyala</button>
                 </div>
             </div>
+            </div>
             <section id="youtube-chat-panel-room" class="card" style="margin-top:16px; display:none;">
                 <div class="toolbar" style="justify-content: space-between; align-items:flex-start;">
                     <div style="flex:1;">
@@ -1316,7 +1318,7 @@
                     </div>
                 </div>
                 <div class="window-selection-row" style="margin-top:10px;">
-                    <label><input type="checkbox" id="youtube-chat-visible-toggle-room" checked> <span data-i18n="recording_wizard.chat.visible_on_stream">Sohbeti yayında göster</span></label>
+                    <label data-youtube-host-controls><input type="checkbox" id="youtube-chat-visible-toggle-room" checked> <span data-i18n="recording_wizard.chat.visible_on_stream">Sohbeti yayında göster</span></label>
                     <label><input type="checkbox" id="youtube-chat-auto-read-toggle-room"> <span data-i18n="recording_wizard.chat.auto_read">Yeni mesajları ekran okuyucuya otomatik duyur</span></label>
                     <label><input type="checkbox" id="youtube-chat-background-notification-toggle-room"> <span data-i18n="recording_wizard.chat.background_notification">Arka planda yeni mesaj geldiğinde sistem bildirimi göster</span></label>
                     <label><input type="checkbox" id="youtube-chat-background-flash-toggle-room"> <span data-i18n="recording_wizard.chat.background_flash">Arka planda yeni mesaj geldiğinde görev çubuğunda dikkat çek</span></label>
@@ -1331,14 +1333,14 @@
                     </div>
                     <label for="youtube-chat-list-room" data-i18n="recording_wizard.chat.list_label">Sohbet mesajları</label>
                     <select id="youtube-chat-list-room" size="8" style="width:100%;" data-i18n-aria="recording_wizard.chat.list_aria"></select>
-                    <p class="hint" data-i18n="recording_wizard.chat.help">Alt+Ctrl+C ile sohbet listesine geçin. Yukarı ve aşağı oklarla mesajlar arasında gezin. Tab ile yazma alanına geçin. Enter gönderir, Shift+Enter yeni satır ekler.</p>
-                    <label for="youtube-chat-composer-room" data-i18n="recording_wizard.chat.composer_label">Mesaj yaz</label>
-                    <textarea id="youtube-chat-composer-room" rows="3" style="width:100%; resize:vertical;"
+                    <p id="youtube-chat-help-room" class="hint" data-i18n="recording_wizard.chat.help">Alt+Ctrl+C ile sohbet listesine geçin. Yukarı ve aşağı oklarla mesajlar arasında gezin. Tab ile yazma alanına geçin. Enter gönderir, Shift+Enter yeni satır ekler.</p>
+                    <label data-youtube-host-controls for="youtube-chat-composer-room" data-i18n="recording_wizard.chat.composer_label">Mesaj yaz</label>
+                    <textarea data-youtube-host-controls id="youtube-chat-composer-room" rows="3" style="width:100%; resize:vertical;"
                         data-i18n-aria="recording_wizard.chat.composer_aria"
                         data-i18n-placeholder="recording_wizard.chat.composer_placeholder"
                         placeholder="Mesajınızı yazın"></textarea>
                     <div class="step-actions" style="margin-top:10px;">
-                        <button type="button" id="btn-youtube-chat-send-room" data-i18n="recording_wizard.chat.send" data-i18n-aria="recording_wizard.chat.send">Mesajı Gönder</button>
+                        <button data-youtube-host-controls type="button" id="btn-youtube-chat-send-room" data-i18n="recording_wizard.chat.send" data-i18n-aria="recording_wizard.chat.send">Mesajı Gönder</button>
                         <button type="button" id="btn-close-youtube-chat-panel-room" data-i18n="recording_wizard.chat.close_panel" data-i18n-aria="recording_wizard.chat.close_panel">Sohbeti Kapat</button>
                     </div>
                 </div>

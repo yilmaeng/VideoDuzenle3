@@ -16,6 +16,7 @@ const { getVisualOrientation, buildSmartStillImagePlacementFilter, buildFitPadFi
 
 let newProjectWindow = null;
 let slideshowEditorWindow = null;
+let karaokeEditorWindow = null;
 let currentProjectSettings = null;
 let storedMainWindow = null; // Ana pencere referansını sakla
 
@@ -458,6 +459,10 @@ function setupSlideshowHandlers(mainWindow) {
 
     // Slideshow'u kapat
     ipcMain.on('slideshow-close', () => {
+        if (karaokeEditorWindow && !karaokeEditorWindow.isDestroyed()) {
+            karaokeEditorWindow.close();
+            karaokeEditorWindow = null;
+        }
         if (slideshowEditorWindow) {
             slideshowEditorWindow.close();
             slideshowEditorWindow = null;
@@ -605,6 +610,90 @@ function setupSlideshowHandlers(mainWindow) {
         }
     });
 
+    ipcMain.on('slideshow-add-ticker', (_event, data = {}) => {
+        openTickerOverlayForSlideshow(storedMainWindow, data);
+    });
+
+    ipcMain.on('slideshow-edit-ticker', (_event, data = {}) => {
+        openTickerOverlayForSlideshow(storedMainWindow, data);
+    });
+
+    ipcMain.on('slideshow-ticker-added', (_event, tickerData) => {
+        if (slideshowEditorWindow) {
+            slideshowEditorWindow.webContents.send('slideshow-text-result', tickerData);
+        }
+    });
+
+    ipcMain.on('slideshow-ticker-updated', (_event, { editIndex, tickerData }) => {
+        if (slideshowEditorWindow) {
+            slideshowEditorWindow.webContents.send('slideshow-text-update-result', {
+                editIndex,
+                textData: tickerData
+            });
+        }
+    });
+
+    ipcMain.on('slideshow-open-karaoke-editor', (_event, data = {}) => {
+        openKaraokeEditorForSlideshow(storedMainWindow, data);
+    });
+
+    ipcMain.on('slideshow-karaoke-save', (_event, karaokeTracks) => {
+        if (slideshowEditorWindow && !slideshowEditorWindow.isDestroyed()) {
+            slideshowEditorWindow.webContents.send('slideshow-karaoke-result', karaokeTracks);
+        }
+    });
+
+    ipcMain.handle('slideshow-karaoke-import-file', async () => {
+        const targetWindow = karaokeEditorWindow || slideshowEditorWindow;
+        const dialogTitle = t('dialog.slideshow_karaoke.import_title', 'Import karaoke or subtitle file');
+        await announceDialogForAccessibility(targetWindow, {
+            title: dialogTitle,
+            message: t('dialog.slideshow_karaoke.choose_file_announcement', 'Choose an SRT, LRC, ASS or SSA file.')
+        });
+        const result = await dialog.showOpenDialog(targetWindow, {
+            title: dialogTitle,
+            filters: [{
+                name: t('dialog.slideshow_karaoke.supported_files', 'Karaoke and subtitle files'),
+                extensions: ['srt', 'lrc', 'ass', 'ssa']
+            }],
+            properties: ['openFile']
+        });
+        if (result.canceled || !result.filePaths[0]) return { canceled: true };
+        const filePath = result.filePaths[0];
+        return {
+            canceled: false,
+            filePath,
+            extension: path.extname(filePath).toLowerCase(),
+            content: fs.readFileSync(filePath, 'utf8')
+        };
+    });
+
+    ipcMain.handle('slideshow-karaoke-export-file', async (_event, data = {}) => {
+        const format = ['srt', 'lrc', 'ass'].includes(String(data.format || '').toLowerCase())
+            ? String(data.format).toLowerCase()
+            : 'srt';
+        const targetWindow = karaokeEditorWindow || slideshowEditorWindow;
+        const dialogTitle = t('dialog.slideshow_karaoke.export_title', 'Export karaoke lyrics');
+        await announceDialogForAccessibility(targetWindow, {
+            title: dialogTitle,
+            message: t('dialog.slideshow_karaoke.save_file_announcement', 'Choose where to save the karaoke file.')
+        });
+        const result = await dialog.showSaveDialog(targetWindow, {
+            title: dialogTitle,
+            defaultPath: String(data.defaultName || `karaoke.${format}`),
+            filters: [{
+                name: format === 'ass'
+                    ? t('dialog.slideshow_karaoke.ass_file', 'ASS karaoke file')
+                    : (format === 'lrc'
+                        ? t('dialog.slideshow_karaoke.lrc_file', 'Enhanced LRC file')
+                        : t('dialog.slideshow_karaoke.srt_file', 'SRT subtitle file')),
+                extensions: [format]
+            }]
+        });
+        if (result.canceled || !result.filePath) return { canceled: true };
+        fs.writeFileSync(result.filePath, String(data.content || ''), 'utf8');
+        return { canceled: false, filePath: result.filePath };
+    });
     ipcMain.on('slideshow-preview', (event, { projectData, options }) => {
         const normalizedProjectData = normalizeSlideshowProjectData(projectData);
         const previewWindow = new BrowserWindow({
@@ -1130,8 +1219,10 @@ CROP_NOTE: [crop note]`;
                 const hasVideoItems = mediaItems.some(item => item?.type === 'video');
                 const hasPinnedItems = mediaItems.some(item => item?.placementMode === 'pinned');
                 const hasBlurFitMode = projectData.visualFitMode === 'blur';
+                const hasTickerOverlays = (projectData.textOverlays || []).some(overlay => overlay?.kind === 'ticker');
+                const hasKaraokeTracks = (projectData.karaokeTracks || []).some(track => Array.isArray(track?.segments) && track.segments.length > 0);
 
-                if (hasVideoItems || hasPinnedItems || hasBlurFitMode) {
+                if (hasVideoItems || hasPinnedItems || hasBlurFitMode || hasTickerOverlays || hasKaraokeTracks) {
                     console.log('Karma medya veya zaman sabitlemeli proje, mixed export hattı kullanılıyor.');
                     await createMixedMediaSlideshowVideo(projectData, result.filePath, slideshowEditorWindow);
                 } else if (projectData.images.length > MAX_SINGLE_PASS_IMAGES) {
@@ -1235,6 +1326,7 @@ CROP_NOTE: [crop note]`;
 }
 
 let textOverlayWindow = null;
+let tickerOverlayWindow = null;
 
 /**
  * Slideshow için yazı ekleme diyaloğunu aç
@@ -1322,9 +1414,76 @@ function openTextOverlayForSlideshow(mainWindow, data = {}) {
     });
 }
 
+function openTickerOverlayForSlideshow(mainWindow, data = {}) {
+    if (tickerOverlayWindow && !tickerOverlayWindow.isDestroyed()) {
+        tickerOverlayWindow.destroy();
+        tickerOverlayWindow = null;
+    }
+
+    tickerOverlayWindow = new BrowserWindow({
+        width: 760,
+        height: 880,
+        parent: slideshowEditorWindow || mainWindow,
+        modal: true,
+        show: false,
+        resizable: true,
+        minimizable: false,
+        maximizable: false,
+        title: data.editTicker
+            ? t('dialog.slideshow_ticker_overlay.title_edit', 'Edit Ticker')
+            : t('dialog.slideshow_ticker_overlay.title_add', 'Add Ticker'),
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+
+    tickerOverlayWindow.setMenu(null);
+    tickerOverlayWindow.loadFile(path.join(__dirname, '../renderer/dialogs/slideshow-ticker-overlay.html'));
+    tickerOverlayWindow.once('ready-to-show', () => {
+        tickerOverlayWindow.show();
+        tickerOverlayWindow.focus();
+    });
+    tickerOverlayWindow.webContents.on('did-finish-load', () => {
+        tickerOverlayWindow.webContents.send('slideshow-ticker-init', data);
+    });
+    tickerOverlayWindow.on('closed', () => {
+        tickerOverlayWindow = null;
+    });
+}
+
 /**
  * Yeni proje diyaloğunu aç
  */
+function openKaraokeEditorForSlideshow(mainWindow, data = {}) {
+    if (karaokeEditorWindow && !karaokeEditorWindow.isDestroyed()) {
+        karaokeEditorWindow.focus();
+        karaokeEditorWindow.webContents.send('slideshow-karaoke-init', data);
+        return;
+    }
+
+    karaokeEditorWindow = new BrowserWindow({
+        width: 1080,
+        height: 850,
+        parent: slideshowEditorWindow || mainWindow,
+        modal: true,
+        show: false,
+        resizable: true,
+        minimizable: false,
+        title: t('dialog.slideshow_karaoke.title', 'Karaoke Editor'),
+        webPreferences: { nodeIntegration: true, contextIsolation: false }
+    });
+    karaokeEditorWindow.setMenu(null);
+    karaokeEditorWindow.loadFile(path.join(__dirname, '../renderer/dialogs/slideshow-karaoke-editor.html'));
+    karaokeEditorWindow.once('ready-to-show', () => {
+        karaokeEditorWindow.show();
+        karaokeEditorWindow.focus();
+    });
+    karaokeEditorWindow.webContents.on('did-finish-load', () => {
+        karaokeEditorWindow.webContents.send('slideshow-karaoke-init', data);
+    });
+    karaokeEditorWindow.on('closed', () => { karaokeEditorWindow = null; });
+}
 function openNewProjectDialog(mainWindow) {
     if (newProjectWindow) {
         newProjectWindow.focus();
@@ -1608,6 +1767,115 @@ function syncMediaItemsWithImages(projectData) {
     return projectData;
 }
 
+function normalizeSlideshowTextOverlay(overlay, index = 0) {
+    if (!overlay || typeof overlay !== 'object') return null;
+    if (overlay.kind !== 'ticker') {
+        return {
+            ...overlay,
+            kind: overlay.kind || 'static',
+            targetImages: Array.isArray(overlay.targetImages) ? overlay.targetImages : []
+        };
+    }
+
+    const clampNumber = (value, min, max, fallback) => {
+        const numericValue = Number(value);
+        return Number.isFinite(numericValue) ? Math.min(max, Math.max(min, numericValue)) : fallback;
+    };
+    const directions = ['right-to-left', 'left-to-right', 'bottom-to-top', 'top-to-bottom'];
+    const presets = ['top-left', 'top-center', 'top-right', 'middle-left', 'center', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right', 'custom'];
+    const fontFamilies = ['sans', 'serif', 'monospace'];
+    const shadowModes = ['none', 'small', 'medium', 'large'];
+    const wholeProject = overlay.wholeProject === true || overlay.endMode === 'project';
+    const startTime = wholeProject ? 0 : Math.max(0, Number(overlay.startTime || 0));
+    const fixedEndTime = Number(overlay.endTime);
+
+    return {
+        ...overlay,
+        id: overlay.id || `ticker-${Date.now()}-${index}`,
+        kind: 'ticker',
+        content: String(overlay.content || ''),
+        direction: directions.includes(overlay.direction) ? overlay.direction : 'right-to-left',
+        speed: clampNumber(overlay.speed, 20, 1000, 140),
+        loop: overlay.loop !== false,
+        wholeProject,
+        startTime,
+        endMode: wholeProject ? 'project' : 'fixed',
+        endTime: wholeProject ? null : (Number.isFinite(fixedEndTime) && fixedEndTime > startTime ? fixedEndTime : startTime + 10),
+        positionPreset: presets.includes(overlay.positionPreset) ? overlay.positionPreset : 'bottom-center',
+        xPercent: clampNumber(overlay.xPercent, 0, 100, 50),
+        yPercent: clampNumber(overlay.yPercent, 0, 100, 90),
+        fontFamily: fontFamilies.includes(overlay.fontFamily) ? overlay.fontFamily : 'sans',
+        fontSize: clampNumber(overlay.fontSize, 12, 240, 52),
+        fontColor: /^#[0-9a-f]{6}$/i.test(overlay.fontColor || '') ? overlay.fontColor : '#ffffff',
+        backgroundColor: /^#[0-9a-f]{6}$/i.test(overlay.backgroundColor || '') ? overlay.backgroundColor : '#000000',
+        backgroundOpacity: clampNumber(overlay.backgroundOpacity, 0, 100, 55),
+        shadow: shadowModes.includes(overlay.shadow) ? overlay.shadow : (overlay.shadow === false ? 'none' : 'medium'),
+        borderWidth: clampNumber(overlay.borderWidth, 0, 12, 1),
+        borderColor: /^#[0-9a-f]{6}$/i.test(overlay.borderColor || '') ? overlay.borderColor : '#000000',
+        targetImages: []
+    };
+}
+
+function normalizeKaraokeWord(word, index, segmentStart, segmentEnd, wordsLength) {
+    const fallbackStart = segmentStart + ((segmentEnd - segmentStart) * index / Math.max(1, wordsLength));
+    const start = Number.isFinite(Number(word?.start)) ? Number(word.start) : fallbackStart;
+    return {
+        text: String(word?.text || '').trim(),
+        start: Math.min(segmentEnd, Math.max(segmentStart, start)),
+        manual: word?.manual === true
+    };
+}
+
+function normalizeKaraokeTrack(track, index = 0) {
+    if (!track || typeof track !== 'object') return null;
+    const segments = (Array.isArray(track.segments) ? track.segments : [])
+        .map((segment, segmentIndex) => {
+            const start = Math.max(0, Number(segment?.start || 0));
+            const end = Math.max(start + 0.05, Number(segment?.end || start + 2));
+            const rawWords = Array.isArray(segment?.words) ? segment.words : [];
+            const words = rawWords
+                .map((word, wordIndex) => normalizeKaraokeWord(word, wordIndex, start, end, rawWords.length))
+                .filter(word => word.text)
+                .sort((a, b) => a.start - b.start);
+            return {
+                ...segment,
+                id: segment?.id || `karaoke-segment-${index}-${segmentIndex}-${Date.now()}`,
+                start,
+                end,
+                text: String(segment?.text || '').trim(),
+                words,
+                timingMode: words.length > 0
+                    ? (words.every(word => word.manual) ? 'manual' : (segment?.timingMode || 'imported'))
+                    : 'none',
+                needsReview: segment?.needsReview === true
+            };
+        })
+        .filter(segment => segment.text && segment.end > segment.start)
+        .sort((a, b) => a.start - b.start);
+
+    const color = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : fallback;
+    return {
+        ...track,
+        id: track.id || `karaoke-track-${index}-${Date.now()}`,
+        audioTrackId: String(track.audioTrackId || ''),
+        name: String(track.name || `Karaoke ${index + 1}`),
+        sourceFormat: String(track.sourceFormat || 'manual'),
+        segments,
+        style: {
+            position: ['top', 'center', 'bottom'].includes(track?.style?.position) ? track.style.position : 'bottom',
+            fontFamily: String(track?.style?.fontFamily || 'Arial'),
+            fontSize: Math.min(120, Math.max(18, Number(track?.style?.fontSize || 54))),
+            inactiveColor: color(track?.style?.inactiveColor, '#ffffff'),
+            activeColor: color(track?.style?.activeColor, '#ffd700'),
+            outlineColor: color(track?.style?.outlineColor, '#000000'),
+            outlineWidth: Math.min(10, Math.max(0, Number(track?.style?.outlineWidth ?? 3))),
+            backgroundColor: color(track?.style?.backgroundColor, '#000000'),
+            backgroundOpacity: Math.min(100, Math.max(0, Number(track?.style?.backgroundOpacity ?? 35))),
+            showNextLine: track?.style?.showNextLine !== false
+        },
+        offsetMs: Math.min(2000, Math.max(-2000, Number(track.offsetMs || 0)))
+    };
+}
 function normalizeSlideshowProjectData(rawProjectData) {
     const projectData = {
         type: 'slideshow',
@@ -1619,6 +1887,7 @@ function normalizeSlideshowProjectData(rawProjectData) {
         mediaItems: [],
         audioTracks: [],
         textOverlays: [],
+        karaokeTracks: [],
         totalDuration: 0,
         ...(rawProjectData || {})
     };
@@ -1628,7 +1897,12 @@ function normalizeSlideshowProjectData(rawProjectData) {
         ? rawProjectData.mediaItems.map((item, index) => normalizeMediaItem(item, index)).filter(Boolean)
         : [];
     projectData.audioTracks = Array.isArray(rawProjectData?.audioTracks) ? rawProjectData.audioTracks : [];
-    projectData.textOverlays = Array.isArray(rawProjectData?.textOverlays) ? rawProjectData.textOverlays : [];
+    projectData.textOverlays = Array.isArray(rawProjectData?.textOverlays)
+        ? rawProjectData.textOverlays.map(normalizeSlideshowTextOverlay).filter(Boolean)
+        : [];
+    projectData.karaokeTracks = Array.isArray(rawProjectData?.karaokeTracks)
+        ? rawProjectData.karaokeTracks.map(normalizeKaraokeTrack).filter(Boolean)
+        : [];
     projectData.visualFitMode = ['blur', 'crop', 'fit'].includes(rawProjectData?.visualFitMode)
         ? rawProjectData.visualFitMode
         : (rawProjectData?.fillFrame === false ? 'fit' : 'blur');
@@ -1770,23 +2044,258 @@ function createSlideshowDrawtextFile(content, tempPaths) {
     return textFilePath;
 }
 
-function buildSlideshowDrawtextFilter(overlay, startT, endT, tempPaths) {
-    const fontFile = escapeDrawtextFilePath('C:/Windows/Fonts/segoeui.ttf');
-    const textFile = escapeDrawtextFilePath(createSlideshowDrawtextFile(overlay.content, tempPaths));
-    const y = overlay.position === 'top' ? '30' : (overlay.position === 'center' ? '(h-th)/2' : 'h-th-30');
-    return `drawtext=textfile='${textFile}':fontfile='${fontFile}':fontsize=${overlay.fontSize || 48}:fontcolor=${overlay.fontColor || 'white'}:x=(w-tw)/2:y=${y}${overlay.background && overlay.background !== 'none' ? `:box=1:boxcolor=${overlay.background === 'black' ? 'black@0.5' : 'white@0.5'}:boxborderw=10` : ''}:enable='between(t,${startT},${endT})'`;
+function getSlideshowFontOption(fontFamily = 'sans') {
+    const family = ['serif', 'monospace'].includes(fontFamily) ? fontFamily : 'sans';
+    const fontCandidates = process.platform === 'darwin'
+        ? {
+            sans: ['/System/Library/Fonts/Supplemental/Arial.ttf', '/System/Library/Fonts/Helvetica.ttc'],
+            serif: ['/System/Library/Fonts/Supplemental/Times New Roman.ttf', '/System/Library/Fonts/Times.ttc'],
+            monospace: ['/System/Library/Fonts/Supplemental/Courier New.ttf', '/System/Library/Fonts/SFNSMono.ttf']
+        }
+        : {
+            sans: ['C:/Windows/Fonts/segoeui.ttf', 'C:/Windows/Fonts/arial.ttf'],
+            serif: ['C:/Windows/Fonts/times.ttf'],
+            monospace: ['C:/Windows/Fonts/cour.ttf']
+        };
+    const fallbackNames = {
+        sans: 'Arial',
+        serif: 'Times New Roman',
+        monospace: 'Courier New'
+    };
+    const fontPath = fontCandidates[family].find(candidate => fs.existsSync(candidate));
+    return fontPath
+        ? `fontfile='${escapeDrawtextFilePath(fontPath)}'`
+        : `font='${fallbackNames[family]}'`;
 }
 
+function normalizeDrawtextColor(color, fallback = '#ffffff') {
+    const safeColor = /^#[0-9a-f]{6}$/i.test(String(color || '')) ? String(color) : fallback;
+    return `0x${safeColor.slice(1)}`;
+}
+
+function getSlideshowOverlayPosition(overlay) {
+    const presetPositions = {
+        'top-left': [5, 8],
+        'top-center': [50, 8],
+        'top-right': [95, 8],
+        'middle-left': [5, 50],
+        center: [50, 50],
+        'middle-right': [95, 50],
+        'bottom-left': [5, 90],
+        'bottom-center': [50, 90],
+        'bottom-right': [95, 90]
+    };
+    const legacyPreset = overlay.position === 'top'
+        ? 'top-center'
+        : (overlay.position === 'center' ? 'center' : 'bottom-center');
+    const preset = overlay.positionPreset || legacyPreset;
+    const presetValue = presetPositions[preset];
+    return {
+        xPercent: presetValue ? presetValue[0] : Math.min(100, Math.max(0, Number(overlay.xPercent ?? 50))),
+        yPercent: presetValue ? presetValue[1] : Math.min(100, Math.max(0, Number(overlay.yPercent ?? 90)))
+    };
+}
+
+function buildSlideshowDrawtextStyle(overlay, tempPaths) {
+    const textFile = escapeDrawtextFilePath(createSlideshowDrawtextFile(overlay.content, tempPaths));
+    const fontOption = getSlideshowFontOption(overlay.fontFamily);
+    const fontColor = normalizeDrawtextColor(overlay.fontColor, '#ffffff');
+    const fontSize = Math.min(240, Math.max(12, Number(overlay.fontSize || 48)));
+    let style = `drawtext=textfile='${textFile}':${fontOption}:fontsize=${fontSize}:fontcolor=${fontColor}`;
+
+    if (overlay.kind === 'ticker') {
+        const opacity = Math.min(100, Math.max(0, Number(overlay.backgroundOpacity ?? 55))) / 100;
+        if (opacity > 0) {
+            style += `:box=1:boxcolor=${normalizeDrawtextColor(overlay.backgroundColor, '#000000')}@${opacity.toFixed(2)}:boxborderw=10`;
+        }
+        const shadowSettings = {
+            small: ':shadowx=1:shadowy=1:shadowcolor=black@0.75',
+            medium: ':shadowx=2:shadowy=2:shadowcolor=black@0.85',
+            large: ':shadowx=4:shadowy=4:shadowcolor=black@0.9'
+        };
+        style += shadowSettings[overlay.shadow] || '';
+        const borderWidth = Math.min(12, Math.max(0, Number(overlay.borderWidth || 0)));
+        if (borderWidth > 0) {
+            style += `:borderw=${borderWidth}:bordercolor=${normalizeDrawtextColor(overlay.borderColor, '#000000')}`;
+        }
+    } else if (overlay.background && overlay.background !== 'none') {
+        style += `:box=1:boxcolor=${overlay.background === 'black' ? 'black@0.5' : 'white@0.5'}:boxborderw=10`;
+    }
+
+    return style;
+}
+
+function buildSlideshowDrawtextFilter(overlay, startT, endT, tempPaths) {
+    const y = overlay.position === 'top'
+        ? '30'
+        : (overlay.position === 'center' ? '(h-th)/2' : 'h-th-30');
+    return `${buildSlideshowDrawtextStyle(overlay, tempPaths)}:x=(w-tw)/2:y=${y}:enable='between(t,${startT},${endT})'`;
+}
+
+function buildSlideshowTickerDrawtextFilter(overlay, totalDuration, tempPaths) {
+    const startTime = Math.max(0, Number(overlay.startTime || 0));
+    const requestedEnd = overlay.wholeProject || overlay.endMode === 'project'
+        ? totalDuration
+        : Number(overlay.endTime);
+    const endTime = Math.min(totalDuration, Number.isFinite(requestedEnd) ? requestedEnd : totalDuration);
+    if (endTime <= startTime) return null;
+
+    const speed = Math.min(1000, Math.max(20, Number(overlay.speed || 140)));
+    const position = getSlideshowOverlayPosition(overlay);
+    const deltaHorizontal = `(t-${startTime.toFixed(3)})*(${speed}*w/1920)`;
+    const deltaVertical = `(t-${startTime.toFixed(3)})*(${speed}*h/1080)`;
+    const loop = overlay.loop !== false;
+    let x = `(w-tw)*${(position.xPercent / 100).toFixed(4)}`;
+    let y = `(h-th)*${(position.yPercent / 100).toFixed(4)}`;
+
+    if (overlay.direction === 'left-to-right') {
+        x = loop
+            ? `-tw+(${deltaHorizontal}-(w+tw)*floor(${deltaHorizontal}/(w+tw)))`
+            : `-tw+${deltaHorizontal}`;
+    } else if (overlay.direction === 'bottom-to-top') {
+        y = loop
+            ? `h-(${deltaVertical}-(h+th)*floor(${deltaVertical}/(h+th)))`
+            : `h-${deltaVertical}`;
+    } else if (overlay.direction === 'top-to-bottom') {
+        y = loop
+            ? `-th+(${deltaVertical}-(h+th)*floor(${deltaVertical}/(h+th)))`
+            : `-th+${deltaVertical}`;
+    } else {
+        x = loop
+            ? `w-(${deltaHorizontal}-(w+tw)*floor(${deltaHorizontal}/(w+tw)))`
+            : `w-${deltaHorizontal}`;
+    }
+
+    return `${buildSlideshowDrawtextStyle(overlay, tempPaths)}:x='${x}':y='${y}':enable='between(t,${startTime.toFixed(3)},${endTime.toFixed(3)})'`;
+}
+
+function formatAssTime(seconds) {
+    const safe = Math.max(0, Number(seconds || 0));
+    const hours = Math.floor(safe / 3600);
+    const minutes = Math.floor((safe % 3600) / 60);
+    const secs = Math.floor(safe % 60);
+    const centiseconds = Math.min(99, Math.floor((safe - Math.floor(safe)) * 100));
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
+}
+
+function toAssColor(hex, opacityPercent = 100) {
+    const match = String(hex || '#ffffff').match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+    const [, rr, gg, bb] = match || ['', 'ff', 'ff', 'ff'];
+    const alpha = Math.round(255 * (1 - Math.min(100, Math.max(0, Number(opacityPercent || 0))) / 100));
+    return `&H${alpha.toString(16).padStart(2, '0').toUpperCase()}${bb.toUpperCase()}${gg.toUpperCase()}${rr.toUpperCase()}`;
+}
+
+function escapeAssText(text) {
+    return String(text || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/{/g, '\\{')
+        .replace(/}/g, '\\}')
+        .replace(/\r?\n/g, '\\N');
+}
+
+function buildAutomaticKaraokeWords(segment) {
+    const tokens = String(segment?.text || '').trim().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return [];
+    const start = Number(segment.start || 0);
+    const end = Math.max(start + 0.05, Number(segment.end || start + 2));
+    const weights = tokens.map(token => Math.max(1, Array.from(token).length));
+    const totalWeight = weights.reduce((sum, value) => sum + value, 0);
+    let cursor = start;
+    return tokens.map((text, index) => {
+        const word = { text, start: cursor, manual: false };
+        cursor += (end - start) * weights[index] / totalWeight;
+        return word;
+    });
+}
+
+function getKaraokeTrackTimelineOffset(audioTrackId, audioTracks, mediaTimings) {
+    const pairedItems = (Array.isArray(mediaTimings) ? mediaTimings : [])
+        .filter(item => item?.pairedAudioId === audioTrackId)
+        .sort((a, b) => Number(a.start || 0) - Number(b.start || 0));
+    if (pairedItems.length > 0) return Number(pairedItems[0].start || 0);
+
+    const pairedIds = new Set((Array.isArray(mediaTimings) ? mediaTimings : [])
+        .filter(item => item?.pairedAudioId)
+        .map(item => item.pairedAudioId));
+    const globalTracks = (Array.isArray(audioTracks) ? audioTracks : []).filter(track => !pairedIds.has(track.id));
+    let offset = 0;
+    for (const track of globalTracks) {
+        if (track.id === audioTrackId) return offset;
+        offset += Math.max(0, Number(track.duration || 0));
+    }
+    return 0;
+}
+
+function buildSlideshowKaraokeFilter(baseLabel, karaokeTracks, audioTracks, mediaTimings, width, height, tempPaths = []) {
+    const normalizedTracks = (Array.isArray(karaokeTracks) ? karaokeTracks : [])
+        .map(normalizeKaraokeTrack)
+        .filter(track => track && track.segments.length > 0);
+    if (normalizedTracks.length === 0) return { filterComplex: '', outputLabel: baseLabel };
+
+    const styles = [];
+    const dialogues = [];
+    normalizedTracks.forEach((track, trackIndex) => {
+        const style = track.style || {};
+        const styleName = `Karaoke${trackIndex + 1}`;
+        const alignment = style.position === 'top' ? 8 : (style.position === 'center' ? 5 : 2);
+        const fontScale = height / 1080;
+        const fontSize = Math.max(18, Math.round(Number(style.fontSize || 54) * fontScale));
+        styles.push(`Style: ${styleName},${String(style.fontFamily || 'Arial').replace(/,/g, '')},${fontSize},${toAssColor(style.activeColor || '#ffd700', 100)},${toAssColor(style.inactiveColor || '#ffffff', 100)},${toAssColor(style.outlineColor || '#000000', 100)},${toAssColor(style.backgroundColor || '#000000', Number(style.backgroundOpacity ?? 35))},0,0,0,0,100,100,0,0,${Number(style.backgroundOpacity || 0) > 0 ? 3 : 1},${Math.max(0, Number(style.outlineWidth ?? 3))},1,${alignment},60,60,70,1`);
+        const trackOffset = getKaraokeTrackTimelineOffset(track.audioTrackId, audioTracks, mediaTimings) + Number(track.offsetMs || 0) / 1000;
+        track.segments.forEach(segment => {
+            const segmentStart = Math.max(0, trackOffset + Number(segment.start || 0));
+            const segmentEnd = Math.max(segmentStart + 0.05, trackOffset + Number(segment.end || 0));
+            const localWords = (Array.isArray(segment.words) && segment.words.length > 0)
+                ? segment.words
+                : buildAutomaticKaraokeWords(segment);
+            const sortedWords = [...localWords].filter(word => word?.text).sort((a, b) => Number(a.start || 0) - Number(b.start || 0));
+            const karaokeText = sortedWords.length > 0
+                ? sortedWords.map((word, wordIndex) => {
+                    const localStart = Math.max(Number(segment.start || 0), Number(word.start || segment.start || 0));
+                    const nextStart = wordIndex < sortedWords.length - 1
+                        ? Number(sortedWords[wordIndex + 1].start || segment.end)
+                        : Number(segment.end || localStart + 0.1);
+                    const centiseconds = Math.max(1, Math.round((Math.max(localStart + 0.01, nextStart) - localStart) * 100));
+                    return `{\\k${centiseconds}}${escapeAssText(word.text)}${wordIndex < sortedWords.length - 1 ? ' ' : ''}`;
+                }).join('')
+                : escapeAssText(segment.text);
+            dialogues.push(`Dialogue: 0,${formatAssTime(segmentStart)},${formatAssTime(segmentEnd)},${styleName},,0,0,0,,${karaokeText}`);
+        });
+    });
+
+    const assContent = `[Script Info]\nScriptType: v4.00+\nPlayResX: ${width}\nPlayResY: ${height}\nScaledBorderAndShadow: yes\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\n${styles.join('\n')}\n\n[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n${dialogues.join('\n')}\n`;
+    const assPath = path.join(os.tmpdir(), `slideshow_karaoke_${Date.now()}_${Math.random().toString(36).slice(2)}.ass`);
+    fs.writeFileSync(assPath, assContent, 'utf8');
+    tempPaths.push(assPath);
+    const escapedPath = assPath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
+    return {
+        filterComplex: `[${baseLabel}]ass=filename='${escapedPath}'[karaokeout]; `,
+        outputLabel: 'karaokeout'
+    };
+}
 function buildSlideshowTextOverlayFilters(baseLabel, textOverlays, imageTimings, tempPaths = []) {
     if (!Array.isArray(textOverlays) || textOverlays.length === 0) {
         return { filterComplex: '', outputLabel: baseLabel };
     }
 
+    const totalDuration = Math.max(0, ...imageTimings.map(timing => Number(timing?.end || 0)));
     let lastOutput = baseLabel;
     let filterComplex = '';
 
-    textOverlays.forEach((overlay, index) => {
-        const overlayTargets = Array.isArray(overlay?.targetImages) ? overlay.targetImages : [];
+    textOverlays.forEach((rawOverlay, index) => {
+        const overlay = normalizeSlideshowTextOverlay(rawOverlay, index);
+        if (!overlay || !overlay.content.trim()) return;
+
+        if (overlay.kind === 'ticker') {
+            const drawtext = buildSlideshowTickerDrawtextFilter(overlay, totalDuration, tempPaths);
+            if (!drawtext) return;
+            const currentOut = `ticker${index}`;
+            filterComplex += `[${lastOutput}]${drawtext}[${currentOut}]; `;
+            lastOutput = currentOut;
+            return;
+        }
+
+        const overlayTargets = Array.isArray(overlay.targetImages) ? overlay.targetImages : [];
         overlayTargets.forEach((imgId, targetIdx) => {
             const timing = imageTimings.find(t => t.id === imgId);
             if (!timing) return;
@@ -1806,7 +2315,6 @@ function buildSlideshowTextOverlayFilters(baseLabel, textOverlays, imageTimings,
         outputLabel: lastOutput
     };
 }
-
 function buildMixedMediaPlacementFilter(mediaItem, targetWidth, targetHeight, projectData) {
     if (mediaItem?.type === 'video') {
         if (mediaItem.fitMode === 'crop') {
@@ -2101,27 +2609,14 @@ async function createSlideshowVideo(projectData, outputPath, parentWindow) {
             filterComplex += `concat=n=${slideshowImages.length}:v=1:a=0[vcoll]; `;
 
             let lastOutput = 'vcoll';
-
-            // Text Overlays
-            if (projectData.textOverlays && projectData.textOverlays.length > 0) {
-                projectData.textOverlays.forEach((overlay, index) => {
-                    overlay.targetImages.forEach((imgId, targetIdx) => {
-                        const timing = imageTimings.find(t => t.id === imgId);
-                        if (!timing) return;
-
-                        const startT = timing.start.toFixed(3);
-                        const isVeryLast = !imageTimings.find(t => t.start > timing.start);
-                        const endT = isVeryLast ? (timing.end + 1.0).toFixed(3) : (timing.end - 0.02).toFixed(3);
-
-                        const drawtext = buildSlideshowDrawtextFilter(overlay, startT, endT, tempFilterFiles);
-
-                        const currentOut = `txt${index}_${targetIdx}`;
-                        filterComplex += `[${lastOutput}]${drawtext}[${currentOut}]; `;
-                        lastOutput = currentOut;
-                    });
-                });
-            }
-
+            const textFilter = buildSlideshowTextOverlayFilters(
+                'vcoll',
+                projectData.textOverlays || [],
+                imageTimings,
+                tempFilterFiles
+            );
+            filterComplex += textFilter.filterComplex;
+            lastOutput = textFilter.outputLabel;
             // Eşlenmiş ses filter complex:
             // Her ses için: eşli resimlerin zamanlamalarına göre trim + delay
             const audioSegments = [];
@@ -2213,27 +2708,14 @@ async function createSlideshowVideo(projectData, outputPath, parentWindow) {
             filterComplex += `concat=n=${slideshowImages.length}:v=1:a=0[vcoll]; `;
 
             let lastOutput = 'vcoll';
-
-            // Text Overlays
-            if (projectData.textOverlays && projectData.textOverlays.length > 0) {
-                projectData.textOverlays.forEach((overlay, index) => {
-                    overlay.targetImages.forEach((imgId, targetIdx) => {
-                        const timing = imageTimings.find(t => t.id === imgId);
-                        if (!timing) return;
-
-                        const startT = timing.start.toFixed(3);
-                        const isVeryLast = !imageTimings.find(t => t.start > timing.start);
-                        const endT = isVeryLast ? (timing.end + 1.0).toFixed(3) : (timing.end - 0.02).toFixed(3);
-
-                        const drawtext = buildSlideshowDrawtextFilter(overlay, startT, endT, tempFilterFiles);
-
-                        const currentOut = `txt${index}_${targetIdx}`;
-                        filterComplex += `[${lastOutput}]${drawtext}[${currentOut}]; `;
-                        lastOutput = currentOut;
-                    });
-                });
-            }
-
+            const textFilter = buildSlideshowTextOverlayFilters(
+                'vcoll',
+                projectData.textOverlays || [],
+                imageTimings,
+                tempFilterFiles
+            );
+            filterComplex += textFilter.filterComplex;
+            lastOutput = textFilter.outputLabel;
             filterComplex = filterComplex.trim();
             if (filterComplex.endsWith(';')) filterComplex = filterComplex.slice(0, -1);
 
@@ -2433,6 +2915,9 @@ async function createMixedMediaSlideshowVideo(projectData, outputPath, parentWin
         filterComplex += `[0:v]null[basev]; `;
         filterComplex += textFilter.filterComplex;
         let videoOutputLabel = textFilter.outputLabel;
+        const karaokeFilter = buildSlideshowKaraokeFilter(videoOutputLabel, projectData.karaokeTracks || [], audioTracks, mediaTimings, width, height, tempPaths);
+        filterComplex += karaokeFilter.filterComplex;
+        videoOutputLabel = karaokeFilter.outputLabel;
 
         filterComplex += `[0:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[baseaud]; `;
 

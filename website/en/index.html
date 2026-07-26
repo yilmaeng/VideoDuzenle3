@@ -16,7 +16,7 @@
     <link rel="alternate" hreflang="es" href="https://evd.drenginyilmaz.net/es/">
     <link rel="alternate" hreflang="fr" href="https://evd.drenginyilmaz.net/fr/">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="stylesheet" href="/site.css?v=3.9992.0-tutorials1">
+    <link rel="stylesheet" href="/site.css?v=4.7.0-mac-beta-1">
 </head>
 
 <body>
@@ -58,7 +58,6 @@
                 <ul class="list">
                     <li>Keyboard-first workflow</li>
                     <li>Accessible recording wizard</li>
-                    <li>YouTube integration and broadcast preparation</li>
                 </ul>
             </article>
 
@@ -93,21 +92,9 @@
                 <li>The startup experience, empty project view, panel hierarchy, and timeline were refreshed to feel clearer, more readable, and more inviting.</li>
                 <li>The subtitle workflow was simplified, styling moved into a separate step, more accessible visual styles were added, and subtitle AI evaluation plus preview resilience were improved.</li>
                 <li>The text-to-speech preview now plays the mixed result together with the video audio. Audio settings gained a stronger volume boost, mono and stereo conversion, and better accessibility for channel layout controls.</li>
-                <li>The YouTube chat and live preparation flow was expanded: the OBS step was removed, URL-based read-only chat watching was added, and moderation, return-to-live, microphone selection, and error feedback were improved.</li>
                 <li>Export, slideshow, CTA, and overlay workflows were improved with estimated remaining time, photo orientation detection, left-right rotation, photo description, and output quality fixes. A bug where insertion-list transitions and overlays were missing from the result was also fixed.</li>
                 <li>Accessible recording and update flows were refined with fixes for Meet, Zoom, and Teams progress, localized release notes in the update screen, and a better covered startup state at launch.</li>
             </ul>
-        </section>
-
-        <section class="card tutorials-section" aria-labelledby="tutorials-title">
-            <h2 id="tutorials-title">Tutorials</h2>
-            <p>The latest 5 public tutorial videos for EVD are shown here. When a new video is added to the playlist, this section updates as well.</p>
-            <div id="tutorial-list" class="tutorial-list" aria-live="polite">
-                <p class="release-empty">Loading tutorials...</p>
-            </div>
-            <div class="tutorial-actions">
-                <a class="btn btn-secondary" href="https://www.youtube.com/playlist?list=PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ" target="_blank" rel="noopener noreferrer">Open the full playlist</a>
-            </div>
         </section>
 
         <footer class="footer">
@@ -124,18 +111,18 @@
             setupLabel: 'Windows Setup',
             portableLabel: 'Portable',
             notesLabel: 'Release Notes',
+            guideLabel: 'Broadcast Room Guide',
+            macBetaTitle: 'Public Beta for Mac',
+            macBetaPlatform: 'macOS · Apple Silicon (arm64)',
+            macBetaWarning: 'OBS and native helper support are not available in this public beta yet. Both are coming soon.',
+            macBetaLabel: 'Download Mac Public Beta',
             versionLabel: 'Version',
             dateLabel: 'Date',
             releaseFallback: 'No description was added for this release yet.',
-            releaseError: 'Releases could not be loaded. Please try again later.',
-            noTutorials: 'No public tutorials are available yet.',
-            tutorialError: 'Tutorials could not be loaded right now. Please use the playlist link below.',
-            tutorialWatchLabel: 'Open video',
-            tutorialListLabel: 'Open the full playlist',
-            tutorialDateLabel: 'Published'
+            releaseError: 'Releases could not be loaded. Please try again later.'
         };
     </script>
-    <script src="/site.js?v=3.9992.0-tutorials1"></script>
+    <script src="/site.js?v=4.7.0-mac-beta-1"></script>
 </body>
 
 </html>

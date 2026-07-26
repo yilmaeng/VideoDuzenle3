@@ -1073,7 +1073,9 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             hostRecordingActive: req.body?.hostRecordingActive,
             hostShareActive: req.body?.hostShareActive,
             hostShareLabel: req.body?.hostShareLabel,
-            hostShareMonitorAudioEnabled: req.body?.hostShareMonitorAudioEnabled
+            hostShareMonitorAudioEnabled: req.body?.hostShareMonitorAudioEnabled,
+            youtubeWatchUrl: req.body?.youtubeWatchUrl,
+            youtubeLiveActive: req.body?.youtubeLiveActive
         });
 
         if (!room) {
