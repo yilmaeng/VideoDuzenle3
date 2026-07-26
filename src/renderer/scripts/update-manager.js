@@ -195,10 +195,13 @@ const UpdateManager = {
         });
 
         if (result === 0) {
-            const preferPortable = this.isPortableMode === true;
-            const downloadUrl = preferPortable
-                ? (info.portableUrl || info.setupUrl || info.url || info.downloadUrl || '')
-                : (info.setupUrl || info.url || info.downloadUrl || info.portableUrl || '');
+            const platform = String(window.api?.platform || '').toLowerCase();
+            const preferPortable = platform === 'win32' && this.isPortableMode === true;
+            const downloadUrl = platform === 'darwin'
+                ? (info.macUrl || info.url || info.downloadUrl || '')
+                : preferPortable
+                    ? (info.portableUrl || info.setupUrl || info.url || info.downloadUrl || '')
+                    : (info.setupUrl || info.url || info.downloadUrl || info.portableUrl || '');
             if (downloadUrl) {
                 const openExternalUrl = window.api && typeof window.api.openExternalUrl === 'function'
                     ? window.api.openExternalUrl.bind(window.api)

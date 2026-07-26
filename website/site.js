@@ -3,7 +3,7 @@
     const preferredKey = 'evd-site-language';
     const tutorialPlaylistId = 'PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ';
     const tutorialPlaylistUrl = `https://www.youtube.com/playlist?list=${tutorialPlaylistId}`;
-    const assetVersion = '4.7.0-mac-beta-1';
+    const assetVersion = '4.8.0';
     const tutorialJsonUrl = `/tutorials.json?v=${assetVersion}`;
 
     function safeText(key, fallback) {
@@ -85,6 +85,9 @@
                 const portableButton = release.portableUrl
                     ? `<a class="btn btn-secondary" href="/${release.portableUrl}">${safeText('portableLabel', 'Portable')}</a>`
                     : '';
+                const macButton = release.macUrl
+                    ? `<a class="btn btn-secondary" href="/${release.macUrl}">${safeText('macLabel', 'Download for Mac (Apple Silicon)')}</a>`
+                    : '';
                 const notesButton = release.notesUrl
                     ? `<a class="btn btn-secondary" href="/${release.notesUrl}">${safeText('notesLabel', 'Release Notes')}</a>`
                     : '';
@@ -127,6 +130,7 @@
                         <div class="release-actions">
                             ${setupButton}
                             ${portableButton}
+                            ${macButton}
                             ${notesButton}
                             ${guideButton}
                         </div>

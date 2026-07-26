@@ -34,7 +34,8 @@
         "es": "guides/guia-sala-transmision-evd.html",
         "fr": "guides/guide-salle-diffusion-evd.html"
       },
-      "notesUrl": ""
+      "notesUrl": "",
+      "macUrl": "downloads/EVD-4.8.0-arm64.dmg"
     },
     {
       "version": "4.7.0",

@@ -1,6 +1,6 @@
 {
   "version": "4.8.0",
-  "setupUrl": "https://evd.drenginyilmaz.net/downloads/EVD-Setup-v4.8.0.exe",
+  "setupUrl": "https://evd.drenginyilmaz.net/download.html?version=4.8.0",
   "portableUrl": "https://evd.drenginyilmaz.net/downloads/EVD-Portable-v4.8.0.zip",
   "releaseNotes": {
     "tr": "4.8 iki harika özelliği beraberinde getiriyor. İlki akan yazı ekleme. Slide show içine ya da mevcut bir videonuzun üzerine artık sağdan sola, aşağıdan yukarı veya farklı tercihlerle akan yazı ekleyerek çok daha profesyonel bir içerik üretme imkânınız var.\n\nDiğer özellik ise Karaoke. Slide show yazı sekmesine Karaoke ekleyebilir, mevcut karaoke dosyalarını kullanabilir veya bizzat elle erişilebilir biçimde dize ve kelimeleri zamanlayarak parçaya karaoke olarak ekleyebilirsiniz.\n\nMOV dosyalarının açılması, Mac ve Windows tarafındaki klavye iyileştirmeleri ve hata düzeltmeleri de heybemizde.\n\nKeyifli kullanımlar.",
@@ -9,5 +9,6 @@
     "es": "EVD 4.8 incorpora dos grandes funciones nuevas. La primera es el texto desplazable. Ahora puede añadir texto que se mueva de derecha a izquierda, de abajo arriba o en otras direcciones a un slideshow o a un vídeo existente para crear contenidos más profesionales.\n\nLa otra función es Karaoke. Puede añadir karaoke desde la pestaña Texto de Slideshow, utilizar archivos de karaoke existentes o sincronizar de forma accesible y manual las líneas y cada palabra para incorporarlas a la pieza como karaoke.\n\nTambién se incluyen mejoras al abrir archivos MOV, mejoras de teclado en Mac y Windows y otras correcciones de errores.\n\nDisfrute de EVD 4.8.",
     "fr": "EVD 4.8 apporte deux excellentes nouvelles fonctionnalités. La première est le texte défilant. Vous pouvez désormais ajouter à un slideshow ou à une vidéo existante un texte animé de droite à gauche, de bas en haut ou dans d’autres directions, afin de créer un contenu plus professionnel.\n\nL’autre fonctionnalité est le Karaoke. Depuis l’onglet Texte du Slideshow, vous pouvez ajouter un karaoke, utiliser des fichiers de karaoke existants ou synchroniser manuellement et de manière accessible les lignes et chaque mot afin de les ajouter au morceau.\n\nDes améliorations de l’ouverture des fichiers MOV, des raccourcis clavier sur Mac et Windows ainsi que d’autres corrections sont également incluses.\n\nProfitez bien d’EVD 4.8."
   },
-  "notesUrl": "https://evd.drenginyilmaz.net/"
+  "notesUrl": "https://evd.drenginyilmaz.net/",
+  "macUrl": "https://evd.drenginyilmaz.net/downloads/EVD-4.8.0-arm64.dmg"
 }
