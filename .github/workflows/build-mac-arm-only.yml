@@ -2,6 +2,9 @@ name: Mac ARM64 Only Build (Experiment)
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'mac-v*'
 
 jobs:
   build-mac-arm:
