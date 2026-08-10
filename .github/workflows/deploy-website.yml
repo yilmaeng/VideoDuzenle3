@@ -39,21 +39,27 @@ jobs:
             exit 1
           fi
 
+      - name: Configure restricted SSH deployment
+        shell: bash
+        env:
+          EVD_WEB_SSH_PRIVATE_KEY: ${{ secrets.EVD_WEB_SSH_PRIVATE_KEY }}
+          EVD_WEB_SSH_KNOWN_HOSTS: ${{ secrets.EVD_WEB_SSH_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$EVD_WEB_SSH_PRIVATE_KEY" > "$HOME/.ssh/evd_web_deploy"
+          chmod 600 "$HOME/.ssh/evd_web_deploy"
+          printf '%s\n' "$EVD_WEB_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
       - name: Deploy website files
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          local-dir: ./website/
-          port: 21
-          protocol: ftp
-          log-level: standard
-          dangerous-clean-slate: false
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            downloads/**
-            release-publishing-notes.md
+        shell: bash
+        env:
+          EVD_WEB_SSH_HOST: ${{ secrets.EVD_WEB_SSH_HOST }}
+          EVD_WEB_SSH_PORT: ${{ secrets.EVD_WEB_SSH_PORT }}
+          EVD_WEB_SSH_USER: ${{ secrets.EVD_WEB_SSH_USER }}
+        run: |
+          rsync -az --itemize-changes \
+            --exclude '/downloads/***' \
+            --exclude '/release-publishing-notes.md' \
+            -e "ssh -i $HOME/.ssh/evd_web_deploy -p $EVD_WEB_SSH_PORT -o IdentitiesOnly=yes" \
+            website/ "$EVD_WEB_SSH_USER@$EVD_WEB_SSH_HOST:./"
