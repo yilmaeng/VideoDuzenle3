@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EVD Broadcast-Raum Benutzerhandbuch</title>
+  <style>
+    :root { --text:#1f2937; --muted:#4b5563; --accent:#0f766e; --line:#d1d5db; --soft:#f3f4f6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; color: var(--text); line-height: 1.55; background: white; }
+    .page { max-width: 920px; margin: 0 auto; padding: 40px 52px 72px; }
+    h1, h2, h3 { line-height: 1.25; margin: 0 0 14px; }
+    h1 { font-size: 30px; color: #0b3b36; margin-bottom: 10px; }
+    h2 { font-size: 22px; color: var(--accent); margin-top: 34px; padding-top: 14px; border-top: 2px solid var(--line); }
+    h3 { font-size: 17px; margin-top: 20px; }
+    p, li { font-size: 14px; }
+    p { margin: 0 0 12px; }
+    ul, ol { margin: 0 0 14px 22px; padding: 0; }
+    li { margin: 0 0 7px; }
+    .lead { font-size: 16px; color: var(--muted); margin-bottom: 18px; }
+    .meta { display: flex; gap: 18px; flex-wrap: wrap; padding: 12px 16px; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 28px; }
+    .meta span { font-size: 13px; color: var(--muted); }
+    .toc { background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin-bottom: 28px; }
+    .toc h2 { border: 0; padding-top: 0; margin-top: 0; font-size: 18px; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover, .toc a:focus { text-decoration: underline; }
+    .note, .tip { border-left: 4px solid var(--accent); background: #f0fdfa; padding: 12px 14px; margin: 14px 0 18px; border-radius: 8px; }
+    .note strong, .tip strong { color: #115e59; }
+    .shortcut-list li { margin-bottom: 6px; }
+    .footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    @media print { .page { max-width: none; padding: 20mm 16mm 18mm; } a { color: inherit; text-decoration: none; } }
+</style>
+</head>
+<body>
+  <main class="page">
+    <h1>EVD Broadcast-Raum Benutzerhandbuch</h1>
+    <p class="lead">Dieses Handbuch erklärt den EVD Broadcast-Raum für barrierefreie und professionelle Livestreams, Besprechungen, Interviews, Aufnahmen, Bildschirmfreigabe, Live-Untertitel, Übersetzung, Dubbing, Teilnehmerverwaltung und Szenengestaltung.</p>
+    <div class="meta">
+      <span><strong>Product:</strong> Barrierefreier Videoeditor</span>
+      <span><strong>Section:</strong> Broadcast-Raum</span>
+      <span><strong>Document:</strong> Teilbares HTML/PDF-Handbuch</span>
+      <span><strong>Updated:</strong> 13. Juni 2026</span>
+    </div>
+    <section class="toc">
+      <h2>Inhalt</h2>
+      <ol>
+        <li><a href="#section-01">Was ist der Broadcast-Raum?</a></li>
+        <li><a href="#section-02">Oberfläche</a></li>
+        <li><a href="#section-03">Temporäre oder permanente Räume öffnen</a></li>
+        <li><a href="#section-04">Gast-Beitrittsseite</a></li>
+        <li><a href="#section-05">Szenenlayouts</a></li>
+        <li><a href="#section-06">Hintergründe, Logo und Profile</a></li>
+        <li><a href="#section-07">Aufnahme</a></li>
+        <li><a href="#section-08">Lokales Gast-Backup und Bot-Aufnahme</a></li>
+        <li><a href="#section-09">YouTube-Livestream</a></li>
+        <li><a href="#section-10">Live-Untertitel, Übersetzung und Dubbing</a></li>
+        <li><a href="#section-11">ElevenLabs-Dubbing nach der Aufnahme</a></li>
+        <li><a href="#section-12">API-Schlüssel und KI-Dienste</a></li>
+        <li><a href="#section-13">Effekt-Ebene</a></li>
+        <li><a href="#section-14">Bildschirmfreigabe</a></li>
+        <li><a href="#section-15">Teilnehmerverwaltung und Chat</a></li>
+        <li><a href="#section-16">Webinar-Ablauf</a></li>
+        <li><a href="#section-17">KI-Szenenfeedback</a></li>
+        <li><a href="#section-18">Wichtige Tastenkürzel</a></li>
+        <li><a href="#section-19">Fehlerbehebung</a></li>
+      </ol>
+    </section>
+
+    <section id="section-01">
+      <h2>1. Was ist der Broadcast-Raum?</h2>
+      <p>Der Broadcast-Raum ist ein Produktionsbereich, in dem Sie Gäste per Link einladen, Kamera, Mikrofon und Bildschirmfreigabe empfangen und die fertige Szene an Aufnahme oder YouTube senden.</p>
+      <p>Der Ablauf hat zwei Ebenen: zuerst Raum öffnen, danach festlegen, wie Personen und Inhalte auf der Bühne erscheinen.</p>
+      <ul>
+        <li>Temporäre und permanente Räume</li>
+        <li>Kamera, Mikrofon, Chat, Bildschirmfreigabe und Teilnehmerbefehle</li>
+        <li>Manuelle Szenenlayouts, Hintergründe, Logos, Live-Untertitel, Übersetzung, Gebärdensprachdolmetscher, Aufnahme, YouTube und Effekte</li>
+      </ul>
+    </section>
+
+    <section id="section-02">
+      <h2>2. Oberfläche</h2>
+      <p>Alt+L öffnet die Bereichsliste. Mit Pfeilen navigieren Sie, Enter springt in den gewählten Bereich. Ctrl+Rechts und Ctrl+Links wechseln schnell zwischen Hauptbereichen.</p>
+      <ul>
+        <li>Raum und Geräte</li>
+        <li>Teilnehmer und Chat</li>
+        <li>Freigabe und Quellen</li>
+        <li>Szenenlayout</li>
+        <li>Hintergründe</li>
+        <li>OBS, Aufnahme, YouTube, Effekte</li>
+        <li>Live-Untertitel und Übersetzung</li>
+        <li>Diagnose und Ereignisverlauf</li>
+      </ul>
+    </section>
+
+    <section id="section-03">
+      <h2>3. Temporäre oder permanente Räume öffnen</h2>
+      <p>Erstellen Sie schnell einen temporären Raum oder öffnen Sie die Raumverwaltung mit Alt+O, um einen permanenten Raum anzulegen. Permanente Räume unterstützen eigene Linkschlüssel, Kennwortregeln und Beitritt ohne Host.</p>
+      <p>Die Liste permanenter Räume kann mit Pfeiltasten, Enter und Rechts-Pfeil für das Kontextmenü bedient werden.</p>
+    </section>
+
+    <section id="section-04">
+      <h2>4. Gast-Beitrittsseite</h2>
+      <p>Die Gastseite ist bewusst einfach. Geräteauswahl befindet sich im Bereich Geräteoptionen; der normale Ablauf ist Anzeigename, optionales Kennwort und Raum beitreten.</p>
+      <ul>
+        <li>Mikrofon: Ctrl+D</li>
+        <li>Kamera: Ctrl+E</li>
+        <li>Freigabe starten/stoppen: Ctrl+Shift+E</li>
+        <li>Raum verlassen: Ctrl+Shift+H</li>
+        <li>Chat, Teilnehmer, weitere Informationen, Untertitel und zugänglicher Freigabetext liegen in einklappbaren Bereichen.</li>
+      </ul>
+    </section>
+
+    <section id="section-05">
+      <h2>5. Szenenlayouts</h2>
+      <p>Layouts bestimmen, wie Host, Gäste und Freigaben in Aufnahme oder Livestream erscheinen. Quellen können über das Slot-Zuweisungsmenü manuell platziert werden.</p>
+      <p>Bei Bildschirmfreigabe kann EVD Sprecher als kleine Fenster behalten und nach Ende der Freigabe zum vorherigen Layout zurückkehren.</p>
+    </section>
+
+    <section id="section-06">
+      <h2>6. Hintergründe, Logo und Profile</h2>
+      <p>Sie können JPG, PNG, WebP, BMP, MP4, WebM, MOV oder MKV als Hintergrund verwenden. Bei ungeeigneter Größe kann EVD warnen oder eine 1920x1080-Kopie erstellen.</p>
+      <p>Profile speichern Hintergrund, Anpassung, Abdunklung, Logo, Position und Größe.</p>
+    </section>
+
+    <section id="section-07">
+      <h2>7. Aufnahme</h2>
+      <p>Starten Sie mit Alt+R, nachdem OBS und Szene bereit sind. Die Aufnahme verwendet ein sauberes Sendeausgabe-Fenster, damit die Steueroberfläche nicht im Video erscheint.</p>
+      <p>Für Layout, Gäste, Effekte, Freigabe oder Stopp kehren Sie zum Broadcast-Raum-Fenster zurück.</p>
+    </section>
+
+    <section id="section-08">
+      <h2>8. Lokales Gast-Backup und Bot-Aufnahme</h2>
+      <p>Während lokaler Aufnahme können unterstützte Gastbrowser lokale Backup-Stücke erstellen. Bei Netzwerkaussetzern können diese später als sauberere Quelle genutzt werden.</p>
+      <p>Bot-Aufnahme ist optional und wird mit Alt+Ctrl+B umgeschaltet.</p>
+    </section>
+
+    <section id="section-09">
+      <h2>9. YouTube-Livestream</h2>
+      <p>Bereiten Sie Szene und OBS vor, wählen oder erstellen Sie den Stream und starten/stoppen Sie mit Alt+Ctrl+L. Ein privater Teststream wird empfohlen.</p>
+      <p>Ein Not-Stopp ist verfügbar, falls die Oberfläche während des Livestreams schwer bedienbar wird.</p>
+    </section>
+
+    <section id="section-10">
+      <h2>10. Live-Untertitel, Übersetzung und Dubbing</h2>
+      <p>Aktivieren Sie Live-Übersetzung/Untertitel und wählen Sie Dienst, Quell- und Zielsprache sowie Ausgabe. OpenAI eignet sich für Text, Gemini Live Translate für gesprochene Übersetzung, ElevenLabs besonders für Dubbing nach der Aufnahme.</p>
+      <p>Gäste wählen ihre Sprache im Panel. Wenn bereits in der Zielsprache gesprochen wird, wird keine gleichsprachige Übersetzungsstimme abgespielt.</p>
+    </section>
+
+    <section id="section-11">
+      <h2>11. ElevenLabs-Dubbing nach der Aufnahme</h2>
+      <p>Nach der Aufnahme kann die Datei an ElevenLabs Dubbing gesendet werden. EVD mischt die Dub-Stimme vorne und den Originalton darunter.</p>
+      <p>Gespeicherte Segmente können ohne erneute API-Anfrage neu gemischt werden.</p>
+    </section>
+
+    <section id="section-12">
+      <h2>12. API-Schlüssel und KI-Dienste</h2>
+      <p>API-Schlüssel werden im KI-Menü verwaltet. Gemini dient für visuelles Feedback und Live Translate, OpenAI für Textübersetzung/Transkription und als Fallback, ElevenLabs für Scribe, Stimmen und Dubbing.</p>
+    </section>
+
+    <section id="section-13">
+      <h2>13. Effekt-Ebene</h2>
+      <p>Die Effekt-Ebene triggert Jingles, Sounds, Videos und visuelle Effekte während Aufnahme oder Livestream. Effekte gehen in die Ausgabe.</p>
+    </section>
+
+    <section id="section-14">
+      <h2>14. Bildschirmfreigabe</h2>
+      <p>Host-Freigabe: Alt+S. Wählen Sie Bildschirm, Fenster oder Quelle und optional Systemton. Gäste verwenden den Browserdialog.</p>
+      <p>Mit zugänglicher Dokumentfreigabe kann eine passende PowerPoint-, Word- oder unterstützte Datei hochgeladen werden, damit blinde Gäste Text und Folien verfolgen können.</p>
+    </section>
+
+    <section id="section-15">
+      <h2>15. Teilnehmerverwaltung und Chat</h2>
+      <p>Alt+U öffnet die Teilnehmerliste. Pfeile bewegen, Rechts-Pfeil öffnet das Menü, Links-Pfeil oder Escape schließt es.</p>
+      <p>Das Menü enthält Entfernen, Nachricht, Stumm, Kamera/Video, Freigaberechte, Panelist, Dolmetscherrollen und Wortmeldungen.</p>
+    </section>
+
+    <section id="section-16">
+      <h2>16. Webinar-Ablauf</h2>
+      <p>Webinar-Modus ist für große Gruppen, bei denen nur ausgewählte Panelisten sprechen oder erscheinen. Anfragen können von Admins bestätigt und mit Webinar-Schlüssel an Hosts gegeben werden.</p>
+    </section>
+
+    <section id="section-17">
+      <h2>17. KI-Szenenfeedback</h2>
+      <p>KI-Feedback analysiert den realen Szenenframe und meldet sichtbare Gesichter, Freigabeplatzierung, schwarze Bereiche oder unerwünschte Bedienelemente. Gemini wird bevorzugt, OpenAI kann als Fallback dienen.</p>
+    </section>
+
+    <section id="section-18">
+      <h2>18. Wichtige Tastenkürzel</h2>
+      <p>Host: Alt+A Mikrofon, Alt+V Kamera, Alt+S Freigabe, Alt+Y Layout, Alt+U Teilnehmer, Alt+C Chat, Alt+O Raumverwaltung, Alt+Q verlassen/beenden, Alt+R Aufnahme, Alt+L Bereiche, Alt+Ctrl+L YouTube, Alt+Ctrl+B Bot-Aufnahme, Alt+Ctrl+T Untertitel/Übersetzung.</p>
+      <p>Gast: Ctrl+D Mikrofon, Ctrl+E Kamera, Ctrl+Shift+E Freigabe, Ctrl+Shift+H verlassen.</p>
+    </section>
+
+    <section id="section-19">
+      <h2>19. Fehlerbehebung</h2>
+      <p>Bei fehlendem Gastton prüfen Sie Berechtigungen und Geräte. Bei fehlendem Freigabeton prüfen Sie, ob der Browser Ton für die gewählte Quelle liefert. Bei Untertitelproblemen prüfen Sie Aktivierung und API-Schlüssel.</p>
+      <p>Diagnose und Ereignisverlauf sind die erste Anlaufstelle für Ton, Video, Teilnehmer und YouTube/Aufnahme.</p>
+    </section>
+
+    <p class="footer">Dieses Dokument ist die teilbare Anleitung zum Hilfebereich des EVD Broadcast-Raums.</p>
+  </main>
+</body>
+</html>

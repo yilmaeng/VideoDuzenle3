@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EVD Betimleme ve Altyazı Editörü - Hızlı Başlangıç Kılavuzu</title>
+  <style>
+    :root { --ink:#17211b; --muted:#526057; --paper:#fffdf7; --panel:#f1f5e9; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 45%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus, button:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 85% 15%,#267c68 0,transparent 25%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:72rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:70rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.2rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .quick { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; counter-reset:step; }
+    .quick article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .quick article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style>
+</head>
+<body>
+<a class="skip" href="#icerik">Ana içeriğe geç</a>
+<header id="ust">
+  <p class="eyebrow">EVD 4.9 Beta</p>
+  <h1>Betimleme ve Altyazı Editörü Hızlı Başlangıç Kılavuzu</h1>
+  <p>Videoyu izleme, ses dalgası ve sahne değişimlerinden yararlanma, betimleme/altyazı yazma, seslendirme, insan sesi eşleştirme, ContentStudio ile taslak üretme ve kalite kontrolü tek erişilebilir çalışma alanında.</p>
+  <p><strong>Kılavuz sürümü:</strong> 10 Ağustos 2026</p>
+</header>
+
+<main id="icerik">
+<nav aria-labelledby="toc-title">
+  <h2 id="toc-title">İçindekiler</h2>
+  <ol class="toc">
+    <li><a href="#amac">Editör ne işe yarar?</a></li>
+    <li><a href="#hizli-baslangic">10 dakikada hızlı başlangıç</a></li>
+    <li><a href="#arayuz">Arayüz ve proje yönetimi</a></li>
+    <li><a href="#timeline">Videoyu inceleme ve işaretçiler</a></li>
+    <li><a href="#olay-ekleme">Betimleme, altyazı ve not ekleme</a></li>
+    <li><a href="#olay-listesi">Olay listesini düzenleme</a></li>
+    <li><a href="#ice-dis">İçe ve dışa aktarma</a></li>
+    <li><a href="#tts">TTS, miks ve betimlemeli video</a></li>
+    <li><a href="#insan-sesi">İnsan seslendirmesini eşleştirme</a></li>
+    <li><a href="#contentstudio">ContentStudio otomatik betimleme</a></li>
+    <li><a href="#kalite">Kalite kontrolü ve son çıktı</a></li>
+    <li><a href="#kisayollar">Kısayolların tamamı</a></li>
+    <li><a href="#sorun">Sorun giderme ve iyi uygulamalar</a></li>
+  </ol>
+</nav>
+
+<section id="amac">
+  <h2>Editör ne işe yarar?</h2>
+  <p>Betimleme ve Altyazı Editörü; bir videonun erişilebilir metinlerini zaman kodlarıyla yazmak, düzenlemek, seslendirmek ve denetlemek için hazırlanmıştır. Aynı proje içinde üç olay türü tutulur:</p>
+  <ul>
+    <li><strong>Sesli betimleme:</strong> Görsel olarak önemli olan eylem, kişi, mekân, yazı ve değişimleri diyalog aralarına yerleştirir.</li>
+    <li><strong>Altyazı:</strong> Konuşmayı ve gerekli ses bilgisini yazılı olarak zamanlar.</li>
+    <li><strong>Son kontrol notu:</strong> Düzeltilmesi, doğrulanması veya başka bir ekip üyesine aktarılması gereken noktayı kaydeder.</li>
+  </ul>
+  <p>Olaylar taslak, kontrolde veya onaylandı durumunda tutulabilir; konuşmacı, seslendirme notu, ton ve tempo bilgileri eklenebilir. Proje daha sonra yeniden açılabilir, SRT/VTT/Excel olarak paylaşılabilir veya seslendirilmiş video üretilebilir.</p>
+</section>
+
+<section id="hizli-baslangic">
+  <h2>10 dakikada hızlı başlangıç</h2>
+  <div class="quick">
+    <article><strong>Editörü açın.</strong><br>EVD içinde <strong>Ekle &gt; Betimleme / Altyazı Editörü</strong> yolunu izleyin.</article>
+    <article><strong>Videoyu seçin.</strong><br><em>Video seç</em> düğmesiyle kaynak videoyu açın. Daha önce çalıştıysanız <em>Proje aç</em> ile <code>.evdscript</code> dosyanızı çağırın.</article>
+    <article><strong>Aralığı bulun.</strong><br>Zaman çizelgesine odaklanın; videoyu oynatın ve olayın başlangıcıyla bitişinde <kbd>M</kbd> tuşuna basarak iki işaretçi koyun.</article>
+    <article><strong>Olayı yazın.</strong><br><kbd>D</kbd> betimleme, <kbd>S</kbd> altyazı, <kbd>A</kbd> son kontrol notu açar. Metni yazın ve <kbd>Ctrl</kbd>+<kbd>Enter</kbd> ile kaydedin.</article>
+    <article><strong>Dinleyip düzeltin.</strong><br><kbd>Alt</kbd>+<kbd>L</kbd> ile olay listesine gidin. Oklarla olayları gezin; <kbd>Boşluk</kbd> veya <kbd>P</kbd> ile aralığı dinleyin, <kbd>Enter</kbd> ile düzenleyin.</article>
+    <article><strong>Seslendirin ve denetleyin.</strong><br>TTS/miks ayarlarını seçin, betimlemeleri seslendirin, kalite kontrolünü çalıştırın ve son olarak betimlemeli videoyu oluşturun.</article>
+  </div>
+  <div class="note"><strong>Mac notu:</strong> Bu kılavuzdaki <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> ifadesi Windows'ta Ctrl, macOS'ta Command anlamına gelir. Yalnız <kbd>Ctrl</kbd> yazılan komutlarda macOS'ta da Control tuşu kullanılır.</div>
+</section>
+
+<section id="arayuz">
+  <h2>Arayüz ve proje yönetimi</h2>
+  <h3>Temel bölgeler</h3>
+  <ol>
+    <li><strong>Proje işlemleri:</strong> Video seçme, proje açma/kaydetme, SRT/VTT içe aktarma, dışa aktarma ve editörü kapatma.</li>
+    <li><strong>Kaynak video ve uzman zaman çizelgesi:</strong> Video önizlemesi, ses dalgası, işaretçiler, olaylar, yakınlaştırma ve sahne analizi.</li>
+    <li><strong>Olay listesi:</strong> Betimleme, altyazı ve kontrol notlarının zaman sıralı listesi.</li>
+    <li><strong>TTS ve miks:</strong> Ses servisi, ses, hız, betimleme düzeyi, özgün video düzeyi ve otomatik sığdırma.</li>
+    <li><strong>İnsan seslendirmesi, ContentStudio ve kalite kontrolü:</strong> İhtiyaç halinde açılan ayrıntı panelleri.</li>
+  </ol>
+  <h3>Kaydetme</h3>
+  <p><em>Projeyi kaydet</em> veya <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> ilk kayıtta dosya adı ister; sonraki kullanımlarda aynı proje dosyasını günceller. <em>Farklı kaydet</em> yeni bir kopya oluşturur. Proje açıkken birkaç dakikada bir otomatik kayıt da yapılır.</p>
+  <div class="tip"><strong>Öneri:</strong> Kaynak videoyu çalışma bitene kadar taşımayın veya yeniden adlandırmayın. Proje dosyası videoya ve üretilen ses parçalarına başvurur.</div>
+</section>
+
+<section id="timeline">
+  <h2>Videoyu inceleme ve işaretçiler</h2>
+  <p>Zaman çizelgesi fare kullanıcılarına ses dalgasını, sahne değişimlerini, işaretçileri ve olay bloklarını görsel olarak sunar. Klavye kullanıcıları aynı konumlara oynatma ve gezinme komutlarıyla ulaşır. <em>Sahne değişimlerini analiz et</em>, kesme veya plan değişimlerini işaretleyerek betimleme metninin sahne sınırını aşma ihtimalini kalite kontrolünde bildirebilir.</p>
+  <h3>İki işaretçiyle aralık oluşturma</h3>
+  <ol>
+    <li>Zaman çizelgesine <kbd>Alt</kbd>+<kbd>T</kbd> ile gidin.</li>
+    <li><kbd>Boşluk</kbd> ile oynatın; gerektiğinde oklar, Page Up/Page Down veya git komutlarını kullanın.</li>
+    <li>Aralığın başında <kbd>M</kbd>, sonunda yeniden <kbd>M</kbd> yapın.</li>
+    <li><kbd>Shift</kbd>+<kbd>Boşluk</kbd> iki işaretçi arasını çalar. Doğruysa <kbd>D</kbd>, <kbd>S</kbd> veya <kbd>A</kbd> ile olayı oluşturun.</li>
+  </ol>
+  <p><kbd>Alt</kbd>+<kbd>Sol/Sağ</kbd> önceki veya sonraki işaretçiye gider. <kbd>Alt</kbd>+<kbd>Yukarı/Aşağı</kbd> ince gezinme adımını küçültür/büyütür. Böylece ok tuşlarının kaç saniye hareket edeceğini çalışma sırasında ayarlayabilirsiniz.</p>
+</section>
+
+<section id="olay-ekleme">
+  <h2>Betimleme, altyazı ve not ekleme</h2>
+  <p>İki işaretçi hazırken <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd> genel olay penceresini açar. Daha hızlı çalışmak için:</p>
+  <ul>
+    <li><kbd>D</kbd>: Sesli betimleme seçili olarak açar.</li>
+    <li><kbd>S</kbd>: Altyazı seçili olarak açar.</li>
+    <li><kbd>A</kbd>: Son kontrol notu seçili olarak açar.</li>
+  </ul>
+  <p>Pencere açıldığında odak metin alanına gelir. Metin alanında <kbd>Enter</kbd> yeni satır açar; <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd> olayı kaydeder ve odağı yeniden oynatma alanına taşır.</p>
+  <h3>Olay alanları</h3>
+  <ul>
+    <li>Olay türü ve iş akışı durumu: taslak, kontrolde veya onaylandı.</li>
+    <li>Başlangıç ve bitiş zaman kodu.</li>
+    <li>Betimleme, altyazı veya not metni.</li>
+    <li>İsteğe bağlı konuşmacı/karakter bilgisi.</li>
+    <li>Seslendirme notları, ton ve tempo.</li>
+    <li>Betimlemeye özel ses, TTS hızı ve ses düzeyleri.</li>
+  </ul>
+  <div class="tip"><strong>Metnin sığıp sığmadığını kontrol edin:</strong> Editör süreyi, kelime sayısını ve tahmini okuma süresini gösterir. Otomatik sığdırma belirlenen güvenli sınıra kadar TTS hızını yükseltebilir; aşırı hız gerektiren metni kısaltmak genellikle daha iyi sonuç verir.</div>
+</section>
+
+<section id="olay-listesi">
+  <h2>Olay listesini düzenleme</h2>
+  <p><kbd>Alt</kbd>+<kbd>L</kbd> olay listesine, <kbd>Alt</kbd>+<kbd>T</kbd> oynatma alanına gider. Listede aşağı/yukarı okla gezildiğinde seçili aralık otomatik olarak önizlenir. Seslendirilmiş bir betimlemede video ile TTS miks halinde çalar; zamanları çakışan başka bir betimleme varsa o da önizlemeye katılır.</p>
+  <h3>Sağ ok işlem menüsü</h3>
+  <p>Bir olay üzerinde <kbd>Sağ Ok</kbd> ile işlem menüsünü açabilirsiniz. Menüde düzenleme, dinleme, erkene/ileri taşıma, oynatma konumunda bölme, seçili olayları birleştirme ve silme bulunur. Menüde oklarla dolaşın, <kbd>Enter</kbd> ile çalıştırın; <kbd>Sol Ok</kbd> veya <kbd>Escape</kbd> ile listeye dönün. Aynı işlemler fare kullanıcıları için görünür düğmelerle de sunulur.</p>
+  <h3>Çoklu seçim</h3>
+  <ul>
+    <li><kbd>Shift</kbd>+<kbd>Yukarı/Aşağı</kbd>: Seçimi genişletir.</li>
+    <li><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Boşluk</kbd>: Geçerli öğeyi seçime ekler veya çıkarır.</li>
+    <li><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>A</kbd>: Tüm olayları seçer.</li>
+  </ul>
+  <p>Seçili olayları 1 ms, 10 ms, 100 ms veya 1 saniyelik adımlarla taşıyabilirsiniz. Taşıma yalnız olayın ve ona bağlı seslendirmenin zamanını değiştirir; kaynak videoyu geri veya ileri almaz.</p>
+  <div class="note"><strong>Metni yeniden seslendirme:</strong> Daha önce seslendirilmiş bir betimlemeyi açıp metni, sesi veya hızı değiştirerek <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd> yaptığınızda yalnız o olay yeniden üretilir. Metni değiştirmeden aynı komutu vermek de sorunlu bir sentezi yeniden oluşturmak için kullanılabilir.</div>
+</section>
+
+<section id="ice-dis">
+  <h2>İçe ve dışa aktarma</h2>
+  <h3>SRT veya VTT içe aktarma</h3>
+  <p>Dosyadaki zaman kodları ve metinler projeye eklenebilir ya da mevcut olayların yerine alınabilir. İçe aktarılan satırların olay türünü altyazı veya betimleme olarak seçin. İçe aktarma sonrasında zamanları ve metinleri normal olaylar gibi düzenleyebilirsiniz.</p>
+  <h3>Dışa aktarma</h3>
+  <p>Tüm olayları veya yalnız seçili olayları dışa aktarabilirsiniz. Tür filtreleriyle betimleme, altyazı ve kontrol notlarını ayrı tutabilirsiniz.</p>
+  <ul>
+    <li><strong>SRT/VTT:</strong> Başlangıç, bitiş ve görünür metin için uygundur. Başka altyazı veya stüdyo uygulamalarına aktarılabilir.</li>
+    <li><strong>Excel:</strong> Zaman kodlarıyla birlikte tür, durum, konuşmacı, metin, seslendirme notları, ton ve tempo gibi üretim alanlarını taşır.</li>
+  </ul>
+  <p><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd> metin aramayı, <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>H</kbd> ara ve değiştir penceresini açar.</p>
+</section>
+
+<section id="tts">
+  <h2>TTS, miks ve betimlemeli video</h2>
+  <h3>Varsayılan ayarlar</h3>
+  <p><em>Varsayılan TTS ve miks ayarları</em> panelinde bilgisayar sesleri, OpenAI, ElevenLabs veya insan seslendirmesi seçilebilir. OpenAI ve ElevenLabs kullanımı için ilgili API anahtarlarının EVD Yapay Zekâ ayarlarında kayıtlı olması gerekir.</p>
+  <ul>
+    <li><strong>TTS hızı:</strong> Okuma temposu.</li>
+    <li><strong>TTS ses düzeyi:</strong> Betimleme sesinin yüksekliği; gerektiğinde %100'ün üzerine çıkarılabilir.</li>
+    <li><strong>Özgün video sesi:</strong> Betimleme sırasında filmin ne kadar duyulacağı. Varsayılan %90'dır.</li>
+    <li><strong>En fazla otomatik hız:</strong> Metni aralığa sığdırmak için çıkılabilecek güvenli üst sınır.</li>
+  </ul>
+  <p>Bu değerler yeni olaylara temel olur. Her betimleme olayında farklı ses, hız ve miks düzeyi seçebilirsiniz. <em>Seçili betimlemeleri seslendir</em> yalnız seçimi; <em>Tüm betimlemeleri seslendir</em> tüm uygun olayları üretir.</p>
+  <h3>Önizleme ve çıktı</h3>
+  <p>Olay listesindeki önizleme, TTS veya insan sesiyle özgün videoyu olayın kendi miks ayarlarıyla birlikte çalar. <em>Betimlemeli video veya MP3 oluştur</em>, seslendirilmiş olayları zaman kodlarına yerleştirir. Video, görüntülü son kontrol; MP3 ise yalnız montajlı sesi ekip arkadaşlarıyla paylaşmak için kullanılabilir. Seslendirmesi olmayan taslaklar çıktıya ses olarak girmez.</p>
+</section>
+
+<section id="insan-sesi">
+  <h2>İnsan seslendirmesini eşleştirme</h2>
+  <p>Stüdyodan gelen temiz MP3/WAV kaydını betimleme veya altyazı olaylarıyla eşleştirip TTS yerine gerçek anlatıcı sesini kullanabilirsiniz. EVD iki tamamlayıcı yöntem sunar: Whisper destekli <strong>otomatik aday bulma</strong> ve tamamen klavyeyle çalışan <strong>elle eşleme</strong>. Otomatik sonuçları kabul etmek zorunda değilsiniz; iki yöntemi aynı projede birlikte kullanabilirsiniz.</p>
+  <h3>Otomatik aday bulma</h3>
+  <ol>
+    <li>Tiny (hızlı), Base (önerilen) veya Small (daha doğru, daha yavaş) modelini seçin.</li>
+    <li><em>Temiz insan sesini seç ve eşleştir</em> ile yalnız anlatıcının bulunduğu ses dosyasını seçin ve analiz bitene kadar bekleyin.</li>
+    <li>Aday çekim listesinde aşağı/yukarı oklarla dolaşın. <kbd>Boşluk</kbd> yalnız çekimi, <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Boşluk</kbd> çekim ile filmi miks halinde çalar.</li>
+    <li><kbd>Enter</kbd> veya <kbd>Alt</kbd>+<kbd>Enter</kbd> seçili çekimi uygular. <kbd>Sağ Ok</kbd> dinleme, miks dinleme, düzenleme ve uygulama komutlarını içeren menüyü açar.</li>
+    <li>İsterseniz <em>Önerilen çekimleri kullan</em> ile yüksek güvenli eşleşmeleri topluca uygulayın.</li>
+  </ol>
+  <p>Seslendirenin “olmadı, tekrar alıyorum” gibi notları, öksürükler veya aynı metnin farklı denemeleri zorla seçilmez; alternatif çekimler ve eşleşmeyen kayıtlar montajcı kararına bırakılır. Bir çekimin başında ya da sonunda artık ses varsa <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd> ile çekim düzenleyicisini açın. <kbd>K</kbd> oynatır/durdurur, <kbd>J/L</kbd> bir saniye, <kbd>Shift</kbd>+<kbd>J/L</kbd> 100 ms gider; <kbd>M</kbd> başlangıç ve bitiş sınırlarını koyar. <kbd>Shift</kbd>/<kbd>Ctrl</kbd>+<kbd>Boşluk</kbd> seçimi dinler, <kbd>Enter</kbd> kırpılmış çekimi kaydeder.</p>
+  <h3>Elle eşleme</h3>
+  <ol>
+    <li><em>Elle eşleştir</em> düğmesini açın. Gerekirse temiz ses dosyasını seçin. EVD henüz ses atanmamış ilk olayı seçer ve metnini duyurur.</li>
+    <li><kbd>Alt</kbd>+<kbd>T</kbd> ile insan sesi zaman çizelgesine gidin. <kbd>K</kbd> veya <kbd>Boşluk</kbd> oynatır/durdurur; <kbd>J/L</kbd> bir saniye, <kbd>Shift</kbd>+<kbd>J/L</kbd> 100 ms geri/ileri gider.</li>
+    <li>Uzun sessizlikleri hızlı geçmek için <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Sol/Sağ</kbd> veya ekran okuyucularla daha rahat olan <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>J/L</kbd> kullanın. Duraklatılmışken hedef konuşmanın başından kısa bir örnek çalınır.</li>
+    <li>İlgili okumanın başında <kbd>M</kbd>, sonunda yeniden <kbd>M</kbd> yapın. <kbd>Shift</kbd>/<kbd>Ctrl</kbd>+<kbd>Boşluk</kbd> seçili aralığı dinler; <kbd>Enter</kbd> aralığı geçerli metne atar ve sonraki metne geçer.</li>
+    <li>Yanlış işaret koyarsanız <kbd>Shift</kbd>+<kbd>M</kbd> etkin işaretçileri temizler. Önceden kaydedilmiş eşleşmeler silinmez. <kbd>D</kbd> sıradaki metni yeniden okur.</li>
+    <li><kbd>Alt</kbd>+<kbd>L</kbd> ile olay/eşleşme listesine dönün. Aşağı/yukarı ok seçili insan sesiyle filmi miks halinde önizler; <kbd>Delete</kbd> yanlış atamayı kaldırır. Otomatik bir aday doğruysa <kbd>Alt</kbd>+<kbd>Enter</kbd> ile doğrudan onaylayabilirsiniz.</li>
+  </ol>
+  <p>Liste içinde <kbd>Shift</kbd>+oklar veya <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>A</kbd> ile birden fazla olay seçebilirsiniz. <kbd>F/A</kbd> insan sesi hızını, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L/J</kbd> anlatıcı sesini, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Yukarı/Aşağı</kbd> özgün film sesini artırır/azaltır. Ayar seçili olayların tümüne uygulanır ve sonuç hemen miks halinde dinletilir.</p>
+  <div class="tip"><strong>Öncelik kuralı:</strong> Bir olaya elle çekim atandığında o olayın otomatik adayı devre dışı kalır; dışa aktarımda yalnız seçtiğiniz insan sesi kullanılır. Betimleme veya altyazı olarak içe alınmış olayların her ikisi de insan sesiyle video ya da MP3 çıktısına dönüştürülebilir.</div>
+  <div class="note">Whisper modeli ilk kullanımda indirilir ve bilgisayarda önbelleğe alınır. İlk analiz internet ve indirme nedeniyle uzun sürebilir; sonraki kullanımlar yerel önbellekten çalışır.</div>
+</section>
+<section id="contentstudio">
+  <h2>ContentStudio ile otomatik betimleme</h2>
+  <p>ContentStudio entegrasyonu videoyu uzaktaki yapay zekâ servisine gönderip taslak betimleme ve isteğe bağlı altyazı üretir. Otomatik sonuç nihai metin değil, editörde gözden geçirilmesi gereken bir başlangıç taslağıdır.</p>
+  <ol>
+    <li>API anahtarını bir kez girip güvenli kaydedin. Sonraki açılışlarda yalnız <em>API anahtarını değiştir</em> görünür.</li>
+    <li><em>Bağlantıyı ve krediyi denetle</em> ile hesap durumunu kontrol edin.</li>
+    <li>Dil, yazım şablonu, ayrıntı düzeyi, işleme modu, en düşük güven ve yaratıcılığı seçin.</li>
+    <li>EVD'nin profesyonel betimleme kurallarını açık bırakın; yapıma özgü isimler, üslup veya kaçınılacak noktaları <em>Ek özel talimatlar</em> alanına yazın.</li>
+    <li><em>Videoyu yükle ve otomatik betimlemeyi başlat</em> düğmesini kullanın. Uzun işlemlerde durum alanından ilerlemeyi izleyin.</li>
+    <li>Hazır olduğunda <em>Betimlemeleri taslak olarak içe aktar</em> düğmesine basın. Yeni projede sonuç hazır olunca odak bu düğmeye gelir.</li>
+  </ol>
+  <p>Uygulama kapanmışsa <em>Son eşleşen projeyi bul</em> ile işlem geri çağrılabilir. ContentStudio çıktısı ayrıca SRT, MP3 veya altyazılı MP4 olarak indirilebilir. EVD projesine alınan taslakları olay listesinde tek tek dinleyin, zamanlarını düzeltin ve onaylayın.</p>
+</section>
+
+<section id="kalite">
+  <h2>Kalite kontrolü ve son çıktı</h2>
+  <p><em>Kalite kontrolünü çalıştır</em> projeyi teknik ve editoryal kurallarla tarar. Sonuçlar engelleyici, uyarı ve öneri olarak ayrılır. Filtreyle yalnız istediğiniz düzeyi gösterebilirsiniz.</p>
+  <h3>Denetlenen başlıca durumlar</h3>
+  <ul>
+    <li>Geçersiz zaman kodu, boş metin, çözülmemiş kontrol notu ve taslak/kontrolde kalan olaylar.</li>
+    <li>Seslendirmesi eksik veya metni değiştiği için güncelliğini yitirmiş betimlemeler.</li>
+    <li>Aralığa sığmayan TTS, aşırı uzun metin ve şüpheli boşluklar.</li>
+    <li>Aynı tür olayların, betimleme ile diyalog/altyazının veya üretilen TTS seslerinin çakışması.</li>
+    <li>Sahne değişimini aşan olaylar ve düşük güvenli ContentStudio taslakları.</li>
+  </ul>
+  <p>Sorun listesinde oklarla dolaşın; <kbd>Enter</kbd> ilgili olaya götürür. Page Up/Page Down onar öğe, Home/End ilk ve son sorun arasında ilerler. Sonuçları TXT veya Excel raporu olarak kaydedebilirsiniz.</p>
+  <div class="warning"><strong>Engelleyici sorunlar:</strong> Betimlemeli video oluştururken engelleyici maddeler varsa erişilebilir bir onay penceresi gösterilir. Teknik olarak devam edebilirsiniz; ancak yayınlanacak işte önce bu maddeleri düzeltmeniz önerilir.</div>
+</section>
+
+<section id="kisayollar">
+  <h2>Kısayolların tamamı</h2>
+  <p>Oynatma ve işaretçi komutları yalnız <strong>uzman zaman çizelgesi odaktayken</strong> çalışır. Böylece yazma alanında Enter kullanmak veya bir düğmeyi açmak videoyu yanlışlıkla başlatmaz. Kısayol Yöneticisi'nde değiştirilen atamalar varsayılanların yerini alır.</p>
+  <h3>Zaman çizelgesi: oynatma ve gezinme</h3>
+  <table><thead><tr><th scope="col">Kısayol</th><th scope="col">İşlev</th></tr></thead><tbody>
+    <tr><td><kbd>Boşluk</kbd></td><td>Oynatır/duraklatır; yeniden durduğunda başladığı konuma döner.</td></tr>
+    <tr><td><kbd>K</kbd></td><td>Geçerli konumda duraklatır.</td></tr>
+    <tr><td><kbd>Enter</kbd></td><td>Duraklatır ve konumlar; duruyorsa oynatır.</td></tr>
+    <tr><td><kbd>Sol/Sağ Ok</kbd></td><td>Seçili ince gezinme adımı kadar geri/ileri gider ve kısa ses örneği çalar.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Yukarı/Aşağı</kbd></td><td>İnce gezinme adımını küçültür/büyütür.</td></tr>
+    <tr><td><kbd>Page Up/Page Down</kbd></td><td>5 saniye geri/ileri gider.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Sol/Sağ</kbd></td><td>30 saniye geri/ileri gider.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Alt</kbd>+<kbd>Sol/Sağ</kbd></td><td>5 dakika geri/ileri gider.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Yukarı/Aşağı</kbd></td><td>Videonun başına/sonuna gider.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>G</kbd></td><td>Belirli zaman koduna git penceresini açar.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>B</kbd></td><td>Geçerli zamanı söyler.</td></tr>
+  </tbody></table>
+  <h3>İşaretçi ve hızlı olay ekleme</h3>
+  <table><thead><tr><th scope="col">Kısayol</th><th scope="col">İşlev</th></tr></thead><tbody>
+    <tr><td><kbd>M</kbd></td><td>Geçerli konuma işaretçi ekler.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Sol/Sağ</kbd></td><td>Önceki/sonraki işaretçiye gider.</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>Boşluk</kbd></td><td>Etkin iki işaretçi arasını oynatır.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd></td><td>İşaretçi aralığından genel olay penceresini açar; olay formunda kaydeder.</td></tr>
+    <tr><td><kbd>D</kbd></td><td>Betimleme olayı ekler.</td></tr>
+    <tr><td><kbd>S</kbd></td><td>Altyazı olayı ekler.</td></tr>
+    <tr><td><kbd>A</kbd></td><td>Son kontrol notu ekler.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>L</kbd></td><td>Olay listesine gider.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>T</kbd></td><td>Oynatma/zaman çizelgesi alanına gider.</td></tr>
+  </tbody></table>
+  <h3>Olay listesi</h3>
+  <table><thead><tr><th scope="col">Kısayol</th><th scope="col">İşlev</th></tr></thead><tbody>
+    <tr><td><kbd>Yukarı/Aşağı</kbd></td><td>Önceki/sonraki olayı seçer ve aralığı önizler.</td></tr>
+    <tr><td><kbd>Page Up/Page Down</kbd></td><td>10 olay geri/ileri gider.</td></tr>
+    <tr><td><kbd>Home/End</kbd></td><td>İlk/son olaya gider.</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>Yukarı/Aşağı</kbd></td><td>Aralık seçimini genişletir.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Boşluk</kbd></td><td>Geçerli olayın çoklu seçimini değiştirir.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>A</kbd></td><td>Tüm olayları seçer.</td></tr>
+    <tr><td><kbd>Enter</kbd></td><td>Seçili olayı düzenler.</td></tr>
+    <tr><td><kbd>Boşluk</kbd> veya <kbd>P</kbd></td><td>Seçili olayı miks halinde dinler.</td></tr>
+    <tr><td><kbd>Sağ Ok</kbd></td><td>İşlem menüsünü açar.</td></tr>
+    <tr><td><kbd>Sol Ok</kbd> veya <kbd>Escape</kbd></td><td>İşlem menüsünü kapatıp listeye döner.</td></tr>
+    <tr><td><kbd>Delete</kbd></td><td>Seçili olayları onay alarak siler.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Sol/Sağ</kbd></td><td>Seçili olayları 10 ms erkene/ileri alır.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Sol/Sağ</kbd></td><td>Seçili olayları 100 ms erkene/ileri alır.</td></tr>
+    <tr><td><kbd>G/H</kbd></td><td>Seçili olayları 1 ms erkene/ileri alır.</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>J/L</kbd></td><td>Seçili olayları 1 saniye erkene/ileri alır.</td></tr>
+  </tbody></table>
+  <h3>Proje, arama ve insan sesi</h3>
+  <table><thead><tr><th scope="col">Kısayol</th><th scope="col">İşlev</th></tr></thead><tbody>
+    <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Projeyi kaydeder.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>F</kbd></td><td>Olay metninde arama açar.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>H</kbd></td><td>Ara ve değiştir penceresini açar.</td></tr>
+    <tr><td><kbd>Yukarı/Aşağı</kbd> (aday listesi)</td><td>İnsan seslendirmesi adayları arasında gezer ve adayı dinler.</td></tr>
+    <tr><td><kbd>Boşluk</kbd> / <kbd>Ctrl/Cmd</kbd>+<kbd>Boşluk</kbd> (aday listesi)</td><td>Yalnız çekimi / çekim ile filmi miks halinde dinler.</td></tr>
+    <tr><td><kbd>Enter</kbd> veya <kbd>Alt</kbd>+<kbd>Enter</kbd> (aday listesi)</td><td>Seçili çekimi geçerli olaya uygular.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd> (aday listesi)</td><td>Çekim kırpma düzenleyicisini açar.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>T/L</kbd> (elle eşleme)</td><td>İnsan sesi zaman çizelgesi ile olay/eşleşme listesi arasında geçer.</td></tr>
+    <tr><td><kbd>K</kbd> veya <kbd>Boşluk</kbd> (elle eşleme)</td><td>Temiz insan sesi kaydını oynatır/durdurur.</td></tr>
+    <tr><td><kbd>J/L</kbd>; <kbd>Shift</kbd>+<kbd>J/L</kbd></td><td>1 saniye; 100 ms geri/ileri gider.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>J/L</kbd></td><td>Önceki/sonraki konuşma başlangıcına gider ve kısa örnek çalar.</td></tr>
+    <tr><td><kbd>M</kbd>; <kbd>Shift</kbd>+<kbd>M</kbd></td><td>Başlangıç/bitiş işareti koyar; etkin işaretçileri temizler.</td></tr>
+    <tr><td><kbd>Enter</kbd> (elle eşleme zaman çizelgesi)</td><td>Seçili ses aralığını geçerli metne atar ve sonraki metne geçer.</td></tr>
+    <tr><td><kbd>D</kbd> (elle eşleme)</td><td>Geçerli veya sıradaki betimleme/altyazı metnini okur.</td></tr>
+    <tr><td><kbd>F/A</kbd></td><td>Seçili insan sesi olaylarının hızını artırır/azaltır.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L/J</kbd></td><td>Seçili insan sesi olaylarının anlatıcı düzeyini artırır/azaltır.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Yukarı/Aşağı</kbd></td><td>Seçili olayların özgün film sesini artırır/azaltır.</td></tr>
+  </tbody></table>
+  <h3>Kalite sorunları listesi</h3>
+  <table><thead><tr><th scope="col">Kısayol</th><th scope="col">İşlev</th></tr></thead><tbody>
+    <tr><td><kbd>Yukarı/Aşağı</kbd></td><td>Önceki/sonraki soruna gider.</td></tr>
+    <tr><td><kbd>Page Up/Page Down</kbd></td><td>10 sorun geri/ileri gider.</td></tr>
+    <tr><td><kbd>Home/End</kbd></td><td>İlk/son soruna gider.</td></tr>
+    <tr><td><kbd>Enter</kbd></td><td>Sorunla ilişkili olayı seçer ve olay listesine götürür.</td></tr>
+  </tbody></table>
+  <div class="note"><strong>Kısayol Yöneticisi:</strong> SRT/VTT içe aktarma, dışa aktarma, olay bölme/birleştirme, seçili/tüm betimlemeleri seslendirme ve betimlemeli video oluşturma komutları Kısayol Yöneticisi'nde bulunur; ancak varsayılan tuşları atanmış değildir. İhtiyacınıza göre güvenli bir kombinasyon belirleyebilirsiniz.</div>
+</section>
+
+<section id="sorun">
+  <h2>Sorun giderme ve iyi uygulamalar</h2>
+  <h3>Seslendirme metne sığmıyor</h3>
+  <p>Önce metni gereksiz ayrıntılardan arındırın. Ardından otomatik sığdırmayı ve en fazla otomatik hızı kontrol edin. Hızlı konuşma anlaşılabilirliği bozuyorsa olayın zamanını genişletin veya metni iki olaya bölün.</p>
+  <h3>İki betimleme üst üste geliyor</h3>
+  <p>Olay listesinde önizleme komşu TTS seslerini de çalar. Sorunlu olayı 1 ms, 10 ms, 100 ms veya 1 saniyelik komutlarla taşıyın; sonra kalite kontrolündeki TTS çakışması uyarısını yeniden denetleyin.</p>
+  <h3>Metni değiştirdim ama eski ses çalıyor</h3>
+  <p>Olayı açın ve <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd> ile kaydedin. Daha önce üretilmiş ses, geçerli metin ve ayarlarla yeniden sentezlenir.</p>
+  <h3>ContentStudio işlemi uzun sürüyor</h3>
+  <p>Durumu şimdi denetleyin. Uygulamayı kapatmanız gerektiğinde daha sonra aynı videoyu açıp <em>Son eşleşen projeyi bul</em> komutunu kullanabilirsiniz. Kredi ve bağlantı bilgilerini paneldeki çok satırlı alanda ok tuşlarıyla inceleyebilirsiniz.</p>
+  <h3>İnsan sesi eşleşmesi zayıf</h3>
+  <p>Temiz, yalnız anlatıcıyı içeren MP3/WAV kullanın. Tiny yerine Base veya Small deneyin. Birden fazla çekim varsa otomatik öneriyi kabul etmeden adayları miks halinde dinleyin.</p>
+  <h3>Yayın öncesi önerilen sıra</h3>
+  <ol>
+    <li>Taslak olayları tamamlayın ve durumlarını kontrolde/onaylandı olarak güncelleyin.</li>
+    <li>Sahne analizini çalıştırıp betimlemelerin kesmeleri aşmadığını denetleyin.</li>
+    <li>Her betimlemeyi video ile miks halinde dinleyin.</li>
+    <li>Kalite kontrolünü çalıştırın; engelleyici sorunları ve çözülmemiş notları kapatın.</li>
+    <li>Projeyi kaydedin, Excel senaryo/kalite raporunu arşivleyin ve son videoyu oluşturun.</li>
+  </ol>
+  <p class="back"><a href="#ust">Sayfa başına dön</a></p>
+</section>
+</main>
+<footer><p>Engelsiz Video Düzenleyicisi - Betimleme ve Altyazı Editörü hızlı başlangıç belgesi</p></footer>
+</body>
+</html>

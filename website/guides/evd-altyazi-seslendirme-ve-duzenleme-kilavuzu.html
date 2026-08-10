@@ -1,0 +1,108 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>EVD Altyazı Seslendirme ve Düzenleme Kılavuzu</title><style>
+    :root { --ink:#17211b; --muted:#526057; --paper:#fffdf7; --panel:#f1f5e9; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 45%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus, button:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 85% 15%,#267c68 0,transparent 25%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:72rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:70rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.2rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .quick { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; counter-reset:step; }
+    .quick article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .quick article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#icerik">Ana içeriğe geç</a><header id="ust"><p class="eyebrow">EVD 4.9 Beta</p><h1>Altyazı Seslendirme ve Düzenleme Kılavuzu</h1>
+<p>Bir SRT dosyasını videoya gömün, bilgisayar sesleri, OpenAI veya ElevenLabs ile seslendirin; her altyazının zamanını, metnini, sesini, hızını ve miksini erişilebilir biçimde ayrı ayrı düzenleyin.</p><p><strong>Kılavuz sürümü:</strong> 10 Ağustos 2026</p></header>
+<main id="icerik"><nav aria-labelledby="toc-title"><h2 id="toc-title">İçindekiler</h2><ol class="toc">
+<li><a href="#amac">Bu araç ne işe yarar?</a></li><li><a href="#hazirlik">Başlamadan önce</a></li><li><a href="#hizli">Hızlı başlangıç</a></li><li><a href="#ilk-ayarlar">Altyazı ve seslendirme ayarları</a></li>
+<li><a href="#duzenleyici">Seslendirme düzenleyicisi</a></li><li><a href="#onizleme">Önizlemeyi doğru yorumlama</a></li><li><a href="#metin-ses">Metni ve sesi değiştirme</a></li>
+<li><a href="#zaman-miks">Zamanlama, hız ve miks</a></li><li><a href="#proje">Projeyi kaydetme ve açma</a></li><li><a href="#cikti">Düzenlemeleri uygulama ve çıktı</a></li>
+<li><a href="#kisayollar">Klavye kısayolları</a></li><li><a href="#sorun">Sorun giderme ve iyi uygulamalar</a></li><li><a href="#kontrol">Son kontrol listesi</a></li></ol></nav>
+<section id="amac"><h2>Bu araç ne işe yarar?</h2>
+<p>EVD'nin altyazı aracı yalnız metni görüntüye gömmekle sınırlı değildir. Bir SRT dosyasındaki her satırı TTS ile seslendirebilir ve oluşan bölümleri ayrı ayrı düzenleyebilir. Bu yapı; sesli betimleme, konuşan altyazı, eğitim içeriği, dil erişimi veya metnin hem görünür hem duyulur olması gereken videolar için kullanılabilir.</p>
+<p>Üç temel çıktı yaklaşımı vardır:</p><ul><li><strong>Yalnız görünür altyazı:</strong> SRT metni videoya yazılır.</li><li><strong>Yalnız seslendirme:</strong> Metin TTS olarak videoya eklenir.</li><li><strong>Altyazı ve seslendirme birlikte:</strong> Güncellenen metin ekranda görünür ve aynı zamanda seslendirilir.</li></ul>
+<div class="note">Düzenleyici kaynak videoyu değiştirmez. İşlem sonunda yeni bir video oluşturulur; kaydettiğiniz <code>.evdtts</code> projesiyle daha sonra kaldığınız yerden devam edebilirsiniz.</div></section>
+<section id="hazirlik"><h2>Başlamadan önce</h2><ul><li>Zaman kodları düzgün bir SRT dosyası ve onunla eşleşen kaynak video hazırlayın.</li><li>OpenAI veya ElevenLabs kullanacaksanız ilgili API anahtarını EVD'nin Yapay Zekâ menüsünde kaydedin.</li><li>Bilgisayar sesleri internet gerektirmez; kullanılabilir diller Windows veya macOS'ta kurulu seslere bağlıdır.</li><li>Proje boyunca kaynak videoyu, altyazıyı ve üretilen proje klasörünü taşımayın.</li></ul>
+<div class="tip">Önce birkaç kısa altyazıyla deneme yaparak seçtiğiniz sesin telaffuzunu, hızını ve özgün film sesiyle dengesini kontrol edin.</div></section>
+<section id="hizli"><h2>Hızlı başlangıç</h2><div class="quick">
+<article><strong>Videoyu açın.</strong><br>EVD'de altyazıyı ekleyeceğiniz kaynak videoyu açın.</article><article><strong>SRT'yi seçin.</strong><br><strong>Ekle &gt; Altyazı Dosyası Ekle</strong> yolunu kullanın.</article>
+<article><strong>İşlemi seçin.</strong><br>Altyazıyı gömme, seslendirme veya ikisini birlikte kullanma tercihini yapın.</article><article><strong>Toplu ayarları yapın.</strong><br>Servis, ses, hız, TTS ve özgün film düzeyini seçin.</article>
+<article><strong>Düzenleyin veya atlayın.</strong><br>Bölümleri tek tek düzenleyin ya da mevcut ayarlarla doğrudan oluşturun.</article><article><strong>Kaydedin ve oluşturun.</strong><br>Gerekirse projeyi kaydedin; ardından düzenlemeleri uygulayıp yeni videoyu oluşturun.</article></div></section>
+<section id="ilk-ayarlar"><h2>Altyazı ve seslendirme ayarları</h2>
+<h3>Görünür altyazı</h3><p>Altyazıyı videoya gömecekseniz yazı tipi, boyut, renk, kenarlık, arka plan ve konum gibi stil seçeneklerini belirleyin. Düzenleyicide metni değiştirirseniz son videoda görünen altyazı da güncellenir.</p>
+<h3>Seslendirme</h3><ul><li><strong>Servis:</strong> Bilgisayar sesleri, OpenAI veya ElevenLabs.</li><li><strong>Ses:</strong> Serviste bulunan varsayılan veya seçili konuşmacı.</li><li><strong>Konuşma hızı:</strong> Başlangıçta tüm bölümlere uygulanacak tempo.</li><li><strong>TTS ses seviyesi:</strong> Seslendirmenin başlangıç yüksekliği.</li><li><strong>Özgün film sesi:</strong> TTS konuşurken filmin ne kadar duyulacağı; 0 sessiz, 100 tam sestir.</li></ul>
+<p><strong>Dinle (Test Et)</strong> ile seçili servis ve sesi kısa bir metinde deneyin. <strong>Seçilen ayarlarla başlat</strong> tüm SRT satırlarının ilk TTS parçalarını üretir.</p>
+<div class="warning">İşlem sırasında <strong>Seslendirmeleri düzenle</strong> veya <strong>Doğrudan mevcut ayarlarla oluştur</strong> seçimi gelir. Zaman, metin, ses veya miks düzeltmeyecekseniz düzenleyiciyi tamamen atlayabilirsiniz.</div></section>
+<section id="duzenleyici"><h2>Seslendirme düzenleyicisi</h2>
+<p>Düzenleyici açıldığında kısayollar otomatik okunur ve odak bölüm listesine gelir. Her liste öğesi önce altyazı metnini; ardından TTS başlangıç zamanını, hızı, TTS düzeyini, özgün ses düzeyini ve seslendirmenin açık/kapalı durumunu bildirir.</p>
+<ul><li>Aşağı/yukarı ok önceki veya sonraki bölümü seçer ve otomatik önizler.</li><li>Page Up/Page Down on bölüm, Home/End ilk veya son bölüme gider.</li><li><kbd>Enter</kbd> veya <kbd>Boşluk</kbd> seçili bölümü yeniden dinletir.</li><li><kbd>Sağ Ok</kbd> işlem menüsünü açar. Menüyü oklarla gezin, Enter ile çalıştırın; Sol Ok veya Escape ile listeye dönün.</li></ul>
+<p>İşlem menüsünde önizleme, hız, özgün ses, TTS sesi, zaman, seslendirmeyi kapatma/açma ve bölümü sıfırlama komutları bulunur. Aynı komutların hızlı kısayolları da vardır.</p></section>
+<section id="onizleme"><h2>Önizlemeyi doğru yorumlama</h2>
+<p>EVD filmi seçili TTS başlangıcından yaklaşık bir saniye önce oynatır. Böylece seslendirmenin konuşma veya önemli bir ses üzerine gelip gelmediğini duyabilirsiniz. TTS tam ayarlanan anda devreye girer; önizleme, seslendirme bittikten veya ilgili altyazı aralığı sona erdikten sonra kısa bir pay daha sürer.</p>
+<p>Başka bir seslendirme seçili bölüme zaman olarak taşıyorsa EVD onu da aynı önizlemede çalar. Bu sayede iki TTS parçasını yanlışlıkla üst üste getirdiyseniz yalnız dışa aktarımda değil, düzenleme sırasında da duyarsınız.</p>
+<p><kbd>J</kbd>/<kbd>L</kbd> seçili bölümün zamanını değiştirmeden film önizlemesini beş saniye geri/ileri alır ve kısa süre oynatır. Bu, çevredeki konuşmayı incelemek içindir.</p>
+<div class="note">Önizlemede duyduğunuz TTS hızı, TTS düzeyi ve özgün film düzeyi dışa aktarımda da aynı hesapla kullanılır.</div></section>
+<section id="metin-ses"><h2>Metni ve sesi değiştirme</h2>
+<h3>Metni yeniden seslendirme</h3><ol><li>Listede bölümü seçin ve Tab ile <strong>Seçili altyazı metni</strong> alanına gelin.</li><li>Metni düzeltin. Yeni satır gerekiyorsa <kbd>Shift</kbd>+<kbd>Enter</kbd> kullanın.</li><li><kbd>Enter</kbd> yapın. Yalnız bu bölüm seçili servis, ses ve ayarlarla yeniden üretilir ve otomatik önizlenir.</li></ol>
+<p>Metni değiştirmeden Enter yapmak da aynı metni yeniden sentezler. Bir ses motoru kelimeyi hatalı veya anlamsız ürettiyse bu yöntem yeni bir deneme almak için kullanılabilir. Güncellenen metin hem seslendirmede hem de kaydedilen/dışa aktarılan SRT'de kullanılır.</p>
+<h3>Bölüme özel ses</h3><p><strong>Seçili bölümün sesi</strong> kutusundan farklı bir ses seçebilirsiniz. Değişiklik yalnız o bölümü yeniden seslendirir; diğer bölümlerin sesleri aynı kalır. Liste içinde başka bir bölüme geçtiğinizde onun daha önce kaydedilmiş sesi seçili görünür.</p></section>
+<section id="zaman-miks"><h2>Zamanlama, hız ve miks</h2>
+<p>Her ayardan sonra bölüm yeni değerle hemen önizlenir. Böylece rakamı tahmin etmek yerine sonucu dinleyerek karar verebilirsiniz.</p>
+<table><thead><tr><th>Ayar</th><th>Davranış</th></tr></thead><tbody>
+<tr><td>Hız</td><td><kbd>F</kbd> yüzde 5 artırır, <kbd>A</kbd> azaltır, <kbd>D</kbd> başlangıç değerine döndürür. Aralık %50-%200'dür.</td></tr>
+<tr><td>TTS düzeyi</td><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L/J</kbd> yüzde 10 artırır/azaltır. Gerektiğinde %200'e kadar yükseltilebilir.</td></tr>
+<tr><td>Özgün film sesi</td><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+Yukarı/Aşağı yüzde 10 artırır/azaltır.</td></tr>
+<tr><td>Zaman</td><td>G/H 1 ms, Alt+Sol/Sağ 10 ms, Alt+Shift+Sol/Sağ 100 ms, Ctrl+J/L bir saniye geri/ileri taşır.</td></tr>
+<tr><td>Seslendirmeyi kapat</td><td><kbd>V</kbd> yalnız seçili TTS'yi kapatır/açar. Görünür altyazı seçildiyse metin ekranda kalır.</td></tr>
+<tr><td>Sıfırla</td><td><kbd>R</kbd> seçili bölümün metin, zaman, hız, ses ve miks ayarlarını ilk üretilen durumuna döndürür.</td></tr>
+</tbody></table>
+<p>Zaman komutları kaynak filmi kaydırmaz; seçili altyazı/TTS bölümünü filmin zaman çizelgesi üzerinde taşır. Proje kaydedildiğinde güncellenen SRT zamanları da aynı değişiklikleri içerir.</p></section>
+<section id="proje"><h2>Projeyi kaydetme ve açma</h2>
+<p><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> veya <strong>Projeyi Kaydet</strong> ilk kullanımda ad ister ve <code>.evdtts</code> dosyası oluşturur. Sonraki kayıtlarda aynı dosya doğrudan güncellenir.</p>
+<p>Projenin yanında iki önemli kaynak saklanır:</p><ul><li>Üretilen TTS parçalarını içeren <code>proje_adi_assets</code> klasörü.</li><li>Metin ve zaman değişikliklerini içeren <code>proje_adi_duzenlenmis.srt</code> dosyası.</li></ul>
+<p>Kaydedilen proje seçili bölüm konumunu, toplu ayarları, bölüm seslerini ve düzenlemeleri korur. <strong>Ekle &gt; Altyazı Seslendirme Projesi Aç</strong> yolundan veya düzenleyicideki <strong>Başka Proje Aç</strong> düğmesinden <code>.evdtts</code> dosyasını çağırabilirsiniz.</p>
+<div class="warning">Proje dosyasını tek başına taşımayın. Assets klasörü, düzenlenmiş SRT ve kaynak video erişilebilir olmalıdır; aksi halde kayıtlı TTS parçaları bulunamaz.</div></section>
+<section id="cikti"><h2>Düzenlemeleri uygulama ve çıktı</h2>
+<ul><li><strong>Düzenlemeleri Uygula ve Oluştur:</strong> bölüm bazlı metin, ses, hız, zaman ve miks değerleriyle devam eder.</li><li><strong>Düzenlemeyi Atla, Mevcut Ayarlarla Oluştur:</strong> ilk toplu ayarları kullanır ve bölüm düzenleme aşamasını atlar.</li><li><strong>İptal:</strong> altyazı işlemine çıktı oluşturmadan döner.</li></ul>
+<p>EVD ses parçalarını zamanlarına yerleştirir, özgün film sesiyle belirlediğiniz düzeylerde miksler ve görünür altyazı seçildiyse güncellenen metin/zamanları videoya gömer. İşlem sırasında ilerleme duyurulur; tamamlandığında başarı sesi ve oluşturulan dosya bilgisi verilir.</p></section>
+<section id="kisayollar"><h2>Klavye kısayolları</h2><table><thead><tr><th>Kısayol</th><th>İşlev</th></tr></thead><tbody>
+<tr><td>Yukarı/Aşağı</td><td>Önceki/sonraki bölümü seçer ve önizler.</td></tr><tr><td>Page Up/Page Down</td><td>10 bölüm geri/ileri gider.</td></tr><tr><td>Home/End</td><td>İlk/son bölüme gider.</td></tr>
+<tr><td>Enter veya Boşluk</td><td>Seçili bölümü önizler.</td></tr><tr><td>J/L</td><td>Filmi beş saniye geri/ileri inceleyip kısa örnek çalar.</td></tr><tr><td>Sağ Ok</td><td>İşlem menüsünü açar.</td></tr><tr><td>Sol Ok veya Escape</td><td>Menüyü kapatıp listeye döner.</td></tr>
+<tr><td>F/A/D</td><td>TTS hızını artırır/azaltır/varsayılana getirir.</td></tr><tr><td>Alt+Shift+L/J</td><td>TTS sesini artırır/azaltır.</td></tr><tr><td>Alt+Shift+Yukarı/Aşağı</td><td>Özgün film sesini artırır/azaltır.</td></tr>
+<tr><td>G/H</td><td>Bölümü 1 ms geri/ileri taşır.</td></tr><tr><td>Alt+Sol/Sağ</td><td>10 ms geri/ileri taşır.</td></tr><tr><td>Alt+Shift+Sol/Sağ</td><td>100 ms geri/ileri taşır.</td></tr><tr><td>Ctrl+J/L</td><td>Bir saniye geri/ileri taşır.</td></tr>
+<tr><td>V</td><td>Seçili seslendirmeyi kapatır/açar.</td></tr><tr><td>R</td><td>Seçili bölümü sıfırlar.</td></tr><tr><td>Alt+Shift+S</td><td>Seslendirme projesini kaydeder.</td></tr>
+<tr><td>Enter, metin alanında</td><td>Seçili metni yeniden seslendirir.</td></tr><tr><td>Shift+Enter, metin alanında</td><td>Yeni satır ekler.</td></tr></tbody></table>
+<p>Bu komutlar düzenleme penceresine özgüdür; ana EVD Kısayol Yöneticisi'ni kalabalıklaştırmamak için global kısayol olarak listelenmez.</p></section>
+<section id="sorun"><h2>Sorun giderme ve iyi uygulamalar</h2>
+<h3>TTS konuşmanın üzerine geliyor</h3><p>Bölümü 10/100 ms veya bir saniyelik komutlarla ileri/geri taşıyın. Önizlemedeki bir saniyelik giriş payıyla diyalogu kontrol edin.</p>
+<h3>İki seslendirme üst üste geliyor</h3><p>Liste önizlemesi komşu TTS parçalarını da çalar. Çakışan bölümlerden birini taşıyın, hızlandırın, metni kısaltın veya gerekirse V ile kapatın.</p>
+<h3>Seslendirme çok düşük</h3><p>Alt+Shift+L ile TTS'yi yükseltin veya Alt+Shift+Aşağı ile özgün filmi azaltın. TTS %200'e çıkabilir; aşırı artışta bozulma olup olmadığını dinleyin.</p>
+<h3>Metni düzelttim ama ses eski</h3><p>Metin alanında Enter yapın. Yeniden üretim tamamlandıktan sonra önizlemeyi dinleyin ve projeyi Alt+Shift+S ile kaydedin.</p>
+<h3>Proje açılırken ses dosyası bulunamadı</h3><p><code>_assets</code> klasörünün proje dosyasının yanında olduğundan ve kaynak videonun taşınmadığından emin olun.</p></section>
+<section id="kontrol"><h2>Son kontrol listesi</h2><ol><li>Doğru video ve SRT dosyasını seçtim.</li><li>Görünür altyazı, seslendirme veya ikisini birlikte seçtim.</li><li>Servis, ses, hız ve ilk miks ayarlarını test ettim.</li><li>Her bölümü oklarla gezip filmle birlikte dinledim.</li><li>Yanlış metinleri ve telaffuzları yeniden seslendirdim.</li><li>Çakışan TTS parçalarını düzelttim.</li><li>Önemli bölümlerde özgün film ve TTS dengesini kontrol ettim.</li><li>Projeyi ve güncellenen SRT'yi kaydettim.</li><li>Son videoda görünür metin, zamanlama ve ses miksini yeniden denetledim.</li></ol><p class="back"><a href="#ust">Sayfa başına dön</a></p></section>
+</main><footer><p>Engelsiz Video Düzenleyicisi - Altyazı Seslendirme ve Düzenleme Kılavuzu</p></footer></body></html>

@@ -1,0 +1,71 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>EVD Untertitel-Sprachausgabe und Bearbeitung</title><style>
+    :root { --ink:#17211b; --muted:#526057; --paper:#fffdf7; --panel:#f1f5e9; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 45%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus, button:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 85% 15%,#267c68 0,transparent 25%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:72rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:70rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.2rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .quick { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; counter-reset:step; }
+    .quick article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .quick article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#inhalt">Zum Hauptinhalt</a><header id="oben"><p class="eyebrow">EVD 4.9 Beta</p><h1>Anleitung für Untertitel-Sprachausgabe und Bearbeitung</h1>
+<p>SRT in Video einbrennen, mit Systemstimmen, OpenAI oder ElevenLabs sprechen lassen und Zeit, Text, Stimme, Tempo und Mischung jedes Untertitels barrierefrei bearbeiten.</p><p><strong>Stand:</strong> 10. August 2026</p></header>
+<main id="inhalt"><nav aria-labelledby="toc"><h2 id="toc">Inhalt</h2><ol class="toc">
+<li><a href="#zweck">Aufgabe des Werkzeugs</a></li><li><a href="#vorher">Vorbereitung</a></li><li><a href="#schnell">Schnellstart</a></li><li><a href="#einstellungen">Einstellungen</a></li><li><a href="#editor">Editor</a></li><li><a href="#vorschau">Vorschau</a></li><li><a href="#text">Text und Stimme</a></li><li><a href="#mix">Zeit und Mischung</a></li><li><a href="#projekt">Projekt</a></li><li><a href="#ausgabe">Ausgabe</a></li><li><a href="#tasten">Tastenkürzel</a></li><li><a href="#probleme">Fehlerbehebung</a></li><li><a href="#liste">Checkliste</a></li></ol></nav>
+<section id="zweck"><h2>Aufgabe des Werkzeugs</h2><p>EVD kann SRT-Text sichtbar einbrennen, als TTS sprechen oder beides kombinieren. Jeder erzeugte Abschnitt kann getrennt bearbeitet werden. Das eignet sich für gesprochene Untertitel, Audiodeskription, Lerninhalte und mehrsprachige Barrierefreiheit.</p>
+<div class="note">Das Quellvideo wird nicht überschrieben. Ein <code>.evdtts</code>-Projekt ermöglicht die spätere Fortsetzung.</div></section>
+<section id="vorher"><h2>Vorbereitung</h2><ul><li>Passende Video- und korrekt zeitcodierte SRT-Datei bereithalten.</li><li>Für OpenAI/ElevenLabs den API-Schlüssel im KI-Menü speichern.</li><li>Systemstimmen arbeiten offline und hängen von installierten Stimmen ab.</li><li>Video, SRT und Projektdateien während der Arbeit nicht verschieben.</li></ul></section>
+<section id="schnell"><h2>Schnellstart</h2><div class="quick"><article><strong>Video öffnen.</strong></article><article><strong>Hinzufügen &gt; Untertiteldatei hinzufügen.</strong></article><article><strong>Sichtbar, gesprochen oder beides wählen.</strong></article><article><strong>Dienst, Stimme, Tempo und Pegel festlegen.</strong></article><article><strong>Abschnitte bearbeiten oder überspringen.</strong></article><article><strong>Projekt speichern und Video erzeugen.</strong></article></div></section>
+<section id="einstellungen"><h2>Untertitel- und Spracheinstellungen</h2><p>Für sichtbare Untertitel Schrift, Größe, Farbe, Rand, Hintergrund und Position wählen. Spätere Textänderungen erscheinen auch im Endvideo.</p>
+<ul><li><strong>Dienst:</strong> Systemstimmen, OpenAI, ElevenLabs.</li><li><strong>Stimme:</strong> Standard oder gewählte Stimme.</li><li><strong>Tempo und TTS-Pegel:</strong> Startwerte für alle Abschnitte.</li><li><strong>Originalton:</strong> 0 stumm, 100 voller Filmton.</li></ul>
+<p>Mit <strong>Test hören</strong> prüfen, dann erzeugen. Anschließend können Sie <strong>Sprachausgaben bearbeiten</strong> oder mit den aktuellen Einstellungen direkt erstellen.</p></section>
+<section id="editor"><h2>Sprachausgabe-Editor</h2><p>Beim Öffnen werden die Kürzel vorgelesen und die Abschnittsliste fokussiert. Ein Eintrag nennt zuerst Text, danach TTS-Start, Tempo, TTS-Pegel, Originalpegel und Aktivstatus.</p>
+<p>Oben/Unten wählt und spielt automatisch. Bild auf/ab springt zehn Einträge, Pos1/Ende zum ersten/letzten. Enter/Leertaste spielt erneut. Rechts öffnet das Aktionsmenü; Links oder Escape kehrt zur Liste zurück.</p></section>
+<section id="vorschau"><h2>Vorschau richtig verstehen</h2><p>Der Film startet ungefähr eine Sekunde vor dem TTS-Einsatz. So hören Sie Dialogüberschneidungen. Zeitlich überlappende benachbarte TTS-Abschnitte werden ebenfalls abgespielt, damit Kollisionen vor dem Export auffallen. <kbd>J/L</kbd> untersucht den Film fünf Sekunden zurück/vor, ohne die Untertitelzeit zu ändern.</p>
+<div class="note">Tempo und Pegel der Vorschau werden mit derselben Berechnung exportiert.</div></section>
+<section id="text"><h2>Text und Stimme ändern</h2><p>Zum Feld <strong>Gewählter Untertiteltext</strong> wechseln, korrigieren und <kbd>Enter</kbd> drücken. Nur dieser Abschnitt wird neu erzeugt und vorgespielt. <kbd>Umschalt</kbd>+<kbd>Enter</kbd> fügt eine Zeile ein. Enter ohne Textänderung erzwingt eine neue Synthese. Der geänderte Text wird auch in der bearbeiteten SRT gespeichert.</p>
+<p>In <strong>Stimme des gewählten Abschnitts</strong> kann eine andere Stimme gewählt werden. Nur dieser Abschnitt wird neu erzeugt.</p></section>
+<section id="mix"><h2>Zeit, Tempo und Mischung</h2><table><thead><tr><th>Einstellung</th><th>Befehl</th></tr></thead><tbody>
+<tr><td>Tempo</td><td><kbd>F/A/D</kbd>: erhöhen, verringern, Standard; 50-200 %.</td></tr><tr><td>TTS-Pegel</td><td>Alt+Umschalt+L/J, bis 200 %.</td></tr><tr><td>Originalton</td><td>Alt+Umschalt+Oben/Unten.</td></tr>
+<tr><td>Zeit</td><td>G/H = 1 ms; Alt+Links/Rechts = 10 ms; Alt+Umschalt+Links/Rechts = 100 ms; Strg+J/L = 1 Sekunde.</td></tr>
+<tr><td>Ein/Aus</td><td><kbd>V</kbd> schaltet nur die gewählte Stimme; sichtbarer Text bleibt.</td></tr><tr><td>Zurücksetzen</td><td><kbd>R</kbd> stellt den ursprünglichen Abschnitt wieder her.</td></tr></tbody></table>
+<p>Zeitbefehle verschieben Untertitel und TTS auf der Filmzeitleiste, nicht das Quellvideo. Jede Änderung wird sofort neu vorgespielt.</p></section>
+<section id="projekt"><h2>Projekt speichern und öffnen</h2><p><kbd>Alt</kbd>+<kbd>Umschalt</kbd>+<kbd>S</kbd> erstellt beim ersten Mal <code>.evdtts</code> und aktualisiert später dieselbe Datei. Daneben speichert EVD <code>projektname_assets</code> mit TTS-Dateien und <code>projektname_duzenlenmis.srt</code> mit aktualisiertem Text und Zeiten.</p>
+<p>Öffnen über <strong>Hinzufügen &gt; Untertitel-Sprachausgabeprojekt öffnen</strong> oder <strong>Anderes Projekt öffnen</strong>. Projekt, Assets, SRT und Quellvideo zusammenhalten.</p></section>
+<section id="ausgabe"><h2>Bearbeitung anwenden und Ausgabe erstellen</h2><ul><li><strong>Bearbeitungen anwenden und erstellen:</strong> alle Abschnittswerte verwenden.</li><li><strong>Bearbeitung überspringen:</strong> mit den ersten Grundeinstellungen erstellen.</li><li><strong>Abbrechen:</strong> ohne Ausgabe verlassen.</li></ul><p>EVD platziert TTS, mischt Originalton und brennt bei Bedarf den aktualisierten Untertitel ein. Fortschritt, Erfolg und Dateipfad werden mitgeteilt.</p></section>
+<section id="tasten"><h2>Tastenkürzel</h2><table><thead><tr><th>Taste</th><th>Funktion</th></tr></thead><tbody>
+<tr><td>Oben/Unten</td><td>Abschnitt wählen und spielen</td></tr><tr><td>Bild auf/ab</td><td>Zehn Abschnitte</td></tr><tr><td>Enter/Leertaste</td><td>Vorschau</td></tr><tr><td>J/L</td><td>Film fünf Sekunden durchsuchen</td></tr><tr><td>Rechts</td><td>Menü öffnen</td></tr>
+<tr><td>F/A/D</td><td>Tempo + / - / Standard</td></tr><tr><td>Alt+Umschalt+L/J</td><td>TTS-Pegel + / -</td></tr><tr><td>Alt+Umschalt+Oben/Unten</td><td>Originalton + / -</td></tr>
+<tr><td>G/H</td><td>1 ms</td></tr><tr><td>Alt+Links/Rechts</td><td>10 ms</td></tr><tr><td>Alt+Umschalt+Links/Rechts</td><td>100 ms</td></tr><tr><td>Strg+J/L</td><td>1 Sekunde</td></tr>
+<tr><td>V / R</td><td>Stimme ein/aus / zurücksetzen</td></tr><tr><td>Alt+Umschalt+S</td><td>Projekt speichern</td></tr><tr><td>Enter im Text</td><td>Neu synthetisieren</td></tr><tr><td>Umschalt+Enter</td><td>Neue Zeile</td></tr></tbody></table></section>
+<section id="probleme"><h2>Fehlerbehebung</h2><p><strong>TTS über Dialog:</strong> Zeit fein verschieben. <strong>Zwei Stimmen überlappen:</strong> verschieben, beschleunigen, kürzen oder V. <strong>Zu leise:</strong> TTS erhöhen oder Film senken. <strong>Alter Ton nach Textänderung:</strong> Enter, Vorschau, speichern. <strong>Projekt findet Ton nicht:</strong> Assets-Ordner und Video wiederherstellen.</p></section>
+<section id="liste"><h2>Checkliste</h2><ol><li>Richtiges Video/SRT.</li><li>Sichtbar, Stimme oder beides gewählt.</li><li>Dienst, Stimme, Tempo und Mischung getestet.</li><li>Alle Abschnitte im Film geprüft.</li><li>Fehltexte neu erzeugt.</li><li>Überlappungen korrigiert.</li><li>Projekt und SRT gespeichert.</li><li>Endvideo visuell und akustisch geprüft.</li></ol><p class="back"><a href="#oben">Nach oben</a></p></section>
+</main><footer><p>Engelsiz Video Düzenleyicisi - Anleitung für Untertitel-Sprachausgabe und Bearbeitung</p></footer></body></html>

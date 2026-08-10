@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EVD Son Kontrol Paketi Kullanım Kılavuzu</title>
+  <style>
+    :root { --ink:#18211c; --muted:#536159; --paper:#fffdf7; --panel:#f0f5ea; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 48%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 86% 13%,#287e69 0,transparent 26%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:75rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:72rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.1rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(245px,1fr)); gap:1rem; counter-reset:step; }
+    .steps article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .steps article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    caption { margin-bottom:.55rem; text-align:left; font-weight:700; color:#124437; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style>
+</head>
+<body>
+<a class="skip" href="#icerik">Ana içeriğe geç</a>
+<header id="ust">
+  <p class="eyebrow">EVD 4.9 Beta</p>
+  <h1>Son Kontrol Paketi Kullanım Kılavuzu</h1>
+  <p>Video veya ses ile zaman kodlu betimleme metnini birlikte açın; kaydı dinlerken ilgili betimlemeyi anında bulun, son kontrol notları ekleyin ve yalnızca raporlanması gereken maddeleri Word, TXT ya da Excel olarak dışa aktarın.</p>
+  <p><strong>Kılavuz sürümü:</strong> 10 Ağustos 2026</p>
+</header>
+
+<main id="icerik">
+<nav aria-labelledby="toc-title">
+  <h2 id="toc-title">İçindekiler</h2>
+  <ol class="toc">
+    <li><a href="#amac">Son Kontrol Paketi ne işe yarar?</a></li>
+    <li><a href="#hazirlik">Klasörü hazırlama</a></li>
+    <li><a href="#paket-acma">Kontrol paketini açma</a></li>
+    <li><a href="#arayuz">Çalışma alanını tanıma</a></li>
+    <li><a href="#uctan-uca">Uçtan uca son kontrol akışı</a></li>
+    <li><a href="#mevcut-not">Mevcut betimlemeye not ekleme</a></li>
+    <li><a href="#bagimsiz-not">Bağımsız kontrol notu ekleme</a></li>
+    <li><a href="#proje">Projeyi kaydetme ve yeniden açma</a></li>
+    <li><a href="#disari">Kontrol raporunu dışa aktarma</a></li>
+    <li><a href="#kisayollar">Klavye kısayolları</a></li>
+    <li><a href="#ipuclari">İpuçları ve sorun giderme</a></li>
+    <li><a href="#kontrol-listesi">Hızlı kontrol listesi</a></li>
+  </ol>
+</nav>
+
+<section id="amac">
+  <h2>Son Kontrol Paketi ne işe yarar?</h2>
+  <p>Son Kontrol Paketi, tamamlanmış veya tamamlanmaya yakın bir sesli betimleme çalışmasını denetlemek için hazırlanmıştır. Kaynak video ya da ses dosyası ile SRT, VTT veya Word biçimindeki betimleme metni aynı çalışma alanında açılır. Denetçi kaydı dinlerken durduğu zamana en yakın betimlemeyi bulabilir, o betimlemeye düzeltme notu yazabilir veya betimlemenin hiç bulunmadığı bir aralığa bağımsız not ekleyebilir.</p>
+  <p>Çalışma sonunda bütün metni yeniden vermek yerine yalnızca not eklenen maddeler Word, TXT veya Excel raporu olarak dışa aktarılabilir. Böylece betimleme yazarı, seslendiren kişi ve montajcı kendileriyle ilgili düzeltmeleri zaman kodlarıyla birlikte kolayca izleyebilir.</p>
+  <div class="note"><strong>İki not türü vardır:</strong> Var olan bir betimlemeye bağlı son kontrol notu, doğrudan o metnin altında tutulur. Bağımsız son kontrol notu ise o aralıkta henüz bir betimleme bulunmasa bile “Burada betimleme eksik” gibi bir tespiti zaman koduyla kaydeder.</div>
+</section>
+
+<section id="hazirlik">
+  <h2>Klasörü hazırlama</h2>
+  <p>En rahat çalışma için aynı yapımla ilgili dosyaları tek klasörde tutun. Klasörde aşağıdakiler bulunabilir:</p>
+  <ul>
+    <li>Bir video dosyası veya yalnız sesle kontrol yapılacaksa MP3, WAV, M4A gibi bir ses dosyası.</li>
+    <li>Betimlemeleri içeren SRT, VTT ya da DOCX dosyası.</li>
+    <li>Daha önce kaydedilmişse <code>.evdscript</code> uzantılı EVD proje dosyası.</li>
+  </ul>
+  <p>Klasörde tek medya ve tek betimleme metni varsa EVD bunları otomatik seçer. Birden fazla uygun dosya varsa açılan pencerede kullanacağınız medya ve metni seçebilirsiniz.</p>
+  <div class="tip"><strong>Word dosyaları:</strong> EVD, Word belgesindeki zaman kodlu betimlemeleri ayıklayabilir. Zaman kodundan sonra tamamı büyük harfle yazılmış “DUYGUSAL”, “HIZLI OKUNMALI” gibi ifadeler seslendirme notu olarak ayrılır. İçe aktarma önizlemesindeki uyarıları kontrol edin.</div>
+  <div class="warning"><strong>Eski DOC biçimi:</strong> Eski <code>.doc</code> dosyası doğrudan alınmaz. Belgeyi Word'de <code>.docx</code> olarak kaydedin.</div>
+</section>
+
+<section id="paket-acma">
+  <h2>Kontrol paketini açma</h2>
+  <h3>EVD içinden açma</h3>
+  <ol>
+    <li>EVD içinde <strong>Ekle &gt; Betimleme / Altyazı Editörü</strong> yolunu izleyin.</li>
+    <li><strong>Kontrol paketi aç</strong> düğmesine basın.</li>
+    <li>Video/ses, betimleme metni ve varsa proje dosyasının bulunduğu klasörü seçin.</li>
+    <li>Klasörde tek bir <code>.evdscript</code> varsa proje doğrudan açılır. Birden fazla proje varsa kullanacağınız proje sorulur.</li>
+    <li>Proje yoksa <em>Video veya ses dosyası</em> ile <em>Betimleme metni</em> seçimlerini doğrulayın. Word dosyası kullanıyorsanız algılama önizlemesini okuyun.</li>
+    <li><strong>Seçilen paketi aç</strong> düğmesine basın.</li>
+  </ol>
+  <h3>Dosya Gezgini'nden açma</h3>
+  <p>Kurulumlu EVD'de çalışma klasörünün bağlam menüsündeki <strong>EVD kontrol paketiyle aç</strong> komutunu kullanabilirsiniz. Bir <code>.evdscript</code> dosyasına Enter yapmak da ilişkili projeyi EVD'de açar.</p>
+  <div class="note"><strong>Taşınabilir sürüm:</strong> Windows dosya ilişkilendirmesi ve klasör bağlam menüsü genellikle kurulumlu sürümle oluşturulur. Taşınabilir sürümde paketi EVD içindeki <em>Kontrol paketi aç</em> düğmesiyle çağırın.</div>
+</section>
+
+<section id="arayuz">
+  <h2>Çalışma alanını tanıma</h2>
+  <ul>
+    <li><strong>Oynatma ve uzman zaman çizelgesi:</strong> Kaynak ses/video, geçerli zaman, ses dalgası, işaretçiler ve olay blokları burada izlenir.</li>
+    <li><strong>Olay listesi:</strong> Betimlemeler ve bağımsız kontrol notları zaman sırasıyla görünür. Bir betimleme üzerinde önce metin, ardından başlangıç-bitiş zamanı ve diğer bilgiler okunur.</li>
+    <li><strong>Olay filtresi:</strong> Tüm olaylar, yalnızca son kontrol notu olanlar veya başka çalışma durumları arasında süzme yapar.</li>
+    <li><strong>Proje işlemleri:</strong> Kaydetme, farklı kaydetme, açma ve dışa aktarma komutlarını içerir.</li>
+  </ul>
+  <p><kbd>Alt</kbd>+<kbd>T</kbd> oynatma/zaman çizelgesine, <kbd>Alt</kbd>+<kbd>L</kbd> olay listesine götürür. Oynatmayı durdurduktan sonra <kbd>Alt</kbd>+<kbd>L</kbd> yaptığınızda EVD, durulan zamana en yakın betimlemeyi seçer.</p>
+  <div class="warning"><strong>Bağlama göre ok tuşları:</strong> Olay listesinde yukarı/aşağı ok önceki veya sonraki metne gider. Zaman çizelgesinde yukarı/aşağı ok önizleme ses düzeyini yüzde 5 artırır veya azaltır; ekran okuyucu gereksiz bir mesaj söylemez.</div>
+</section>
+
+<section id="uctan-uca">
+  <h2>Uçtan uca son kontrol akışı</h2>
+  <div class="steps">
+    <article><strong>Paketi açın.</strong><br>Çalışma klasörünü seçin; medya ve betimleme metninin doğru olduğunu denetleyin.</article>
+    <article><strong>Dinlemeye başlayın.</strong><br><kbd>Alt</kbd>+<kbd>T</kbd> ile zaman çizelgesine geçin ve <kbd>Boşluk</kbd> ile oynatın.</article>
+    <article><strong>Sorunlu yerde durun.</strong><br><kbd>Enter</kbd> veya <kbd>K</kbd> ile geçerli konumda duraklatın.</article>
+    <article><strong>İlgili metni bulun.</strong><br><kbd>Alt</kbd>+<kbd>L</kbd> yapın. EVD durduğunuz zamana en yakın betimlemeyi seçer; oklarla komşu metinleri inceleyebilirsiniz.</article>
+    <article><strong>Notunuzu yazın.</strong><br>Var olan betimleme için <kbd>Alt</kbd>+<kbd>N</kbd>; betimleme olmayan aralık için iki <kbd>M</kbd> ve ardından <kbd>A</kbd> kullanın.</article>
+    <article><strong>Kaydedip devam edin.</strong><br>Not penceresinde <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd> yapın. Odak oynatma alanına döner.</article>
+    <article><strong>Projeyi koruyun.</strong><br><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> ile projeyi kaydedin. EVD ayrıca birkaç dakikada bir otomatik kayıt yapar.</article>
+    <article><strong>Raporu çıkarın.</strong><br><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> ile dışa aktarmayı açın; Word, TXT veya Excel seçin.</article>
+  </div>
+</section>
+
+<section id="mevcut-not">
+  <h2>Mevcut betimlemeye son kontrol notu ekleme</h2>
+  <ol>
+    <li>Kaydı dinlerken düzeltme gerektiren yerde durun.</li>
+    <li><kbd>Alt</kbd>+<kbd>L</kbd> ile olay listesine geçin. Durulan zamana en yakın betimleme seçilir.</li>
+    <li>Gerekirse yukarı/aşağı oklarla doğru betimlemeyi bulun. <kbd>Boşluk</kbd> veya <kbd>P</kbd> ile seçili aralığı yeniden dinleyin.</li>
+    <li><kbd>Alt</kbd>+<kbd>N</kbd> yapın. Aynı komuta seçili öğenin sağ ok menüsündeki <strong>Son kontrol notu ekle veya düzenle</strong> öğesinden de ulaşabilirsiniz.</li>
+    <li>Notunuzu yazın. Metin alanında Enter yeni satır açar.</li>
+    <li><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd> ile kaydedin. Odak yeniden zaman çizelgesine gelir ve dinlemeye devam edebilirsiniz.</li>
+  </ol>
+  <p>Daha sonra aynı betimlemede <kbd>Alt</kbd>+<kbd>N</kbd> yaparak notu düzenleyebilir, silebilir veya <em>Not çözüldü</em> seçeneğini işaretleyebilirsiniz. Çözülmeyen notları dışa aktarımda ayrıca süzebilirsiniz.</p>
+</section>
+
+<section id="bagimsiz-not">
+  <h2>Betimleme olmayan yere bağımsız kontrol notu ekleme</h2>
+  <p>Örneğin bir görsel olayın betimlenmediğini, bir sesin yanlış yerde olduğunu veya yeni bir betimleme gerektiğini belirtmek için bağımsız not kullanın.</p>
+  <ol>
+    <li><kbd>Alt</kbd>+<kbd>T</kbd> ile zaman çizelgesine dönün.</li>
+    <li>Eksik veya sorunlu aralığın başlangıcında <kbd>M</kbd>, bitişinde yeniden <kbd>M</kbd> yapın.</li>
+    <li><kbd>Shift</kbd>+<kbd>Boşluk</kbd> ile iki işaretçi arasını dinleyip aralığı doğrulayın.</li>
+    <li><kbd>A</kbd> tuşuna basın. Son kontrol notu türü seçili ve odak metin alanında açılır.</li>
+    <li>“Bu aralıkta betimleme eksik” gibi açıklayıcı notunuzu yazın.</li>
+    <li><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd> ile kaydedin.</li>
+  </ol>
+  <div class="tip"><strong>İnce zaman ayarı:</strong> Notu olay listesinde seçtikten sonra <kbd>G</kbd>/<kbd>H</kbd> ile 1 ms, <kbd>Alt</kbd>+sol/sağ ile 10 ms, <kbd>Alt</kbd>+<kbd>Shift</kbd>+sol/sağ ile 100 ms, <kbd>Ctrl</kbd>+<kbd>J</kbd>/<kbd>L</kbd> ile 1 saniye erkene veya ileriye taşıyabilirsiniz.</div>
+</section>
+
+<section id="proje">
+  <h2>Projeyi kaydetme ve yeniden açma</h2>
+  <h3>İlk kayıt</h3>
+  <p><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> yapın veya <strong>Projeyi kaydet</strong> düğmesini kullanın. İlk kayıtta dosya adı ve konum sorulur; proje <code>.evdscript</code> uzantısıyla saklanır.</p>
+  <h3>Çalışmaya devam ederken</h3>
+  <p>Proje bir kez kaydedildikten sonra aynı kısayol mevcut dosyayı doğrudan günceller. Yeni adla bir kopya oluşturmak için <strong>Farklı kaydet</strong> komutunu kullanın. EVD birkaç dakikada bir otomatik kayıt yapar; yine de önemli bir düzeltme grubundan sonra elle kaydetmek iyi bir alışkanlıktır.</p>
+  <h3>Projeyi yeniden açma</h3>
+  <ul>
+    <li>EVD içindeki <strong>Proje aç</strong> komutundan <code>.evdscript</code> dosyasını seçebilirsiniz.</li>
+    <li>Kurulumlu Windows veya macOS sürümünde ilişkilendirilmiş proje dosyasına Enter yapabilirsiniz.</li>
+    <li><strong>Kontrol paketi aç</strong> ile proje klasörünü seçebilirsiniz. Klasörde tek proje varsa doğrudan açılır; birden fazlaysa hangisinin açılacağı sorulur.</li>
+  </ul>
+  <p>Kaydedilmiş proje yeniden açıldığında son oynatma konumu ve çalışma seçimi geri yüklenir; denetime kaldığınız yerden devam edebilirsiniz.</p>
+</section>
+
+<section id="disari">
+  <h2>Kontrol raporunu dışa aktarma</h2>
+  <ol>
+    <li><kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> yapın veya <strong>Dışa aktar</strong> düğmesine basın.</li>
+    <li>Son kontrol raporu için Word, TXT veya Excel biçimini seçin.</li>
+    <li>Varsayılan kapsam olan <strong>Yalnızca son kontrol notu olan betimlemeler ve bağımsız notlar</strong> seçili gelir. Yalnız çözülmemiş notları veya tüm olayları da seçebilirsiniz.</li>
+    <li>Başka bir ayar değiştirmeyecekseniz seçim kutusunda Enter yaparak dışa aktarımı başlatabilirsiniz.</li>
+    <li>Dosya konumunu doğrulayıp kaydedin. Ad Türkçe arayüzde örneğin <code>Greyhound-ses son kontrol raporu.docx</code> biçiminde önerilir.</li>
+  </ol>
+  <h3>Biçimler ne zaman kullanılmalı?</h3>
+  <table>
+    <caption>Dışa aktarma biçimleri</caption>
+    <thead><tr><th scope="col">Biçim</th><th scope="col">Önerilen kullanım</th></tr></thead>
+    <tbody>
+      <tr><td>Word, DOCX</td><td>Betimleme yazarı, seslendiren kişi veya yapım ekibiyle okunabilir son kontrol raporu paylaşmak için. Maddeler numaralanır; betimleme metni, zaman aralığı ve H3 düzeyindeki son kontrol notu birlikte verilir.</td></tr>
+      <tr><td>TXT</td><td>Biçimlendirmesiz, kolay kopyalanabilir ve her cihazda açılabilir rapor için.</td></tr>
+      <tr><td>Excel, XLSX</td><td>Çok sayıda notu sütunlarla süzmek, sıralamak ve ekip içinde takip etmek için.</td></tr>
+      <tr><td>SRT veya VTT</td><td>Zamanlı betimleme/altyazı metnini başka bir kurgu ya da altyazı programına aktarmak için. Son kontrol raporunun yerine geçmez.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="kisayollar">
+  <h2>Klavye kısayolları</h2>
+  <p>Oynatma komutları yalnızca uzman zaman çizelgesi odaktayken çalışır. Metin alanında Enter yeni satır açar; <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd> formu kaydeder. <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> ifadesi Windows'ta Ctrl, macOS'ta Command anlamına gelir.</p>
+  <h3>Oynatma ve gezinme</h3>
+  <table><thead><tr><th scope="col">Kısayol</th><th scope="col">İşlev</th></tr></thead><tbody>
+    <tr><td><kbd>Boşluk</kbd></td><td>Oynatır veya duraklatır.</td></tr>
+    <tr><td><kbd>K</kbd></td><td>Geçerli konumda duraklatır.</td></tr>
+    <tr><td><kbd>Enter</kbd></td><td>Oynuyorsa geçerli konumda durdurur; duruyorsa oynatır.</td></tr>
+    <tr><td><kbd>Sol/Sağ Ok</kbd></td><td>Seçili ince gezinme adımı kadar geri/ileri gider ve kısa ses örneği çalar.</td></tr>
+    <tr><td><kbd>Yukarı/Aşağı Ok</kbd></td><td>Zaman çizelgesindeyken kaynak önizleme sesini yüzde 5 artırır/azaltır.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Yukarı/Aşağı</kbd></td><td>İnce gezinme adımını küçültür/büyütür.</td></tr>
+    <tr><td><kbd>Page Up/Page Down</kbd></td><td>5 saniye geri/ileri gider.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Sol/Sağ</kbd></td><td>30 saniye geri/ileri gider.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Alt</kbd>+<kbd>Sol/Sağ</kbd></td><td>5 dakika geri/ileri gider.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Yukarı/Aşağı</kbd></td><td>Kaydın başına/sonuna gider.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>G</kbd></td><td>Belirli zaman koduna git penceresini açar.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>B</kbd></td><td>Geçerli zamanı söyler.</td></tr>
+  </tbody></table>
+  <h3>İşaretçiler ve son kontrol</h3>
+  <table><thead><tr><th scope="col">Kısayol</th><th scope="col">İşlev</th></tr></thead><tbody>
+    <tr><td><kbd>M</kbd></td><td>Geçerli konuma işaretçi ekler.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Sol/Sağ</kbd></td><td>Zaman çizelgesinde önceki/sonraki işaretçiye gider.</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>Boşluk</kbd></td><td>Etkin iki işaretçi arasını oynatır.</td></tr>
+    <tr><td><kbd>A</kbd></td><td>İşaretçi aralığına bağımsız son kontrol notu ekler.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>N</kbd></td><td>Seçili betimlemeye son kontrol notu ekler veya mevcut notu düzenler.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd></td><td>Olay/not penceresini kaydeder; iki işaretçiden genel olay penceresini de açar.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>L</kbd></td><td>Durulan zamana en yakın olayı seçerek olay listesine gider.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>T</kbd></td><td>Oynatma ve zaman çizelgesi alanına döner.</td></tr>
+  </tbody></table>
+  <h3>Olay listesi</h3>
+  <table><thead><tr><th scope="col">Kısayol</th><th scope="col">İşlev</th></tr></thead><tbody>
+    <tr><td><kbd>Yukarı/Aşağı</kbd></td><td>Önceki/sonraki olaya gider ve seçili aralığı dinletir.</td></tr>
+    <tr><td><kbd>Page Up/Page Down</kbd></td><td>10 olay geri/ileri gider.</td></tr>
+    <tr><td><kbd>Home/End</kbd></td><td>İlk/son olaya gider.</td></tr>
+    <tr><td><kbd>Enter</kbd></td><td>Seçili olayı düzenler.</td></tr>
+    <tr><td><kbd>Boşluk</kbd> veya <kbd>P</kbd></td><td>Seçili olay aralığını önizler.</td></tr>
+    <tr><td><kbd>Sağ Ok</kbd> veya <kbd>Shift</kbd>+<kbd>F10</kbd></td><td>Seçili öğenin işlem menüsünü açar.</td></tr>
+    <tr><td><kbd>Sol Ok</kbd> veya <kbd>Escape</kbd></td><td>İşlem menüsünü kapatıp listeye döner.</td></tr>
+    <tr><td><kbd>Delete</kbd></td><td>Seçili olayı onay alarak siler.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Sol/Sağ</kbd></td><td>Seçili olayı 10 ms erkene/ileriye taşır.</td></tr>
+    <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Sol/Sağ</kbd></td><td>Seçili olayı 100 ms erkene/ileriye taşır.</td></tr>
+    <tr><td><kbd>G/H</kbd></td><td>Seçili olayı 1 ms erkene/ileriye taşır.</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>J/L</kbd></td><td>Seçili olayı 1 saniye erkene/ileriye taşır.</td></tr>
+  </tbody></table>
+  <h3>Proje ve rapor</h3>
+  <table><thead><tr><th scope="col">Kısayol</th><th scope="col">İşlev</th></tr></thead><tbody>
+    <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Projeyi kaydeder; ilk kullanımda dosya adı ister.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd></td><td>Dışa aktarma penceresini açar.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>F</kbd></td><td>Olay metinlerinde arama açar.</td></tr>
+    <tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>H</kbd></td><td>Ara ve değiştir penceresini açar.</td></tr>
+  </tbody></table>
+</section>
+
+<section id="ipuclari">
+  <h2>İpuçları ve sorun giderme</h2>
+  <h3>Ses seviyesi düşük</h3>
+  <p><kbd>Alt</kbd>+<kbd>T</kbd> ile zaman çizelgesine geçin; yukarı oka basılı tutarak önizleme sesini artırın. Bu ayar yalnız çalışma sırasında dinlediğiniz kaynak ses düzeyidir ve kaynağın dosyasını değiştirmez.</p>
+  <h3>Alt+L yanlış metne gitti</h3>
+  <p>EVD önce durulan zamanı kapsayan en kısa betimlemeyi, böyle bir olay yoksa en yakın betimlemeyi seçer. Yukarı/aşağı okla komşu metinlere bakın; <kbd>Boşluk</kbd> veya <kbd>P</kbd> ile aralığı dinleyerek doğrulayın.</p>
+  <h3>Bir notu sonradan değiştirmek istiyorum</h3>
+  <p>Betimlemeyi seçip <kbd>Alt</kbd>+<kbd>N</kbd> yapın. Notu düzenleyebilir, çözülmüş olarak işaretleyebilir veya silebilirsiniz. Bağımsız notu seçip Enter ya da sağ ok menüsündeki düzenleme komutunu kullanabilirsiniz.</p>
+  <h3>Klasörde çok sayıda dosya var</h3>
+  <p>Kontrol paketi penceresinde proje, medya ve betimleme metni seçimlerini tek tek doğrulayın. Özellikle aynı yapımın farklı sürümleri varsa dosya adlarına tarih veya sürüm eklemek karışıklığı önler.</p>
+  <h3>Metin ve medya eşleşmiyor</h3>
+  <p>Doğru medya sürümünü seçtiğinizden emin olun. Girişte veya jenerikte sonradan kesim yapıldıysa bütün zaman kodları kayabilir. Sorunun tek bir olayda mı yoksa bütün listede mi olduğunu birkaç farklı noktayı dinleyerek belirleyin.</p>
+  <h3>Rapor çok kalabalık</h3>
+  <p>Dışa aktarım kapsamını <em>Yalnızca son kontrol notu olan betimlemeler ve bağımsız notlar</em> olarak bırakın. Tamamlanan maddeleri <em>Not çözüldü</em> olarak işaretlediyseniz yalnız çözülmemiş notları dışa aktarabilirsiniz.</p>
+</section>
+
+<section id="kontrol-listesi">
+  <h2>Hızlı kontrol listesi</h2>
+  <ol>
+    <li>Doğru medya ve betimleme metnini açtım.</li>
+    <li>Dinlerken sorunlu yerde durup <kbd>Alt</kbd>+<kbd>L</kbd> ile doğru metni buldum.</li>
+    <li>Var olan betimlemelere <kbd>Alt</kbd>+<kbd>N</kbd> ile açık ve uygulanabilir notlar yazdım.</li>
+    <li>Betimleme bulunmayan aralıkları iki <kbd>M</kbd> ve <kbd>A</kbd> ile bağımsız not olarak kaydettim.</li>
+    <li>Gerekli notların zaman aralıklarını yeniden dinledim.</li>
+    <li><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> ile projeyi kaydettim.</li>
+    <li>Word, TXT veya Excel raporunda yalnız gerekli notların bulunduğunu doğruladım.</li>
+    <li>Proje dosyasını, kaynak medyayı ve son kontrol raporunu birlikte arşivledim.</li>
+  </ol>
+  <p class="back"><a href="#ust">Sayfa başına dön</a></p>
+</section>
+</main>
+<footer><p>Engelsiz Video Düzenleyicisi - Son Kontrol Paketi kullanım belgesi</p></footer>
+</body>
+</html>

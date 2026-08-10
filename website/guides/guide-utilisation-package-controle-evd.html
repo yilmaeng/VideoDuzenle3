@@ -1,0 +1,70 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Package de contrôle EVD - Guide d'utilisation</title><style>
+    :root { --ink:#18211c; --muted:#536159; --paper:#fffdf7; --panel:#f0f5ea; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 48%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 86% 13%,#287e69 0,transparent 26%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:75rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:72rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.1rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(245px,1fr)); gap:1rem; counter-reset:step; }
+    .steps article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .steps article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    caption { margin-bottom:.55rem; text-align:left; font-weight:700; color:#124437; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#contenu">Aller au contenu principal</a><header id="haut"><p class="eyebrow">EVD 4.9 bêta</p><h1>Guide d'utilisation du package de contrôle</h1>
+<p>Ouvrez vidéo ou audio avec un script d'audiodescription horodaté, retrouvez le texte concerné pendant l'écoute, ajoutez des notes de contrôle et exportez seulement les corrections en Word, TXT ou Excel.</p><p><strong>Version :</strong> 10 août 2026</p></header>
+<main id="contenu"><nav aria-labelledby="toc"><h2 id="toc">Sommaire</h2><ol class="toc">
+<li><a href="#objectif">Rôle du package</a></li><li><a href="#preparer">Préparer le dossier</a></li><li><a href="#ouvrir">Ouvrir le package</a></li><li><a href="#espace">Espace de travail</a></li><li><a href="#flux">Flux complet</a></li><li><a href="#liee">Note liée</a></li>
+<li><a href="#independante">Note indépendante</a></li><li><a href="#projet">Enregistrer et reprendre</a></li><li><a href="#export">Exporter le rapport</a></li><li><a href="#raccourcis">Raccourcis</a></li><li><a href="#conseils">Conseils</a></li><li><a href="#liste">Liste de contrôle</a></li></ol></nav>
+<section id="objectif"><h2>Rôle du package de contrôle</h2><p>Il sert au contrôle final d'une audiodescription terminée ou presque terminée. La vidéo/l'audio et le script SRT, VTT ou Word s'ouvrent ensemble. À l'arrêt, le contrôleur retrouve la description la plus proche, lui associe une correction ou crée une note indépendante lorsqu'aucune description n'existe.</p>
+<div class="note"><strong>Deux types :</strong> la note liée appartient à une description existante ; la note indépendante enregistre avec ses propres temps un problème tel que « Il manque une description ici ».</div></section>
+<section id="preparer"><h2>Préparer le dossier</h2><p>Placez dans un même dossier : une vidéo ou un MP3/WAV/M4A, le script SRT/VTT/DOCX et, s'il existe, un projet <code>.evdscript</code>. Avec un seul média et un seul script, EVD les sélectionne automatiquement ; avec plusieurs, il demande votre choix.</p>
+<div class="tip"><strong>Word :</strong> EVD extrait les descriptions horodatées. Le texte en capitales juste après le code, par exemple « ÉMOTIONNEL » ou « LIRE VITE », devient une consigne de lecture. Vérifiez l'aperçu.</div><div class="warning">Convertissez les anciens fichiers <code>.doc</code> en <code>.docx</code>.</div></section>
+<section id="ouvrir"><h2>Ouvrir le package</h2><ol><li>Choisissez <strong>Ajouter &gt; Éditeur de description/sous-titres</strong>, puis <strong>Ouvrir un package de contrôle</strong>.</li><li>Sélectionnez le dossier.</li>
+<li>Un seul <code>.evdscript</code> s'ouvre directement ; avec plusieurs projets, EVD demande lequel.</li><li>Sans projet, vérifiez média et script et, pour Word, l'aperçu de détection.</li><li>Activez <strong>Ouvrir le package sélectionné</strong>. Un couple unique est chargé et la chronologie clavier reçoit le focus.</li></ol>
+<p>Dans la version installée, utilisez aussi <strong>Ouvrir avec le package de contrôle EVD</strong> dans le menu du dossier ou Entrée sur un projet associé. Dans la version portable, ouvrez depuis EVD.</p></section>
+<section id="espace"><h2>Espace de travail</h2><ul><li><strong>Lecture/chronologie experte :</strong> média, temps, onde, marqueurs et événements.</li><li><strong>Liste :</strong> descriptions et notes ; le nom accessible commence par le texte puis annonce temps et détails.</li><li><strong>Filtre :</strong> tous, avec note, non résolus et états.</li><li><strong>Projet :</strong> enregistrer, enregistrer sous, ouvrir, exporter.</li></ul>
+<p><kbd>Alt</kbd>+<kbd>T</kbd> focalise la lecture. <kbd>Alt</kbd>+<kbd>L</kbd> ouvre la liste et sélectionne la description la plus proche de la pause. Haut/Bas dans la chronologie change le volume d'aperçu de 5 %.</p></section>
+<section id="flux"><h2>Flux complet</h2><div class="steps"><article><strong>Ouvrez.</strong><br>Vérifiez dossier, média et script.</article><article><strong>Écoutez.</strong><br>Alt+T puis Espace.</article><article><strong>Arrêtez-vous.</strong><br>Entrée ou K.</article>
+<article><strong>Trouvez le texte.</strong><br>Alt+L puis flèches.</article><article><strong>Écrivez.</strong><br>Alt+N pour un texte existant ; deux M et A pour une note indépendante.</article><article><strong>Enregistrez.</strong><br>Ctrl/Cmd+Entrée revient à la lecture.</article>
+<article><strong>Protégez le projet.</strong><br>Alt+Maj+S et sauvegarde automatique.</article><article><strong>Rapport.</strong><br>Ctrl/Cmd+Maj+E, Word/TXT/Excel.</article></div></section>
+<section id="liee"><h2>Note sur une description existante</h2><ol><li>Arrêtez-vous et appuyez sur Alt+L.</li><li>Trouvez avec Haut/Bas ; Espace ou P lit la plage.</li><li>Appuyez sur <kbd>Alt</kbd>+<kbd>N</kbd> ou choisissez <strong>Ajouter/modifier la note de contrôle</strong> dans le menu Flèche droite.</li><li>Écrivez ; Entrée ajoute une ligne.</li><li>Ctrl/Cmd+Entrée enregistre et revient à la chronologie.</li></ol><p>Vous pouvez modifier, supprimer ou marquer la note résolue. L'export peut ne contenir que les non résolues.</p></section>
+<section id="independante"><h2>Note indépendante sans description</h2><ol><li>Alt+T revient à la chronologie.</li><li>Appuyez sur M au début et à la fin.</li><li>Maj+Espace vérifie.</li><li>Appuyez sur A ; le champ de note est focalisé.</li><li>Écrivez et enregistrez avec Ctrl/Cmd+Entrée.</li></ol>
+<div class="tip">Réglage du temps : G/H = 1 ms, Alt+Gauche/Droite = 10 ms, Alt+Maj+Gauche/Droite = 100 ms, Ctrl+J/L = une seconde.</div></section>
+<section id="projet"><h2>Enregistrer et reprendre</h2><p><kbd>Alt</kbd>+<kbd>Maj</kbd>+<kbd>S</kbd> demande un nom la première fois et crée <code>.evdscript</code>. Ensuite le même fichier est mis à jour ; Enregistrer sous crée une copie. Une sauvegarde automatique est également effectuée.</p>
+<p>Reprenez avec Ouvrir le projet, Entrée sur le fichier associé ou le dossier du package. Un seul projet s'ouvre directement ; plusieurs sont proposés. Position et sélection sont restaurées.</p></section>
+<section id="export"><h2>Exporter le rapport</h2><ol><li>Ctrl/Cmd+Maj+E ou <strong>Exporter</strong>.</li><li>Choisissez Word, TXT ou Excel.</li><li>Par défaut : <strong>uniquement descriptions avec note et notes indépendantes</strong>. Vous pouvez choisir non résolues ou tout.</li><li>Si rien d'autre ne change, appuyez sur Entrée dans le format.</li><li>Confirmez la destination ; EVD annonce progression, annulation, erreur et réussite.</li></ol>
+<table><thead><tr><th>Format</th><th>Usage</th></tr></thead><tbody><tr><td>Word</td><td>Rapport numéroté avec description, temps et note sous titre H3.</td></tr><tr><td>TXT</td><td>Texte simple à copier.</td></tr><tr><td>Excel</td><td>Filtrer et suivre de nombreuses notes.</td></tr><tr><td>SRT/VTT</td><td>Transférer le texte horodaté ; ne remplace pas le rapport.</td></tr></tbody></table></section>
+<section id="raccourcis"><h2>Raccourcis principaux</h2><table><thead><tr><th>Raccourci</th><th>Action</th></tr></thead><tbody>
+<tr><td>Espace</td><td>Lecture/pause</td></tr><tr><td>K / Entrée</td><td>Arrêter / basculer la lecture positionnée</td></tr><tr><td>Gauche/Droite</td><td>Recherche fine et court extrait</td></tr><tr><td>Haut/Bas</td><td>Volume d'aperçu 5 %</td></tr>
+<tr><td>Page préc./suiv.</td><td>5 secondes</td></tr><tr><td>Ctrl/Cmd+Gauche/Droite</td><td>30 secondes</td></tr><tr><td>M</td><td>Ajouter un marqueur</td></tr><tr><td>Maj+Espace</td><td>Lire entre marqueurs</td></tr>
+<tr><td>A</td><td>Note indépendante</td></tr><tr><td>Alt+N</td><td>Note liée</td></tr><tr><td>Alt+L/T</td><td>Liste / chronologie</td></tr><tr><td>Alt+Maj+S</td><td>Enregistrer le projet</td></tr><tr><td>Ctrl/Cmd+Maj+E</td><td>Ouvrir l'export</td></tr></tbody></table></section>
+<section id="conseils"><h2>Conseils et dépannage</h2><p><strong>Volume faible :</strong> Alt+T et maintenez Haut ; seule l'écoute change. <strong>Alt+L choisit mal :</strong> vérifiez les voisins avec flèches et Espace/P. <strong>Beaucoup de fichiers :</strong> vérifiez chaque sélection. <strong>Temps décalés :</strong> confirmez le bon montage. <strong>Rapport trop long :</strong> gardez la portée par défaut ou les non résolues.</p></section>
+<section id="liste"><h2>Liste de contrôle</h2><ol><li>Bon média et bon script ouverts.</li><li>Arrêt au problème et texte trouvé avec Alt+L.</li><li>Descriptions annotées avec Alt+N.</li><li>Manques notés avec deux M et A.</li><li>Plages importantes réécoutées.</li><li>Projet enregistré avec Alt+Maj+S.</li><li>Seulement les notes utiles dans Word/TXT/Excel.</li><li>Projet, média et rapport archivés ensemble.</li></ol><p class="back"><a href="#haut">Retour en haut</a></p></section>
+</main><footer><p>Engelsiz Video Düzenleyicisi - Guide du package de contrôle</p></footer></body></html>

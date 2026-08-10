@@ -1,0 +1,68 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>EVD Locución y edición de subtítulos</title><style>
+    :root { --ink:#17211b; --muted:#526057; --paper:#fffdf7; --panel:#f1f5e9; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 45%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus, button:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 85% 15%,#267c68 0,transparent 25%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:72rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:70rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.2rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .quick { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; counter-reset:step; }
+    .quick article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .quick article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#contenido">Ir al contenido principal</a><header id="arriba"><p class="eyebrow">EVD 4.9 Beta</p><h1>Guía de locución y edición de subtítulos</h1>
+<p>Incruste un SRT en el vídeo, léalo con voces del sistema, OpenAI o ElevenLabs y edite de forma accesible tiempo, texto, voz, velocidad y mezcla de cada subtítulo.</p><p><strong>Versión:</strong> 10 de agosto de 2026</p></header>
+<main id="contenido"><nav aria-labelledby="toc"><h2 id="toc">Contenido</h2><ol class="toc">
+<li><a href="#objetivo">Función</a></li><li><a href="#preparar">Preparación</a></li><li><a href="#inicio">Inicio rápido</a></li><li><a href="#ajustes">Ajustes</a></li><li><a href="#editor">Editor</a></li><li><a href="#vista">Vista previa</a></li><li><a href="#texto">Texto y voz</a></li><li><a href="#mezcla">Tiempo y mezcla</a></li><li><a href="#proyecto">Proyecto</a></li><li><a href="#salida">Salida</a></li><li><a href="#atajos">Atajos</a></li><li><a href="#problemas">Problemas</a></li><li><a href="#lista">Comprobación</a></li></ol></nav>
+<section id="objetivo"><h2>Función de la herramienta</h2><p>EVD puede incrustar el texto SRT, convertirlo en TTS o hacer ambas cosas. Cada segmento generado se edita por separado. Es útil para subtítulos hablados, audiodescripción, educación y acceso lingüístico.</p><div class="note">No se sobrescribe el vídeo original. Un proyecto <code>.evdtts</code> permite continuar después.</div></section>
+<section id="preparar"><h2>Preparación</h2><ul><li>Prepare vídeo y SRT correctamente sincronizados.</li><li>Para OpenAI/ElevenLabs guarde la clave en el menú de IA.</li><li>Las voces del sistema funcionan sin conexión y dependen de las instaladas.</li><li>No mueva vídeo, SRT ni recursos del proyecto durante el trabajo.</li></ul></section>
+<section id="inicio"><h2>Inicio rápido</h2><div class="quick"><article><strong>Abra el vídeo.</strong></article><article><strong>Añadir &gt; Añadir archivo de subtítulos.</strong></article><article><strong>Elija visible, hablado o ambos.</strong></article><article><strong>Configure servicio, voz, velocidad y niveles.</strong></article><article><strong>Edite segmentos o salte.</strong></article><article><strong>Guarde y cree el vídeo.</strong></article></div></section>
+<section id="ajustes"><h2>Ajustes de subtítulos y voz</h2><p>Para subtítulos visibles elija fuente, tamaño, color, borde, fondo y posición. Los cambios posteriores de texto aparecen en el vídeo.</p>
+<ul><li><strong>Servicio:</strong> voces del sistema, OpenAI, ElevenLabs.</li><li><strong>Voz:</strong> predeterminada o seleccionada.</li><li><strong>Velocidad y TTS:</strong> valores iniciales.</li><li><strong>Audio original:</strong> 0 silencio, 100 volumen completo.</li></ul>
+<p>Pruebe con <strong>Escuchar</strong>. Después elija <strong>Editar locuciones</strong> o crear directamente con los ajustes actuales.</p></section>
+<section id="editor"><h2>Editor de locuciones</h2><p>Al abrir, se anuncian los atajos y se enfoca la lista. Cada elemento anuncia primero el texto, luego inicio TTS, velocidad, nivel TTS, audio original y estado.</p>
+<p>Arriba/Abajo selecciona y previsualiza. Re/Av Pág mueve diez, Inicio/Fin primero/último. Enter/Espacio repite. Derecha abre el menú; Izquierda o Escape vuelve a la lista.</p></section>
+<section id="vista"><h2>Comprender la vista previa</h2><p>La película empieza aproximadamente un segundo antes del TTS para comprobar diálogos. Las locuciones vecinas que se solapan también se oyen, permitiendo detectar colisiones antes de exportar. <kbd>J/L</kbd> explora la película cinco segundos sin cambiar el tiempo del subtítulo.</p><div class="note">Velocidad y niveles escuchados usan el mismo cálculo que la salida final.</div></section>
+<section id="texto"><h2>Cambiar texto y voz</h2><p>Vaya a <strong>Texto del subtítulo seleccionado</strong>, corrija y pulse <kbd>Enter</kbd>. Solo ese segmento se regenera y reproduce. <kbd>Mayús</kbd>+<kbd>Enter</kbd> añade línea. Enter sin cambiar texto fuerza otra síntesis. El SRT editado también se actualiza.</p>
+<p>En <strong>Voz del segmento seleccionado</strong> puede elegir otra voz; solo se regenera ese segmento.</p></section>
+<section id="mezcla"><h2>Tiempo, velocidad y mezcla</h2><table><thead><tr><th>Ajuste</th><th>Control</th></tr></thead><tbody>
+<tr><td>Velocidad</td><td><kbd>F/A/D</kbd>: subir, bajar, predeterminada; 50-200 %.</td></tr><tr><td>TTS</td><td>Alt+Mayús+L/J, hasta 200 %.</td></tr><tr><td>Original</td><td>Alt+Mayús+Arriba/Abajo.</td></tr>
+<tr><td>Tiempo</td><td>G/H = 1 ms; Alt+Izquierda/Derecha = 10 ms; Alt+Mayús+Izquierda/Derecha = 100 ms; Ctrl+J/L = 1 segundo.</td></tr><tr><td>Activar</td><td><kbd>V</kbd> apaga/enciende solo TTS; el texto visible permanece.</td></tr><tr><td>Restablecer</td><td><kbd>R</kbd> restaura el segmento original.</td></tr></tbody></table>
+<p>Los controles mueven subtítulo/TTS sobre la película, no el vídeo original. Cada cambio se escucha de inmediato.</p></section>
+<section id="proyecto"><h2>Guardar y abrir proyectos</h2><p><kbd>Alt</kbd>+<kbd>Mayús</kbd>+<kbd>S</kbd> crea <code>.evdtts</code> y después actualiza el mismo archivo. EVD guarda también <code>nombre_assets</code> con audios y <code>nombre_duzenlenmis.srt</code> con texto y tiempos.</p>
+<p>Abra desde <strong>Añadir &gt; Abrir proyecto de locución de subtítulos</strong> o <strong>Abrir otro proyecto</strong>. Mantenga proyecto, recursos, SRT y vídeo juntos.</p></section>
+<section id="salida"><h2>Aplicar ediciones y crear salida</h2><ul><li><strong>Aplicar ediciones y crear:</strong> usa todos los valores por segmento.</li><li><strong>Saltar edición:</strong> usa ajustes iniciales.</li><li><strong>Cancelar:</strong> sale sin crear.</li></ul><p>EVD coloca TTS, mezcla el original e incrusta texto/tiempo actualizados si corresponde. Se anuncian progreso, éxito y archivo.</p></section>
+<section id="atajos"><h2>Atajos</h2><table><thead><tr><th>Atajo</th><th>Acción</th></tr></thead><tbody>
+<tr><td>Arriba/Abajo</td><td>Seleccionar y escuchar</td></tr><tr><td>Re/Av Pág</td><td>Diez segmentos</td></tr><tr><td>Enter/Espacio</td><td>Vista previa</td></tr><tr><td>J/L</td><td>Explorar película 5 segundos</td></tr><tr><td>Derecha</td><td>Abrir menú</td></tr>
+<tr><td>F/A/D</td><td>Velocidad + / - / predeterminada</td></tr><tr><td>Alt+Mayús+L/J</td><td>TTS + / -</td></tr><tr><td>Alt+Mayús+Arriba/Abajo</td><td>Original + / -</td></tr>
+<tr><td>G/H</td><td>1 ms</td></tr><tr><td>Alt+Izquierda/Derecha</td><td>10 ms</td></tr><tr><td>Alt+Mayús+Izquierda/Derecha</td><td>100 ms</td></tr><tr><td>Ctrl+J/L</td><td>1 segundo</td></tr>
+<tr><td>V / R</td><td>Voz sí/no / restablecer</td></tr><tr><td>Alt+Mayús+S</td><td>Guardar proyecto</td></tr><tr><td>Enter en texto</td><td>Regenerar</td></tr><tr><td>Mayús+Enter</td><td>Nueva línea</td></tr></tbody></table></section>
+<section id="problemas"><h2>Problemas y buenas prácticas</h2><p><strong>TTS sobre diálogo:</strong> desplace finamente. <strong>Dos voces solapadas:</strong> mueva, acelere, acorte o use V. <strong>Voz baja:</strong> suba TTS o baje película. <strong>Audio antiguo:</strong> Enter, previsualizar y guardar. <strong>Proyecto sin audio:</strong> restaure carpeta assets y vídeo.</p></section>
+<section id="lista"><h2>Lista de comprobación</h2><ol><li>Vídeo/SRT correctos.</li><li>Visible, voz o ambos.</li><li>Servicio, voz, velocidad y mezcla probados.</li><li>Todos los segmentos escuchados con película.</li><li>Textos/tomas incorrectos regenerados.</li><li>Solapamientos corregidos.</li><li>Proyecto y SRT guardados.</li><li>Vídeo final revisado visual y auditivamente.</li></ol><p class="back"><a href="#arriba">Volver arriba</a></p></section>
+</main><footer><p>Engelsiz Video Düzenleyicisi - Guía de locución y edición de subtítulos</p></footer></body></html>

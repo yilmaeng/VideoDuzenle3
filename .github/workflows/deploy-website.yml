@@ -13,6 +13,10 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+concurrency:
+  group: evd-website-production
+  cancel-in-progress: false
+
 jobs:
   deploy-website:
     runs-on: ubuntu-latest
@@ -20,6 +24,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Validate website release files
+        shell: bash
+        run: |
+          node -e "for (const file of ['website/update.json', 'website/releases.json']) JSON.parse(require('fs').readFileSync(file, 'utf8'));"
+          test -f website/index.html
+          for language in tr en de es fr; do
+            test -f "website/$language/index.html"
+            test -f "website/$language/guides.html"
+          done
+          if find website -type f -path 'website/downloads/*' -print -quit | grep -q .; then
+            echo 'Large release packages must be uploaded manually; website/downloads must stay empty.' >&2
+            exit 1
+          fi
 
       - name: Deploy website files
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
@@ -32,3 +50,10 @@ jobs:
           port: 21
           protocol: ftp
           log-level: standard
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            downloads/**
+            release-publishing-notes.md

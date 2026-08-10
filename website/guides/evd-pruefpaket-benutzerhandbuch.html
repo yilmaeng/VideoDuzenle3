@@ -1,0 +1,75 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>EVD Prüfpaket - Benutzerhandbuch</title><style>
+    :root { --ink:#18211c; --muted:#536159; --paper:#fffdf7; --panel:#f0f5ea; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 48%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 86% 13%,#287e69 0,transparent 26%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:75rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:72rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.1rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(245px,1fr)); gap:1rem; counter-reset:step; }
+    .steps article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .steps article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    caption { margin-bottom:.55rem; text-align:left; font-weight:700; color:#124437; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#inhalt">Zum Hauptinhalt</a><header id="oben"><p class="eyebrow">EVD 4.9 Beta</p><h1>Benutzerhandbuch für das Prüfpaket</h1>
+<p>Video oder Audio zusammen mit einem zeitcodierten Audiodeskriptionsskript öffnen, beim Hören den passenden Text finden, Prüfnotizen erfassen und nur die zu korrigierenden Punkte als Word, TXT oder Excel ausgeben.</p><p><strong>Stand:</strong> 10. August 2026</p></header>
+<main id="inhalt"><nav aria-labelledby="toc"><h2 id="toc">Inhalt</h2><ol class="toc">
+<li><a href="#zweck">Aufgabe des Prüfpakets</a></li><li><a href="#vorbereitung">Ordner vorbereiten</a></li><li><a href="#oeffnen">Paket öffnen</a></li><li><a href="#arbeitsbereich">Arbeitsbereich</a></li><li><a href="#ablauf">Vollständiger Ablauf</a></li>
+<li><a href="#verknuepft">Notiz zu vorhandener Beschreibung</a></li><li><a href="#frei">Unabhängige Notiz</a></li><li><a href="#projekt">Speichern und fortsetzen</a></li><li><a href="#export">Prüfbericht exportieren</a></li><li><a href="#tasten">Tastenkürzel</a></li><li><a href="#tipps">Tipps</a></li><li><a href="#liste">Checkliste</a></li></ol></nav>
+<section id="zweck"><h2>Aufgabe des Prüfpakets</h2><p>Das Prüfpaket dient zur Endkontrolle einer fertigen oder fast fertigen Audiodeskription. Quellvideo/-audio und ein Skript in SRT, VTT oder Word werden gemeinsam geöffnet. Beim Anhalten kann die nächste Beschreibung gefunden, mit einer Korrektur verknüpft oder an einer Stelle ohne Beschreibung eine unabhängige Notiz angelegt werden.</p>
+<div class="note"><strong>Zwei Notiztypen:</strong> Die verknüpfte Prüfnotiz gehört zu einer bestehenden Beschreibung. Eine unabhängige Notiz hält etwa „Hier fehlt eine Beschreibung“ mit eigenem Zeitbereich fest.</div></section>
+<section id="vorbereitung"><h2>Ordner vorbereiten</h2><p>Legen Sie pro Produktion in einem Ordner ab: ein Video oder MP3/WAV/M4A, das Skript als SRT/VTT/DOCX und gegebenenfalls ein <code>.evdscript</code>-Projekt. Bei genau einer Medien- und einer Skriptdatei wählt EVD beide automatisch; sonst erscheint eine Auswahl.</p>
+<div class="tip"><strong>Word:</strong> EVD erkennt zeitcodierte Beschreibungen. Groß geschriebene Angaben direkt nach dem Zeitcode, etwa „EMOTIONAL“ oder „SCHNELL LESEN“, werden als Sprechhinweis getrennt. Prüfen Sie die Importvorschau.</div>
+<div class="warning">Alte <code>.doc</code>-Dateien zuerst in Word als <code>.docx</code> speichern.</div></section>
+<section id="oeffnen"><h2>Paket öffnen</h2><ol><li><strong>Hinzufügen &gt; Beschreibungs-/Untertitel-Editor</strong> und <strong>Prüfpaket öffnen</strong> wählen.</li><li>Den Arbeitsordner angeben.</li>
+<li>Ein einzelnes <code>.evdscript</code> öffnet direkt; bei mehreren Projekten wird gefragt.</li><li>Ohne Projekt Medien- und Skriptauswahl sowie bei Word die Erkennungsvorschau prüfen.</li><li><strong>Ausgewähltes Paket öffnen</strong>. Bei einem eindeutigen Paar werden Dateien geladen und die Tastatur-Zeitleiste fokussiert.</li></ol>
+<p>In der installierten Version kann auch <strong>Mit EVD-Prüfpaket öffnen</strong> im Ordnermenü oder Enter auf einer verknüpften Projektdatei verwendet werden. In der portablen Version das Paket innerhalb von EVD öffnen.</p></section>
+<section id="arbeitsbereich"><h2>Arbeitsbereich</h2><ul><li><strong>Wiedergabe/Experten-Zeitleiste:</strong> Medium, Zeit, Wellenform, Marker und Ereignisse.</li><li><strong>Ereignisliste:</strong> Beschreibungen und unabhängige Notizen; der zugängliche Name beginnt mit dem Text und nennt danach Zeit und Details.</li><li><strong>Filter:</strong> alle Ereignisse, Notizen, ungelöste Notizen und Status.</li><li><strong>Projekt:</strong> Speichern, Speichern unter, Öffnen, Export.</li></ul>
+<p><kbd>Alt</kbd>+<kbd>T</kbd> fokussiert die Wiedergabe. <kbd>Alt</kbd>+<kbd>L</kbd> öffnet die Liste und wählt die Beschreibung, die am nächsten zur Pausenposition liegt. In der Zeitleiste ändert Oben/Unten die Vorschau-Lautstärke um 5 %.</p></section>
+<section id="ablauf"><h2>Vollständiger Prüfablauf</h2><div class="steps">
+<article><strong>Paket öffnen.</strong><br>Ordner, Medium und Skript prüfen.</article><article><strong>Hören.</strong><br>Alt+T, dann Leertaste.</article><article><strong>Am Problem anhalten.</strong><br>Enter oder K.</article>
+<article><strong>Text finden.</strong><br>Alt+L wählt den nächsten Text; Pfeile prüfen Nachbarn.</article><article><strong>Notiz schreiben.</strong><br>Alt+N für vorhandenen Text; zwei M und A für freie Notiz.</article>
+<article><strong>Speichern und weiter.</strong><br>Strg/Cmd+Enter kehrt zur Wiedergabe zurück.</article><article><strong>Projekt sichern.</strong><br>Alt+Umschalt+S; zusätzlich automatische Sicherung.</article>
+<article><strong>Bericht.</strong><br>Strg/Cmd+Umschalt+E, Word/TXT/Excel.</article></div></section>
+<section id="verknuepft"><h2>Notiz zu einer vorhandenen Beschreibung</h2><ol><li>Am Problem stoppen und <kbd>Alt</kbd>+<kbd>L</kbd> drücken.</li><li>Mit Oben/Unten den richtigen Text wählen; Leertaste oder P spielt den Bereich.</li><li><kbd>Alt</kbd>+<kbd>N</kbd> oder im Rechts-Menü <strong>Prüfnotiz hinzufügen/bearbeiten</strong>.</li><li>Notiz schreiben; Enter erzeugt eine Zeile.</li><li>Mit <kbd>Strg/Cmd</kbd>+<kbd>Enter</kbd> speichern und zur Zeitleiste zurückkehren.</li></ol>
+<p>Später kann die Notiz geändert, gelöscht oder als gelöst markiert werden. Der Export kann nur ungelöste Notizen enthalten.</p></section>
+<section id="frei"><h2>Unabhängige Notiz ohne vorhandene Beschreibung</h2><ol><li>Mit Alt+T zur Zeitleiste.</li><li>Am Anfang und Ende des Problems <kbd>M</kbd> drücken.</li><li>Umschalt+Leertaste prüft den Bereich.</li><li><kbd>A</kbd> öffnet die Prüfnotiz und fokussiert den Text.</li><li>Notiz schreiben und mit Strg/Cmd+Enter speichern.</li></ol>
+<div class="tip">Zeitkorrektur in der Liste: G/H = 1 ms, Alt+Links/Rechts = 10 ms, Alt+Umschalt+Links/Rechts = 100 ms, Strg+J/L = eine Sekunde.</div></section>
+<section id="projekt"><h2>Projekt speichern und fortsetzen</h2><p><kbd>Alt</kbd>+<kbd>Umschalt</kbd>+<kbd>S</kbd> fragt beim ersten Mal nach Name und Ort und erstellt <code>.evdscript</code>. Danach wird dieselbe Datei aktualisiert; Speichern unter erstellt eine Kopie. EVD speichert außerdem automatisch.</p>
+<p>Das Projekt lässt sich über Projekt öffnen, Enter auf der verknüpften Datei oder den Paketordner fortsetzen. Ein Projekt öffnet direkt, mehrere werden zur Auswahl angeboten. Wiedergabeposition und Arbeitsauswahl werden wiederhergestellt.</p></section>
+<section id="export"><h2>Prüfbericht exportieren</h2><ol><li><kbd>Strg/Cmd</kbd>+<kbd>Umschalt</kbd>+<kbd>E</kbd> oder <strong>Exportieren</strong>.</li><li>Word, TXT oder Excel wählen.</li>
+<li>Standardmäßig sind <strong>nur Beschreibungen mit Prüfnotiz und unabhängige Notizen</strong> gewählt. Alternativ ungelöste Notizen oder alle Ereignisse.</li><li>Wenn keine weitere Einstellung nötig ist, Enter in der Formatauswahl drücken.</li><li>Ziel bestätigen; EVD meldet Fortschritt, Abbruch, Fehler und Erfolg.</li></ol>
+<table><thead><tr><th>Format</th><th>Verwendung</th></tr></thead><tbody><tr><td>Word</td><td>Nummerierter lesbarer Bericht mit Beschreibung, Zeitbereich und Prüfnotiz als H3-Überschrift.</td></tr><tr><td>TXT</td><td>Einfacher kopierbarer Text.</td></tr><tr><td>Excel</td><td>Viele Notizen filtern, sortieren und verfolgen.</td></tr><tr><td>SRT/VTT</td><td>Zeittexte an ein anderes Programm übergeben; kein Ersatz für den Prüfbericht.</td></tr></tbody></table></section>
+<section id="tasten"><h2>Wichtige Tastenkürzel</h2><table><thead><tr><th>Taste</th><th>Funktion</th></tr></thead><tbody>
+<tr><td>Leertaste</td><td>Wiedergabe/Pause</td></tr><tr><td>K / Enter</td><td>Anhalten / positionierte Wiedergabe umschalten</td></tr><tr><td>Links/Rechts</td><td>Fein suchen und kurze Probe spielen</td></tr><tr><td>Oben/Unten</td><td>Vorschau-Lautstärke um 5 %</td></tr>
+<tr><td>Bild auf/ab</td><td>5 Sekunden</td></tr><tr><td>Strg/Cmd+Links/Rechts</td><td>30 Sekunden</td></tr><tr><td>M</td><td>Marker setzen</td></tr><tr><td>Umschalt+Leertaste</td><td>Zwischen Markern spielen</td></tr>
+<tr><td>A</td><td>Unabhängige Prüfnotiz</td></tr><tr><td>Alt+N</td><td>Notiz zur gewählten Beschreibung</td></tr><tr><td>Alt+L/T</td><td>Liste / Zeitleiste</td></tr><tr><td>Alt+Umschalt+S</td><td>Projekt speichern</td></tr><tr><td>Strg/Cmd+Umschalt+E</td><td>Export öffnen</td></tr></tbody></table></section>
+<section id="tipps"><h2>Tipps und Fehlerbehebung</h2><p><strong>Zu leise:</strong> Alt+T und Oben halten; nur die Vorschau ändert sich. <strong>Alt+L wählt falsch:</strong> Pfeile und Leertaste/P zur Kontrolle. <strong>Viele Dateien:</strong> Projekt, Medium und Skript einzeln prüfen. <strong>Zeiten passen nicht:</strong> richtigen Filmschnitt prüfen. <strong>Bericht zu groß:</strong> Standardumfang oder nur ungelöste Notizen verwenden.</p></section>
+<section id="liste"><h2>Checkliste</h2><ol><li>Richtiges Medium und Skript geöffnet.</li><li>Am Problem angehalten und mit Alt+L den Text gefunden.</li><li>Vorhandene Texte mit Alt+N kommentiert.</li><li>Fehlende Beschreibungen mit zwei M und A notiert.</li><li>Wichtige Bereiche erneut gehört.</li><li>Projekt mit Alt+Umschalt+S gespeichert.</li><li>Nur nötige Punkte in Word/TXT/Excel geprüft.</li><li>Projekt, Medien und Bericht gemeinsam archiviert.</li></ol><p class="back"><a href="#oben">Nach oben</a></p></section>
+</main><footer><p>Engelsiz Video Düzenleyicisi - Prüfpaket-Handbuch</p></footer></body></html>

@@ -16,7 +16,7 @@
     <link rel="alternate" hreflang="es" href="https://evd.drenginyilmaz.net/es/">
     <link rel="alternate" hreflang="fr" href="https://evd.drenginyilmaz.net/fr/">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="stylesheet" href="/site.css?v=3.9992.0-tutorials1">
+    <link rel="stylesheet" href="/site.css?v=4.9.0">
 </head>
 
 <body>
@@ -43,6 +43,7 @@
             </p>
             <div class="actions">
                 <a class="btn btn-primary" href="story.html">La historia de EVD</a>
+                <a class="btn btn-secondary" href="guides.html">Guías</a>
                 <a class="btn btn-secondary" href="https://www.drenginyilmaz.net/">Visitar sitio oficial</a>
             </div>
         </section>
@@ -58,7 +59,6 @@
                 <ul class="list">
                     <li>Flujo de trabajo orientado al teclado</li>
                     <li>Asistente de grabación accesible</li>
-                    <li>Integración con YouTube y preparación de emisiones</li>
                 </ul>
             </article>
 
@@ -93,21 +93,9 @@
                 <li>La experiencia de inicio, la vista de proyecto vacío, la jerarquía de paneles y la línea de tiempo se renovaron para sentirse más claras, legibles y acogedoras.</li>
                 <li>El flujo de subtítulos se simplificó, los estilos pasaron a un paso separado, se añadieron opciones visuales más accesibles y se reforzó la evaluación con IA junto con la estabilidad de la vista previa.</li>
                 <li>La vista previa de texto a voz ahora reproduce el resultado mezclado junto con el audio del video. La configuración de audio recibió un aumento de volumen más claro, conversión mono/estéreo y mejor accesibilidad para los controles de distribución de canales.</li>
-                <li>El flujo de chat de YouTube y preparación en vivo se amplió: se eliminó el paso de OBS, se añadió el seguimiento de chat en modo solo lectura mediante URL, y se mejoraron la moderación, el regreso a la transmisión activa, la selección de micrófono y los mensajes de error.</li>
                 <li>Los flujos de exportación, slideshow, CTA y overlays mejoraron con tiempo restante estimado, detección de orientación de fotos, giro izquierda-derecha, descripción de fotos y correcciones de calidad. También se corrigió un problema por el que las transiciones y overlays de la lista de inserción no aparecían en el resultado final.</li>
                 <li>La grabación accesible y el flujo de actualización se perfeccionaron con correcciones para el progreso en Meet, Zoom y Teams, notas de versión localizadas en la pantalla de actualización y un mejor estado de inicio cubierto al abrir la aplicación.</li>
             </ul>
-        </section>
-
-        <section class="card tutorials-section" aria-labelledby="tutorials-title">
-            <h2 id="tutorials-title">Tutoriales</h2>
-            <p>Aqui se muestran los ultimos 5 videos publicos de tutoriales de EVD. Cuando se agrega un nuevo video a la lista de reproduccion, esta seccion tambien se actualiza.</p>
-            <div id="tutorial-list" class="tutorial-list" aria-live="polite">
-                <p class="release-empty">Cargando tutoriales...</p>
-            </div>
-            <div class="tutorial-actions">
-                <a class="btn btn-secondary" href="https://www.youtube.com/playlist?list=PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ" target="_blank" rel="noopener noreferrer">Abrir la lista completa</a>
-            </div>
         </section>
 
         <footer class="footer">
@@ -123,19 +111,20 @@
             noReleases: 'Todavía no hay versiones publicadas.',
             setupLabel: 'Windows Setup',
             portableLabel: 'Portable',
+            macLabel: "Descargar para Mac (Apple Silicon)",
             notesLabel: 'Notas de la versión',
+            guideLabel: 'Guías',
+            macBetaTitle: 'Beta pública para Mac',
+            macBetaPlatform: 'macOS · Apple Silicon (arm64)',
+            macBetaWarning: 'Esta beta pública todavía no incluye compatibilidad con OBS ni con el asistente nativo. Ambas funciones llegarán próximamente.',
+            macBetaLabel: 'Descargar la beta pública para Mac',
             versionLabel: 'Versión',
             dateLabel: 'Fecha',
             releaseFallback: 'Todavía no se agregó una descripción para esta versión.',
-            releaseError: 'No se pudieron cargar las versiones. Inténtalo de nuevo más tarde.',
-            noTutorials: 'Todavía no hay tutoriales públicos disponibles.',
-            tutorialError: 'No se pudieron cargar los tutoriales en este momento. Use el enlace de la lista de reproducción de abajo.',
-            tutorialWatchLabel: 'Abrir video',
-            tutorialListLabel: 'Abrir la lista completa',
-            tutorialDateLabel: 'Publicado'
+            releaseError: 'No se pudieron cargar las versiones. Inténtalo de nuevo más tarde.'
         };
     </script>
-    <script src="/site.js?v=3.9992.0-tutorials1"></script>
+    <script src="/site.js?v=4.9.0"></script>
 </body>
 
 </html>

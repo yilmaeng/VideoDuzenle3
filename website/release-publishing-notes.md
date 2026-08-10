@@ -1,41 +1,30 @@
-# EVD Website Release Publishing Notes
+# EVD Web Sitesi Yayınlama Akışı
 
-Yeni bir Windows surumu yayinlarken asagidaki adimlari uygulayin:
+## Sorumluluk ayrımı
 
-1. Yeni kurulum ve portable dosyalarini `downloads/` klasorune yukleyin.
-2. Kök dizindeki `update.json` dosyasini guncelleyin.
-3. `website/releases.json` dosyasinda:
-   - `latestVersion` alanini yeni surume cekin.
-   - `releases` listesinin en ustune yeni surum blogunu ekleyin.
+- Büyük dağıtım dosyaları (`.exe`, taşınabilir `.zip` ve `.dmg`) FTP üzerindeki `downloads/` klasörüne elle yüklenir.
+- Web sayfaları, dil sayfaları, `update.json`, `releases.json`, CSS/JavaScript ve kılavuzlar GitHub Actions tarafından otomatik yüklenir.
+- Otomatik FTP akışı `downloads/**` yolunu dışlar ve bu klasördeki büyük paketlere dokunmaz.
 
-Ornek yeni surum blogu:
+## Yeni sürüm yayınlama
 
-```json
-{
-  "version": "3.95.1",
-  "channel": "Beta",
-  "date": "2026-03-24",
-  "title": "EVD 3.95.1 Beta",
-  "notes": "Kucuk hata duzeltmeleri ve kurulum ile guncelleme akisinda iyilestirmeler.",
-  "setupUrl": "downloads/EVD-Setup-v3.95.1.exe",
-  "portableUrl": "downloads/EVD-Portable-v3.95.1.zip",
-  "notesUrl": ""
-}
-```
+1. Kurulum, taşınabilir ve Mac paketlerini FTP `downloads/` klasörüne yükleyin.
+2. `website/update.json`, `website/releases.json`, yerelleştirilmiş sayfalar ve gerekli kılavuzları güncelleyin.
+3. Web dosyalarını GitHub deposunun `main` dalına gönderin.
+4. `Deploy Website To FTP` iş akışı otomatik çalışır.
+5. GitHub Actions sonucunun başarılı olduğunu ve canlı sitede yeni sürümün göründüğünü doğrulayın.
 
-Ornek `update.json`:
+## Güvenlik ve koruma
 
-```json
-{
-  "version": "3.95.1",
-  "setupUrl": "https://evd.drenginyilmaz.net/downloads/EVD-Setup-v3.95.1.exe",
-  "portableUrl": "https://evd.drenginyilmaz.net/downloads/EVD-Portable-v3.95.1.zip",
-  "notesUrl": "https://evd.drenginyilmaz.net/"
-}
-```
+FTP bağlantı bilgileri yalnızca GitHub repository secret alanında tutulur:
 
-Not:
-- `website/index.html` dosyasini yeni surum eklemek icin yeniden duzenlemeniz gerekmez.
-- Ana sayfa, `website/releases.json` dosyasini okuyup indirilebilir surumleri otomatik listeler.
-- Portable dagitim artik tek dosya `.exe` degil, icinde `EVD` klasoru bulunan bir `.zip` dosyasidir.
-- Windows build almadan once uygulama ici `Hakkinda / About` metninde gorunen surum numarasinin da `src/locales/tr.json`, `en.json`, `de.json`, `es.json` ve `fr.json` dosyalarindaki `about_detail` alanlarinda guncellendigini kontrol edin. Aksi halde paket surumu yeni olsa bile Hakkinda penceresi eski surumu gosterebilir.
+- `FTP_SERVER`
+- `FTP_USERNAME`
+- `FTP_PASSWORD`
+- `FTP_SERVER_DIR`
+
+Bu değerler kaynak koduna veya yayın dosyalarına yazılmaz. İş akışı yayın öncesinde JSON dosyalarını, beş dilde ana sayfaları ve kılavuz sayfalarını doğrular. `website/downloads/` altında dosya bulunursa yanlışlıkla büyük paket yüklenmesini önlemek için yayın durdurulur.
+
+## Elle yeniden çalıştırma
+
+Otomatik yayın başarısız olursa GitHub deposunda `Actions > Deploy Website To FTP > Run workflow` adımlarıyla iş akışı yeniden başlatılabilir.

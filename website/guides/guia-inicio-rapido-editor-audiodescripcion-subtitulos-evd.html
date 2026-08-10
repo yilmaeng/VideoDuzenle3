@@ -1,0 +1,84 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Editor de audiodescripción y subtítulos de EVD - Guía rápida</title><style>
+    :root { --ink:#17211b; --muted:#526057; --paper:#fffdf7; --panel:#f1f5e9; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 45%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus, button:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 85% 15%,#267c68 0,transparent 25%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:72rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:70rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.2rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .quick { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; counter-reset:step; }
+    .quick article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .quick article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#contenido">Ir al contenido principal</a><header id="arriba"><p class="eyebrow">EVD 4.9 Beta</p><h1>Guía rápida del editor de audiodescripción y subtítulos</h1>
+<p>Revise el vídeo con forma de onda y cambios de escena, escriba audiodescripciones o subtítulos, genere voz, sincronice una locución humana y controle la calidad en un espacio de trabajo accesible.</p><p><strong>Versión de la guía:</strong> 10 de agosto de 2026</p></header>
+<main id="contenido"><nav aria-labelledby="toc"><h2 id="toc">Contenido</h2><ol class="toc">
+<li><a href="#objetivo">Función del editor</a></li><li><a href="#inicio">Inicio rápido</a></li><li><a href="#proyecto">Espacio de trabajo y proyectos</a></li><li><a href="#linea">Línea de tiempo y marcadores</a></li>
+<li><a href="#eventos">Edición de eventos</a></li><li><a href="#importar">Importación y exportación</a></li><li><a href="#tts">Voz y mezcla</a></li><li><a href="#humana">Sincronización de voz humana</a></li>
+<li><a href="#studio">ContentStudio</a></li><li><a href="#calidad">Control de calidad</a></li><li><a href="#atajos">Atajos</a></li><li><a href="#problemas">Resolución de problemas</a></li></ol></nav>
+<section id="objetivo"><h2>Función del editor</h2><p>El editor crea y gestiona tres tipos de eventos con códigos de tiempo: <strong>audiodescripción</strong> para información visual esencial, <strong>subtítulos</strong> para diálogo y sonidos relevantes y <strong>notas de revisión</strong> para puntos que debe comprobar el equipo. Puede guardar estado, hablante, indicaciones de locución, tono y ritmo.</p></section>
+<section id="inicio"><h2>Inicio rápido</h2><div class="quick">
+<article><strong>Abra el editor.</strong><br><strong>Añadir &gt; Editor de descripción/subtítulos</strong>.</article><article><strong>Elija el vídeo.</strong><br>Abra el original o continúe un proyecto <code>.evdscript</code>.</article>
+<article><strong>Marque un intervalo.</strong><br>En la línea de tiempo pulse <kbd>M</kbd> al principio y al final.</article><article><strong>Escriba.</strong><br><kbd>D</kbd> descripción, <kbd>S</kbd> subtítulo, <kbd>A</kbd> nota; guarde con <kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd>.</article>
+<article><strong>Revise.</strong><br><kbd>Alt</kbd>+<kbd>L</kbd> abre la lista; use flechas y <kbd>Espacio</kbd>/<kbd>P</kbd> para escuchar.</article>
+<article><strong>Genere la salida.</strong><br>Elija TTS o voz humana, ajuste la mezcla, ejecute el control y cree vídeo o MP3.</article></div>
+<div class="note"><strong>Mac:</strong> Ctrl/Cmd significa Ctrl en Windows y Command en macOS. Cuando solo aparece Ctrl, use Control también en macOS.</div></section>
+<section id="proyecto"><h2>Espacio de trabajo y proyectos</h2><p>Incluye operaciones del proyecto, vídeo y línea de tiempo experta, lista cronológica, TTS/mezcla, voz humana, ContentStudio y calidad. La línea visual muestra forma de onda, escenas, marcadores y bloques; los usuarios de teclado alcanzan los mismos puntos mediante navegación.</p>
+<p><kbd>Alt</kbd>+<kbd>Mayús</kbd>+<kbd>S</kbd> pide nombre la primera vez y luego actualiza el mismo proyecto. El guardado automático se ejecuta periódicamente. No mueva el vídeo ni los audios generados antes de terminar.</p></section>
+<section id="linea"><h2>Línea de tiempo y marcadores</h2><ol><li>Pulse <kbd>Alt</kbd>+<kbd>T</kbd>.</li><li>Reproduzca con <kbd>Espacio</kbd> y navegue con flechas o Re Pág/Av Pág.</li><li>Pulse <kbd>M</kbd> al inicio y al final.</li><li><kbd>Mayús</kbd>+<kbd>Espacio</kbd> reproduce el intervalo; D, S o A crea el evento.</li></ol>
+<p>Alt+Izquierda/Derecha va al marcador anterior/siguiente. Alt+Arriba/Abajo cambia el paso fino. El análisis de escenas puede advertir si un evento cruza un corte.</p></section>
+<section id="eventos"><h2>Añadir y editar eventos</h2><p><kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd> abre el formulario general; D, S y A abren el tipo correspondiente y enfocan el texto. Enter crea una línea y Ctrl/Cmd+Enter guarda y vuelve a reproducción.</p>
+<p>Cada evento admite tiempos, texto, estado, hablante, nota de locución, tono, ritmo, voz, velocidad y niveles de mezcla. La duración, el número de palabras y el tiempo estimado ayudan a comprobar si cabe.</p>
+<h3>Lista de eventos</h3><p><kbd>Alt</kbd>+<kbd>L</kbd> enfoca la lista. Las flechas seleccionan y reproducen la mezcla, incluidos solapamientos. Derecha abre el menú; Izquierda o Escape lo cierra. Mayús+flechas amplía la selección, Ctrl/Cmd+Espacio alterna un elemento y Ctrl/Cmd+A selecciona todo. Puede desplazar eventos 1 ms, 10 ms, 100 ms o un segundo sin mover el vídeo original.</p></section>
+<section id="importar"><h2>Importación y exportación</h2><p>Importe SRT/VTT como subtítulos o descripciones y edítelos como eventos normales. Exporte todo o solo la selección.</p><ul><li><strong>SRT/VTT:</strong> tiempos y texto visible.</li><li><strong>Excel:</strong> tipo, estado, hablante, texto, notas, tono y ritmo.</li></ul>
+<p><kbd>Ctrl/Cmd</kbd>+<kbd>F</kbd> busca y <kbd>Ctrl/Cmd</kbd>+<kbd>H</kbd> busca y reemplaza.</p></section>
+<section id="tts"><h2>Voz y mezcla</h2><p>Se admiten voces del sistema, OpenAI, ElevenLabs y locución humana. Los servicios en la nube requieren sus claves en los ajustes de IA. Defina velocidad, volumen de narración, audio original (90 % predeterminado) y velocidad máxima de ajuste; cada evento puede tener valores propios.</p>
+<p><em>Crear vídeo audiodescrito o MP3</em> coloca TTS o tomas humanas aprobadas en sus tiempos. El vídeo sirve para control completo; el MP3 permite compartir la mezcla de audio final.</p></section>
+<section id="humana"><h2>Sincronización de voz humana</h2><p>Use un MP3/WAV limpio que contenga solo al narrador. EVD puede proponer tomas con Whisper local o permitir la sincronización manual completa. Ambos métodos pueden combinarse.</p>
+<h3>Candidatos automáticos</h3><ol><li>Elija Tiny (rápido), Base (recomendado) o Small (más preciso y lento).</li><li>Use <em>Seleccionar y sincronizar voz humana limpia</em>. El modelo se descarga la primera vez y queda en caché.</li>
+<li>Recorra candidatos con Arriba/Abajo. <kbd>Espacio</kbd> reproduce la toma; <kbd>Ctrl/Cmd</kbd>+<kbd>Espacio</kbd> la mezcla con la película.</li><li><kbd>Enter</kbd> o <kbd>Alt</kbd>+<kbd>Enter</kbd> aplica la toma. Derecha abre escuchar, mezclar, editar y aplicar. Las recomendaciones seguras pueden aplicarse juntas.</li></ol>
+<p>Errores, tos, notas habladas y lecturas alternativas quedan disponibles para decisión editorial.</p>
+<h3>Recortar una toma</h3><p>Pulse <kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd> sobre un candidato. <kbd>K</kbd> reproduce/pausa; <kbd>J/L</kbd> mueve un segundo y <kbd>Mayús</kbd>+<kbd>J/L</kbd> 100 ms. Marque inicio y fin con <kbd>M</kbd>, escuche la selección con Mayús/Ctrl+Espacio y guarde con Enter.</p>
+<h3>Sincronización manual</h3><ol><li>Abra <em>Sincronizar manualmente</em>. EVD selecciona y anuncia el primer texto sin voz.</li><li><kbd>Alt</kbd>+<kbd>T</kbd> enfoca la línea del audio humano. K/Espacio reproduce; J/L mueve un segundo y Mayús+J/L 100 ms.</li>
+<li><kbd>Ctrl/Cmd</kbd>+Izquierda/Derecha o <kbd>Ctrl/Cmd</kbd>+<kbd>J/L</kbd> salta entre inicios de voz y reproduce una muestra breve cuando está pausado.</li>
+<li>Pulse <kbd>M</kbd> al inicio y final de la lectura. Mayús/Ctrl+Espacio comprueba; <kbd>Enter</kbd> asigna y avanza al texto siguiente.</li>
+<li><kbd>Mayús</kbd>+<kbd>M</kbd> borra solo los marcadores activos. <kbd>D</kbd> anuncia el texto. <kbd>Alt</kbd>+<kbd>L</kbd> vuelve a la lista; Supr quita una asignación incorrecta y Alt+Enter aprueba un candidato automático.</li></ol>
+<p>Use Mayús+flechas o Ctrl/Cmd+A para selección múltiple. <kbd>F/A</kbd> cambia la velocidad, <kbd>Alt</kbd>+<kbd>Mayús</kbd>+<kbd>L/J</kbd> el volumen del narrador y Alt+Mayús+Arriba/Abajo el audio original. Se aplica a todos los eventos seleccionados y se previsualiza de inmediato.</p>
+<div class="tip"><strong>Prioridad:</strong> Una toma manual sustituye al candidato automático. La voz humana funciona con eventos importados como descripciones o subtítulos y puede salir en vídeo o MP3.</div></section>
+<section id="studio"><h2>ContentStudio</h2><p>Guarde la clave API, compruebe cuenta/crédito, elija idioma, plantilla, detalle y reglas específicas, cargue el vídeo y siga el progreso. Importe el resultado como borrador y revise cada texto y tiempo. <em>Buscar último proyecto coincidente</em> recupera un proceso anterior.</p></section>
+<section id="calidad"><h2>Control de calidad</h2><p>Detecta tiempos no válidos, texto vacío, notas abiertas, estados incompletos, narración ausente o desactualizada, texto que no cabe, huecos, solapamientos, cruces de escena y borradores IA de poca confianza. Enter abre el evento; el informe se guarda como TXT o Excel.</p></section>
+<section id="atajos"><h2>Atajos principales</h2><table><thead><tr><th>Atajo</th><th>Acción</th></tr></thead><tbody>
+<tr><td><kbd>Alt</kbd>+<kbd>T/L</kbd></td><td>Línea de tiempo / lista</td></tr><tr><td><kbd>M</kbd></td><td>Marcador inicial/final</td></tr><tr><td><kbd>D/S/A</kbd></td><td>Descripción / subtítulo / nota</td></tr>
+<tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd></td><td>Abrir o guardar formulario</td></tr><tr><td><kbd>Alt</kbd>+<kbd>Mayús</kbd>+<kbd>S</kbd></td><td>Guardar proyecto</td></tr>
+<tr><td><kbd>G/H</kbd></td><td>Mover eventos 1 ms antes/después</td></tr><tr><td><kbd>Alt</kbd>+Izquierda/Derecha</td><td>10 ms antes/después</td></tr><tr><td><kbd>Alt</kbd>+<kbd>Mayús</kbd>+Izquierda/Derecha</td><td>100 ms antes/después</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>J/L</kbd></td><td>Un segundo antes/después</td></tr><tr><td><kbd>F/A</kbd> (manual)</td><td>Aumentar/reducir velocidad de voz</td></tr><tr><td><kbd>Alt</kbd>+<kbd>Mayús</kbd>+<kbd>L/J</kbd></td><td>Aumentar/reducir voz humana</td></tr>
+</tbody></table><p>Los atajos de reproducción solo actúan cuando la línea multimedia está enfocada. Puede asignar órdenes adicionales en el Gestor de atajos.</p></section>
+<section id="problemas"><h2>Resolución de problemas y cierre</h2><p>Si la voz no cabe, reduzca el texto o amplíe/divida el evento. Si hay solapamientos, desplace con pasos finos y repita el control. Para coincidencias débiles use audio solo del narrador, Base/Small y sincronización manual.</p>
+<ol><li>Complete borradores y estados.</li><li>Analice escenas.</li><li>Escuche cada narración mezclada con la película.</li><li>Resuelva bloqueos y notas.</li><li>Guarde proyecto e informe Excel y cree vídeo o MP3.</li></ol><p class="back"><a href="#arriba">Volver arriba</a></p></section>
+</main><footer><p>Engelsiz Video Düzenleyicisi - Guía rápida de descripción y subtítulos</p></footer></body></html>

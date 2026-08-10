@@ -1,0 +1,117 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>EVD Review Package User Guide</title><style>
+    :root { --ink:#18211c; --muted:#536159; --paper:#fffdf7; --panel:#f0f5ea; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 48%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 86% 13%,#287e69 0,transparent 26%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:75rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:72rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.1rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(245px,1fr)); gap:1rem; counter-reset:step; }
+    .steps article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .steps article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    caption { margin-bottom:.55rem; text-align:left; font-weight:700; color:#124437; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#content">Skip to main content</a><header id="top"><p class="eyebrow">EVD 4.9 Beta</p><h1>Review Package User Guide</h1>
+<p>Open video or audio together with a time-coded description script, find the relevant description while listening, add review notes, and export only the items that need attention as Word, TXT or Excel.</p><p><strong>Guide version:</strong> 10 August 2026</p></header>
+<main id="content"><nav aria-labelledby="toc"><h2 id="toc">Contents</h2><ol class="toc">
+<li><a href="#purpose">What a review package does</a></li><li><a href="#prepare">Prepare the folder</a></li><li><a href="#open">Open the package</a></li><li><a href="#workspace">Understand the workspace</a></li>
+<li><a href="#workflow">End-to-end workflow</a></li><li><a href="#linked-note">Add a note to an existing description</a></li><li><a href="#independent-note">Add an independent note</a></li>
+<li><a href="#project">Save and resume</a></li><li><a href="#export">Export the review report</a></li><li><a href="#shortcuts">Keyboard shortcuts</a></li><li><a href="#tips">Tips and troubleshooting</a></li><li><a href="#checklist">Checklist</a></li>
+</ol></nav>
+<section id="purpose"><h2>What a review package does</h2><p>The Review Package is designed for checking a completed or nearly completed audio-description production. Source video or audio and a description script in SRT, VTT or Word format open in the same workspace. The reviewer can stop playback, locate the closest description, attach a correction note, or create an independent note where no description exists.</p>
+<p>At the end, export only the annotated items instead of redistributing the complete script. Writers, narrators and editors receive clear corrections with time codes.</p>
+<div class="note"><strong>Two note types:</strong> A linked review note belongs to an existing description. An independent note records an issue such as “description missing here” even when no description event exists in that range.</div></section>
+<section id="prepare"><h2>Prepare the folder</h2><p>Keep files for the same production in one folder:</p><ul>
+<li>One video, or MP3/WAV/M4A when reviewing audio only.</li><li>A description script in SRT, VTT or DOCX.</li><li>An existing <code>.evdscript</code> project, if available.</li></ul>
+<p>If there is one media file and one script, EVD selects them automatically. With several compatible files, choose the correct media and script in the package dialog.</p>
+<div class="tip"><strong>Word scripts:</strong> EVD extracts time-coded descriptions. Uppercase text immediately after a time code, such as “EMOTIONAL” or “READ QUICKLY”, is separated as a narration direction. Review import warnings before opening.</div>
+<div class="warning">Legacy <code>.doc</code> is not imported directly. Save it as <code>.docx</code> in Word.</div></section>
+<section id="open"><h2>Open the review package</h2><h3>From EVD</h3><ol>
+<li>Choose <strong>Add &gt; Description / Subtitle Editor</strong>.</li><li>Activate <strong>Open review package</strong> and select its folder.</li>
+<li>If the folder contains one <code>.evdscript</code>, it opens directly. With more than one project, EVD asks which one to use.</li>
+<li>Without a project, verify the media and description-script selections. For Word, inspect the detection preview.</li><li>Activate <strong>Open selected package</strong>. When a single media/script pair is found, EVD loads it and focuses the keyboard timeline automatically.</li></ol>
+<h3>From File Explorer or Finder</h3><p>With installed EVD, use <strong>Open with EVD Review Package</strong> on the folder context menu. Pressing Enter on an associated <code>.evdscript</code> also opens the project.</p>
+<div class="note">File associations and folder context commands are normally installed by the setup version. In the portable build, open the package from within EVD.</div></section>
+<section id="workspace"><h2>Understand the workspace</h2><ul>
+<li><strong>Playback and expert timeline:</strong> source media, current time, waveform, markers and event blocks.</li>
+<li><strong>Event list:</strong> descriptions and independent notes in time order. The accessible label starts with description text, then its start/end time and details.</li>
+<li><strong>Event filter:</strong> all events, events with review notes, unresolved notes and other workflow states.</li>
+<li><strong>Project actions:</strong> save, save as, open and export.</li></ul>
+<p><kbd>Alt</kbd>+<kbd>T</kbd> focuses playback; <kbd>Alt</kbd>+<kbd>L</kbd> focuses the event list and selects the description closest to the paused position.</p>
+<div class="warning">Up/Down selects events in the list. On the timeline, Up/Down changes preview volume by 5% without unnecessary screen-reader announcements.</div></section>
+<section id="workflow"><h2>End-to-end workflow</h2><div class="steps">
+<article><strong>Open the package.</strong><br>Select the folder and verify media and script.</article><article><strong>Start listening.</strong><br>Press <kbd>Alt</kbd>+<kbd>T</kbd>, then <kbd>Space</kbd>.</article>
+<article><strong>Pause at an issue.</strong><br>Use <kbd>Enter</kbd> or <kbd>K</kbd>.</article><article><strong>Find the text.</strong><br><kbd>Alt</kbd>+<kbd>L</kbd> selects the closest description; use arrows for neighbors.</article>
+<article><strong>Write the note.</strong><br>Use <kbd>Alt</kbd>+<kbd>N</kbd> for an existing description, or two <kbd>M</kbd> markers and <kbd>A</kbd> for an independent note.</article>
+<article><strong>Save and continue.</strong><br><kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd> saves and returns focus to playback.</article>
+<article><strong>Protect the project.</strong><br><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> saves; autosave also runs periodically.</article>
+<article><strong>Export the report.</strong><br><kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>, then choose Word, TXT or Excel.</article></div></section>
+<section id="linked-note"><h2>Add a note to an existing description</h2><ol>
+<li>Pause at the issue and press <kbd>Alt</kbd>+<kbd>L</kbd>.</li><li>Use Up/Down to find the correct description; <kbd>Space</kbd> or <kbd>P</kbd> previews its range.</li>
+<li>Press <kbd>Alt</kbd>+<kbd>N</kbd>, or choose <strong>Add or edit review note</strong> from the Right Arrow menu.</li><li>Write the correction. Enter makes a new line.</li>
+<li>Press <kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd>. Focus returns to the timeline.</li></ol>
+<p>Open the same note again to edit, remove or mark it resolved. Exports can be limited to unresolved notes.</p></section>
+<section id="independent-note"><h2>Add an independent note where no description exists</h2><ol>
+<li>Return to playback with <kbd>Alt</kbd>+<kbd>T</kbd>.</li><li>Press <kbd>M</kbd> at the start and again at the end of the affected range.</li>
+<li><kbd>Shift</kbd>+<kbd>Space</kbd> verifies the range.</li><li>Press <kbd>A</kbd>; the review-note form opens with focus in the text field.</li>
+<li>Write a clear note such as “A description is missing in this range” and save with <kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd>.</li></ol>
+<div class="tip">After selecting a note in the list, use <kbd>G/H</kbd> for 1 ms, Alt+Left/Right for 10 ms, Alt+Shift+Left/Right for 100 ms, or Ctrl+J/L for one-second timing changes.</div></section>
+<section id="project"><h2>Save and resume the project</h2><p><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> or <strong>Save project</strong> asks for a name the first time and creates an <code>.evdscript</code>. Later saves update that file; Save As creates a copy. Autosave is helpful, but save manually after important groups of corrections.</p>
+<p>Resume with Open Project, by opening an associated <code>.evdscript</code>, or by selecting its folder through Open Review Package. A single project opens directly; multiple projects are offered for selection. EVD restores the saved playback position and workspace selection.</p></section>
+<section id="export"><h2>Export the review report</h2><ol>
+<li>Press <kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> or activate <strong>Export</strong>.</li>
+<li>Choose Word, TXT or Excel. By default, <strong>only descriptions with review notes and independent notes</strong> is selected.</li>
+<li>You may instead choose unresolved notes or all events. If no other setting is needed, press Enter on the format selection to begin.</li>
+<li>Confirm the destination. EVD proposes a localized name such as <code>Greyhound-audio review report.docx</code> and announces progress, cancellation, errors and success.</li></ol>
+<table><caption>Output formats</caption><thead><tr><th>Format</th><th>Recommended use</th></tr></thead><tbody>
+<tr><td>Word, DOCX</td><td>A readable report for writers, narrators and production teams. Items are numbered; description text, time range and an H3 review-note heading are included.</td></tr>
+<tr><td>TXT</td><td>Plain, copyable text that opens everywhere.</td></tr><tr><td>Excel, XLSX</td><td>Filter, sort and track many notes in columns.</td></tr>
+<tr><td>SRT/VTT</td><td>Transfer timed description/subtitle text to another editor. This is not a substitute for the review report.</td></tr></tbody></table></section>
+<section id="shortcuts"><h2>Keyboard shortcuts</h2><p>Playback keys work only while the expert timeline is focused. Enter creates a new line in a text field; Ctrl/Cmd+Enter saves the form.</p>
+<table><thead><tr><th>Shortcut</th><th>Action</th></tr></thead><tbody>
+<tr><td><kbd>Space</kbd></td><td>Play/pause.</td></tr><tr><td><kbd>K</kbd> / <kbd>Enter</kbd></td><td>Pause at current position / toggle positioned playback.</td></tr>
+<tr><td>Left/Right</td><td>Seek by the selected fine step and play a short sample.</td></tr><tr><td>Up/Down</td><td>Change timeline preview volume by 5%.</td></tr>
+<tr><td>Page Up/Down</td><td>Seek 5 seconds.</td></tr><tr><td><kbd>Ctrl/Cmd</kbd>+Left/Right</td><td>Seek 30 seconds.</td></tr>
+<tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Alt</kbd>+Left/Right</td><td>Seek 5 minutes.</td></tr><tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>G</kbd></td><td>Go to time code.</td></tr>
+<tr><td><kbd>M</kbd></td><td>Add a marker.</td></tr><tr><td><kbd>Shift</kbd>+<kbd>Space</kbd></td><td>Play between active markers.</td></tr>
+<tr><td><kbd>A</kbd></td><td>Add an independent review note in the marked range.</td></tr><tr><td><kbd>Alt</kbd>+<kbd>N</kbd></td><td>Add/edit the selected description's review note.</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>L/T</kbd></td><td>Event list / timeline.</td></tr><tr><td><kbd>Right Arrow</kbd> or <kbd>Shift</kbd>+<kbd>F10</kbd></td><td>Open selected event's action menu.</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save project.</td></tr><tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd></td><td>Open export.</td></tr>
+</tbody></table></section>
+<section id="tips"><h2>Tips and troubleshooting</h2>
+<h3>Preview is too quiet</h3><p>Focus the timeline with Alt+T and hold Up Arrow. This affects monitoring only, not the source or exported file.</p>
+<h3>Alt+L selected the wrong text</h3><p>EVD first selects the shortest event covering the paused position, otherwise the closest one. Check neighbors with arrows and preview with Space or P.</p>
+<h3>The folder contains many files</h3><p>Verify project, media and script fields individually. Add dates or version numbers to filenames when multiple production cuts share a folder.</p>
+<h3>Media and script do not align</h3><p>Confirm the correct media cut. Added or removed intros and credits can shift every time code; sample several places to determine whether one event or the whole list is affected.</p>
+<h3>The report is too large</h3><p>Keep the default scope, or mark completed notes resolved and export unresolved notes only.</p></section>
+<section id="checklist"><h2>Quick checklist</h2><ol>
+<li>I opened the correct media and script.</li><li>I paused at issues and used Alt+L to locate the correct description.</li><li>I added clear, actionable linked notes with Alt+N.</li>
+<li>I recorded missing descriptions as independent notes with two M markers and A.</li><li>I replayed important ranges.</li><li>I saved with Alt+Shift+S.</li>
+<li>I verified that Word, TXT or Excel contains only the required notes.</li><li>I archived the project, source media and report together.</li></ol><p class="back"><a href="#top">Back to top</a></p></section>
+</main><footer><p>Accessible Video Editor - Review Package user guide</p></footer></body></html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EVD Broadcast Room User Guide</title>
+  <style>
+    :root { --text:#1f2937; --muted:#4b5563; --accent:#0f766e; --line:#d1d5db; --soft:#f3f4f6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; color: var(--text); line-height: 1.55; background: white; }
+    .page { max-width: 920px; margin: 0 auto; padding: 40px 52px 72px; }
+    h1, h2, h3 { line-height: 1.25; margin: 0 0 14px; }
+    h1 { font-size: 30px; color: #0b3b36; margin-bottom: 10px; }
+    h2 { font-size: 22px; color: var(--accent); margin-top: 34px; padding-top: 14px; border-top: 2px solid var(--line); }
+    h3 { font-size: 17px; margin-top: 20px; }
+    p, li { font-size: 14px; }
+    p { margin: 0 0 12px; }
+    ul, ol { margin: 0 0 14px 22px; padding: 0; }
+    li { margin: 0 0 7px; }
+    .lead { font-size: 16px; color: var(--muted); margin-bottom: 18px; }
+    .meta { display: flex; gap: 18px; flex-wrap: wrap; padding: 12px 16px; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 28px; }
+    .meta span { font-size: 13px; color: var(--muted); }
+    .toc { background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin-bottom: 28px; }
+    .toc h2 { border: 0; padding-top: 0; margin-top: 0; font-size: 18px; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover, .toc a:focus { text-decoration: underline; }
+    .note, .tip { border-left: 4px solid var(--accent); background: #f0fdfa; padding: 12px 14px; margin: 14px 0 18px; border-radius: 8px; }
+    .note strong, .tip strong { color: #115e59; }
+    .shortcut-list li { margin-bottom: 6px; }
+    .footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    @media print { .page { max-width: none; padding: 20mm 16mm 18mm; } a { color: inherit; text-decoration: none; } }
+</style>
+</head>
+<body>
+  <main class="page">
+    <h1>EVD Broadcast Room User Guide</h1>
+    <p class="lead">This guide explains the EVD Broadcast Room workflow for accessible and professional livestreams, meetings, interviews, recordings, screen sharing, live captions, translation, dubbing, participant management, and scene design.</p>
+    <div class="meta">
+      <span><strong>Product:</strong> Accessible Video Editor</span>
+      <span><strong>Section:</strong> Broadcast Room</span>
+      <span><strong>Document:</strong> Shareable HTML/PDF guide</span>
+      <span><strong>Updated:</strong> June 13, 2026</span>
+    </div>
+    <section class="toc">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#section-01">What is the Broadcast Room?</a></li>
+        <li><a href="#section-02">Interface Overview</a></li>
+        <li><a href="#section-03">Opening Temporary or Persistent Rooms</a></li>
+        <li><a href="#section-04">Guest Join Page</a></li>
+        <li><a href="#section-05">Scene Layouts</a></li>
+        <li><a href="#section-06">Backgrounds, Logo, and Profiles</a></li>
+        <li><a href="#section-07">Recording</a></li>
+        <li><a href="#section-08">Guest Local Backup and Bot Recording</a></li>
+        <li><a href="#section-09">YouTube Livestreaming</a></li>
+        <li><a href="#section-10">Live Captions, Translation, and Dubbing</a></li>
+        <li><a href="#section-11">Post-recording ElevenLabs Dubbing</a></li>
+        <li><a href="#section-12">API Keys and AI Services</a></li>
+        <li><a href="#section-13">Effects Layer</a></li>
+        <li><a href="#section-14">Screen Sharing</a></li>
+        <li><a href="#section-15">Participant Management and Chat</a></li>
+        <li><a href="#section-16">Webinar Flow</a></li>
+        <li><a href="#section-17">AI Scene Feedback</a></li>
+        <li><a href="#section-18">Main Shortcuts</a></li>
+        <li><a href="#section-19">Troubleshooting</a></li>
+      </ol>
+    </section>
+
+    <section id="section-01">
+      <h2>1. What is the Broadcast Room?</h2>
+      <p>The Broadcast Room is a live production workspace where you invite guests with a link, receive their camera, microphone, and screen share, and send the composed scene to recording or YouTube.</p>
+      <p>The workflow has two layers: first you create or open the room, then you decide how people and shared content appear on stage.</p>
+      <ul>
+        <li>Temporary and persistent rooms</li>
+        <li>Guest camera, microphone, chat, screen sharing, and participant commands</li>
+        <li>Manual scene layouts, background profiles, logos, live captions, translation, sign-language interpreter placement, recording, YouTube, and effects</li>
+      </ul>
+    </section>
+
+    <section id="section-02">
+      <h2>2. Interface Overview</h2>
+      <p>Use Alt+L to open the region list. Move with the arrow keys and press Enter to jump to the selected area. Ctrl+Right and Ctrl+Left move quickly between main regions.</p>
+      <ul>
+        <li>Room and devices</li>
+        <li>Participants and chat</li>
+        <li>Sharing and sources</li>
+        <li>Scene layout</li>
+        <li>Backgrounds</li>
+        <li>OBS, recording, YouTube, effects</li>
+        <li>Live captions and translation</li>
+        <li>Diagnostics and event history</li>
+      </ul>
+    </section>
+
+    <section id="section-03">
+      <h2>3. Opening Temporary or Persistent Rooms</h2>
+      <p>Use the room controls to create a quick temporary room, or open Room Management with Alt+O to create a persistent room. Persistent rooms can have a custom link key, password rules, and host-absent joining rules.</p>
+      <p>The persistent room list supports arrow-key navigation, Enter to open a room, and Right Arrow to open the context menu.</p>
+    </section>
+
+    <section id="section-04">
+      <h2>4. Guest Join Page</h2>
+      <p>The guest page is intentionally simple. Device choices are inside the Device options panel; the main flow is display name, optional password, and Join Room.</p>
+      <ul>
+        <li>Microphone: Ctrl+D</li>
+        <li>Camera: Ctrl+E</li>
+        <li>Start or stop sharing: Ctrl+Shift+E</li>
+        <li>Leave room: Ctrl+Shift+H</li>
+        <li>Chat, participants, other information, captions, and accessible share text are kept in collapsible panels to reduce clutter.</li>
+      </ul>
+    </section>
+
+    <section id="section-05">
+      <h2>5. Scene Layouts</h2>
+      <p>Scene layouts control how the host, guests, and shares appear in the recording or livestream. You can assign people, cameras, and shares to slots manually with the slot assignment menu.</p>
+      <p>When a share starts, EVD can keep speakers as small windows and return to the previous layout when sharing stops.</p>
+    </section>
+
+    <section id="section-06">
+      <h2>6. Backgrounds, Logo, and Profiles</h2>
+      <p>You can add JPG, PNG, WebP, BMP, MP4, WebM, MOV, or MKV backgrounds. If the file is not suitable for 1920x1080, EVD can warn you or create a converted copy.</p>
+      <p>Background profiles store background, fit mode, darkening, logo file, logo position, and logo size for repeated use.</p>
+    </section>
+
+    <section id="section-07">
+      <h2>7. Recording</h2>
+      <p>Press Alt+R or use the recording button after OBS and the scene are ready. Recording uses a clean Broadcast Output window so the host control interface does not appear in the final video.</p>
+      <p>Return to the Broadcast Room window to change layouts, manage guests, trigger effects, share the screen, or stop recording.</p>
+    </section>
+
+    <section id="section-08">
+      <h2>8. Guest Local Backup and Bot Recording</h2>
+      <p>During local recording, supported guest browsers can create local backup audio or video chunks. If the main recording has network freezes, the host can later replace affected parts with cleaner guest backups.</p>
+      <p>Bot recording is optional and can be toggled with Alt+Ctrl+B. It is a safety tool for special workflows, not the default recording method.</p>
+    </section>
+
+    <section id="section-09">
+      <h2>9. YouTube Livestreaming</h2>
+      <p>Prepare the scene and OBS, choose or create the YouTube stream, then start or stop the livestream with Alt+Ctrl+L. A private or unlisted test stream is strongly recommended before a real event.</p>
+      <p>Emergency stop is available if the interface becomes hard to control during a live stream.</p>
+    </section>
+
+    <section id="section-10">
+      <h2>10. Live Captions, Translation, and Dubbing</h2>
+      <p>Enable Live translation/captions, choose the service, source language, target language, and output mode. OpenAI is recommended for text captions and translation; Gemini Live Translate is recommended for spoken translation; ElevenLabs is useful especially for post-recording dubbing.</p>
+      <p>Guests choose their own language in the captions/translation panel. If speech is already in the guest target language, the same-language translation voice is not played back.</p>
+    </section>
+
+    <section id="section-11">
+      <h2>11. Post-recording ElevenLabs Dubbing</h2>
+      <p>After recording, you can send the file to ElevenLabs Dubbing and create a dubbed MP4. EVD can mix the dubbed voice in front with the original audio underneath.</p>
+      <p>Stored dubbing segments can be remixed without sending the same job again, which saves time and credits.</p>
+    </section>
+
+    <section id="section-12">
+      <h2>12. API Keys and AI Services</h2>
+      <p>API keys are managed from the AI menu. Gemini is used for visual feedback and Gemini Live Translate. OpenAI is used for text translation/transcription and can be a fallback for AI scene feedback. ElevenLabs is used for Scribe, voices, and post-recording dubbing.</p>
+    </section>
+
+    <section id="section-13">
+      <h2>13. Effects Layer</h2>
+      <p>The effects layer lets you trigger jingles, sounds, videos, and visual effects during recording or livestreaming. Effects are sent to the final output.</p>
+    </section>
+
+    <section id="section-14">
+      <h2>14. Screen Sharing</h2>
+      <p>Host sharing is opened with Alt+S. Choose full screen, window, or an available local source, and optionally include system audio. Guest sharing uses the browser share picker.</p>
+      <p>Accessible document sharing lets you upload the related PowerPoint, Word, or supported file so blind guests can follow the slide or document text instead of receiving only a visual image.</p>
+    </section>
+
+    <section id="section-15">
+      <h2>15. Participant Management and Chat</h2>
+      <p>Open the participant list with Alt+U. Move with Up and Down, open the selected participant menu with Right Arrow, and close it with Left Arrow or Escape.</p>
+      <p>The menu includes remove from room, message, mute/unmute, camera/video permissions, screen-share permission, panelist role, interpreter roles, and speaking request handling.</p>
+    </section>
+
+    <section id="section-16">
+      <h2>16. Webinar Flow</h2>
+      <p>Webinar mode is for large audiences where only selected panelists appear or speak. Users can request a webinar, admins can approve it, and the host can receive a webinar key. Time limits, audience rules, and persistent webinar options can be configured.</p>
+    </section>
+
+    <section id="section-17">
+      <h2>17. AI Scene Feedback</h2>
+      <p>The Ask AI for feedback button analyzes the real scene frame and reports whether faces are visible, sharing is placed correctly, black gaps exist, or unwanted controls appear. Gemini is preferred first; OpenAI can be used as a fallback when available.</p>
+    </section>
+
+    <section id="section-18">
+      <h2>18. Main Shortcuts</h2>
+      <p>Host: Alt+A microphone, Alt+V camera, Alt+S sharing, Alt+Y layout, Alt+U participants, Alt+C chat, Alt+O room management, Alt+Q leave/end room, Alt+R recording, Alt+L region list, Alt+Ctrl+L YouTube, Alt+Ctrl+B bot recording, Alt+Ctrl+T live captions/translation.</p>
+      <p>Guest web: Ctrl+D microphone, Ctrl+E camera, Ctrl+Shift+E sharing, Ctrl+Shift+H leave room.</p>
+    </section>
+
+    <section id="section-19">
+      <h2>19. Troubleshooting</h2>
+      <p>If a guest has no audio, check browser permissions and selected devices. If sharing has no audio, verify that the browser provides audio for the selected share type. If captions or translation do not start, check the feature checkbox and API key status.</p>
+      <p>Use Diagnostics and Event History first when investigating share audio, video tracks, participant events, or YouTube/recording behavior.</p>
+    </section>
+
+    <p class="footer">This document is the shareable guide for the EVD Broadcast Room help content.</p>
+  </main>
+</body>
+</html>

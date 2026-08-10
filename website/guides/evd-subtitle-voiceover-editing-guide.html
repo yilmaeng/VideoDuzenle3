@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>EVD Subtitle Voiceover and Editing Guide</title><style>
+    :root { --ink:#17211b; --muted:#526057; --paper:#fffdf7; --panel:#f1f5e9; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 45%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus, button:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 85% 15%,#267c68 0,transparent 25%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:72rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:70rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.2rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .quick { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; counter-reset:step; }
+    .quick article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .quick article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#content">Skip to main content</a><header id="top"><p class="eyebrow">EVD 4.9 Beta</p><h1>Subtitle Voiceover and Editing Guide</h1>
+<p>Burn an SRT file into video, speak it with system voices, OpenAI or ElevenLabs, and edit every subtitle's timing, text, voice, speed and mix in an accessible workspace.</p><p><strong>Guide version:</strong> 10 August 2026</p></header>
+<main id="content"><nav aria-labelledby="toc"><h2 id="toc">Contents</h2><ol class="toc">
+<li><a href="#purpose">What the tool does</a></li><li><a href="#prepare">Before you begin</a></li><li><a href="#quick">Quick start</a></li><li><a href="#settings">Subtitle and voice settings</a></li>
+<li><a href="#editor">Voiceover editor</a></li><li><a href="#preview">Understand the preview</a></li><li><a href="#textvoice">Change text and voice</a></li><li><a href="#timing">Timing, speed and mix</a></li>
+<li><a href="#project">Save and open projects</a></li><li><a href="#output">Apply edits and create output</a></li><li><a href="#shortcuts">Keyboard shortcuts</a></li><li><a href="#troubleshooting">Troubleshooting</a></li><li><a href="#checklist">Final checklist</a></li></ol></nav>
+<section id="purpose"><h2>What the tool does</h2><p>EVD's subtitle tool can do more than burn text into a picture. It can turn every SRT entry into TTS and let you edit each generated segment independently. Use it for spoken subtitles, audio description, educational content, language access, or any production where text must be visible, audible, or both.</p>
+<ul><li><strong>Visible subtitles only:</strong> burn SRT text into the video.</li><li><strong>Voiceover only:</strong> add the text as TTS.</li><li><strong>Visible subtitles and voiceover:</strong> show and speak the updated text together.</li></ul>
+<div class="note">The source video is never overwritten. EVD creates a new output, and an <code>.evdtts</code> project lets you resume later.</div></section>
+<section id="prepare"><h2>Before you begin</h2><ul><li>Prepare a correctly timed SRT and its matching source video.</li><li>For OpenAI or ElevenLabs, save the appropriate API key in the EVD AI menu.</li><li>System voices work offline; available languages depend on voices installed in Windows or macOS.</li><li>Do not move the source video, subtitle file or saved project assets while editing.</li></ul><div class="tip">Test a few short entries first to confirm pronunciation, speed and the balance with original audio.</div></section>
+<section id="quick"><h2>Quick start</h2><div class="quick">
+<article><strong>Open the video.</strong><br>Load the source video in EVD.</article><article><strong>Choose the SRT.</strong><br>Use <strong>Add &gt; Add Subtitle File</strong>.</article>
+<article><strong>Choose the action.</strong><br>Burn subtitles, create voiceover, or do both.</article><article><strong>Set defaults.</strong><br>Select service, voice, rate, TTS level and original-film level.</article>
+<article><strong>Edit or skip.</strong><br>Open the segment editor, or create directly with the current settings.</article><article><strong>Save and build.</strong><br>Save a project if needed, then apply edits and create the new video.</article></div></section>
+<section id="settings"><h2>Subtitle and voice settings</h2>
+<h3>Visible subtitles</h3><p>When burning subtitles, choose font, size, color, outline, background and position. Text edits made later in the segment editor also update the visible subtitles in the final video.</p>
+<h3>Voiceover defaults</h3><ul><li><strong>Service:</strong> system voices, OpenAI or ElevenLabs.</li><li><strong>Voice:</strong> default or a named voice from that service.</li><li><strong>Speech rate:</strong> initial rate for every segment.</li><li><strong>TTS volume:</strong> initial narration level.</li><li><strong>Original film audio:</strong> how much the film remains audible under TTS; 0 is silent and 100 is full level.</li></ul>
+<p>Use <strong>Listen (Test)</strong> before generating. <strong>Start with selected settings</strong> produces the first TTS take for every SRT entry.</p>
+<div class="warning">You can then choose <strong>Edit voiceovers</strong> or <strong>Create directly with current settings</strong>. If no individual correction is needed, skip the editor entirely.</div></section>
+<section id="editor"><h2>The voiceover editor</h2><p>When the editor opens, its shortcuts are announced and focus moves to the segment list. Each accessible item announces subtitle text first, then TTS start, speed, TTS level, original-audio level and whether voiceover is enabled.</p>
+<ul><li>Up/Down selects and automatically previews the previous/next segment.</li><li>Page Up/Page Down moves ten segments; Home/End moves to first/last.</li><li><kbd>Enter</kbd> or <kbd>Space</kbd> previews the current segment.</li><li><kbd>Right Arrow</kbd> opens the action menu. Navigate with arrows and activate with Enter; Left Arrow or Escape returns to the list.</li></ul>
+<p>The menu contains preview, speed, original audio, TTS level, timing, enable/disable voiceover and reset. All have direct keyboard commands.</p></section>
+<section id="preview"><h2>Understand the preview</h2><p>EVD starts the film approximately one second before the selected TTS start. This lets you hear whether narration overlaps dialogue or an important sound. TTS enters at its exact configured time, and preview continues briefly after the spoken audio or subtitle range.</p>
+<p>If another voiceover overlaps the selected preview window, EVD plays that neighboring segment too. Timing collisions can therefore be detected before export rather than only in the finished video.</p>
+<p><kbd>J/L</kbd> browses the film five seconds backward/forward without changing subtitle timing and plays a short sample.</p>
+<div class="note">The TTS rate, TTS level and original-film level heard in preview use the same calculations as final export.</div></section>
+<section id="textvoice"><h2>Change text and voice</h2>
+<h3>Regenerate text</h3><ol><li>Select a segment and Tab to <strong>Selected subtitle text</strong>.</li><li>Edit the text. Use <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line.</li><li>Press <kbd>Enter</kbd>. Only this segment is regenerated and previewed.</li></ol>
+<p>Pressing Enter without changing the text also creates a fresh synthesis, useful when a voice engine produces a poor reading. Updated text is used both for speech and for the saved/exported SRT.</p>
+<h3>Use a different voice for one segment</h3><p>Choose a voice in <strong>Selected segment voice</strong>. Only that segment is regenerated. Other segments keep their voices, and returning to an item restores its saved selection.</p></section>
+<section id="timing"><h2>Timing, speed and mix</h2><p>Every adjustment immediately replays the segment with its new values.</p>
+<table><thead><tr><th>Setting</th><th>Behavior</th></tr></thead><tbody>
+<tr><td>Rate</td><td><kbd>F</kbd> increases by 5%, <kbd>A</kbd> decreases, <kbd>D</kbd> restores the default. Range: 50%-200%.</td></tr>
+<tr><td>TTS level</td><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L/J</kbd> changes by 10%, up to 200%.</td></tr>
+<tr><td>Original film</td><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+Up/Down changes by 10%.</td></tr>
+<tr><td>Timing</td><td>G/H moves 1 ms, Alt+Left/Right 10 ms, Alt+Shift+Left/Right 100 ms, Ctrl+J/L one second.</td></tr>
+<tr><td>Voiceover</td><td><kbd>V</kbd> disables/enables only selected TTS. Visible subtitles remain if selected.</td></tr>
+<tr><td>Reset</td><td><kbd>R</kbd> restores the segment's original text, timing, voice, rate and mix.</td></tr></tbody></table>
+<p>Timing commands move the subtitle/TTS segment on the film timeline; they do not move the source film. Saved edited SRT time codes reflect the same changes.</p></section>
+<section id="project"><h2>Save and open projects</h2><p><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> or <strong>Save Project</strong> creates an <code>.evdtts</code> file on first use and updates it on later saves.</p>
+<p>Beside the project, EVD stores a <code>project_name_assets</code> folder containing generated TTS files and <code>project_name_duzenlenmis.srt</code> containing updated text and timing. The project preserves the selected index, defaults, segment voices and edits.</p>
+<p>Resume from <strong>Add &gt; Open Subtitle Voiceover Project</strong> or <strong>Open Another Project</strong> inside the editor.</p>
+<div class="warning">Keep the project, assets folder, edited SRT and source video accessible together. A project cannot restore a TTS file that has been moved or deleted.</div></section>
+<section id="output"><h2>Apply edits and create output</h2><ul>
+<li><strong>Apply Edits and Create:</strong> uses all segment-specific text, voice, rate, time and mix settings.</li><li><strong>Skip Editing, Create with Current Settings:</strong> uses the initial defaults and bypasses individual editing.</li><li><strong>Cancel:</strong> leaves without creating output.</li></ul>
+<p>EVD places speech at its times, mixes it with original audio, and burns updated text/timing when visible subtitles are enabled. Progress is announced and a completion sound and file location are provided.</p></section>
+<section id="shortcuts"><h2>Keyboard shortcuts</h2><table><thead><tr><th>Shortcut</th><th>Action</th></tr></thead><tbody>
+<tr><td>Up/Down</td><td>Select and preview previous/next segment.</td></tr><tr><td>Page Up/Page Down</td><td>Move ten segments.</td></tr><tr><td>Home/End</td><td>First/last segment.</td></tr>
+<tr><td>Enter or Space</td><td>Preview selected segment.</td></tr><tr><td>J/L</td><td>Browse film five seconds backward/forward.</td></tr><tr><td>Right Arrow</td><td>Open action menu.</td></tr><tr><td>Left Arrow or Escape</td><td>Close menu.</td></tr>
+<tr><td>F/A/D</td><td>Increase/decrease/reset TTS rate.</td></tr><tr><td>Alt+Shift+L/J</td><td>Increase/decrease TTS level.</td></tr><tr><td>Alt+Shift+Up/Down</td><td>Increase/decrease original audio.</td></tr>
+<tr><td>G/H</td><td>Move 1 ms earlier/later.</td></tr><tr><td>Alt+Left/Right</td><td>Move 10 ms.</td></tr><tr><td>Alt+Shift+Left/Right</td><td>Move 100 ms.</td></tr><tr><td>Ctrl+J/L</td><td>Move one second.</td></tr>
+<tr><td>V</td><td>Disable/enable voiceover.</td></tr><tr><td>R</td><td>Reset segment.</td></tr><tr><td>Alt+Shift+S</td><td>Save voiceover project.</td></tr>
+<tr><td>Enter in text field</td><td>Regenerate selected text.</td></tr><tr><td>Shift+Enter in text field</td><td>Insert a new line.</td></tr></tbody></table>
+<p>These commands are local to the editor and intentionally do not appear as global commands in the main Shortcut Manager.</p></section>
+<section id="troubleshooting"><h2>Troubleshooting and good practice</h2>
+<h3>TTS overlaps dialogue</h3><p>Move the segment in 10/100 ms or one-second steps and use the one-second lead-in to check dialogue.</p>
+<h3>Two voiceovers overlap</h3><p>Neighboring TTS is included in preview. Move one segment, increase its rate, shorten its text or disable it with V.</p>
+<h3>Voiceover is too quiet</h3><p>Increase TTS with Alt+Shift+L or lower the film with Alt+Shift+Down. Above 100%, listen for distortion.</p>
+<h3>Text changed but old audio remains</h3><p>Press Enter in the text field, wait for regeneration, preview, and save with Alt+Shift+S.</p>
+<h3>Saved project reports a missing audio file</h3><p>Restore the <code>_assets</code> folder beside the project and ensure the source video has not moved.</p></section>
+<section id="checklist"><h2>Final checklist</h2><ol><li>Correct video and SRT selected.</li><li>Visible subtitles, voiceover or both chosen.</li><li>Service, voice, rate and initial mix tested.</li><li>Every segment previewed with the film.</li><li>Incorrect text or pronunciation regenerated.</li><li>Overlapping TTS corrected.</li><li>Important original/TTS balances checked.</li><li>Project and edited SRT saved.</li><li>Visible text, timing and mix checked in the final video.</li></ol><p class="back"><a href="#top">Back to top</a></p></section>
+</main><footer><p>Accessible Video Editor - Subtitle Voiceover and Editing Guide</p></footer></body></html>

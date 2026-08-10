@@ -2,39 +2,69 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://evd.drenginyilmaz.net/</loc>
-    <lastmod>2026-03-31</lastmod>
+    <lastmod>2026-08-10</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://evd.drenginyilmaz.net/tr/</loc>
-    <lastmod>2026-03-31</lastmod>
+    <lastmod>2026-08-10</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
   <url>
     <loc>https://evd.drenginyilmaz.net/en/</loc>
-    <lastmod>2026-03-31</lastmod>
+    <lastmod>2026-08-10</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
   <url>
     <loc>https://evd.drenginyilmaz.net/de/</loc>
-    <lastmod>2026-03-31</lastmod>
+    <lastmod>2026-08-10</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
   <url>
     <loc>https://evd.drenginyilmaz.net/es/</loc>
-    <lastmod>2026-03-31</lastmod>
+    <lastmod>2026-08-10</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
   <url>
     <loc>https://evd.drenginyilmaz.net/fr/</loc>
-    <lastmod>2026-03-31</lastmod>
+    <lastmod>2026-08-10</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/tr/guides.html</loc>
+    <lastmod>2026-08-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/en/guides.html</loc>
+    <lastmod>2026-08-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/de/guides.html</loc>
+    <lastmod>2026-08-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/es/guides.html</loc>
+    <lastmod>2026-08-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/fr/guides.html</loc>
+    <lastmod>2026-08-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://evd.drenginyilmaz.net/tr/story.html</loc>
@@ -125,5 +155,125 @@
     <lastmod>2026-03-31</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-altyazi-seslendirme-ve-duzenleme-kilavuzu.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-beschreibungs-und-untertitel-editor-schnellstartanleitung.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-betimleme-altyazi-editoru-hizli-baslangic-kilavuzu.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-broadcast-room-benutzerhandbuch.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-broadcast-room-user-guide.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-description-subtitle-editor-quick-start-guide.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-pruefpaket-benutzerhandbuch.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-review-package-user-guide.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-son-kontrol-paketi-kullanim-kilavuzu.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-subtitle-voiceover-editing-guide.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-untertitel-sprachausgabe-bearbeitung-anleitung.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/evd-yayin-odasi-kullanim-kilavuzu.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/guia-evd-locucion-edicion-subtitulos.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/guia-inicio-rapido-editor-audiodescripcion-subtitulos-evd.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/guia-sala-transmision-evd.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/guia-uso-paquete-revision-evd.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/guide-demarrage-rapide-editeur-audiodescription-sous-titres-evd.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/guide-evd-voix-edition-sous-titres.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/guide-salle-diffusion-evd.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
+  </url>
+  <url>
+    <loc>https://evd.drenginyilmaz.net/guides/guide-utilisation-package-controle-evd.html 2026-08-10 monthly 0.85</loc>
+    <lastmod></lastmod>
+    <changefreq></changefreq>
+    <priority></priority>
   </url>
 </urlset>

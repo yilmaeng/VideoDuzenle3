@@ -3,7 +3,7 @@
     const preferredKey = 'evd-site-language';
     const tutorialPlaylistId = 'PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ';
     const tutorialPlaylistUrl = `https://www.youtube.com/playlist?list=${tutorialPlaylistId}`;
-    const assetVersion = '4.0.0-tutorials2';
+    const assetVersion = '4.9.0';
     const tutorialJsonUrl = `/tutorials.json?v=${assetVersion}`;
 
     function safeText(key, fallback) {
@@ -36,6 +36,14 @@
             day: 'numeric',
             timeZone: 'UTC'
         });
+    }
+
+    function localizedValue(value, fallback = '') {
+        if (!value || typeof value !== 'object') {
+            return value || fallback;
+        }
+        const lang = String(document.documentElement.lang || 'en').toLowerCase().split('-')[0] || 'en';
+        return value[lang] || value.en || value.tr || fallback;
     }
 
     function rememberLanguage() {
@@ -71,31 +79,62 @@
 
             releaseList.innerHTML = releases.map((release) => {
                 const releaseDate = formatReleaseDate(release.date);
-                const channel = release.channel ? `<span class="release-badge">${release.channel}</span>` : '';
                 const setupButton = release.setupUrl
                     ? `<a class="btn btn-primary" href="/${release.setupUrl}">${safeText('setupLabel', 'Windows Setup')}</a>`
                     : '';
                 const portableButton = release.portableUrl
                     ? `<a class="btn btn-secondary" href="/${release.portableUrl}">${safeText('portableLabel', 'Portable')}</a>`
                     : '';
+                const macButton = release.macUrl
+                    ? `<a class="btn btn-secondary" href="/${release.macUrl}">${safeText('macLabel', 'Download for Mac (Apple Silicon)')}</a>`
+                    : '';
                 const notesButton = release.notesUrl
                     ? `<a class="btn btn-secondary" href="/${release.notesUrl}">${safeText('notesLabel', 'Release Notes')}</a>`
                     : '';
+                const lang = String(document.documentElement.lang || 'en').toLowerCase().split('-')[0] || 'en';
+                const guideUrl = release.guideUrls && typeof release.guideUrls === 'object'
+                    ? (release.guideUrls[lang] || release.guideUrls.en || release.guideUrls.tr || '')
+                    : (release.guideUrl || '');
+                const guideButton = guideUrl
+                    ? `<a class="btn btn-secondary" href="/${guideUrl}">${safeText('guideLabel', 'Broadcast Room Guide')}</a>`
+                    : '';
+
+                const macBeta = release.macBeta && typeof release.macBeta === 'object' ? release.macBeta : null;
+                const macBetaId = `mac-beta-${String(release.version || 'release').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+                const macBetaBlock = macBeta && macBeta.url
+                    ? `
+                        <section class="mac-beta" aria-labelledby="${macBetaId}">
+                            <h4 id="${macBetaId}">${safeText('macBetaTitle', 'Public Beta for Mac')}</h4>
+                            <p class="mac-beta-platform">${safeText('macBetaPlatform', 'macOS · Apple Silicon (arm64)')}</p>
+                            <p class="mac-beta-warning" role="note">${safeText('macBetaWarning', 'OBS and native helper support are not available in this beta yet. They are coming soon.')}</p>
+                            <div class="release-actions">
+                                <a class="btn btn-primary" href="/${macBeta.url}">${safeText('macBetaLabel', 'Download Mac Public Beta')}</a>
+                            </div>
+                        </section>
+                    `
+                    : '';
+                const localizedTitle = localizedValue(release.title, `EVD ${release.version || ''}`);
+                const localizedNotes = localizedValue(release.notes, safeText('releaseFallback', 'No description was added for this release yet.'));
+                const localizedChannel = localizedValue(release.channel, release.channel || '');
+                const channelBadge = localizedChannel ? `<span class="release-badge">${localizedChannel}</span>` : '';
 
                 return `
-                    <section class="release-card" aria-label="${release.title || release.version || 'EVD release'}">
+                    <section class="release-card" aria-label="${localizedTitle || release.version || 'EVD release'}">
                         <div class="release-meta">
-                            ${channel}
+                            ${channelBadge}
                             <span>${safeText('versionLabel', 'Version')}: ${release.version || '-'}</span>
                             <span>${safeText('dateLabel', 'Date')}: ${releaseDate}</span>
                         </div>
-                        <h3>${release.title || `EVD ${release.version || ''}`}</h3>
-                        <p>${release.notes || safeText('releaseFallback', 'No description was added for this release yet.')}</p>
+                        <h3>${localizedTitle}</h3>
+                        <p>${localizedNotes}</p>
                         <div class="release-actions">
                             ${setupButton}
                             ${portableButton}
+                            ${macButton}
                             ${notesButton}
+                            ${guideButton}
                         </div>
+                        ${macBetaBlock}
                     </section>
                 `;
             }).join('');
@@ -126,13 +165,6 @@
         });
     }
 
-    function summarizeTutorialDescription(value) {
-        const normalized = String(value || '').replace(/\s+/g, ' ').trim();
-        if (!normalized) return '';
-        if (normalized.length <= 220) return normalized;
-        return `${normalized.slice(0, 217).trimEnd()}...`;
-    }
-
     async function loadTutorials() {
         const tutorialList = document.getElementById('tutorial-list');
         if (!tutorialList) return;
@@ -157,7 +189,6 @@
                 const published = entry.published || '';
                 const videoUrl = entry.url || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : (data.playlistUrl || tutorialPlaylistUrl));
                 const thumbUrl = entry.thumbnail || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
-                const description = summarizeTutorialDescription(entry.description);
 
                 return `
                     <article class="tutorial-card">
@@ -165,7 +196,6 @@
                         <div class="tutorial-body">
                             <h3>${escapeHtml(title)}</h3>
                             <div class="tutorial-meta">${safeText('tutorialDateLabel', 'Published')}: ${escapeHtml(formatTutorialDate(published) || '-')}</div>
-                            ${description ? `<p class="tutorial-description">${escapeHtml(description)}</p>` : ''}
                             <div class="release-actions">
                                 <a class="btn btn-primary" href="${videoUrl}" target="_blank" rel="noopener noreferrer">${safeText('tutorialWatchLabel', 'Open video')}</a>
                             </div>
