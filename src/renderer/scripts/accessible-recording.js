@@ -87,6 +87,60 @@ let recordingWizardReady = false;
 let interviewQuickStartAttempted = false;
 let recordingTimelineInterval = null;
 let obsStatsInterval = null;
+let recordingAudioKeepAlive = null;
+
+async function startRecordingAudioKeepAlive() {
+    if (recordingAudioKeepAlive || state.mode === 'broadcast' || !els.systemAudioEnable?.checked) {
+        return false;
+    }
+
+    try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return false;
+
+        const context = new AudioContextClass({ latencyHint: 'playback' });
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(997, context.currentTime);
+        gain.gain.setValueAtTime(1e-7, context.currentTime);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start();
+        if (context.state === 'suspended') {
+            await context.resume();
+        }
+
+        recordingAudioKeepAlive = { context, oscillator, gain };
+        logRecordingWizard('recording_audio_keepalive_started', {
+            sampleRate: context.sampleRate,
+            state: context.state
+        });
+        await delay(350);
+        return true;
+    } catch (error) {
+        console.warn('[RecordingWizard] Audio keep-alive could not be started:', error);
+        logRecordingWizard('recording_audio_keepalive_failed', {
+            error: error?.message || String(error)
+        });
+        return false;
+    }
+}
+
+async function stopRecordingAudioKeepAlive(reason = 'recording_stopped') {
+    const keepAlive = recordingAudioKeepAlive;
+    recordingAudioKeepAlive = null;
+    if (!keepAlive) return;
+
+    try {
+        keepAlive.gain.gain.setValueAtTime(0, keepAlive.context.currentTime);
+        keepAlive.oscillator.stop();
+    } catch (error) { }
+    try {
+        await keepAlive.context.close();
+    } catch (error) { }
+    logRecordingWizard('recording_audio_keepalive_stopped', { reason });
+}
 
 ipcRenderer.on('recording-wizard-init', (_event, options) => {
     pendingLaunchOptions = options || {};
@@ -464,6 +518,7 @@ const state = {
     youtubeStreamMethod: 'manual',
     youtubeApiMode: 'instant',
     youtubeConnected: false,
+    youtubeClientConfigured: false,
     youtubeAccounts: [],
     youtubeActiveAccountId: '',
     youtubeChannelTitle: '',
@@ -669,6 +724,11 @@ const els = {
     youtubeStreamMethodPanel: document.getElementById('youtube-stream-method-panel'),
     youtubeStreamMethod: document.getElementById('youtube-stream-method'),
     youtubeApiPanel: document.getElementById('youtube-api-panel'),
+    youtubeOauthSetup: document.getElementById('youtube-oauth-setup'),
+    youtubeClientId: document.getElementById('youtube-client-id'),
+    youtubeClientSecret: document.getElementById('youtube-client-secret'),
+    youtubeShowClientSecret: document.getElementById('youtube-show-client-secret'),
+    btnYoutubeSaveClient: document.getElementById('youtube-save-client'),
     btnYoutubeConnect: document.getElementById('btn-youtube-connect'),
     btnYoutubeDisconnect: document.getElementById('btn-youtube-disconnect'),
     youtubeAuthStatus: document.getElementById('youtube-auth-status'),
@@ -4616,6 +4676,8 @@ function syncYoutubeStatusText(messageKey = 'recording_wizard.broadcast.youtube_
 }
 
 function updateYouTubeAuthUi() {
+    if (els.youtubeOauthSetup) els.youtubeOauthSetup.hidden = state.youtubeClientConfigured;
+    if (els.btnYoutubeConnect) els.btnYoutubeConnect.disabled = !state.youtubeClientConfigured;
     if (!els.youtubeAuthStatus) return;
     if (state.youtubeConnected) {
         els.youtubeAuthStatus.textContent = t('recording_wizard.broadcast.youtube_auth_connected', 'YouTube hesabi bagli: {channel}', {
@@ -4727,6 +4789,7 @@ function populateYouTubeBroadcastList() {
 async function loadYouTubeAuthState() {
     const response = await ipcRenderer.invoke('youtube-get-auth-state');
     if (!response.success) {
+        state.youtubeClientConfigured = false;
         state.youtubeAccounts = [];
         state.youtubeActiveAccountId = '';
         state.youtubePlaylists = [];
@@ -4737,6 +4800,7 @@ async function loadYouTubeAuthState() {
     }
 
     state.youtubeConnected = !!response.connected;
+    state.youtubeClientConfigured = Boolean(String(response.clientId || '').trim());
     state.youtubeAccounts = Array.isArray(response.accounts) ? response.accounts : [];
     state.youtubeActiveAccountId = response.activeAccountId || '';
     state.youtubeChannelTitle = response.channel?.title || '';
@@ -4804,6 +4868,27 @@ async function refreshYouTubeBroadcasts(options = {}) {
     } else {
         syncYoutubeStatusText('recording_wizard.broadcast.youtube_no_broadcasts', 'Planli YouTube yayini bulunamadi.');
     }
+}
+
+// One-time OAuth setup intentionally has no shortcut-manager action.
+async function saveYouTubeClientConfig() {
+    const clientId = String(els.youtubeClientId?.value || '').trim();
+    const clientSecret = String(els.youtubeClientSecret?.value || '').trim();
+    if (!clientId) {
+        syncYoutubeStatusText('youtube_oauth_setup.client_id_required', 'YouTube OAuth Client ID gereklidir.');
+        els.youtubeClientId?.focus();
+        return;
+    }
+    const response = await ipcRenderer.invoke('youtube-save-client-config', { clientId, clientSecret });
+    if (!response?.success) {
+        syncYoutubeStatusText('youtube_oauth_setup.save_failed', 'YouTube OAuth bilgileri kaydedilemedi: {error}', { error: response?.error || 'unknown_error' });
+        return;
+    }
+    if (els.youtubeClientSecret) els.youtubeClientSecret.value = '';
+    await loadYouTubeAuthState();
+    syncYoutubeStatusText('youtube_oauth_setup.saved', 'YouTube OAuth bilgileri kaydedildi. Şimdi YouTube hesabınızı bağlayabilirsiniz.');
+    announce(t('youtube_oauth_setup.saved', 'YouTube OAuth bilgileri kaydedildi. Şimdi YouTube hesabınızı bağlayabilirsiniz.'));
+    els.btnYoutubeConnect?.focus();
 }
 
 async function connectYouTubeAccount() {
@@ -5990,6 +6075,22 @@ async function init() {
                 }
             });
         });
+    }
+    if (els.youtubeShowClientSecret) {
+        els.youtubeShowClientSecret.addEventListener('change', () => {
+            if (els.youtubeClientSecret) els.youtubeClientSecret.type = els.youtubeShowClientSecret.checked ? 'text' : 'password';
+        });
+    }
+    els.youtubeOauthSetup?.addEventListener('click', (event) => {
+        const link = event.target?.closest?.('a[href]');
+        if (!link) return;
+        event.preventDefault();
+        shell.openExternal(link.href).catch((error) => console.warn('YouTube OAuth guide link could not be opened:', error));
+    });
+    if (els.btnYoutubeSaveClient) {
+        els.btnYoutubeSaveClient.addEventListener('click', () => saveYouTubeClientConfig().catch((error) => {
+            syncYoutubeStatusText('youtube_oauth_setup.save_failed', 'YouTube OAuth bilgileri kaydedilemedi: {error}', { error: error.message || error });
+        }));
     }
     if (els.btnYoutubeConnect) {
         els.btnYoutubeConnect.addEventListener('click', async () => {
@@ -7614,13 +7715,11 @@ async function setupObsSources() {
     // (Step 5'teki slider değerleri)
     if (state.micInputName) {
         const micVol = parseInt(els.micVolume.value, 10) || 100;
-        if (micVol !== 100) {
-            await ipcRenderer.invoke('obs-set-input-volume', {
-                inputName: state.micInputName,
-                volumePercent: micVol
-            });
-            console.log(`Applied mic volume: ${micVol}%`);
-        }
+        await ipcRenderer.invoke('obs-set-input-volume', {
+            inputName: state.micInputName,
+            volumePercent: micVol
+        });
+        console.log(`Applied mic volume: ${micVol}%`);
     }
     if (state.systemInputName && !els.systemVolume.disabled) {
         const sysVol = parseInt(els.systemVolume.value, 10) || 100;
@@ -8687,6 +8786,7 @@ async function startRecording() {
             await syncLiveEffectVisual(introSlot, { visible: false, restart: false });
         }
 
+        await startRecordingAudioKeepAlive();
         await minimizeAppForRecordingStartIfNeeded();
         const result = await ipcRenderer.invoke('obs-start-recording');
         logRecordingWizard('recording_start_result', {
@@ -8700,6 +8800,7 @@ async function startRecording() {
             els.recordingStatus.textContent = t('recording_wizard.recording.start_failed', 'Error: {error}', { error: result.error });
             announce(t('recording_wizard.recording.start_failed_announce', 'Recording could not be started: {error}', { error: result.error }));
             els.btnStartRecord.disabled = false;
+            await stopRecordingAudioKeepAlive('recording_start_failed');
             return;
         }
         state.recordingActive = true;
@@ -8750,6 +8851,7 @@ async function startRecording() {
         if (els.btnStartRecord) {
             els.btnStartRecord.disabled = false;
         }
+        await stopRecordingAudioKeepAlive('recording_start_exception');
     } finally {
         state.sessionActionInProgress = false;
     }
@@ -8883,6 +8985,7 @@ async function stopRecording() {
         state.recordingActive = false;
         state.recordingPaused = false;
         state.lastOutputPath = result.outputPath || null;
+        await stopRecordingAudioKeepAlive('recording_stopped');
         await resetLiveEffectsSession();
 
         if (els.btnStartRecord) {

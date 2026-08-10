@@ -3,7 +3,7 @@
     const preferredKey = 'evd-site-language';
     const tutorialPlaylistId = 'PLHs9m0QEyULCSQ7kIonyUQ5AXl5NwNGHQ';
     const tutorialPlaylistUrl = `https://www.youtube.com/playlist?list=${tutorialPlaylistId}`;
-    const assetVersion = '4.8.0';
+    const assetVersion = '4.9.0';
     const tutorialJsonUrl = `/tutorials.json?v=${assetVersion}`;
 
     function safeText(key, fallback) {

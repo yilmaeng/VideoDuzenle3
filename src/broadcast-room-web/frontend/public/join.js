@@ -5205,7 +5205,7 @@
             handleCameraToggleChange().catch((error) => {
                 els.cameraEnabled.checked = !Boolean(els.cameraEnabled.checked);
                 updateJoinMediaToggleButtons();
-                setStatus(t('broadcast_room_join.join_failed', 'Katılım jetonu alınamadı: {error}', {
+                setStatus(t('broadcast_room_join.camera_publish_failed', 'Kamera açılamadı: {error}', {
                     error: formatErrorMessage(error)
                 }));
             });
@@ -5216,7 +5216,7 @@
             handleMicrophoneToggleChange().catch((error) => {
                 els.microphoneEnabled.checked = !Boolean(els.microphoneEnabled.checked);
                 updateJoinMediaToggleButtons();
-                setStatus(t('broadcast_room_join.join_failed', 'Katılım jetonu alınamadı: {error}', {
+                setStatus(t('broadcast_room_join.microphone_publish_failed', 'Mikrofon açılamadı: {error}', {
                     error: formatErrorMessage(error)
                 }));
             });

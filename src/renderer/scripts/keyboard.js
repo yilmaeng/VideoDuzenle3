@@ -81,6 +81,8 @@ const Keyboard = {
             playCutPreview: { tr: 'Kesim Önizleme (Seçimsiz)', en: 'Preview Cut (No Selection)' },
             pauseAt: { tr: 'Duraklat (İmleçsiz)', en: 'Pause at Position' },
             pauseAndSet: { tr: 'Duraklat ve Konumla', en: 'Pause and Set Cursor' },
+            playbackVolumeUp: { tr: 'Oynatıcı Sesini Artır', en: 'Increase Playback Volume' },
+            playbackVolumeDown: { tr: 'Oynatıcı Sesini Azalt', en: 'Decrease Playback Volume' },
             skipSilence: { tr: 'Sessizliği Atla', en: 'Skip Silence' },
             scrubRight: { tr: 'İleri (İnce)', en: 'Seek Forward (Fine)' },
             scrubLeft: { tr: 'Geri (İnce)', en: 'Seek Backward (Fine)' },
@@ -138,6 +140,7 @@ const Keyboard = {
             openCtaLibrary: { tr: 'CTA / Overlay Kütüphanesi', en: 'CTA / Overlay Library' },
             insertVideoLayer: { tr: 'Video Katmanı (PiP)', en: 'Insert Video Layer (PiP)' },
             insertSubtitle: { tr: 'Altyazı Ekle (.srt)', en: 'Insert Subtitle (.srt)' },
+            openDescriptionSubtitleEditor: { tr: 'Betimleme / Altyazı Editörü', en: 'Description / Subtitle Editor' },
             createShorts: { tr: 'Dikey Video (Shorts/Reels) Oluştur', en: 'Create Vertical Video (Shorts/Reels)' },
             createShortsFromSelection: { tr: 'Seçili Alanı Dikey Videoya Dönüştür', en: 'Create Vertical Video from Selection' },
             addSelectionToQueue: { tr: 'Seçili Alanı Seçim Listesine Ekle', en: 'Add Selected Range to Selection List' },
@@ -211,6 +214,31 @@ const Keyboard = {
         'delete': { default: ['Delete', 'Mod+D'], category: 'Düzenleme', label: 'Sil' },
         'selectAll': { default: 'Mod+A', category: 'Düzenleme', label: 'Tümünü Seç' },
         'addMarker': { default: 'M', category: 'İşaretçiler', label: 'İşaretçi Ekle' },
+        // This contextual command is consumed by the specialist description/subtitle editor.
+        'createDescriptionEvent': { default: 'Mod+Enter', category: 'Ekle', label: 'İşaretçi Aralığından Betimleme veya Altyazı Olayı Ekle' },
+        'createDescriptionEventQuick': { default: 'D', category: 'Ekle', label: 'Hızlı Sesli Betimleme Olayı Ekle' },
+        'createSubtitleEventQuick': { default: 'S', category: 'Ekle', label: 'Hızlı Altyazı Olayı Ekle' },
+        'createReviewNoteQuick': { default: 'A', category: 'Ekle', label: 'İşaretçi Aralığına Bağımsız Son Kontrol Notu Ekle' },
+        'editDescriptionReviewNote': { default: 'Alt+N', category: 'Ekle', label: 'Seçili betimlemeye son kontrol notu ekle veya düzenle' },
+        'importDescriptionSubtitles': { default: null, category: 'Dosya', label: 'Betimleme Editörüne SRT veya VTT İçe Aktar' },
+        'exportDescriptionEvents': { default: 'Mod+Shift+E', category: 'Dosya', label: 'Betimleme ve Altyazı Olaylarını Dışa Aktar' },
+        'splitDescriptionEvent': { default: null, category: 'Düzenleme', label: 'Betimleme Olayını Oynatma Konumunda Böl' },
+        'mergeDescriptionEvents': { default: null, category: 'Düzenleme', label: 'Seçili Betimleme Olaylarını Birleştir' },
+        'synthesizeSelectedDescriptions': { default: null, category: 'Ekle', label: 'Seçili Betimlemeleri Seslendir' },
+        'synthesizeAllDescriptions': { default: null, category: 'Ekle', label: 'Tüm Betimlemeleri Seslendir' },
+        'renderDescribedVideo': { default: null, category: 'Dosya', label: 'Betimlemeli Video Oluştur' },
+        'findDescriptionText': { default: 'Mod+F', category: 'Düzenleme', label: 'Betimleme Metninde Ara' },
+        'replaceDescriptionText': { default: 'Mod+H', category: 'Düzenleme', label: 'Betimleme Metninde Ara ve Değiştir' },
+        'focusDescriptionEventList': { default: 'Alt+L', category: 'Navigasyon', label: 'Betimleme Olay Listesine Git' },
+        'focusDescriptionPlayback': { default: 'Alt+T', category: 'Navigasyon', label: 'Betimleme Oynatma ve Zaman Çizelgesi Alanına Git' },
+        'moveDescriptionEarlier': { default: 'Alt+ArrowLeft', category: 'Navigasyon', label: 'Seçili Betimleme Olaylarını 10 Milisaniye Erkene Al' },
+        'moveDescriptionLater': { default: 'Alt+ArrowRight', category: 'Navigasyon', label: 'Seçili Betimleme Olaylarını 10 Milisaniye İleri Al' },
+        'moveDescriptionEarlierLarge': { default: 'Alt+Shift+ArrowLeft', category: 'Navigasyon', label: 'Seçili Betimleme Olaylarını 100 Milisaniye Erkene Al' },
+        'moveDescriptionLaterLarge': { default: 'Alt+Shift+ArrowRight', category: 'Navigasyon', label: 'Seçili Betimleme Olaylarını 100 Milisaniye İleri Al' },
+        'moveDescriptionEarlierFine': { default: 'G', category: 'Navigasyon', label: 'Seçili Betimleme Olaylarını 1 Milisaniye Erkene Al' },
+        'moveDescriptionLaterFine': { default: 'H', category: 'Navigasyon', label: 'Seçili Betimleme Olaylarını 1 Milisaniye İleri Al' },
+        'moveDescriptionEarlierSecond': { default: 'Ctrl+J', category: 'Navigasyon', label: 'Seçili Betimleme Olaylarını 1 Saniye Erkene Al' },
+        'moveDescriptionLaterSecond': { default: 'Ctrl+L', category: 'Navigasyon', label: 'Seçili Betimleme Olaylarını 1 Saniye İleri Al' },
         'applyTransition': { default: null, category: 'Düzenleme', label: 'Varsayılan Geçiş Ekle' },
         'transitionLib': { default: 'Mod+Shift+T', category: 'Düzenleme', label: 'Geçiş Kütüphanesi' },
         'applyAllTrans': { default: 'Mod+T', category: 'Düzenleme', label: 'Tümüne Geçiş Uygula' },
@@ -222,6 +250,8 @@ const Keyboard = {
         'playCutPreview': { default: 'Ctrl+Shift+Space', category: 'Oynatma', label: 'Kesim Önizleme (Seçimsiz)' },
         'pauseAt': { default: 'K', category: 'Oynatma', label: 'Duraklat (İmleçsiz)' },
         'pauseAndSet': { default: 'Enter', category: 'Oynatma', label: 'Duraklat ve Konumla' },
+        'playbackVolumeUp': { default: 'ArrowUp', category: 'Oynatma', label: 'Oynatıcı Sesini Artır' },
+        'playbackVolumeDown': { default: 'ArrowDown', category: 'Oynatma', label: 'Oynatıcı Sesini Azalt' },
         'skipSilence': { default: 'Mod+Shift+J', category: 'Oynatma', label: 'Sessizliği Atla' },
 
         // --- Navigasyon (Navigation) ---
@@ -296,6 +326,7 @@ const Keyboard = {
         'openCtaLibrary': { default: 'Mod+Shift+K', category: 'Ekle', label: 'CTA / Overlay Kütüphanesi' },
         'insertVideoLayer': { default: 'Ctrl+Shift+V', category: 'Ekle', label: 'Video Katmanı (PiP)' },
         'insertSubtitle': { default: null, category: 'Ekle', label: 'Altyazı Ekle (.srt)' },
+        'openDescriptionSubtitleEditor': { default: null, category: 'Ekle', label: 'Betimleme / Altyazı Editörü' },
         'createShorts': { default: null, category: 'Ekle', label: 'Dikey Video (Shorts/Reels) Oluştur' },
         'createShortsFromSelection': { default: null, category: 'Ekle', label: 'Seçili Alanı Dikey Videoya Dönüştür' },
         'addSelectionToQueue': { default: null, category: 'Ekle', label: 'Seçili Alanı Seçim Listesine Ekle' },
@@ -615,6 +646,8 @@ const Keyboard = {
         }
 
         // Oynatma
+        else if (this.check('playbackVolumeUp', e) && VideoPlayer.hasVideo()) { VideoPlayer.adjustPlaybackVolume(5, false); handled = true; }
+        else if (this.check('playbackVolumeDown', e) && VideoPlayer.hasVideo()) { VideoPlayer.adjustPlaybackVolume(-5, false); handled = true; }
         else if (this.check('togglePlay', e)) { VideoPlayer.togglePlay(); handled = true; }
         else if (this.check('pauseAt', e)) { VideoPlayer.pauseAtCurrentPosition(); handled = true; }
         else if (this.check('pauseAndSet', e)) { VideoPlayer.togglePauseAtCurrentPosition(); handled = true; }
@@ -691,6 +724,10 @@ const Keyboard = {
             handled = true;
         }
         else if (this.check('insertSubtitle', e)) { App.insertSubtitle(); handled = true; }
+        else if (this.check('openDescriptionSubtitleEditor', e)) {
+            window.api.openDescriptionSubtitleEditor({ videoPath: App.currentFilePath || '', userKeymap: this.getUserKeymap(), navigationStep: Settings.getNavigationStep() });
+            handled = true;
+        }
         else if (this.check('insertVideoLayer', e)) {
             if (VideoPlayer.hasVideo()) {
                 // Video seçim dialogunu aç

@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EVD Yayın Odası Kullanım Kılavuzu</title>
+  <style>
+    :root {
+      --text: #1f2937;
+      --muted: #4b5563;
+      --accent: #0f766e;
+      --line: #d1d5db;
+      --soft: #f3f4f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+      line-height: 1.55;
+      background: white;
+    }
+    .page {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 40px 52px 72px;
+    }
+    h1, h2, h3 {
+      line-height: 1.25;
+      margin: 0 0 14px;
+    }
+    h1 {
+      font-size: 30px;
+      color: #0b3b36;
+      margin-bottom: 10px;
+    }
+    h2 {
+      font-size: 22px;
+      color: var(--accent);
+      margin-top: 34px;
+      padding-top: 14px;
+      border-top: 2px solid var(--line);
+    }
+    h3 {
+      font-size: 17px;
+      margin-top: 20px;
+    }
+    p, li {
+      font-size: 14px;
+    }
+    p {
+      margin: 0 0 12px;
+    }
+    ul, ol {
+      margin: 0 0 14px 22px;
+      padding: 0;
+    }
+    li { margin: 0 0 7px; }
+    .lead {
+      font-size: 16px;
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+    .meta {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      margin-bottom: 28px;
+    }
+    .meta span {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .toc {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 28px;
+    }
+    .toc h2 {
+      border: 0;
+      padding-top: 0;
+      margin-top: 0;
+      font-size: 18px;
+    }
+    .toc a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .toc a:hover,
+    .toc a:focus {
+      text-decoration: underline;
+    }
+    .note, .tip {
+      border-left: 4px solid var(--accent);
+      background: #f0fdfa;
+      padding: 12px 14px;
+      margin: 14px 0 18px;
+      border-radius: 8px;
+    }
+    .note strong, .tip strong {
+      color: #115e59;
+    }
+    .shortcut-list li {
+      margin-bottom: 6px;
+    }
+    .footer {
+      margin-top: 44px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    @media print {
+      .page {
+        max-width: none;
+        padding: 20mm 16mm 18mm;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <h1>EVD Yayın Odası Kullanım Kılavuzu</h1>
+    <p class="lead">
+      Bu kılavuz, EVD içindeki Yayın Odası özelliğini baştan sona erişilebilir bir iş akışıyla anlatır.
+      Amaç; oda açma, konuk davet etme, sahne düzeni kurma, kayıt alma, YouTube yayını başlatma,
+      ekran paylaşma, sohbet, katılımcı yönetimi, canlı altyazı, dublaj ve sahne arka planlarını tek yerde
+      toplu olarak açıklamaktır.
+    </p>
+
+    <div class="meta">
+      <span><strong>Ürün:</strong> Engelsiz Video Düzenleyicisi</span>
+      <span><strong>Bölüm:</strong> Yayın Odası</span>
+      <span><strong>Belge türü:</strong> Paylaşılabilir PDF kılavuz</span>
+      <span><strong>Güncelleme:</strong> 13 Haziran 2026</span>
+    </div>
+
+    <section class="toc">
+      <h2>İçindekiler</h2>
+      <ol>
+        <li><a href="#yayin-odasi-nedir">Yayın Odası nedir?</a></li>
+        <li><a href="#yayin-odasi-arayuzu">Yayın Odası arayüzü</a></li>
+        <li><a href="#gecici-oda-acma">Geçici oda açma</a></li>
+        <li><a href="#kalici-odalar">Kalıcı odalar ve katılım kuralları</a></li>
+        <li><a href="#konuk-katilim-akisi">Konuk katılım akışı</a></li>
+        <li><a href="#konuk-sunucu-sayfasi">Konuk sunucu sayfası ve kontroller</a></li>
+        <li><a href="#sahne-duzenleri">Sahne düzenleri</a></li>
+        <li><a href="#sahne-arka-plani">Sahne arka planı, logo ve arka plan profilleri</a></li>
+        <li><a href="#kayit-nasil-yapilir">Kayıt alma</a></li>
+        <li><a href="#yerel-yedek-ve-bot-kaydi">Yerel yedek kayıt, konuk parçaları ve bot kaydı</a></li>
+        <li><a href="#youtube-canli-yayin">YouTube canlı yayın akışı</a></li>
+        <li><a href="#canli-altyazi-ceviri-dublaj">Canlı altyazı, canlı çeviri ve dublaj</a></li>
+        <li><a href="#elevenlabs-kayit-sonrasi-dublaj">ElevenLabs ile kayıt sonrası dublaj</a></li>
+        <li><a href="#api-anahtarlari">API anahtarları ve servis seçimi</a></li>
+        <li><a href="#efekt-katmani">Efekt katmanı</a></li>
+        <li><a href="#ekran-paylasimi">Ekran paylaşımı</a></li>
+        <li><a href="#erisilebilir-belge-paylasimi">Erişilebilir belge yükleyerek paylaşımı erişilebilir hale getirme</a></li>
+        <li><a href="#katilimci-yonetimi">Katılımcı yönetimi, roller ve sohbet</a></li>
+        <li><a href="#webinar-akisi">Webinar, panelist ve izleyici akışı</a></li>
+        <li><a href="#yapay-zekadan-gorus-alma">Yapay zekadan görüş alma</a></li>
+        <li><a href="#temel-kisayollar">Temel kısayollar</a></li>
+        <li><a href="#sorun-giderme">Sorun giderme</a></li>
+      </ol>
+    </section>
+
+    <section id="yayin-odasi-nedir">
+      <h2>1. Yayın Odası Nedir?</h2>
+      <p>
+        Yayın Odası; konukları bağlantıyla davet ettiğiniz, onların kamera, mikrofon ve ekran paylaşımını
+        alabildiğiniz, tüm bunları kayda veya canlı yayına kontrollü biçimde yansıtabildiğiniz erişilebilir bir
+        canlı yayın çalışma alanıdır.
+      </p>
+      <p>
+        Buradaki mantık iki parçalıdır. Önce oda bağlantısını kurarsınız. Sonra bu bağlantının
+        ekranda nasıl görüneceğini sahne düzeni ile belirlersiniz.
+      </p>
+      <ul>
+        <li><strong>Oda ve cihazlar:</strong> Oda oluşturma, kalıcı odalar, kamera, mikrofon ve hoparlör seçimi.</li>
+        <li><strong>Katılımcılar ve sohbet:</strong> Konuk listesi, söz isteme, özel mesaj ve herkese mesaj.</li>
+        <li><strong>Paylaşım ve kaynaklar:</strong> Host ekran paylaşımı, konuk ekran paylaşımı ve yerel kaynak seçimi.</li>
+        <li><strong>Sahne düzeni:</strong> Kimin nerede görüneceği ve paylaşımın ne kadar büyük olacağı.</li>
+        <li><strong>Marka ve erişilebilirlik katmanları:</strong> Sahne arka planı, logo, canlı altyazı, canlı çeviri ve işaret dili tercümanı.</li>
+        <li><strong>Kayıt ve yayın:</strong> OBS hazırlığı, yerel kayıt, YouTube canlı yayın, dublaj ve efekt katmanı.</li>
+      </ul>
+      <div class="note">
+        <strong>Menü yolu:</strong> <strong>Kayıt &gt; Yayın Odası</strong>
+      </div>
+    </section>
+
+    <section id="yayin-odasi-arayuzu">
+      <h2>2. Yayın Odası Arayüzü</h2>
+      <p>
+        Yayın Odasının en üstünde <strong>Bölge Listesi</strong> bulunur. <strong>Alt+L</strong> ile bu listeye gidebilir,
+        yukarı ve aşağı oklarla bölgeler arasında dolaşabilir, <strong>Enter</strong> ile seçili bölgenin ilk öğesine geçebilirsiniz.
+      </p>
+      <p>Başlıca bölgeler şunlardır:</p>
+      <ul>
+        <li><strong>Canlı Görüntü Önizlemesi:</strong> Host, konuklar ve varsa ekran paylaşımının büyük önizlemesi.</li>
+        <li><strong>Oda ve Cihazlar:</strong> Oda oluşturma, kalıcı odalar ve cihaz seçimleri.</li>
+        <li><strong>Katılımcılar ve Sohbet:</strong> Katılımcı listesi, sohbet alanı ve söz isteyenler bölümü.</li>
+        <li><strong>Paylaşım ve Kaynaklar:</strong> Host yerel paylaşımı ve yakalanacak kaynaklar.</li>
+        <li><strong>Sahne Düzeni:</strong> Yan yana, paylaşım büyük, yüzler küçük gibi yerleşim kararları.</li>
+        <li><strong>Sahne Arka Planı:</strong> Görsel veya video arka plan, logo, karartma ve profil ayarları.</li>
+        <li><strong>OBS, Kayıt, YouTube, Efekt:</strong> Yayını fiilen başlatan ve yöneten bölgeler.</li>
+        <li><strong>Canlı Çeviri / Altyazı:</strong> Canlı altyazı, çeviri sesi, dublaj önizleme ve kayıt/yayın çıktısına gömme seçenekleri.</li>
+        <li><strong>Tanı ve Olay Geçmişi:</strong> Ses, görüntü, paylaşım ve katılımcı olaylarını izlediğiniz alan.</li>
+      </ul>
+      <div class="tip">
+        <strong>Hızlı dolaşım:</strong> <strong>Ctrl+Sağ</strong> ve <strong>Ctrl+Sol</strong> ile bölgeler arasında
+        şerit menü mantığında hızlı geçiş yapılabilir.
+      </div>
+    </section>
+
+    <section id="gecici-oda-acma">
+      <h2>3. Geçici Oda Açma</h2>
+      <ol>
+        <li>Yayın Odasını açın.</li>
+        <li>Kamera, mikrofon ve hoparlör seçimlerinizi kontrol edin.</li>
+        <li>İsterseniz host adını ve oda adını düzenleyin.</li>
+        <li><strong>Oda Oluştur</strong> düğmesine basın.</li>
+        <li>Oda kurulduğunda bağlantı panoya kopyalanır. Bunu konuğunuzla paylaşabilirsiniz.</li>
+      </ol>
+      <p>
+        Geçici oda, o anki oturum için hızlı bir bağlantı üretir. Tek seferlik görüşme, prova veya anlık yayın hazırlığı için uygundur.
+      </p>
+    </section>
+
+    <section id="kalici-odalar">
+      <h2>4. Kalıcı Odalar ve Katılım Kuralları</h2>
+      <p>
+        Aynı bağlantıyı tekrar tekrar kullanmak istiyorsanız kalıcı oda mantığı daha uygundur. Böylece her yayında yeni link göndermeniz gerekmez.
+      </p>
+      <ol>
+        <li><strong>Oda Yönetimi</strong> düğmesini açın. Kısayol: <strong>Alt+O</strong>.</li>
+        <li>Oda adı, host adı ve isterseniz kalıcı oda bağlantı anahtarını belirleyin.</li>
+        <li>Parola koruması istiyorsanız oda parolasını girin.</li>
+        <li>Host varken veya host yokken parolanın zorunlu olup olmayacağını seçin.</li>
+        <li>Host bağlı değilken konukların odaya girip giremeyeceğini belirleyin.</li>
+        <li><strong>Bu ayarlarla oda oluştur</strong> düğmesine basın.</li>
+      </ol>
+      <p>
+        Oda kurulduktan sonra <strong>Kalıcı Oda Listesi</strong> içinde görünür. Listede yukarı ve aşağı oklarla gezilir.
+        <strong>Enter</strong> seçili odayı açar. <strong>Sağ ok</strong> bağlam menüsünü açar, <strong>Sol ok</strong> kapatır.
+      </p>
+      <p>Kalıcı oda menüsünde şunlar bulunur:</p>
+      <ul>
+        <li>Oda bağlantısını kopyala</li>
+        <li>Host varken parola korumasını aç veya kapat</li>
+        <li>Host yokken parola korumasını aç veya kapat</li>
+        <li>Host yokken katılımı etkinleştir veya devre dışı bırak</li>
+        <li>Odayı düzenle</li>
+      </ul>
+      <div class="tip">
+        <strong>Bağlantı anahtarı:</strong> Kalıcı oda bağlantısında yalnız rakam kullanmak zorunda değilsiniz.
+        Boşluk ve Türkçe karakter kullanmadan <strong>SohbetOdasi</strong> veya <strong>HaftalikEgitim</strong> gibi akılda kalıcı bir anahtar belirleyebilirsiniz.
+      </div>
+    </section>
+
+    <section id="konuk-katilim-akisi">
+      <h2>5. Konuk Katılım Akışı</h2>
+      <p>
+        Konuk bağlantıyı açtığında sade bir katılım sayfası görür. Cihaz seçimleri daraltılmış
+        <strong>Aygıt seçenekleri</strong> panelindedir; normal akışta önce görünen ad alanına ulaşılır.
+      </p>
+      <ol>
+        <li>Konuk görünen adını yazar.</li>
+        <li>İsterse katılmadan önce <strong>Aygıt seçenekleri</strong> panelini açıp kamera ve mikrofon seçimini değiştirir.</li>
+        <li>Kamera ve mikrofon onay kutularıyla başlangıçta açık veya kapalı katılacağını belirler.</li>
+        <li>Oda parolası zorunluysa parola alanını da doldurur.</li>
+        <li><strong>Odaya Katıl</strong> düğmesine basar veya görünen ad alanında <strong>Enter</strong> ile katılır.</li>
+      </ol>
+      <p>
+        Konuk bağlandıktan sonra sohbet, söz isteme, ekran paylaşımı ve diğer kontrol alanları görünür hale gelir.
+      </p>
+    </section>
+
+    <section id="konuk-sunucu-sayfasi">
+      <h2>6. Konuk Sunucu Sayfası ve Kontroller</h2>
+      <p>
+        Konukların kullandığı web sayfası, toplantı sırasında en az kalabalıkla çalışacak şekilde tasarlanmıştır.
+        Sayfa başlığında girilen oda adı görünür; örneğin <strong>Engelsiz Erişimli Saatler - EVD Yayın Odası</strong>.
+      </p>
+      <h3>Toplantıya girdikten sonra temel kontroller</h3>
+      <ul>
+        <li><strong>Mikrofon:</strong> Mikrofonu açar veya kapatır. Kısayol: <strong>Ctrl+D</strong>.</li>
+        <li><strong>Kamera:</strong> Kamerayı açar veya kapatır. Kısayol: <strong>Ctrl+E</strong>.</li>
+        <li><strong>Odadan ayrıl:</strong> Konuğu odadan çıkarır. Kısayol: <strong>Ctrl+Shift+H</strong>.</li>
+        <li><strong>Paylaşımı başlat / durdur:</strong> Host izin verdiyse ekran, pencere veya uygulama paylaşır. Kısayol: <strong>Ctrl+Shift+E</strong>.</li>
+      </ul>
+      <h3>Kamera ve mikrofon değiştirme</h3>
+      <p>
+        Katılmadan önce kamera ve mikrofon listeleri <strong>Aygıt seçenekleri</strong> panelindedir.
+        Toplantı içindeyken cihaz değişimi yapılırsa EVD seçimi odaya yansıtmaya çalışır; bazı mobil tarayıcılarda değişiklik için sayfayı yenilemek gerekebilir.
+      </p>
+      <h3>Altyazı ve çeviri paneli</h3>
+      <ol>
+        <li>Host canlı altyazı veya çeviriyi etkinleştirdiyse konuk tarafında <strong>Altyazı/çeviri paneli</strong> kullanılabilir hale gelir.</li>
+        <li>Konuk kendi dilini <strong>Benim dilim</strong> listesinden seçer.</li>
+        <li>Yalnız altyazı modunda metin, seçilen kişisel dilden bağımsız olarak gösterilir; bu akış işitme engelli kullanıcılar için düşünülmüştür.</li>
+        <li>Sesli çeviri modunda konuşma konuk dilinden farklıysa çeviri sesi önde, özgün ses altta duyulur.</li>
+        <li>Konuşma zaten konuğun seçtiği dildeyse aynı dilde tekrar dublaj çalınmaz.</li>
+      </ol>
+      <h3>Ekran paylaşımı büyük görünümü</h3>
+      <p>
+        Host ekran paylaştığında konuk tarafında paylaşım büyük görünümde açılabilir. Konuk <strong>Escape</strong> ile bu büyük görünümden çıkabilir.
+        Paylaşım devam ediyorsa <strong>Paylaşım büyük görünümüne dön</strong> düğmesiyle tekrar açabilir.
+      </p>
+      <h3>Sohbet ve diğer bilgiler</h3>
+      <p>
+        Sohbet varsayılan olarak kapalı bir paneldedir. Konuk gerekirse paneli açıp herkese veya hosta mesaj gönderebilir.
+        Katılımcılar ve diğer bilgiler de daraltılmış panellerde tutulur; böylece sayfa özellikle ekran okuyucu kullanıcıları için daha sakin kalır.
+      </p>
+    </section>
+
+    <section id="sahne-duzenleri">
+      <h2>7. Sahne Düzenleri</h2>
+      <p>
+        Sahne düzeni, host ve konukların kayıtta veya canlı yayında nasıl görüneceğini belirler.
+        Odaya bağlanmak ile sahneye yerleşmek aynı şey değildir. Kişiler önce bağlanır, ardından siz onları sahne mantığına göre yerleştirirsiniz.
+      </p>
+      <ul>
+        <li><strong>Yan yana iki konuşmacı:</strong> Röportajlar ve eşit söz hakkı olan görüşmeler için uygundur.</li>
+        <li><strong>Paylaşım büyük, yüzler küçük:</strong> Sunum, eğitim ve ekran anlatımı için uygundur.</li>
+        <li><strong>Yüzler büyük, paylaşım küçük:</strong> Ekranın destekleyici olduğu ama konuşmacıların ana unsur olduğu akışlar için uygundur.</li>
+        <li><strong>Tek kişi odaklı düzen:</strong> Tek konuşmacılı yayınlarda kullanılır.</li>
+      </ul>
+      <p>
+        Konuk ekran paylaşımı başlatırsa sistem size hızlı sahne önerileri sunabilir; fakat düzeni otomatik olarak zorla değiştirmez.
+        Son kararı her zaman host verir.
+      </p>
+      <h3>Paylaşım sırasında otomatik yerleşim</h3>
+      <p>
+        Host paylaşım başlatmadan önce paylaşımın sahnede nasıl davranacağını seçebilir:
+        hiçbir şey yapma, paylaşımı büyük alana otomatik yerleştir veya paylaşımı küçük alana yerleştir.
+        Birden fazla konuşmacı sahnedeyse paylaşım başladığında konuşmacılar küçük pencerelerde korunur; paylaşım bitince önceki sahne düzenine dönülür.
+      </p>
+      <h3>Slot atama menüsü</h3>
+      <p>
+        Sahne düzeninde sol alan, sağ alan veya ana alan gibi slotlara geldiğinizde <strong>Sağ ok</strong> ile atama menüsünü açabilirsiniz.
+        Menüde atanabilecek kamera, konuk, paylaşım veya kaynaklar görünür. <strong>Enter</strong> seçili kaynağı slota atar,
+        <strong>Sol ok</strong> veya <strong>Escape</strong> menüyü kapatır.
+      </p>
+    </section>
+
+    <section id="sahne-arka-plani">
+      <h2>8. Sahne Arka Planı, Logo ve Arka Plan Profilleri</h2>
+      <p>
+        Yayın Odasında sahnenin en altına görsel veya sessiz döngülü video arka plan ekleyebilirsiniz.
+        Bu özellik, StreamYard benzeri daha markalı ve temiz bir yayın görüntüsü hazırlamak için kullanılır.
+      </p>
+      <h3>Arka plan dosyası ekleme</h3>
+      <ol>
+        <li><strong>Sahne Arka Planı</strong> bölgesine gidin.</li>
+        <li><strong>Arka plan dosyası seç</strong> düğmesine basın.</li>
+        <li>JPG, PNG, WebP, BMP gibi bir görsel veya MP4, WebM, MOV, MKV gibi bir video seçin.</li>
+        <li>Dosya 1920x1080 ölçüsüne uygun değilse EVD sizi uyarır.</li>
+        <li>İsterseniz EVD dosyayı 1920x1080 arka plan kopyasına dönüştürür, isterseniz özgün dosyayı kullanırsınız.</li>
+      </ol>
+      <p>
+        Video arka planlar sessiz olarak kullanılır ve bittiğinde otomatik döngüye girer. Bu nedenle kısa, sakin ve tekrarlandığında
+        rahatsız etmeyen videolar daha iyi sonuç verir.
+      </p>
+      <h3>Yerleşim ve karartma</h3>
+      <ul>
+        <li><strong>Doldur ve kırp:</strong> Arka plan tüm sahneyi kaplar; kenarlardan kırpma olabilir. Genellikle en temiz seçenektir.</li>
+        <li><strong>Sığdır ve boşluk bırak:</strong> Dosyanın tamamı görünür; oran uymuyorsa kenarlarda boşluk kalabilir.</li>
+        <li><strong>Esnet:</strong> Görsel sahneye zorla yayılır; oran bozulabileceği için yalnız özel durumlarda önerilir.</li>
+        <li><strong>Karartma yüzdesi:</strong> Arka planı koyulaştırır. Konuşmacıların ve altyazının daha rahat görünmesi için yararlıdır.</li>
+      </ul>
+      <h3>Logo ekleme</h3>
+      <ol>
+        <li><strong>Logo dosyası seç</strong> düğmesiyle PNG, JPG, WebP veya BMP logo seçin.</li>
+        <li>Logo konumunu sağ üst, sol üst, sağ alt veya sol alt olarak belirleyin.</li>
+        <li>Logo boyutunu küçük, orta veya büyük seçin.</li>
+        <li>Logo, arka plan ve karartmanın üstünde, yayın sahnesinin marka katmanı olarak görünür.</li>
+      </ol>
+      <h3>Profil olarak kaydetme</h3>
+      <p>
+        Sık kullandığınız arka plan, logo, karartma ve yerleşim ayarlarını profil olarak saklayabilirsiniz.
+      </p>
+      <ol>
+        <li>Arka plan, yerleşim, karartma ve logo ayarlarınızı yapın.</li>
+        <li><strong>Arka plan profil adı</strong> alanına örneğin "Kurumsal yayın" veya "Ders yayını" yazın.</li>
+        <li><strong>Profil olarak kaydet</strong> düğmesine basın.</li>
+        <li>Daha sonra <strong>Kayıtlı arka plan profilleri</strong> listesinden profili seçip <strong>Profili uygula</strong> düğmesine basın.</li>
+      </ol>
+      <p>
+        Arka plan profilleri Yayın Odası ve Erişilebilir Kayıt Sihirbazı arasında ortak kullanılır. Bir yerde kaydettiğiniz profili
+        diğer yerde de çağırabilirsiniz.
+      </p>
+    </section>
+
+    <section id="kayit-nasil-yapilir">
+      <h2>9. Kayıt Nasıl Yapılır?</h2>
+      <ol>
+        <li>OBS bağlantısının ve gerekli kaynakların hazır olduğundan emin olun.</li>
+        <li>Konuklar bağlandıysa sahne düzeninizi seçin.</li>
+        <li>Gerekirse paylaşım ve efekt kontrollerini hazırlayın.</li>
+        <li><strong>Kaydı Başlat</strong> düğmesine basın veya <strong>Alt+R</strong> kısayolunu kullanın.</li>
+        <li>Kayıt sırasında sahne düzeni değiştirebilir, katılımcı yönetebilir ve gerekiyorsa paylaşım başlatabilirsiniz.</li>
+        <li>İşiniz bitince aynı düğmeyle kaydı durdurun.</li>
+      </ol>
+      <p>
+        Yeni akışta kayıt için ayrı bir <strong>Yayın Çıkışı</strong> mantığı kullanılır. Böylece host arayüzündeki kontrol düğmeleri
+        kayda karışmadan siz yönetim yapmaya devam edebilirsiniz.
+      </p>
+      <p>
+        Kayıt başladığında EVD sizi temiz <strong>Yayın Çıkışı</strong> penceresine yönlendirebilir. Bu pencere kayda giden görüntüyü temsil eder.
+        Katılımcı yönetimi, sahne düzeni, efekt, paylaşım veya kaydı durdurma gibi işlemler için tekrar <strong>Yayın Odası</strong> penceresine dönmelisiniz.
+      </p>
+      <div class="tip">
+        <strong>Öneri:</strong> Yeni bir düzen, yeni paylaşım türü veya yeni efekt deniyorsanız önce kısa bir prova kaydı alın.
+      </div>
+    </section>
+
+    <section id="yerel-yedek-ve-bot-kaydi">
+      <h2>10. Yerel Yedek Kayıt, Konuk Parçaları ve Bot Kaydı</h2>
+      <h3>Konuk yerel yedek kayıtları</h3>
+      <p>
+        EVD, yerel kayıt sırasında uygun konuk tarayıcılarında yedek kayıt parçaları oluşturabilir.
+        Amaç, konuk interneti zayıfladığında ana kayıtta donma veya kesilme olursa daha temiz yerel parçaları sonradan kullanabilmektir.
+      </p>
+      <ul>
+        <li>Bu akış yalnız yerel kayıt başlatıldığında devreye girer; tek başına YouTube yayını yaparken konuk tarafında yedek kayıt başlatılmaz.</li>
+        <li>Konuk tarafı uygunsa ses veya ses+video parçaları küçük parçalar halinde yerel olarak tutulur ve sonra sunucuya gönderilir.</li>
+        <li>Kayıt bitince host, uygun yedekleri ana kayıtla birleştirerek yeni bir kayıt kopyası oluşturabilir.</li>
+        <li>Ana kayıt zaten temizse yedekleri kullanmanız gerekmez; bu özellik bir sigorta katmanıdır.</li>
+        <li>Oda kapatıldığında veya toplantı herkes için sonlandırıldığında yedek kayıtların temizlenmesi hedeflenir. Ayrıca sunucuda uzun süre bekleyen yedeklerin otomatik temizlenmesi için süre sınırı uygulanır.</li>
+      </ul>
+      <h3>Bot kaydı</h3>
+      <p>
+        Bazı senaryolarda host kendi bilgisayarında çeviri sesini duymak, odadaki sesi dinlemek veya farklı bir iş akışı kullanmak isteyebilir.
+        Bu durumda <strong>bot kaydı</strong> temiz sahne çıkışını ayrı bir kayıt mantığıyla yakalamak için kullanılabilir.
+      </p>
+      <ul>
+        <li>Bot kaydı varsayılan kayıt yöntemi değildir; özellikle ihtiyaç olduğunda başlatılır.</li>
+        <li>Kısayol: <strong>Alt+Ctrl+B</strong> bot kaydını başlatır veya durdurur.</li>
+        <li>Canlı çeviri/altyazı için <strong>Alt+Ctrl+T</strong> kullanılabilir.</li>
+        <li>Bot kaydı, yayın çıkışı penceresindeki temiz sahneye yakın bir görüntü yakalamayı hedefler; normal kayıt akışının yerine zorunlu olarak geçmez.</li>
+      </ul>
+      <div class="note">
+        <strong>Önemli:</strong> Yedek kayıtlar ve bot kaydı, asıl kaydın alternatifi değil, risk azaltma araçlarıdır.
+        Önemli yayınlardan önce kısa bir prova yaparak bilgisayarınızda ve konuk tarayıcısında destek durumunu kontrol edin.
+      </div>
+    </section>
+
+    <section id="youtube-canli-yayin">
+      <h2>11. YouTube Canlı Yayın Süreci</h2>
+      <ol>
+        <li>OBS ve yayın odası düzeninizi tamamlayın.</li>
+        <li>YouTube hesabı bağlantınızı kontrol edin.</li>
+        <li>Yeni yayın oluşturacaksanız başlık, açıklama ve görünürlük ayarlarını gözden geçirin.</li>
+        <li>Gerekirse mevcut bir yayın planını seçin.</li>
+        <li><strong>Canlı Yayını Başlat</strong> düğmesine basın. Kısayol: <strong>Alt+Ctrl+L</strong>.</li>
+        <li>Yayın başladıktan sonra katılımcı, paylaşım ve efekt işlemleri canlı olarak yönetilebilir.</li>
+      </ol>
+      <p>
+        İlk gerçek yayın öncesi gizli veya liste dışı bir YouTube testi yapmak, ses ve sahne doğrulaması için çok yararlıdır.
+      </p>
+      <p>
+        YouTube yayını sırasında ekran paylaşımı yapacaksanız sistem sesi, konuk sesi ve host sesi farklı ses hatlarından yönetilir.
+        Bu nedenle paylaşım başlatmadan önce kısa bir ses testi yapmak ve gerekirse <strong>Acil yayını sonlandır</strong> komutunun yerini bilmek önemlidir.
+      </p>
+    </section>
+
+    <section id="canli-altyazi-ceviri-dublaj">
+      <h2>12. Canlı Altyazı, Canlı Çeviri ve Dublaj</h2>
+      <p>
+        Yayın Odasında canlı altyazı ve canlı çeviri isteğe bağlıdır. Bu bölüm kapalıysa mevcut kayıt ve yayın davranışı değişmez.
+        Yani altyazı veya çeviri kullanmak istemiyorsanız bu alanı hiç açmadan normal yayın yapabilirsiniz.
+      </p>
+      <h3>Canlı altyazı</h3>
+      <ol>
+        <li><strong>Canlı çeviri / altyazıyı etkinleştir</strong> onay kutusunu işaretleyin.</li>
+        <li>Servis olarak varsayılan gelen seçeneği veya ihtiyacınıza göre OpenAI, ElevenLabs ya da Gemini seçeneklerinden birini kullanın.</li>
+        <li>Yalnız aynı dilden altyazı istiyorsanız çeviri ve sesli dublaj yerine metin / altyazı akışını seçin.</li>
+        <li><strong>Canlı altyazıyı kayıt ve yayına göm</strong> seçeneği açıksa altyazı temiz yayın çıkışının alt bölümüne eklenir.</li>
+        <li>Seçenek kapalıysa altyazı üretilse bile kayıt veya YouTube görüntüsüne gömülmez.</li>
+      </ol>
+      <p>
+        Canlı altyazı özellikle sağır ve işitme güçlüğü yaşayan izleyiciler için yararlıdır. Konuk sayfasında otomatik okunmaz;
+        konuk isterse altyazı/çeviri panelini açıp metni salt okunur alandan takip eder.
+      </p>
+      <h3>Servis seçimi</h3>
+      <ul>
+        <li><strong>OpenAI:</strong> Yazılı altyazı ve metin tabanlı çeviri için önerilir. YouTube canlı yayında kararlılık için standart parça akışı tercih edilir.</li>
+        <li><strong>Gemini Live Translate:</strong> Sesli çeviri için en akıcı seçeneklerden biridir. Host ve konuk, hedef dile çevrilen sesi duyabilir.</li>
+        <li><strong>ElevenLabs:</strong> Kayıt sonrası dublajda güçlüdür. Canlı altyazı/çeviri için bazı senaryolarda kullanılabilir; ancak canlı sesli akışta gecikme veya uyumluluk farkları oluşabilir.</li>
+      </ul>
+      <h3>Canlı çeviri ve sesli dublaj</h3>
+      <ol>
+        <li>Kaynak dili otomatik bırakabilir veya konuşulan dile göre seçebilirsiniz.</li>
+        <li>Hedef çeviri dilini seçin.</li>
+        <li>Çıktı modunu belirleyin: otomatik altyazı, yazılı çeviri veya sesli çeviri.</li>
+        <li>Sesli çeviride çevrilen cümleler hedef dilde seslendirilir.</li>
+        <li><strong>Host tarafında dublaj önizlemesini dinle</strong> açıksa host dublajı kayıt sırasında duyar; kapalıysa dublaj üretilir ama host kulaklığında çalmaz.</li>
+      </ol>
+      <p>
+        Sesli çeviride kaynak ve hedef aynıysa ya da sistem aynı dilde bir tekrar ürettiğini anlarsa o çeviri sesi çalınmaz.
+        Örneğin hedef dil İngilizce iken konuk zaten İngilizce konuşuyorsa konuk kendi cümlesini İngilizce dublaj olarak tekrar duymamalıdır.
+      </p>
+      <p>
+        Konuk tarafında kişisel dil seçimi önemlidir. Host Türkçe konuşuyor ve hedef İngilizce ise, dili İngilizce seçen konuk çeviri sesini duyabilir.
+        Türkçe konuşulan bölümde Türkçe seçen konuk ise gereksiz çeviri sesi duymaz.
+      </p>
+      <div class="note">
+        <strong>Gecikme notu:</strong> Canlı çeviri ve dublajda konuşmanın bitmesini bekleyen kısa bir gecikme olabilir. Uzun ve kesintisiz konuşmalarda
+        sistem parçaları daha geç işleyebilir. Canlı altyazı genellikle canlı sesli dublaja göre daha pratik ve hızlıdır.
+      </div>
+      <h3>Kayıt sırasında dublaj parçası oluşturma</h3>
+      <p>
+        Canlı çeviri sesli dublaj üretiyorsa EVD bu parçaları kayıt sonrasında kullanmak üzere saklayabilir.
+        Kayıt bittiğinde özgün ses ile dublaj sesini birleştirerek yeni bir kopya oluşturabilirsiniz.
+      </p>
+      <ul>
+        <li><strong>Özgün ses altta:</strong> Dublajlı belgesel mantığında özgün konuşma kısık kalır, dublaj önde duyulur.</li>
+        <li><strong>Yalnız dublaj:</strong> Paylaşım için daha sade tek sesli çıktı istenirse kullanılabilir.</li>
+        <li><strong>Yeniden dengeleme:</strong> Dublaj ve özgün ses düzeyleri daha sonra yeniden ayarlanabilir.</li>
+      </ul>
+      <p>
+        Çeviriyi durdurduktan hemen sonra kaydı durdurursanız son cümlelerin işlenmesi için kısa bir bekleme gerekebilir.
+        EVD bu durumda çeviri/dublaj kuyruklarını tamamlamaya çalışır; yine de önemli kayıtlar için konuşma bittikten sonra birkaç saniye beklemek iyi bir alışkanlıktır.
+      </p>
+    </section>
+
+    <section id="elevenlabs-kayit-sonrasi-dublaj">
+      <h2>13. ElevenLabs ile Kayıt Sonrası Dublaj</h2>
+      <p>
+        Canlı dublaj yerine, kayıt bittikten sonra tüm videoyu ElevenLabs Dubbing servisine gönderip daha kaliteli ve daha tutarlı bir dublajlı kopya oluşturabilirsiniz.
+        Bu yöntem canlı yayında anlık çeviri sağlamaz; fakat kayıt sonrası çıktı için daha doğal sonuç verebilir.
+      </p>
+      <ol>
+        <li>Yayın Odasında kaydınızı alın veya mevcut bir kayıt dosyasını içe aktarın.</li>
+        <li><strong>ElevenLabs ile kayıt sonrası dublaj</strong> bölümünde kaynak ve hedef dili seçin.</li>
+        <li><strong>ElevenLabs Dubbing ile dublajlı kopya oluştur</strong> düğmesine basın.</li>
+        <li>İşlem ilerleme durumunu takip edin.</li>
+        <li>Dublaj indirildiğinde EVD özgün sesi altta, dublajı önde olacak şekilde tek sesli yeni bir MP4 kopyası oluşturur.</li>
+      </ol>
+      <h3>Düzeyleri yeniden dengeleme</h3>
+      <p>
+        EVD ham dublaj sesini saklayabildiği için, aynı dublajı API'ye yeniden göndermeden farklı ses dengeleriyle tekrar karıştırabilirsiniz.
+        Bu, maliyet ve zaman açısından önemlidir.
+      </p>
+      <ul>
+        <li>Dublaj çok kısık kaldıysa dublaj sesini yükseltin.</li>
+        <li>Özgün ses çok baskınsa özgün ses düzeyini azaltın.</li>
+        <li>Önizleme ile dengeyi kontrol edin, sonra yeni kopyayı oluşturun.</li>
+      </ul>
+      <div class="tip">
+        <strong>Pratik kullanım:</strong> Arkadaşlara veya izleyicilere göndermek için genellikle tek sesli dublajlı kopya daha anlaşılırdır.
+        İki ses parçalı dosyalar daha esnektir ama her oynatıcıda ses kanalı seçmeyi bilmek gerekebilir.
+      </div>
+    </section>
+
+    <section id="api-anahtarlari">
+      <h2>14. API Anahtarları ve Servis Seçimi</h2>
+      <p>
+        Canlı altyazı, canlı çeviri, sesli dublaj ve yapay zeka değerlendirmeleri için bazı servislerin API anahtarları gerekebilir.
+        Anahtarlar <strong>Yapay Zeka</strong> menüsünden yönetilir.
+      </p>
+      <ul>
+        <li><strong>Gemini API Anahtarı:</strong> Görsel değerlendirme, hızlı yapay zeka kontrolleri ve Gemini Live Translate sesli çeviri akışı için kullanılır.</li>
+        <li><strong>OpenAI API Anahtarı:</strong> Canlı metin/çeviri akışları, bazı transkripsiyon işlemleri ve Gemini yanıt veremezse yapay zeka değerlendirmelerinde yedek servis olarak kullanılır.</li>
+        <li><strong>ElevenLabs API Anahtarı:</strong> ElevenLabs Scribe, sesli dublaj ve kayıt sonrası dublaj akışları için kullanılır.</li>
+      </ul>
+      <ol>
+        <li>Üst menüden <strong>Yapay Zeka</strong> menüsünü açın.</li>
+        <li>Eklemek istediğiniz servisin API anahtarı öğesini seçin.</li>
+        <li>Anahtarı yapıştırıp kaydedin.</li>
+        <li>Yayın Odasına döndüğünüzde ilgili bölümde anahtar durumu hazır olarak görünmelidir.</li>
+      </ol>
+      <p>
+        Canlı altyazı bölümünde servis seçerken EVD yaklaşık maliyet bilgisini de duyurur. Gerçek ücretlendirme servislerin güncel fiyatlarına ve kullanım süresine bağlıdır.
+        Uzun yayınlarda önce kısa bir test yapmak ve hesabınızdaki kredi durumunu kontrol etmek iyi olur.
+      </p>
+      <div class="note">
+        <strong>Güvenlik:</strong> API anahtarlarınızı konuklarla veya ekran paylaşımında görünür biçimde paylaşmayın. Anahtar ekranlarını yayın sırasında açmaktan kaçının.
+      </div>
+    </section>
+
+    <section id="efekt-katmani">
+      <h2>15. Efekt Katmanı</h2>
+      <p>
+        Efekt katmanı; jingle, geçiş videosu, kısa ses efekti veya görselli efekt tetiklemek istediğiniz yayınlarda kullanılır.
+      </p>
+      <ol>
+        <li>Önceden bir efekt profili oluşturun ya da mevcut profili seçin.</li>
+        <li>Slotlara ses, video ve gerekiyorsa görsel bağlayın.</li>
+        <li>Yayın Odasında ilgili efekt profilini etkinleştirin.</li>
+        <li>Yayında doğru anda slotu tetikleyin.</li>
+      </ol>
+      <p>
+        Efekt katmanında oynayan içerik kayıt ve yayın akışına gider. Açılış, ara ve kapanış efektlerini farklı slotlarda tutmak yönetimi kolaylaştırır.
+      </p>
+    </section>
+
+    <section id="ekran-paylasimi">
+      <h2>16. Ekran Paylaşımı</h2>
+      <h3>Host paylaşımı</h3>
+      <ol>
+        <li><strong>Alt+S</strong> ile paylaşım bölümünü açın.</li>
+        <li>Kaynak olarak tüm ekran, pencere veya uygun yerel kaynağı seçin.</li>
+        <li>Gerekirse sistem sesini de dahil edin.</li>
+        <li>Paylaşım başladıktan sonra bunu sahne düzeninde büyük veya küçük alan olarak konumlandırın.</li>
+      </ol>
+      <h3>Konuk paylaşımı</h3>
+      <p>
+        Konuk paylaşım başlattığında tarayıcının kendi paylaşım penceresi açılır. Pencere, sekme veya tüm ekran seçimi oradan yapılır.
+        Eğer tarayıcı ve işletim sistemi destekliyorsa paylaşım sesi de aynı akışta eklenir.
+      </p>
+      <p>
+        Paylaşım başladığında host tarafında anons gelir ve hızlı sahne önerileri görünür.
+      </p>
+      <h3>Paylaşım sesi</h3>
+      <p>
+        Host sistem sesini paylaşırken YouTube ve kayıt tarafı ile canlı oda tarafı ayrı ses hatları kullanır.
+        Amaç, müzik veya uygulama sesinin yayına gitmesi; buna karşılık konuğun kendi sesini yankı olarak geri duymamasıdır.
+        Tam ekran, pencere ve uygulama paylaşımı davranışı işletim sistemi ve tarayıcı desteğine göre değişebilir.
+      </p>
+      <h3>Masaüstü paylaşımı</h3>
+      <p>
+        Masaüstünü paylaşırken <strong>Windows+D</strong> ile masaüstüne geçmek, bazı durumlarda <strong>Windows+M</strong> ile tüm pencereleri küçültmeye göre daha kararlı sonuç verebilir.
+        Sonsuz ekran görüntüsü oluşmaması için yayın çıkışı penceresinin veya EVD kontrol panelinin yanlışlıkla paylaşılmadığından emin olun.
+      </p>
+    </section>
+
+    <section id="erisilebilir-belge-paylasimi">
+      <h2>17. Erişilebilir Belge Yükleyerek Paylaşımı Erişilebilir Hale Getirme</h2>
+      <p>
+        Ekran paylaşımı normalde görsel bir görüntüdür. PowerPoint, Word, Excel veya açıklamalı görseller paylaşıldığında,
+        görme engelli bir konuk bu içeriği yalnız görüntü olarak takip edemez. EVD bu nedenle paylaşılan içerikle eşleşen erişilebilir belge yükleme akışı sunar.
+      </p>
+      <h3>Temel kullanım</h3>
+      <ol>
+        <li>Paylaşacağınız sunum veya belgeyi bilgisayarınızda açın.</li>
+        <li>Yayın Odasında ekran paylaşımı için ilgili pencereyi veya sunum penceresini seçin.</li>
+        <li><strong>Erişilebilir belge seç</strong> düğmesiyle aynı PowerPoint, Word veya desteklenen dosyayı yükleyin.</li>
+        <li><strong>Sunucuya gönder</strong> ile belge içeriğini oda oturumu için paylaşın.</li>
+        <li>PowerPoint slayt gösterisi penceresi seçiliyse EVD slayt değişimlerini otomatik izlemeye çalışır.</li>
+      </ol>
+      <p>
+        Konuk tarafında erişilebilir metin varsayılan olarak görsel kalabalık oluşturmayacak şekilde gizli tutulur.
+        Ekran okuyucu kullanıcıları yeni slayt veya bölüm değiştiğinde metni otomatik duyabilir. Az gören kullanıcılar isterse
+        erişilebilir metni görünür yapıp büyüterek okuyabilir.
+      </p>
+      <h3>PowerPoint sunumları</h3>
+      <p>
+        Slayt gösterisi açıkken sistem o anki slaydı yakalamaya çalışır. Slayt değiştiğinde konuk tarafına yalnız gerekli bilgi duyurulur:
+        slayt numarası ve slayt içeriği. Dosya adı veya teknik güncelleme mesajları gereksiz yere okunmaz.
+      </p>
+      <h3>Manuel ilerletme</h3>
+      <p>
+        Otomatik slayt takibi çalışmazsa host önceki veya sonraki bölüm düğmeleriyle erişilebilir metni manuel ilerletebilir.
+        Bu durumda konuk, ekranda görülen slaytla eşleşen metni takip etmeye devam eder.
+      </p>
+      <div class="note">
+        <strong>Gizlilik:</strong> Yüklenen belgeler toplantı oturumu için kullanılır. Oda kapatıldığında veya oturum temizlendiğinde bu dosyaların sunucuda kalmaması hedeflenir.
+        Yine de gizli belgelerde toplantı öncesi kısa bir test ve içerik kontrolü yapmanız önerilir.
+      </div>
+    </section>
+
+    <section id="katilimci-yonetimi">
+      <h2>18. Katılımcı Yönetimi, Roller ve Sohbet</h2>
+      <h3>Katılımcı listesi</h3>
+      <p>
+        <strong>Alt+U</strong> ile katılımcı listesine gidebilirsiniz. Liste içinde yukarı ve aşağı oklarla gezilir.
+        <strong>Sağ ok</strong> seçili katılımcının menüsünü açar, <strong>Sol ok</strong> menüyü kapatır.
+      </p>
+      <p>Katılımcı menüsünde şunlar bulunur:</p>
+      <ul>
+        <li>Odadan çıkar</li>
+        <li>Özel mesaj gönder</li>
+        <li>Sesini aç veya kapat</li>
+        <li>Videosunu aç veya kapat</li>
+        <li>Kamera, mikrofon ve ekran paylaşım izinlerini açıp kapat</li>
+        <li>Panelist, canlı çevirmen veya işaret dili tercümanı gibi rollere alma</li>
+        <li>Söz isteğini görüldü olarak işaretleme</li>
+      </ul>
+      <h3>Katılımcı rolleri</h3>
+      <ul>
+        <li><strong>Katılımcı:</strong> Normal konuk rolüdür. Oda kurallarına göre kamera, mikrofon veya ekran paylaşımı kullanabilir.</li>
+        <li><strong>Panelist:</strong> Webinar akışında sahneye alınabilecek, konuşabilecek veya görüntüsü kullanılabilecek daha yetkili konuktur.</li>
+        <li><strong>Canlı çevirmen:</strong> İnsan çevirmenin sesi ayrı bir çeviri kanalı olarak kullanılabilir. Host kayıt/yayın çıkışında özgün sesi veya çeviri ağırlıklı karışımı seçebilir.</li>
+        <li><strong>İşaret dili tercümanı:</strong> Sahne düzeninde sağ alt köşede yaklaşık 1/8 alan kaplayacak biçimde görünür. Bu ayrı ses kanalı gerektirmez; görüntünün bir parçasıdır.</li>
+      </ul>
+      <h3>Sohbet ve söz isteme</h3>
+      <p>
+        <strong>Alt+C</strong> ile sohbet alanına geçebilirsiniz. Host herkese mesaj gönderebilir ve katılımcı menüsünden özel mesaj da yazabilir.
+        Konuk tarafında hem herkese hem de yöneticiye mesaj gönderme akışı bulunur.
+      </p>
+      <p>
+        Konuklar <strong>Söz İste</strong> ile taleplerini iletebilir. Bu istek host tarafında hem duyurulur hem de söz isteyenler alanında görünür.
+      </p>
+    </section>
+
+    <section id="webinar-akisi">
+      <h2>19. Webinar, Panelist ve İzleyici Akışı</h2>
+      <p>
+        Webinar modu, herkesin kamera açtığı küçük toplantı mantığından farklıdır. Amaç; çok sayıda izleyicinin yayını takip etmesi,
+        yalnız seçili panelistlerin sahneye ve konuşma akışına alınmasıdır.
+      </p>
+      <h3>Webinar talebi</h3>
+      <ol>
+        <li>Kullanıcı webinar talep bölümünden adını, e-posta adresini ve istek detaylarını yazar.</li>
+        <li>İstek detayları alanına tarih, saat, beklenen kişi sayısı ve yayın amacı gibi bilgiler eklenebilir.</li>
+        <li>Gerekirse EVD bir e-posta taslağı hazırlar; bu taslak yöneticiye gönderilebilir.</li>
+        <li>Admin rolündeki kullanıcı talebi inceler ve uygun görürse webinar odası oluşturur.</li>
+      </ol>
+      <h3>Admin ve host anahtarı</h3>
+      <p>
+        Admin girişi, Oda Yönetimi altında yer alır. Admin anahtarını bilen kullanıcı webinar taleplerini görebilir,
+        onaylayabilir veya reddedebilir. Webinar onaylandığında hostun kullanacağı bir webinar anahtarı üretilebilir.
+      </p>
+      <h3>Zaman ve erişim kuralları</h3>
+      <ul>
+        <li>Webinar için tarih, süre, izleyici limiti ve panelist limiti belirlenebilir.</li>
+        <li>İsterseniz webinar kalıcı yapılabilir, isterseniz belirli süreyle sınırlı tutulabilir.</li>
+        <li>Başlangıçtan önce veya bitişten sonra katılımı kısıtlama seçenekleri kullanılabilir.</li>
+        <li>Host yokken katılım ve parola kuralları oda türüne göre ayarlanabilir.</li>
+      </ul>
+      <p>
+        Büyük webinar hedeflerinde herkesin kamera açması beklenmez. Genellikle 15-20 kişi panelist veya görünür katılımcı olarak yönetilir;
+        diğer kişiler izleyici mantığıyla takip eder.
+      </p>
+    </section>
+
+    <section id="yapay-zekadan-gorus-alma">
+      <h2>20. Yapay Zekadan Görüş Alma</h2>
+      <p>
+        Canlı Görüntü Önizlemesi içindeki <strong>Yapay zekadan görüş al</strong> düğmesi, mevcut gerçek kareyi analiz edip erişilebilir bir değerlendirme verir.
+      </p>
+      <p>AI özellikle şu sorulara bakar:</p>
+      <ul>
+        <li>Host ve seçili konuk yüzleri gerçekten görünüyor mu?</li>
+        <li>Ekran paylaşımı varsa paylaşım ile yüzler seçilen düzene uygun mu?</li>
+        <li>Yüzler çok küçük, kesilmiş veya yanlış yerde mi?</li>
+        <li>Ekranda fazladan kontrol, siyah boşluk veya istenmeyen bir öğe var mı?</li>
+      </ul>
+      <p>
+        Bu özellik total kör kullanıcılar için yayın öncesi son kontrol katmanı olarak çok değerlidir.
+      </p>
+      <p>
+        Sistem önce sahnenin gerçek kare görüntüsünü almaya çalışır. Kayıt başlamamış olsa bile aktif sahne düzeni,
+        kamera ve paylaşım kaynakları üzerinden analiz karesi hazırlanır. Değerlendirme için öncelik Gemini servisindedir;
+        Gemini yoğunluk veya kota nedeniyle yanıt veremezse OpenAI anahtarı varsa yedek olarak OpenAI kullanılabilir.
+      </p>
+      <div class="tip">
+        <strong>Kullanım önerisi:</strong> Önemli yayın öncesinde bir kez sahne düzenini kurun, konukları yerleştirin,
+        varsa ekran paylaşımını açın ve yapay zekadan görüş alın. Yanıtta yüzlerin görünmediği, siyah alan olduğu veya yanlış yerleşim bulunduğu söylenirse kısa bir test kaydıyla doğrulayın.
+      </div>
+    </section>
+
+    <section id="temel-kisayollar">
+      <h2>21. Temel Kısayollar</h2>
+      <h3>Host kısayolları</h3>
+      <ul class="shortcut-list">
+        <li><strong>Alt+A:</strong> Host mikrofonunu aç veya kapat.</li>
+        <li><strong>Alt+V:</strong> Host videosunu aç veya kapat.</li>
+        <li><strong>Alt+S:</strong> Paylaşım bölümünü aç; paylaşım aktifse durdur.</li>
+        <li><strong>Alt+Y:</strong> Düzen seçimine git.</li>
+        <li><strong>Alt+U:</strong> Katılımcı listesine git.</li>
+        <li><strong>Alt+C:</strong> Sohbet paneline git.</li>
+        <li><strong>Alt+O:</strong> Oda Yönetimini aç veya kapat.</li>
+        <li><strong>Alt+Q:</strong> Odayı kapat.</li>
+        <li><strong>Alt+R:</strong> Kaydı başlat veya durdur.</li>
+        <li><strong>Alt+L:</strong> Bölge Listesine git.</li>
+        <li><strong>Alt+Ctrl+L:</strong> YouTube canlı yayını başlat veya durdur.</li>
+        <li><strong>Alt+Ctrl+B:</strong> Bot kaydını başlat veya durdur.</li>
+        <li><strong>Alt+Ctrl+T:</strong> Canlı çeviri veya altyazıyı başlat veya durdur.</li>
+        <li><strong>Ctrl+Sağ / Ctrl+Sol:</strong> Yayın Odası bölgeleri arasında hızlı geçiş yap.</li>
+      </ul>
+      <h3>Konuk web kısayolları</h3>
+      <ul class="shortcut-list">
+        <li><strong>Ctrl+D:</strong> Mikrofonu aç veya kapat.</li>
+        <li><strong>Ctrl+E:</strong> Videoyu aç veya kapat.</li>
+        <li><strong>Ctrl+Shift+E:</strong> Ekran paylaşımını başlat veya durdur.</li>
+        <li><strong>Ctrl+Shift+H:</strong> Odadan ayrıl.</li>
+      </ul>
+    </section>
+
+    <section id="sorun-giderme">
+      <h2>22. Sorun Giderme</h2>
+      <ul>
+        <li><strong>Konuk bağlandı ama ses yok:</strong> Kamera ve mikrofon izinlerini, tarayıcı site izinlerini ve seçili cihazları kontrol edin.</li>
+        <li><strong>Paylaşım görüntüsü yok:</strong> Konuğun gerçekten paylaşım başlatıp başlatmadığını ve tanı alanında paylaşım akışının bağlanıp bağlanmadığını kontrol edin.</li>
+        <li><strong>Paylaşım sesi yok:</strong> Tarayıcının paylaşılan kaynak için ses sunup sunmadığına bakın. Bazı tarayıcılar yalnız belirli paylaşım türlerinde ses verir.</li>
+        <li><strong>Kayıtta kontrol düğmeleri görünüyorsa:</strong> Temiz sahne ve yayın çıkışı akışının aktif olduğundan emin olun, kısa test kaydı alın.</li>
+        <li><strong>Canlı altyazı veya çeviri başlamıyorsa:</strong> Önce canlı çeviri / altyazı onay kutusunun açık olduğundan, ardından ilgili API anahtarının hazır göründüğünden emin olun.</li>
+        <li><strong>Dublaj çok geç geliyorsa:</strong> Canlı dublaj yerine kayıt sonrası ElevenLabs Dubbing akışını deneyin. Canlı kullanımda yalnız altyazı daha düşük gecikmeli olabilir.</li>
+        <li><strong>Sesli çeviri kendi dilinizi tekrar ediyorsa:</strong> Konuk dilini, hedef dili ve kaynak dil seçimini kontrol edin. Konuşma hedef dildeyse sistem dublajı çalmamalıdır; sorun sürerse çeviri servisini durdurup yeniden başlatın.</li>
+        <li><strong>Son cümleler dublaja girmediyse:</strong> Konuşma bittikten sonra çeviriyi ve kaydı kapatmadan önce birkaç saniye bekleyin. Uzun konuşmalarda son parça işleniyor olabilir.</li>
+        <li><strong>Konuk videosu yayında donduysa:</strong> Konuk bağlantısı zayıf olabilir. Düşük bant genişliği modu otomatik devreye girebilir; yerel yedek kayıtlar varsa kayıt sonrasında değerlendirilebilir.</li>
+        <li><strong>Yedek kayıt parçaları görünmüyorsa:</strong> Yerel kayıt gerçekten başlamış mı, konuk tarayıcısı kayıt API'lerini destekliyor mu ve kayıt bittikten sonra parçaların yüklenmesi için yeterli süre beklenmiş mi kontrol edin.</li>
+        <li><strong>Bot kaydı başlamıyorsa:</strong> Temiz yayın çıkışı penceresinin açık olduğundan ve görüntü alınabildiğinden emin olun. Normal kayıt çalışıyorsa bot kaydını yalnız ihtiyaç halinde tekrar deneyin.</li>
+        <li><strong>Erişilebilir belge slaytları otomatik ilerlemiyorsa:</strong> PowerPoint slayt gösterisi penceresinin açık olduğundan emin olun, gerekirse yerel kaynakları yenileyin veya önceki/sonraki bölüm düğmeleriyle manuel ilerleyin.</li>
+        <li><strong>Arka plan bozuk veya kırpılmış görünüyorsa:</strong> Yerleşim modunu değiştirin. Doldur ve kırp temiz görünür; sığdır modu dosyanın tamamını gösterir.</li>
+        <li><strong>Logo görünmüyorsa:</strong> Logo dosyasının desteklenen bir görsel biçiminde olduğundan ve sahne arka planı ayarlarının OBS bağlantısı hazırken uygulandığından emin olun.</li>
+        <li><strong>Arka plan profili uygulanmıyorsa:</strong> Profil listesinden gerçekten bir profil seçtiğinizi ve dosya yollarının hâlâ aynı bilgisayarda geçerli olduğunu kontrol edin.</li>
+        <li><strong>Katılımcı listesi veya sohbet garip davranıyorsa:</strong> Odayı kapatmadan önce uygulamayı yeniden açıp hızlı bir prova yapın.</li>
+      </ul>
+      <div class="note">
+        <strong>İlk bakılacak yer:</strong> <strong>Tanı ve Olay Geçmişi</strong> alanı. Özellikle paylaşım sesi, video akışı ve katılımcı olayları için en değerli teknik ipuçları burada görünür.
+      </div>
+    </section>
+
+    <p class="footer">
+      Bu belge, EVD içindeki Yayın Odası yardım içeriğinin paylaşılabilir PDF sürümü olarak hazırlanmıştır.
+    </p>
+  </main>
+</body>
+</html>

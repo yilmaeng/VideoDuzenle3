@@ -2289,6 +2289,53 @@
     </form>
   </dialog>
 
+  <dialog id="subtitle-tts-segment-editor-dialog" aria-labelledby="subtitle-tts-segment-editor-title"
+    style="width: 760px; max-width: 95vw;">
+    <form method="dialog">
+      <h2 id="subtitle-tts-segment-editor-title" data-i18n="dialog.subtitle_tts_editor.title">Altyazı Seslendirmelerini Düzenle</h2>
+      <p id="subtitle-tts-segment-editor-description" data-i18n="dialog.subtitle_tts_editor.description">Aşağı ve yukarı oklarla seslendirmeler arasında gezinerek her bölümü dinleyin. Sağ ok işlem menüsünü açar. Önizlemede özgün video bir saniye önce başlar ve TTS ayarlanan zamanda devreye girer.</p>
+      <h3 id="subtitle-tts-shortcuts-title" data-i18n="dialog.subtitle_tts_editor.shortcuts_title">Kısayollar</h3>
+      <div id="subtitle-tts-shortcuts" class="hint" role="note" tabindex="0" aria-labelledby="subtitle-tts-shortcuts-title" data-i18n="dialog.subtitle_tts_editor.shortcuts">Aşağı/Yukarı: bölüm seç, Page Up/Page Down: 10 bölüm geri/ileri git, Enter veya Boşluk: bölümü dinle, J/L: filmi 5 saniye geri/ileri sar, Sağ Ok: işlem menüsü, Alt+Sol/Sağ: altyazıyı 10 ms geri/ileri al, Alt+Shift+Sol/Sağ: 100 ms, G/H: 1 ms geri/ileri, Ctrl+J/L: TTS sesini 1 saniye geri/ileri al, F/A: TTS hızını artır/azalt, D: varsayılan hız, Alt+Shift+Yukarı/Aşağı: özgün ses, Alt+Shift+L/J: TTS sesi, V: seslendirmeyi aç/kapat, R: bölümü sıfırla, Alt+Shift+S: projeyi kaydet.</div>
+      <div class="list-container" style="max-height: 280px; overflow-y: auto; border: 1px solid #555;">
+        <ul id="subtitle-tts-segment-list" role="listbox" tabindex="0" aria-label="Altyazı seslendirme bölümleri" data-i18n-aria="dialog.subtitle_tts_editor.list_aria"></ul>
+      </div>
+      <div class="form-group">
+        <label for="subtitle-tts-segment-text" data-i18n="dialog.subtitle_tts_editor.selected_text_label">Seçili altyazı metni</label>
+        <textarea id="subtitle-tts-segment-text" rows="3" aria-describedby="subtitle-tts-segment-text-hint"></textarea>
+        <p id="subtitle-tts-segment-text-hint" class="hint" data-i18n="dialog.subtitle_tts_editor.selected_text_hint">Metni değiştirdikten sonra Enter ile seçili bölümü hemen yeniden seslendirin. Yeni satır için Shift+Enter kullanın.</p>
+      </div>
+      <div class="form-group">
+        <label for="subtitle-tts-segment-voice" data-i18n="dialog.subtitle_tts_editor.selected_voice_label">Seçili bölümün sesi</label>
+        <select id="subtitle-tts-segment-voice" aria-describedby="subtitle-tts-segment-voice-hint"></select>
+        <p id="subtitle-tts-segment-voice-hint" class="hint" data-i18n="dialog.subtitle_tts_editor.selected_voice_hint">Ses değiştirildiğinde yalnızca seçili bölüm yeniden seslendirilir. Diğer bölümlerin sesleri değişmez.</p>
+      </div>
+      <div id="subtitle-tts-segment-menu" role="menu" hidden aria-label="Seçili seslendirme işlemleri" data-i18n-aria="dialog.subtitle_tts_editor.menu_aria" style="margin-top: 12px;">
+        <button type="button" role="menuitem" data-action="preview" data-i18n="dialog.subtitle_tts_editor.preview">Seçili Bölümü Dinle, Enter veya Boşluk</button>
+        <button type="button" role="menuitem" data-action="speed-up" data-i18n="dialog.subtitle_tts_editor.speed_up">TTS Hızını Artır, F</button>
+        <button type="button" role="menuitem" data-action="speed-down" data-i18n="dialog.subtitle_tts_editor.speed_down">TTS Hızını Azalt, A</button>
+        <button type="button" role="menuitem" data-action="speed-reset" data-i18n="dialog.subtitle_tts_editor.speed_reset">TTS Hızını Varsayılana Getir, D</button>
+        <button type="button" role="menuitem" data-action="original-up" data-i18n="dialog.subtitle_tts_editor.original_up">Özgün Video Sesini Artır, Alt+Shift+Yukarı Ok</button>
+        <button type="button" role="menuitem" data-action="original-down" data-i18n="dialog.subtitle_tts_editor.original_down">Özgün Video Sesini Azalt, Alt+Shift+Aşağı Ok</button>
+        <button type="button" role="menuitem" data-action="tts-up" data-i18n="dialog.subtitle_tts_editor.tts_up">TTS Sesini Artır, Alt+Shift+L</button>
+        <button type="button" role="menuitem" data-action="tts-down" data-i18n="dialog.subtitle_tts_editor.tts_down">TTS Sesini Azalt, Alt+Shift+J</button>
+        <button type="button" role="menuitem" data-action="earlier" data-i18n="dialog.subtitle_tts_editor.earlier">10 Milisaniye Geri Al, Alt+Sol Ok; 100 ms için Alt+Shift+Sol Ok, 1 ms için G, 1 saniye için Ctrl+J</button>
+        <button type="button" role="menuitem" data-action="later" data-i18n="dialog.subtitle_tts_editor.later">10 Milisaniye İleri Al, Alt+Sağ Ok; 100 ms için Alt+Shift+Sağ Ok, 1 ms için H, 1 saniye için Ctrl+L</button>
+        <button type="button" role="menuitem" data-action="toggle-voice" data-i18n="dialog.subtitle_tts_editor.disable_voice">Bu Seslendirmeyi Kapat, V</button>
+        <button type="button" role="menuitem" data-action="reset" data-i18n="dialog.subtitle_tts_editor.reset">Bu Bölümü Sıfırla, R</button>
+      </div>
+      <video id="subtitle-tts-segment-video" preload="metadata" style="width: 100%; max-height: 180px; margin-top: 12px;"></video>
+      <audio id="subtitle-tts-segment-audio" preload="auto"></audio>
+      <output id="subtitle-tts-segment-status" aria-live="polite"></output>
+      <div class="dialog-buttons">
+        <button type="button" id="subtitle-tts-segment-save-project" data-i18n="dialog.subtitle_tts_editor.save_project">Projeyi Kaydet, Alt+Shift+S</button>
+        <button type="button" id="subtitle-tts-segment-open-project" data-i18n="dialog.subtitle_tts_editor.open_project">Başka Proje Aç</button>
+        <button type="button" id="subtitle-tts-segment-finish" data-i18n="dialog.subtitle_tts_editor.finish">Düzenlemeleri Uygula ve Oluştur</button>
+        <button type="button" id="subtitle-tts-segment-use-defaults" data-i18n="dialog.subtitle_tts_editor.use_defaults">Düzenlemeyi Atla, Mevcut Ayarlarla Oluştur</button>
+        <button type="button" id="subtitle-tts-segment-cancel" data-i18n="dialog.cancel">İptal</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Nesne Analiz ve Uygulama Diyaloğu -->
   <dialog id="object-analysis-dialog" aria-labelledby="object-analysis-title" style="width: 700px; max-width: 95vw;">
     <form method="dialog" style="display: flex; flex-direction: column; height: 80vh;">

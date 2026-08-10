@@ -314,16 +314,12 @@ const AudioSettings = {
 
     close() {
         this.stopPreview();
-        // Video volume'ü normal oynatma seviyesine döndür
-        const videoEl = (VideoPlayer.videoElement) || (VideoPlayer.video) || document.getElementById('main-video');
-        if (videoEl) {
-            videoEl.volume = 1.0;
-            videoEl.muted = false;
-        }
         if (this._keydownHandler) {
             document.removeEventListener('keydown', this._keydownHandler);
         }
         this.dialog.close();
+        if (VideoPlayer.videoElement) VideoPlayer.videoElement.muted = false;
+        VideoPlayer.syncSegmentProperties();
     },
 
     identifyTarget() {
@@ -560,19 +556,15 @@ const AudioSettings = {
         const volSlider = parseInt(this.volumeSlider.value);
         const bypass = this.volumeBypass.checked;
 
-        // Native video preview can only reach 1.0, so we map 100% to normal loudness.
-        // Higher values are still fully applied in rendered preview/export paths.
-        const vol = bypass ? 0 : Math.min(1, volSlider / 100);
+        // Web Audio gain keeps preview consistent with the 0-400% editor range.
+        const vol = bypass ? 0 : Math.max(0, Math.min(4, volSlider / 100));
 
-        console.log(`AudioSettings: Preview Volume Slider=${volSlider}, HTMLVol=${vol.toFixed(2)}, Bypass=${bypass}`);
+        console.log(`AudioSettings: Preview Volume Slider=${volSlider}, Gain=${vol.toFixed(2)}, Bypass=${bypass}`);
 
-        // VideoPlayer üzerinden ses ayarla
-        const videoEl = (VideoPlayer.videoElement) || (VideoPlayer.video) || document.getElementById('main-video');
-
-        if (videoEl) {
-            videoEl.volume = Math.min(1, Math.max(0, vol));
-            videoEl.muted = false;
-            console.log(`AudioSettings: Applied video.volume=${videoEl.volume}`);
+        if (VideoPlayer.videoElement) {
+            VideoPlayer.videoElement.muted = false;
+            VideoPlayer.setVolume(vol);
+            console.log(`AudioSettings: Applied preview gain=${vol.toFixed(2)}`);
         } else {
             console.error('AudioSettings: Video elementi bulunamadı!');
         }
@@ -588,7 +580,7 @@ const AudioSettings = {
                 this.playRenderedAudio(this.preRenderedOriginalPath, this.compareBtn, this.t('runtime.audio_settings.listen_original', 'Orj. Dinle'));
             } else {
                 // Yoksa anlık bypass (fallback)
-                if (VideoPlayer.videoElement) VideoPlayer.videoElement.volume = 1.0;
+                VideoPlayer.setVolume(1);
             }
         } else {
             // Mevcut ayarlar

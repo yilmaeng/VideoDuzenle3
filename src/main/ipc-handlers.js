@@ -1349,8 +1349,9 @@ function setupIpcHandlers(mainWindow) {
         try {
             const { videoPath, imagePath, outputPath, options } = params;
             await ffmpegHandler.addImageOverlay(videoPath, imagePath, outputPath, options, (percent) => {
-                mainWindow.webContents.send('ffmpeg-progress', { operation: 'add-image', percent });
+                event.sender.send('ffmpeg-progress', { operation: 'add-image', percent });
             });
+            event.sender.send('ffmpeg-progress', { operation: 'add-image', percent: 100 });
             return { success: true, outputPath };
         } catch (error) {
             return { success: false, error: error.message };
@@ -1632,6 +1633,7 @@ function setupIpcHandlers(mainWindow) {
     ipcMain.handle('copy-file', async (event, { src, dest }) => {
         const fs = require('fs');
         try {
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
             fs.copyFileSync(src, dest);
             return { success: true };
         } catch (error) {

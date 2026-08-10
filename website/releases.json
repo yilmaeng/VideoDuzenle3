@@ -1,104 +1,140 @@
 {
-  "latestVersion": "4.8.0",
-  "releases": [
-    {
-      "version": "4.8.0",
-      "channel": {
-        "tr": "Kararlı",
-        "en": "Stable",
-        "de": "Stabil",
-        "es": "Estable",
-        "fr": "Stable"
-      },
-      "date": "2026-07-26",
-      "title": {
-        "tr": "EVD 4.8",
-        "en": "EVD 4.8",
-        "de": "EVD 4.8",
-        "es": "EVD 4.8",
-        "fr": "EVD 4.8"
-      },
-      "notes": {
-        "tr": "4.8 iki harika özelliği beraberinde getiriyor. İlki akan yazı ekleme. Slide show içine ya da mevcut bir videonuzun üzerine artık sağdan sola, aşağıdan yukarı veya farklı tercihlerle akan yazı ekleyerek çok daha profesyonel bir içerik üretme imkânınız var.\n\nDiğer özellik ise Karaoke. Slide show yazı sekmesine Karaoke ekleyebilir, mevcut karaoke dosyalarını kullanabilir veya bizzat elle erişilebilir biçimde dize ve kelimeleri zamanlayarak parçaya karaoke olarak ekleyebilirsiniz.\n\nMOV dosyalarının açılması, Mac ve Windows tarafındaki klavye iyileştirmeleri ve hata düzeltmeleri de heybemizde.\n\nKeyifli kullanımlar.",
-        "en": "EVD 4.8 brings two outstanding new features. The first is scrolling ticker text. You can now add text that moves from right to left, bottom to top, or in other directions to a slideshow or an existing video, helping you create more professional content.\n\nThe other feature is Karaoke. You can add karaoke from the Slideshow Text tab, use existing karaoke files, or accessibly time lines and individual words by hand and add them to the track as karaoke.\n\nImproved MOV file opening, keyboard enhancements on Mac and Windows, and additional bug fixes are also included.\n\nEnjoy EVD 4.8.",
-        "de": "EVD 4.8 bringt zwei hervorragende neue Funktionen. Die erste ist eine bewegte Laufschrift. Sie können jetzt Text von rechts nach links, von unten nach oben oder in anderen Richtungen in eine Slideshow oder ein vorhandenes Video einfügen und so professionellere Inhalte erstellen.\n\nDie zweite Funktion ist Karaoke. Auf der Registerkarte Text der Slideshow können Sie Karaoke hinzufügen, vorhandene Karaoke-Dateien verwenden oder Zeilen und einzelne Wörter barrierefrei von Hand zeitlich abstimmen und dem Titel als Karaoke hinzufügen.\n\nVerbesserungen beim Öffnen von MOV-Dateien, Tastaturverbesserungen unter Mac und Windows sowie weitere Fehlerkorrekturen sind ebenfalls enthalten.\n\nViel Freude mit EVD 4.8.",
-        "es": "EVD 4.8 incorpora dos grandes funciones nuevas. La primera es el texto desplazable. Ahora puede añadir texto que se mueva de derecha a izquierda, de abajo arriba o en otras direcciones a un slideshow o a un vídeo existente para crear contenidos más profesionales.\n\nLa otra función es Karaoke. Puede añadir karaoke desde la pestaña Texto de Slideshow, utilizar archivos de karaoke existentes o sincronizar de forma accesible y manual las líneas y cada palabra para incorporarlas a la pieza como karaoke.\n\nTambién se incluyen mejoras al abrir archivos MOV, mejoras de teclado en Mac y Windows y otras correcciones de errores.\n\nDisfrute de EVD 4.8.",
-        "fr": "EVD 4.8 apporte deux excellentes nouvelles fonctionnalités. La première est le texte défilant. Vous pouvez désormais ajouter à un slideshow ou à une vidéo existante un texte animé de droite à gauche, de bas en haut ou dans d’autres directions, afin de créer un contenu plus professionnel.\n\nL’autre fonctionnalité est le Karaoke. Depuis l’onglet Texte du Slideshow, vous pouvez ajouter un karaoke, utiliser des fichiers de karaoke existants ou synchroniser manuellement et de manière accessible les lignes et chaque mot afin de les ajouter au morceau.\n\nDes améliorations de l’ouverture des fichiers MOV, des raccourcis clavier sur Mac et Windows ainsi que d’autres corrections sont également incluses.\n\nProfitez bien d’EVD 4.8."
-      },
-      "setupUrl": "downloads/EVD-Setup-v4.8.0.exe",
-      "portableUrl": "downloads/EVD-Portable-v4.8.0.zip",
-      "guideUrls": {
-        "tr": "guides/evd-yayin-odasi-kullanim-kilavuzu.html",
-        "en": "guides/evd-broadcast-room-user-guide.html",
-        "de": "guides/evd-broadcast-room-benutzerhandbuch.html",
-        "es": "guides/guia-sala-transmision-evd.html",
-        "fr": "guides/guide-salle-diffusion-evd.html"
-      },
-      "notesUrl": "",
-      "macUrl": "downloads/EVD-4.8.0-arm64.dmg"
-    },
-    {
-      "version": "4.7.0",
-      "channel": {
-        "tr": "Kararlı",
-        "en": "Stable",
-        "de": "Stabil",
-        "es": "Estable",
-        "fr": "Stable"
-      },
-      "date": "2026-07-10",
-      "title": {
-        "tr": "EVD 4.7",
-        "en": "EVD 4.7",
-        "de": "EVD 4.7",
-        "es": "EVD 4.7",
-        "fr": "EVD 4.7"
-      },
-      "notes": {
-        "tr": "Yayın odası arayüz, ses ve kayıt iyileştirmeleri. Çoklu dille çeviri desteği. EVD üzerinden odalara konuk olarak katılım imkanı. EVD geçiş, Overlay ve altyazı ekleme sonrası dışa aktarılan videolarda görüntü kalitesine ilişkin geliştirmeler. Slide show çıktılarında boşlukların kapatılmasıyla ilgili görsel iyileştirmeler, yazıların videolarla eşlenmesi, Türkçe karakter düzeltmeleri ve proje ayarları.",
-        "en": "Broadcast Room interface, audio, and recording improvements. Multi-language translation support. Ability to join rooms as a guest directly from EVD. Image quality improvements for exported videos after adding transitions, overlays, and subtitles. Visual improvements for filling empty areas in slideshow outputs, matching text with videos, Turkish character fixes, and project settings.",
-        "de": "Verbesserungen an Oberfläche, Audio und Aufnahme im Broadcast-Raum. Unterstützung für mehrsprachige Übersetzung. Möglichkeit, direkt aus EVD als Gast Räumen beizutreten. Verbesserungen der Bildqualität bei exportierten Videos nach dem Hinzufügen von Übergängen, Overlays und Untertiteln. Visuelle Verbesserungen zum Schließen leerer Bereiche in Slideshow-Ausgaben, Zuordnung von Texten zu Videos, Korrekturen für türkische Zeichen und Projekteinstellungen.",
-        "es": "Mejoras en la interfaz, el audio y la grabación de la Sala de transmisión. Compatibilidad con traducción en varios idiomas. Posibilidad de unirse a salas como invitado directamente desde EVD. Mejoras en la calidad de imagen de los videos exportados después de agregar transiciones, overlays y subtítulos. Mejoras visuales para rellenar espacios vacíos en las salidas de slideshow, asociación de textos con videos, correcciones de caracteres turcos y configuración del proyecto.",
-        "fr": "Améliorations de l'interface, de l'audio et de l'enregistrement dans la Salle de diffusion. Prise en charge de la traduction multilingue. Possibilité de rejoindre des salles comme invité directement depuis EVD. Améliorations de la qualité d'image des vidéos exportées après l'ajout de transitions, d'overlays et de sous-titres. Améliorations visuelles pour remplir les zones vides dans les exports slideshow, association des textes avec les vidéos, corrections des caractères turcs et paramètres de projet."
-      },
-      "setupUrl": "downloads/EVD-Setup-v4.7.0.exe",
-      "portableUrl": "downloads/EVD-Portable-v4.7.0.zip",
-      "macBeta": {
-        "url": "downloads/EVD-4.7.0-arm64.dmg",
-        "architecture": "Apple Silicon (arm64)",
-        "sizeBytes": 263228540,
-        "sha256": "D55084A828502AB09E459A80E4434F3414FD8F9D9A283E6B80F669143C703D28"
-      },
-      "guideUrls": {
-        "tr": "guides/evd-yayin-odasi-kullanim-kilavuzu.html",
-        "en": "guides/evd-broadcast-room-user-guide.html",
-        "de": "guides/evd-broadcast-room-benutzerhandbuch.html",
-        "es": "guides/guia-sala-transmision-evd.html",
-        "fr": "guides/guide-salle-diffusion-evd.html"
-      },
-      "notesUrl": ""
-    },
-    {
-      "version": "4.0.1",
-      "channel": {
-        "tr": "Kararlı",
-        "en": "Stable",
-        "de": "Stabil",
-        "es": "Estable",
-        "fr": "Stable"
-      },
-      "date": "2026-05-02",
-      "title": "EVD 4.01",
-      "notes": {
-        "tr": "EVD 4.01 ile çoklu seçim, seçim listesi ve slideshow önizleme deneyimi geliştirildi. Artık işaretçi çiftlerini doğrudan seçim listesine ekleyebilir, seçim listesini projeyle birlikte kaydedip daha sonra kaldığınız yerden devam edebilirsiniz. Slideshow önizlemesi seçili resim, yazı ve ses için daha doğru 5 saniyelik sahne sunar; yapay zekâ betimleme de artık önizlemede gerçekten görünen kareyi analiz eder. Ayrıca dikey video, seçim listesi ve erişilebilirlik tarafında çeşitli hata düzeltmeleri yapıldı.",
-        "en": "EVD 4.01 improved multi-selection, the selection list, and the slideshow preview experience. You can add marker pairs directly to the selection list, save that list with the project, and continue later. Slideshow preview now presents a more accurate five-second scene for the selected image, text, and audio, and AI description analyzes the frame actually shown in the preview. Several fixes were also made for vertical video, the selection list, and accessibility.",
-        "de": "EVD 4.01 verbessert Mehrfachauswahl, Auswahlliste und Slideshow-Vorschau. Markerpaare koennen direkt zur Auswahlliste hinzugefuegt, mit dem Projekt gespeichert und spaeter weiterverwendet werden. Die Slideshow-Vorschau zeigt nun eine genauere fuenfsekundige Szene fuer das ausgewaehlte Bild, den Text und den Ton; die KI-Beschreibung analysiert den tatsaechlich sichtbaren Vorschaurahmen. Ausserdem wurden Fehler bei vertikalem Video, Auswahlliste und Barrierefreiheit behoben.",
-        "es": "EVD 4.01 mejoró la selección múltiple, la lista de selecciones y la vista previa de slideshow. Ahora puede agregar pares de marcadores directamente a la lista, guardarla con el proyecto y continuar más tarde. La vista previa de slideshow muestra una escena de cinco segundos más precisa para la imagen, el texto y el audio seleccionados, y la descripción con IA analiza el fotograma realmente visible. También se corrigieron problemas de video vertical, lista de selecciones y accesibilidad.",
-        "fr": "EVD 4.01 améliore la sélection multiple, la liste de sélections et l'aperçu du slideshow. Vous pouvez ajouter des paires de marqueurs directement à la liste, l'enregistrer avec le projet et reprendre plus tard. L'aperçu du slideshow présente maintenant une scène de cinq secondes plus précise pour l'image, le texte et l'audio choisis, et la description IA analyse l'image réellement affichée. Des corrections ont aussi été apportées à la vidéo verticale, à la liste de sélections et à l'accessibilité."
-      },
-      "setupUrl": "downloads/EVD-Setup-v4.0.1.exe",
-      "portableUrl": "downloads/EVD-Portable-v4.0.1.zip",
-      "notesUrl": ""
-    }
-  ]
+    "latestVersion":  "4.9.0",
+    "releases":  [
+                     {
+                         "version":  "4.9.0",
+                         "channel":  {
+                                         "tr":  "Kararlı",
+                                         "en":  "Stable",
+                                         "de":  "Stabil",
+                                         "es":  "Estable",
+                                         "fr":  "Stable"
+                                     },
+                         "date":  "2026-08-10",
+                         "title":  {
+                                       "tr":  "EVD 4.9",
+                                       "en":  "EVD 4.9",
+                                       "de":  "EVD 4.9",
+                                       "es":  "EVD 4.9",
+                                       "fr":  "EVD 4.9"
+                                   },
+                         "notes":  {
+                                       "tr":  "Selam. Bu sürümde konumuz betimleme ve altyazı. Amacımız, yalnızca içerik tüketen değil, erişilebilir biçimde içerik üreten kullanıcıların ihtiyaç duyduğu mekanizmaları EVD\u0027ye kazandırmak.\n\nBunun için Ekle menüsüne güçlü bir Betimleme ve Altyazı Editörü ekledik. Editör sayesinde videolarınıza ister elle ister otomatik olarak betimleme ve altyazı ekleyebilir; metinleri dilediğiniz gibi düzenleyebilir; sentezleyici ya da insan sesi kullanabilir ve sesleri erişilebilir araçlarla ayrıntılı biçimde eşleyip düzenleyebilirsiniz.\n\nSıkı durun! ContentStudio da editörümüzde yerini aldı. Seslibetimle.com servisinin API desteği sunmasının hemen ardından bu entegrasyonu EVD\u0027ye ekledik. Bir hesabınız varsa Ayarlar bölümünden API anahtarınızı üretip EVD Betimleme ve Altyazı Editörü\u0027ne bir kez girmeniz yeterli. Bu desteği paylaştıkları için kendilerine teşekkür ederiz.\n\nEVD 4.9 ayrıca güçlü bir Altyazı Seslendirme ve Düzenleme Editörü ile geliyor. Videolara sesli veya yazılı altyazı gömmek zaten mümkündü; bu sürümle birlikte gömülecek altyazıları tek tek düzenleyebilir, ses ve hız ayarlarını her parçaya ayrı uygulayabilir ve sonucu ayrıntılı biçimde önizleyebilirsiniz.\n\nTüm bunları nasıl öğreneceğim diye düşünmeyin. Hem EVD\u0027nin Yardım menüsünde hem de evd.drenginyilmaz.net sitesindeki Kılavuzlar bölümünde bu özelliklerin ayrıntılı kılavuzlarını bulabilirsiniz.\n\nKısacası, üretmekten keyif alıyorsanız yeni sürüme bekleriz. 😊",
+                                       "en":  "Hello. This release focuses on audio description and subtitles. Our goal is to give EVD users the tools not only to consume content, but also to create it accessibly.\n\nTo make this possible, we added a powerful Description and Subtitle Editor to the Insert menu. You can now add descriptions and subtitles to your videos manually or automatically, edit them as needed, use synthesized or human narration, and match and refine the audio in detail with accessible tools.\n\nAnd there is more: ContentStudio is now part of the editor. As soon as Seslibetimle.com introduced API access, we integrated it into EVD. If you have an account, simply create an API key in Settings and enter it once in the EVD Description and Subtitle Editor. We thank the ContentStudio team for making this integration available.\n\nEVD 4.9 also includes a powerful Subtitle Voiceover and Editing Editor. EVD could already embed spoken or written subtitles into videos; this release lets you edit each subtitle individually, apply separate voice and speed settings to every segment, and preview the result in detail.\n\nWondering how to learn it all? Detailed guides for these features are available both in EVD\u0027s Help menu and in the Guides section at evd.drenginyilmaz.net.\n\nIn short, if you enjoy creating, we invite you to discover the new release. 😊",
+                                       "de":  "Hallo. In dieser Version dreht sich alles um Audiodeskription und Untertitel. Unser Ziel ist es, EVD-Nutzern Werkzeuge an die Hand zu geben, mit denen sie Inhalte nicht nur konsumieren, sondern auch barrierefrei erstellen können.\n\nDafür haben wir dem Menü Einfügen einen leistungsfähigen Editor für Audiodeskription und Untertitel hinzugefügt. Sie können Beschreibungen und Untertitel nun manuell oder automatisch zu Videos hinzufügen, Texte nach Bedarf bearbeiten, synthetische oder menschliche Stimmen verwenden und die Audiospuren mit barrierefreien Werkzeugen detailliert zuordnen und anpassen.\n\nUnd es gibt noch mehr: ContentStudio ist jetzt ebenfalls Teil des Editors. Unmittelbar nachdem Seslibetimle.com einen API-Zugang bereitgestellt hatte, haben wir ihn in EVD integriert. Wenn Sie ein Konto besitzen, erstellen Sie in den Einstellungen einfach einen API-Schlüssel und geben ihn einmal im EVD-Editor für Audiodeskription und Untertitel ein. Wir danken dem ContentStudio-Team für die Bereitstellung dieser Möglichkeit.\n\nEVD 4.9 enthält außerdem einen leistungsfähigen Editor für Untertitel-Sprachausgabe und -Bearbeitung. Gesprochene oder geschriebene Untertitel konnten bereits in Videos eingebettet werden; mit dieser Version lassen sich einzelne Untertitel bearbeiten, Sprach- und Geschwindigkeitseinstellungen separat auf jedes Segment anwenden und die Ergebnisse detailliert vorhören.\n\nSie fragen sich, wie Sie all das erlernen können? Ausführliche Anleitungen zu diesen Funktionen finden Sie sowohl im Hilfe-Menü von EVD als auch im Bereich Anleitungen auf evd.drenginyilmaz.net.\n\nKurz gesagt: Wenn Sie gerne Inhalte erstellen, laden wir Sie ein, die neue Version zu entdecken. 😊",
+                                       "es":  "Hola. Esta versión está dedicada a la audiodescripción y los subtítulos. Nuestro objetivo es ofrecer a los usuarios de EVD herramientas no solo para consumir contenido, sino también para crearlo de forma accesible.\n\nPara conseguirlo, añadimos al menú Insertar un potente Editor de audiodescripción y subtítulos. Ahora puede incorporar descripciones y subtítulos a sus vídeos de forma manual o automática, editar los textos como desee, utilizar voces sintetizadas o humanas y sincronizar y ajustar el audio en detalle con herramientas accesibles.\n\nY hay más: ContentStudio ya forma parte del editor. En cuanto Seslibetimle.com ofreció acceso mediante API, lo integramos en EVD. Si tiene una cuenta, solo necesita crear una clave API en Configuración e introducirla una vez en el Editor de audiodescripción y subtítulos de EVD. Agradecemos al equipo de ContentStudio que haya hecho posible esta integración.\n\nEVD 4.9 también incorpora un potente Editor de locución y edición de subtítulos. EVD ya permitía integrar subtítulos hablados o escritos en los vídeos; con esta versión puede editar cada subtítulo por separado, aplicar ajustes de voz y velocidad diferentes a cada segmento y escuchar el resultado con detalle.\n\n¿Le preocupa cómo aprenderlo todo? Encontrará guías detalladas de estas funciones tanto en el menú Ayuda de EVD como en la sección Guías de evd.drenginyilmaz.net.\n\nEn resumen, si disfruta creando, le invitamos a descubrir la nueva versión. 😊",
+                                       "fr":  "Bonjour. Cette version est consacrée à l\u0027audiodescription et aux sous-titres. Notre objectif est de donner aux utilisateurs d\u0027EVD les moyens non seulement de consulter des contenus, mais aussi d\u0027en créer de manière accessible.\n\nPour cela, nous avons ajouté au menu Insérer un puissant Éditeur d\u0027audiodescription et de sous-titres. Vous pouvez désormais ajouter manuellement ou automatiquement des descriptions et des sous-titres à vos vidéos, modifier les textes à votre convenance, utiliser une voix de synthèse ou une voix humaine, puis associer et ajuster précisément les pistes audio à l\u0027aide d\u0027outils accessibles.\n\nEt ce n\u0027est pas tout : ContentStudio fait désormais partie de l\u0027éditeur. Dès que Seslibetimle.com a proposé un accès API, nous l\u0027avons intégré à EVD. Si vous possédez un compte, il vous suffit de créer une clé API dans les paramètres et de la saisir une seule fois dans l\u0027Éditeur d\u0027audiodescription et de sous-titres d\u0027EVD. Nous remercions l\u0027équipe de ContentStudio d\u0027avoir rendu cette intégration possible.\n\nEVD 4.9 comprend également un puissant Éditeur de voix et de montage des sous-titres. EVD permettait déjà d\u0027intégrer des sous-titres écrits ou vocalisés aux vidéos ; cette version permet de modifier chaque sous-titre séparément, d\u0027appliquer des réglages de voix et de vitesse propres à chaque segment et d\u0027écouter précisément le résultat.\n\nVous vous demandez comment apprendre à utiliser toutes ces fonctions ? Des guides détaillés sont disponibles dans le menu Aide d\u0027EVD ainsi que dans la rubrique Guides du site evd.drenginyilmaz.net.\n\nEn bref, si vous aimez créer, nous vous invitons à découvrir cette nouvelle version. 😊"
+                                   },
+                         "setupUrl":  "downloads/EVD-Setup-v4.9.0.exe",
+                         "portableUrl":  "downloads/EVD-Portable-v4.9.0.zip",
+                         "guideUrls":  {
+                                           "tr":  "tr/guides.html",
+                                           "en":  "en/guides.html",
+                                           "de":  "de/guides.html",
+                                           "es":  "es/guides.html",
+                                           "fr":  "fr/guides.html"
+                                       },
+                         "notesUrl":  "",
+                         "macUrl":  "downloads/EVD-4.9.0-arm64.dmg"
+                     },
+                     {
+                         "version":  "4.8.0",
+                         "channel":  {
+                                         "tr":  "Kararlı",
+                                         "en":  "Stable",
+                                         "de":  "Stabil",
+                                         "es":  "Estable",
+                                         "fr":  "Stable"
+                                     },
+                         "date":  "2026-07-26",
+                         "title":  {
+                                       "tr":  "EVD 4.8",
+                                       "en":  "EVD 4.8",
+                                       "de":  "EVD 4.8",
+                                       "es":  "EVD 4.8",
+                                       "fr":  "EVD 4.8"
+                                   },
+                         "notes":  {
+                                       "tr":  "4.8 iki harika özelliği beraberinde getiriyor. İlki akan yazı ekleme. Slide show içine ya da mevcut bir videonuzun üzerine artık sağdan sola, aşağıdan yukarı veya farklı tercihlerle akan yazı ekleyerek çok daha profesyonel bir içerik üretme imkânınız var.\n\nDiğer özellik ise Karaoke. Slide show yazı sekmesine Karaoke ekleyebilir, mevcut karaoke dosyalarını kullanabilir veya bizzat elle erişilebilir biçimde dize ve kelimeleri zamanlayarak parçaya karaoke olarak ekleyebilirsiniz.\n\nMOV dosyalarının açılması, Mac ve Windows tarafındaki klavye iyileştirmeleri ve hata düzeltmeleri de heybemizde.\n\nKeyifli kullanımlar.",
+                                       "en":  "EVD 4.8 brings two outstanding new features. The first is scrolling ticker text. You can now add text that moves from right to left, bottom to top, or in other directions to a slideshow or an existing video, helping you create more professional content.\n\nThe other feature is Karaoke. You can add karaoke from the Slideshow Text tab, use existing karaoke files, or accessibly time lines and individual words by hand and add them to the track as karaoke.\n\nImproved MOV file opening, keyboard enhancements on Mac and Windows, and additional bug fixes are also included.\n\nEnjoy EVD 4.8.",
+                                       "de":  "EVD 4.8 bringt zwei hervorragende neue Funktionen. Die erste ist eine bewegte Laufschrift. Sie können jetzt Text von rechts nach links, von unten nach oben oder in anderen Richtungen in eine Slideshow oder ein vorhandenes Video einfügen und so professionellere Inhalte erstellen.\n\nDie zweite Funktion ist Karaoke. Auf der Registerkarte Text der Slideshow können Sie Karaoke hinzufügen, vorhandene Karaoke-Dateien verwenden oder Zeilen und einzelne Wörter barrierefrei von Hand zeitlich abstimmen und dem Titel als Karaoke hinzufügen.\n\nVerbesserungen beim Öffnen von MOV-Dateien, Tastaturverbesserungen unter Mac und Windows sowie weitere Fehlerkorrekturen sind ebenfalls enthalten.\n\nViel Freude mit EVD 4.8.",
+                                       "es":  "EVD 4.8 incorpora dos grandes funciones nuevas. La primera es el texto desplazable. Ahora puede añadir texto que se mueva de derecha a izquierda, de abajo arriba o en otras direcciones a un slideshow o a un vídeo existente para crear contenidos más profesionales.\n\nLa otra función es Karaoke. Puede añadir karaoke desde la pestaña Texto de Slideshow, utilizar archivos de karaoke existentes o sincronizar de forma accesible y manual las líneas y cada palabra para incorporarlas a la pieza como karaoke.\n\nTambién se incluyen mejoras al abrir archivos MOV, mejoras de teclado en Mac y Windows y otras correcciones de errores.\n\nDisfrute de EVD 4.8.",
+                                       "fr":  "EVD 4.8 apporte deux excellentes nouvelles fonctionnalités. La première est le texte défilant. Vous pouvez désormais ajouter à un slideshow ou à une vidéo existante un texte animé de droite à gauche, de bas en haut ou dans d’autres directions, afin de créer un contenu plus professionnel.\n\nL’autre fonctionnalité est le Karaoke. Depuis l’onglet Texte du Slideshow, vous pouvez ajouter un karaoke, utiliser des fichiers de karaoke existants ou synchroniser manuellement et de manière accessible les lignes et chaque mot afin de les ajouter au morceau.\n\nDes améliorations de l’ouverture des fichiers MOV, des raccourcis clavier sur Mac et Windows ainsi que d’autres corrections sont également incluses.\n\nProfitez bien d’EVD 4.8."
+                                   },
+                         "setupUrl":  "downloads/EVD-Setup-v4.8.0.exe",
+                         "portableUrl":  "downloads/EVD-Portable-v4.8.0.zip",
+                         "guideUrls":  {
+                                           "tr":  "guides/evd-yayin-odasi-kullanim-kilavuzu.html",
+                                           "en":  "guides/evd-broadcast-room-user-guide.html",
+                                           "de":  "guides/evd-broadcast-room-benutzerhandbuch.html",
+                                           "es":  "guides/guia-sala-transmision-evd.html",
+                                           "fr":  "guides/guide-salle-diffusion-evd.html"
+                                       },
+                         "notesUrl":  "",
+                         "macUrl":  "downloads/EVD-4.8.0-arm64.dmg"
+                     },
+                     {
+                         "version":  "4.7.0",
+                         "channel":  {
+                                         "tr":  "Kararlı",
+                                         "en":  "Stable",
+                                         "de":  "Stabil",
+                                         "es":  "Estable",
+                                         "fr":  "Stable"
+                                     },
+                         "date":  "2026-07-10",
+                         "title":  {
+                                       "tr":  "EVD 4.7",
+                                       "en":  "EVD 4.7",
+                                       "de":  "EVD 4.7",
+                                       "es":  "EVD 4.7",
+                                       "fr":  "EVD 4.7"
+                                   },
+                         "notes":  {
+                                       "tr":  "Yayın odası arayüz, ses ve kayıt iyileştirmeleri. Çoklu dille çeviri desteği. EVD üzerinden odalara konuk olarak katılım imkanı. EVD geçiş, Overlay ve altyazı ekleme sonrası dışa aktarılan videolarda görüntü kalitesine ilişkin geliştirmeler. Slide show çıktılarında boşlukların kapatılmasıyla ilgili görsel iyileştirmeler, yazıların videolarla eşlenmesi, Türkçe karakter düzeltmeleri ve proje ayarları.",
+                                       "en":  "Broadcast Room interface, audio, and recording improvements. Multi-language translation support. Ability to join rooms as a guest directly from EVD. Image quality improvements for exported videos after adding transitions, overlays, and subtitles. Visual improvements for filling empty areas in slideshow outputs, matching text with videos, Turkish character fixes, and project settings.",
+                                       "de":  "Verbesserungen an Oberfläche, Audio und Aufnahme im Broadcast-Raum. Unterstützung für mehrsprachige Übersetzung. Möglichkeit, direkt aus EVD als Gast Räumen beizutreten. Verbesserungen der Bildqualität bei exportierten Videos nach dem Hinzufügen von Übergängen, Overlays und Untertiteln. Visuelle Verbesserungen zum Schließen leerer Bereiche in Slideshow-Ausgaben, Zuordnung von Texten zu Videos, Korrekturen für türkische Zeichen und Projekteinstellungen.",
+                                       "es":  "Mejoras en la interfaz, el audio y la grabación de la Sala de transmisión. Compatibilidad con traducción en varios idiomas. Posibilidad de unirse a salas como invitado directamente desde EVD. Mejoras en la calidad de imagen de los videos exportados después de agregar transiciones, overlays y subtítulos. Mejoras visuales para rellenar espacios vacíos en las salidas de slideshow, asociación de textos con videos, correcciones de caracteres turcos y configuración del proyecto.",
+                                       "fr":  "Améliorations de l\u0027interface, de l\u0027audio et de l\u0027enregistrement dans la Salle de diffusion. Prise en charge de la traduction multilingue. Possibilité de rejoindre des salles comme invité directement depuis EVD. Améliorations de la qualité d\u0027image des vidéos exportées après l\u0027ajout de transitions, d\u0027overlays et de sous-titres. Améliorations visuelles pour remplir les zones vides dans les exports slideshow, association des textes avec les vidéos, corrections des caractères turcs et paramètres de projet."
+                                   },
+                         "setupUrl":  "downloads/EVD-Setup-v4.7.0.exe",
+                         "portableUrl":  "downloads/EVD-Portable-v4.7.0.zip",
+                         "macBeta":  {
+                                         "url":  "downloads/EVD-4.7.0-arm64.dmg",
+                                         "architecture":  "Apple Silicon (arm64)",
+                                         "sizeBytes":  263228540,
+                                         "sha256":  "D55084A828502AB09E459A80E4434F3414FD8F9D9A283E6B80F669143C703D28"
+                                     },
+                         "guideUrls":  {
+                                           "tr":  "guides/evd-yayin-odasi-kullanim-kilavuzu.html",
+                                           "en":  "guides/evd-broadcast-room-user-guide.html",
+                                           "de":  "guides/evd-broadcast-room-benutzerhandbuch.html",
+                                           "es":  "guides/guia-sala-transmision-evd.html",
+                                           "fr":  "guides/guide-salle-diffusion-evd.html"
+                                       },
+                         "notesUrl":  ""
+                     },
+                     {
+                         "version":  "4.0.1",
+                         "channel":  {
+                                         "tr":  "Kararlı",
+                                         "en":  "Stable",
+                                         "de":  "Stabil",
+                                         "es":  "Estable",
+                                         "fr":  "Stable"
+                                     },
+                         "date":  "2026-05-02",
+                         "title":  "EVD 4.01",
+                         "notes":  {
+                                       "tr":  "EVD 4.01 ile çoklu seçim, seçim listesi ve slideshow önizleme deneyimi geliştirildi. Artık işaretçi çiftlerini doğrudan seçim listesine ekleyebilir, seçim listesini projeyle birlikte kaydedip daha sonra kaldığınız yerden devam edebilirsiniz. Slideshow önizlemesi seçili resim, yazı ve ses için daha doğru 5 saniyelik sahne sunar; yapay zekâ betimleme de artık önizlemede gerçekten görünen kareyi analiz eder. Ayrıca dikey video, seçim listesi ve erişilebilirlik tarafında çeşitli hata düzeltmeleri yapıldı.",
+                                       "en":  "EVD 4.01 improved multi-selection, the selection list, and the slideshow preview experience. You can add marker pairs directly to the selection list, save that list with the project, and continue later. Slideshow preview now presents a more accurate five-second scene for the selected image, text, and audio, and AI description analyzes the frame actually shown in the preview. Several fixes were also made for vertical video, the selection list, and accessibility.",
+                                       "de":  "EVD 4.01 verbessert Mehrfachauswahl, Auswahlliste und Slideshow-Vorschau. Markerpaare koennen direkt zur Auswahlliste hinzugefuegt, mit dem Projekt gespeichert und spaeter weiterverwendet werden. Die Slideshow-Vorschau zeigt nun eine genauere fuenfsekundige Szene fuer das ausgewaehlte Bild, den Text und den Ton; die KI-Beschreibung analysiert den tatsaechlich sichtbaren Vorschaurahmen. Ausserdem wurden Fehler bei vertikalem Video, Auswahlliste und Barrierefreiheit behoben.",
+                                       "es":  "EVD 4.01 mejoró la selección múltiple, la lista de selecciones y la vista previa de slideshow. Ahora puede agregar pares de marcadores directamente a la lista, guardarla con el proyecto y continuar más tarde. La vista previa de slideshow muestra una escena de cinco segundos más precisa para la imagen, el texto y el audio seleccionados, y la descripción con IA analiza el fotograma realmente visible. También se corrigieron problemas de video vertical, lista de selecciones y accesibilidad.",
+                                       "fr":  "EVD 4.01 améliore la sélection multiple, la liste de sélections et l\u0027aperçu du slideshow. Vous pouvez ajouter des paires de marqueurs directement à la liste, l\u0027enregistrer avec le projet et reprendre plus tard. L\u0027aperçu du slideshow présente maintenant une scène de cinq secondes plus précise pour l\u0027image, le texte et l\u0027audio choisis, et la description IA analyse l\u0027image réellement affichée. Des corrections ont aussi été apportées à la vidéo verticale, à la liste de sélections et à l\u0027accessibilité."
+                                   },
+                         "setupUrl":  "downloads/EVD-Setup-v4.0.1.exe",
+                         "portableUrl":  "downloads/EVD-Portable-v4.0.1.zip",
+                         "notesUrl":  ""
+                     }
+                 ]
 }

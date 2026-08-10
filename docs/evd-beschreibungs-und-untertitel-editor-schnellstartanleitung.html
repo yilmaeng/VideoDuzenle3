@@ -1,0 +1,84 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>EVD Beschreibungs- und Untertitel-Editor - Schnellstart</title><style>
+    :root { --ink:#17211b; --muted:#526057; --paper:#fffdf7; --panel:#f1f5e9; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 45%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus, button:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 85% 15%,#267c68 0,transparent 25%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:72rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:70rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.2rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .quick { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; counter-reset:step; }
+    .quick article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .quick article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#inhalt">Zum Hauptinhalt</a><header id="oben"><p class="eyebrow">EVD 4.9 Beta</p><h1>Schnellstart für den Beschreibungs- und Untertitel-Editor</h1>
+<p>Video, Wellenform und Szenenwechsel prüfen, Audiodeskriptionen oder Untertitel schreiben, Sprachaufnahmen erzeugen, menschliche Aufnahmen zuordnen und die Qualität kontrollieren - in einem barrierefreien Arbeitsbereich.</p><p><strong>Stand:</strong> 10. August 2026</p></header>
+<main id="inhalt"><nav aria-labelledby="toc"><h2 id="toc">Inhalt</h2><ol class="toc">
+<li><a href="#zweck">Aufgabe des Editors</a></li><li><a href="#schnell">Schnellstart</a></li><li><a href="#projekt">Arbeitsbereich und Projekte</a></li><li><a href="#zeitleiste">Zeitleiste und Marker</a></li>
+<li><a href="#ereignisse">Ereignisse bearbeiten</a></li><li><a href="#import">Import und Export</a></li><li><a href="#tts">Sprachausgabe und Mischung</a></li><li><a href="#mensch">Menschliche Sprachaufnahme zuordnen</a></li>
+<li><a href="#studio">ContentStudio</a></li><li><a href="#qualitaet">Qualitätskontrolle</a></li><li><a href="#tasten">Tastenkürzel</a></li><li><a href="#probleme">Fehlerbehebung</a></li></ol></nav>
+<section id="zweck"><h2>Aufgabe des Editors</h2><p>Der Editor erstellt und verwaltet drei zeitcodierte Ereignistypen: <strong>Audiodeskription</strong> für wichtige visuelle Informationen, <strong>Untertitel</strong> für Sprache und relevante Geräusche sowie <strong>Prüfnotizen</strong> für Punkte, die das Team klären muss. Status, Sprecher, Sprechhinweis, Tonfall und Tempo können gespeichert werden.</p></section>
+<section id="schnell"><h2>Schnellstart</h2><div class="quick">
+<article><strong>Editor öffnen.</strong><br><strong>Hinzufügen &gt; Beschreibungs-/Untertitel-Editor</strong>.</article><article><strong>Video wählen.</strong><br>Quelldatei öffnen oder ein <code>.evdscript</code>-Projekt fortsetzen.</article>
+<article><strong>Bereich markieren.</strong><br>In der Zeitleiste am Anfang und Ende <kbd>M</kbd> drücken.</article><article><strong>Text schreiben.</strong><br><kbd>D</kbd> Beschreibung, <kbd>S</kbd> Untertitel, <kbd>A</kbd> Prüfnotiz; mit <kbd>Strg/Cmd</kbd>+<kbd>Enter</kbd> speichern.</article>
+<article><strong>Prüfen.</strong><br><kbd>Alt</kbd>+<kbd>L</kbd> öffnet die Ereignisliste; Pfeiltasten und <kbd>Leertaste</kbd>/<kbd>P</kbd> starten die Vorschau.</article>
+<article><strong>Vertonen und ausgeben.</strong><br>TTS oder menschliche Stimme wählen, Mischung prüfen, Qualitätskontrolle starten und Video oder MP3 erzeugen.</article></div>
+<div class="note"><strong>Mac:</strong> Strg/Cmd bedeutet Strg unter Windows und Command unter macOS. Steht nur Strg, wird auch am Mac die Control-Taste verwendet.</div></section>
+<section id="projekt"><h2>Arbeitsbereich und Projekte</h2><p>Der Arbeitsbereich enthält Projektbefehle, Quellvideo und Experten-Zeitleiste, Ereignisliste, TTS-/Mischoptionen, menschliche Sprachaufnahme, ContentStudio und Qualitätskontrolle. Die visuelle Zeitleiste zeigt Wellenform, Szenenwechsel, Marker und Ereignisblöcke; alle Positionen sind auch per Tastatur erreichbar.</p>
+<p><kbd>Alt</kbd>+<kbd>Umschalt</kbd>+<kbd>S</kbd> speichert beim ersten Mal unter einem Namen und aktualisiert danach dieselbe Datei. Automatisches Speichern läuft regelmäßig. Quellvideo und erzeugte Audiodateien bis zum Abschluss nicht verschieben.</p></section>
+<section id="zeitleiste"><h2>Zeitleiste und Marker</h2><ol><li>Mit <kbd>Alt</kbd>+<kbd>T</kbd> zur Zeitleiste.</li><li>Mit <kbd>Leertaste</kbd> abspielen und mit Pfeilen oder Bild auf/ab navigieren.</li><li>Am Anfang und Ende <kbd>M</kbd> drücken.</li><li><kbd>Umschalt</kbd>+<kbd>Leertaste</kbd> spielt den Bereich; <kbd>D</kbd>, <kbd>S</kbd> oder <kbd>A</kbd> legt das Ereignis an.</li></ol>
+<p><kbd>Alt</kbd>+Links/Rechts springt zum vorigen/nächsten Marker. Alt+Oben/Unten ändert die Fein-Schrittweite. Die Szenenanalyse kann Ereignisse melden, die einen Schnitt überschreiten.</p></section>
+<section id="ereignisse"><h2>Ereignisse hinzufügen und bearbeiten</h2><p><kbd>Strg/Cmd</kbd>+<kbd>Enter</kbd> öffnet das allgemeine Formular; D, S und A öffnen direkt den passenden Typ und fokussieren das Textfeld. Enter erzeugt eine neue Zeile, Strg/Cmd+Enter speichert und kehrt zur Wiedergabe zurück.</p>
+<p>Ein Ereignis kann Zeitcodes, Text, Status, Sprecher, Sprechhinweis, Ton, Tempo, Stimme, Geschwindigkeit und Mischpegel enthalten. Dauer, Wortzahl und geschätzte Sprechzeit helfen beim Einpassen.</p>
+<h3>Ereignisliste</h3><p><kbd>Alt</kbd>+<kbd>L</kbd> fokussiert die Liste. Pfeile wählen und spielen den gemischten Bereich. Rechts öffnet das Aktionsmenü; Links oder Escape schließt es. Umschalt+Pfeile erweitert die Auswahl, Strg/Cmd+Leertaste schaltet ein Element um, Strg/Cmd+A wählt alles. Ereignisse lassen sich um 1 ms, 10 ms, 100 ms oder eine Sekunde verschieben, ohne das Quellvideo zu bewegen.</p></section>
+<section id="import"><h2>Import und Export</h2><p>SRT/VTT kann als Untertitel oder Audiodeskription importiert und anschließend vollständig bearbeitet werden. Export ist für alle oder ausgewählte Ereignisse möglich.</p>
+<ul><li><strong>SRT/VTT:</strong> Zeitcodes und sichtbarer Text.</li><li><strong>Excel:</strong> Typ, Status, Sprecher, Text, Sprechhinweise, Ton und Tempo.</li></ul><p><kbd>Strg/Cmd</kbd>+<kbd>F</kbd> sucht; <kbd>Strg/Cmd</kbd>+<kbd>H</kbd> sucht und ersetzt.</p></section>
+<section id="tts"><h2>Sprachausgabe und Mischung</h2><p>Systemstimmen, OpenAI, ElevenLabs und menschliche Stimme werden unterstützt. Cloud-Dienste benötigen ihre API-Schlüssel in den EVD-KI-Einstellungen. Stellen Sie Tempo, Sprecherpegel, Originalton (Standard 90 %) und maximale automatische Geschwindigkeit ein; jedes Ereignis kann eigene Werte besitzen.</p>
+<p><em>Beschriebenes Video oder MP3 erstellen</em> setzt TTS oder bestätigte menschliche Aufnahmen an die Zeitcodes. Video dient der vollständigen Prüfung, MP3 dem Teilen der fertigen Tonmischung.</p></section>
+<section id="mensch"><h2>Menschliche Sprachaufnahme zuordnen</h2><p>Verwenden Sie eine saubere MP3/WAV-Datei nur mit der Sprecherstimme. EVD bietet Whisper-gestützte Kandidaten und eine vollständig tastaturbedienbare manuelle Zuordnung; beide Verfahren können kombiniert werden.</p>
+<h3>Automatische Kandidaten</h3><ol><li>Tiny (schnell), Base (empfohlen) oder Small (genauer, langsamer) wählen.</li><li><em>Saubere menschliche Stimme wählen und zuordnen</em> starten. Das Modell wird beim ersten Mal geladen und lokal gespeichert.</li>
+<li>Mit Oben/Unten Kandidaten wählen. <kbd>Leertaste</kbd> spielt nur die Aufnahme, <kbd>Strg/Cmd</kbd>+<kbd>Leertaste</kbd> die Mischung mit dem Film.</li><li><kbd>Enter</kbd> oder <kbd>Alt</kbd>+<kbd>Enter</kbd> übernimmt. Rechts öffnet Hören, Mischung, Bearbeiten und Übernehmen. Sichere Empfehlungen können gesammelt angewendet werden.</li></ol>
+<p>Versprecher, Husten, Produktionshinweise und alternative Aufnahmen bleiben zur redaktionellen Entscheidung sichtbar.</p>
+<h3>Aufnahme beschneiden</h3><p>Auf einem Kandidaten <kbd>Strg/Cmd</kbd>+<kbd>Enter</kbd> drücken. <kbd>K</kbd> spielt/pausiert, <kbd>J/L</kbd> geht eine Sekunde, <kbd>Umschalt</kbd>+<kbd>J/L</kbd> 100 ms. Mit <kbd>M</kbd> Start und Ende setzen, mit Umschalt/Strg+Leertaste prüfen und mit Enter speichern.</p>
+<h3>Manuelle Zuordnung</h3><ol><li><em>Manuell zuordnen</em> öffnen. EVD wählt den ersten noch nicht vertonten Text und liest ihn vor.</li><li><kbd>Alt</kbd>+<kbd>T</kbd> fokussiert die Aufnahme-Zeitleiste. K/Leertaste spielt; J/L bewegt eine Sekunde, Umschalt+J/L 100 ms.</li>
+<li><kbd>Strg/Cmd</kbd>+Links/Rechts oder <kbd>Strg/Cmd</kbd>+<kbd>J/L</kbd> springt zwischen Sprachbeginnpunkten und spielt im Pausenzustand eine kurze Probe.</li>
+<li>Am Anfang und Ende <kbd>M</kbd> drücken. Umschalt/Strg+Leertaste prüft die Auswahl; <kbd>Enter</kbd> ordnet zu und wechselt zum nächsten Text.</li>
+<li><kbd>Umschalt</kbd>+<kbd>M</kbd> löscht nur aktive Marker. <kbd>D</kbd> liest den aktuellen Text. <kbd>Alt</kbd>+<kbd>L</kbd> öffnet die Zuordnungsliste; Entf entfernt eine falsche Zuordnung, Alt+Enter bestätigt einen automatischen Kandidaten.</li></ol>
+<p>Mehrfachauswahl: Umschalt+Pfeile oder Strg/Cmd+A. <kbd>F/A</kbd> ändert das Tempo, <kbd>Alt</kbd>+<kbd>Umschalt</kbd>+<kbd>L/J</kbd> den Sprecherpegel und Alt+Umschalt+Oben/Unten den Filmton. Änderungen gelten für alle gewählten Ereignisse und werden sofort vorgespielt.</p>
+<div class="tip"><strong>Priorität:</strong> Eine manuelle Aufnahme ersetzt den automatischen Kandidaten. Menschliche Stimme funktioniert sowohl für Beschreibungs- als auch Untertitelereignisse und kann als Video oder MP3 ausgegeben werden.</div></section>
+<section id="studio"><h2>ContentStudio</h2><p>API-Schlüssel speichern, Konto/Guthaben prüfen, Sprache, Vorlage, Detailgrad und zusätzliche Produktionshinweise wählen, Video hochladen und Fortschritt verfolgen. Ergebnisse als Entwürfe importieren und jeden Text sowie Zeitcode kontrollieren. Frühere Online-Aufträge lassen sich mit <em>Letztes passendes Projekt finden</em> wiederherstellen.</p></section>
+<section id="qualitaet"><h2>Qualitätskontrolle</h2><p>Geprüft werden ungültige Zeitcodes, leere Texte, offene Notizen, unvollständige Status, fehlende/veraltete Vertonung, nicht passende Sprechdauer, Lücken, Überschneidungen, Szenenschnitte und unsichere KI-Entwürfe. Enter auf einem Ergebnis öffnet das Ereignis; Berichte können als TXT oder Excel gespeichert werden.</p></section>
+<section id="tasten"><h2>Wichtige Tastenkürzel</h2><table><thead><tr><th>Taste</th><th>Funktion</th></tr></thead><tbody>
+<tr><td><kbd>Alt</kbd>+<kbd>T/L</kbd></td><td>Zeitleiste / Ereignisliste</td></tr><tr><td><kbd>M</kbd></td><td>Start-/Endmarker</td></tr><tr><td><kbd>D/S/A</kbd></td><td>Beschreibung / Untertitel / Prüfnotiz</td></tr>
+<tr><td><kbd>Strg/Cmd</kbd>+<kbd>Enter</kbd></td><td>Formular öffnen oder speichern</td></tr><tr><td><kbd>Alt</kbd>+<kbd>Umschalt</kbd>+<kbd>S</kbd></td><td>Projekt speichern</td></tr>
+<tr><td><kbd>G/H</kbd></td><td>Ereignisse 1 ms früher/später</td></tr><tr><td><kbd>Alt</kbd>+Links/Rechts</td><td>10 ms früher/später</td></tr><tr><td><kbd>Alt</kbd>+<kbd>Umschalt</kbd>+Links/Rechts</td><td>100 ms früher/später</td></tr>
+<tr><td><kbd>Strg</kbd>+<kbd>J/L</kbd></td><td>Eine Sekunde früher/später</td></tr><tr><td><kbd>F/A</kbd> (manuell)</td><td>Sprechtempo erhöhen/verringern</td></tr><tr><td><kbd>Alt</kbd>+<kbd>Umschalt</kbd>+<kbd>L/J</kbd></td><td>Sprecherpegel erhöhen/verringern</td></tr>
+</tbody></table><p>Wiedergabetasten wirken nur in der fokussierten Medien-Zeitleiste. Weitere Befehle können im Tastenkürzel-Manager belegt werden.</p></section>
+<section id="probleme"><h2>Fehlerbehebung und empfohlener Abschluss</h2><p>Passt eine Aufnahme nicht, Text kürzen oder Ereignis verlängern/teilen. Bei Überschneidungen fein verschieben und Qualitätskontrolle erneut starten. Für schwache automatische Zuordnung eine reine Sprecherdatei, Base/Small und manuelle Zuordnung verwenden.</p>
+<ol><li>Entwürfe und Status abschließen.</li><li>Szenenanalyse starten.</li><li>Jede Vertonung im Filmmix prüfen.</li><li>Blocker und Prüfnotizen beheben.</li><li>Projekt und Excel-Bericht sichern, dann Video oder MP3 erzeugen.</li></ol><p class="back"><a href="#oben">Nach oben</a></p></section>
+</main><footer><p>Engelsiz Video Düzenleyicisi - Schnellstart für Beschreibung und Untertitel</p></footer></body></html>

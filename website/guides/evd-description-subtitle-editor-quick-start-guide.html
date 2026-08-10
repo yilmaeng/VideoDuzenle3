@@ -1,0 +1,126 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EVD Description and Subtitle Editor - Quick Start Guide</title><style>
+    :root { --ink:#17211b; --muted:#526057; --paper:#fffdf7; --panel:#f1f5e9; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 45%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus, button:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 85% 15%,#267c68 0,transparent 25%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:72rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:70rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.2rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .quick { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; counter-reset:step; }
+    .quick article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .quick article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#content">Skip to main content</a>
+<header id="top"><p class="eyebrow">EVD 4.9 Beta</p><h1>Description and Subtitle Editor Quick Start Guide</h1>
+<p>Review video with waveforms and scene changes, write descriptions or subtitles, generate narration, match a human voice recording, create ContentStudio drafts, and run quality control in one accessible workspace.</p>
+<p><strong>Guide version:</strong> 10 August 2026</p></header>
+<main id="content">
+<nav aria-labelledby="toc-title"><h2 id="toc-title">Contents</h2><ol class="toc">
+<li><a href="#purpose">What the editor does</a></li><li><a href="#quick">Quick start</a></li><li><a href="#workspace">Workspace and projects</a></li>
+<li><a href="#timeline">Timeline and markers</a></li><li><a href="#events">Adding and editing events</a></li><li><a href="#import">Import and export</a></li>
+<li><a href="#tts">Narration and mixing</a></li><li><a href="#human">Human narration matching</a></li><li><a href="#studio">ContentStudio</a></li>
+<li><a href="#quality">Quality control</a></li><li><a href="#shortcuts">Keyboard shortcuts</a></li><li><a href="#troubleshooting">Troubleshooting</a></li>
+</ol></nav>
+<section id="purpose"><h2>What the editor does</h2>
+<p>The editor creates, times, reviews and narrates three event types: <strong>audio description</strong> for essential visual information, <strong>subtitles</strong> for speech and relevant sound, and <strong>review notes</strong> for issues that must be checked by the team. Events can be draft, in review or approved, and may include a speaker, narration notes, tone and pace.</p>
+</section>
+<section id="quick"><h2>Quick start</h2><div class="quick">
+<article><strong>Open the editor.</strong><br>Choose <strong>Add &gt; Description / Subtitle Editor</strong>.</article>
+<article><strong>Choose a video.</strong><br>Open a source video or resume an <code>.evdscript</code> project.</article>
+<article><strong>Mark a range.</strong><br>Focus the timeline and press <kbd>M</kbd> at the beginning and end.</article>
+<article><strong>Write the event.</strong><br><kbd>D</kbd> opens description, <kbd>S</kbd> subtitle, and <kbd>A</kbd> review note. Save with <kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd>.</article>
+<article><strong>Review.</strong><br><kbd>Alt</kbd>+<kbd>L</kbd> opens the event list. Use arrows and press <kbd>Space</kbd> or <kbd>P</kbd> to preview.</article>
+<article><strong>Narrate and export.</strong><br>Choose TTS or human narration, adjust the mix, run quality control, then create video or MP3.</article>
+</div><div class="note"><strong>Mac:</strong> Ctrl/Cmd means Ctrl on Windows and Command on macOS. Where only Ctrl is shown, use Control on macOS as well.</div></section>
+<section id="workspace"><h2>Workspace and projects</h2>
+<p>The workspace contains project actions, source video and expert timeline, the chronological event list, TTS/mix settings, human narration, ContentStudio and quality-control panels. The visual timeline shows waveform, scene changes, markers and event blocks; keyboard users reach the same positions with playback and navigation commands.</p>
+<p><strong>Save:</strong> <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> asks for a name the first time and updates the same project afterward. Save As creates a copy. Autosave runs periodically while a saved project is open.</p>
+<div class="tip">Keep the source video and generated narration files in place until the project is complete.</div></section>
+<section id="timeline"><h2>Timeline and markers</h2>
+<ol><li>Press <kbd>Alt</kbd>+<kbd>T</kbd> to focus the timeline.</li><li>Play with <kbd>Space</kbd> and navigate with arrows or Page Up/Page Down.</li>
+<li>Press <kbd>M</kbd> at the start and again at the end.</li><li><kbd>Shift</kbd>+<kbd>Space</kbd> previews the marked range. Press <kbd>D</kbd>, <kbd>S</kbd> or <kbd>A</kbd> to create the event.</li></ol>
+<p><kbd>Alt</kbd>+Left/Right moves to the previous/next marker. <kbd>Alt</kbd>+Up/Down changes the fine-seek step. Scene analysis can flag events that cross a cut.</p></section>
+<section id="events"><h2>Adding and editing events</h2>
+<p><kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd> opens the general event form. <kbd>D</kbd>, <kbd>S</kbd> and <kbd>A</kbd> open it with the relevant type selected and focus the text field. Enter adds a line; Ctrl/Cmd+Enter saves and returns to playback.</p>
+<p>Each event can contain time codes, text, workflow status, speaker, narration note, tone, pace, voice, playback rate and mix levels. The editor displays duration, word count and estimated reading time; automatic fitting may increase speech rate up to the configured safe limit.</p>
+<h3>Event list</h3><p><kbd>Alt</kbd>+<kbd>L</kbd> focuses the list. Arrow keys select and preview events, including overlapping narration. <kbd>Right Arrow</kbd> opens the action menu; <kbd>Left Arrow</kbd> or <kbd>Escape</kbd> closes it. Shift+arrows extends selection, Ctrl/Cmd+Space toggles an item, and Ctrl/Cmd+A selects all.</p>
+<p>Events can be moved by 1 ms, 10 ms, 100 ms or one second without moving the source video. Editing and saving an already narrated item regenerates only that item, even if the text was not changed.</p></section>
+<section id="import"><h2>Import and export</h2>
+<p>Import SRT or VTT as subtitles or descriptions, then edit them like native events. Export all or selected items and filter by type.</p>
+<ul><li><strong>SRT/VTT:</strong> time codes and visible text for subtitle or studio tools.</li><li><strong>Excel:</strong> event type, status, speaker, text, narration notes, tone and pace.</li></ul>
+<p><kbd>Ctrl/Cmd</kbd>+<kbd>F</kbd> opens search; <kbd>Ctrl/Cmd</kbd>+<kbd>H</kbd> opens find and replace.</p></section>
+<section id="tts"><h2>Narration and mixing</h2>
+<p>Default settings support system voices, OpenAI, ElevenLabs and human narration. Cloud services require their API keys in EVD AI settings. Set narration rate and level, original-video level (default 90%), and the maximum automatic fitting rate. Every event can override these defaults.</p>
+<p>Preview mixes narration with the original video using the event's settings. <em>Create described video or MP3</em> places TTS or approved human takes at their time codes. Video supports visual review; MP3 is useful for sharing the completed audio mix. Events without generated or matched audio remain silent in the output.</p></section>
+<section id="human"><h2>Human narration matching</h2>
+<p>Use a clean MP3/WAV recording containing only the narrator. EVD can find candidates with local Whisper or let you match every take manually. Both methods may be combined in one project.</p>
+<h3>Automatic candidate matching</h3><ol>
+<li>Select Tiny (fast), Base (recommended) or Small (more accurate and slower).</li>
+<li>Choose <em>Select and match clean human narration</em>. On first use the model is downloaded and cached; later analyses use the local cache.</li>
+<li>Use Up/Down in the candidate list. <kbd>Space</kbd> plays the take; <kbd>Ctrl/Cmd</kbd>+<kbd>Space</kbd> plays it mixed with the film.</li>
+<li><kbd>Enter</kbd> or <kbd>Alt</kbd>+<kbd>Enter</kbd> applies the take. <kbd>Right Arrow</kbd> opens listen, mix, edit and apply commands. High-confidence matches may be applied together with <em>Use recommended takes</em>.</li>
+</ol>
+<p>Errors, coughs, spoken production notes and alternate readings remain available for editorial review rather than being forced into the project.</p>
+<h3>Trim a candidate</h3>
+<p>Press <kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd> on a candidate. <kbd>K</kbd> plays/pauses; <kbd>J/L</kbd> seeks one second and <kbd>Shift</kbd>+<kbd>J/L</kbd> seeks 100 ms. Set start and end with <kbd>M</kbd>, preview the selection with <kbd>Shift</kbd>/<kbd>Ctrl</kbd>+<kbd>Space</kbd>, and save with <kbd>Enter</kbd>.</p>
+<h3>Manual matching</h3><ol>
+<li>Open <em>Match manually</em>. EVD selects the first event without narration and announces its text.</li>
+<li><kbd>Alt</kbd>+<kbd>T</kbd> focuses the narration timeline. <kbd>K</kbd>/<kbd>Space</kbd> plays; <kbd>J/L</kbd> seeks one second and Shift+J/L seeks 100 ms.</li>
+<li><kbd>Ctrl/Cmd</kbd>+Left/Right or <kbd>Ctrl/Cmd</kbd>+<kbd>J/L</kbd> jumps between speech starts and plays a short sample when paused.</li>
+<li>Press <kbd>M</kbd> at the start and end of the reading. Shift/Ctrl+Space previews it; <kbd>Enter</kbd> assigns it and advances to the next event.</li>
+<li><kbd>Shift</kbd>+<kbd>M</kbd> clears only active markers. <kbd>D</kbd> announces the current text. <kbd>Alt</kbd>+<kbd>L</kbd> returns to the match list; Delete removes an incorrect assignment, while Alt+Enter approves an available automatic candidate.</li>
+</ol>
+<p>Use Shift+arrows or Ctrl/Cmd+A for multiple selection. <kbd>F/A</kbd> changes narration speed, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L/J</kbd> narration volume, and <kbd>Alt</kbd>+<kbd>Shift</kbd>+Up/Down original-film volume. Changes apply to all selected events and are previewed immediately.</p>
+<div class="tip"><strong>Priority:</strong> A manual take replaces the automatic candidate for that event. Human narration works for events imported as descriptions or subtitles and can be exported to video or MP3.</div></section>
+<section id="studio"><h2>ContentStudio automatic description</h2>
+<p>Save the API key once, check account/credit, choose language, template, detail, processing mode, confidence and creativity, then add production-specific instructions. Upload the video and monitor progress. When ready, import results as drafts and review every text and time code. A previous remote job can be recovered with <em>Find last matching project</em>.</p></section>
+<section id="quality"><h2>Quality control</h2>
+<p>Quality control reports invalid time codes, empty text, unresolved notes, unfinished workflow states, missing or outdated narration, text that does not fit, suspicious gaps, overlapping events/TTS, scene-crossing events and low-confidence AI drafts. Select a result and press Enter to reach its event; reports can be saved as TXT or Excel.</p>
+<div class="warning">Blocking issues are announced before output. You may continue technically, but resolve them before publication whenever possible.</div></section>
+<section id="shortcuts"><h2>Keyboard shortcuts</h2>
+<table><thead><tr><th>Shortcut</th><th>Action</th></tr></thead><tbody>
+<tr><td><kbd>Alt</kbd>+<kbd>T/L</kbd></td><td>Timeline / event list.</td></tr><tr><td><kbd>Space</kbd>, <kbd>K</kbd></td><td>Play/pause in the focused media workspace.</td></tr>
+<tr><td><kbd>M</kbd></td><td>Add start/end marker.</td></tr><tr><td><kbd>Shift</kbd>+<kbd>Space</kbd></td><td>Play between markers.</td></tr>
+<tr><td><kbd>D/S/A</kbd></td><td>Add description / subtitle / review note.</td></tr><tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd></td><td>Open or save the event form.</td></tr>
+<tr><td><kbd>Right Arrow</kbd></td><td>Open an event or human-take action menu.</td></tr><tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save project.</td></tr>
+<tr><td><kbd>G/H</kbd></td><td>Move selected events 1 ms earlier/later.</td></tr><tr><td><kbd>Alt</kbd>+Left/Right</td><td>Move selected events 10 ms earlier/later.</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+Left/Right</td><td>Move selected events 100 ms earlier/later.</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>J/L</kbd></td><td>Move selected events one second earlier/later.</td></tr>
+<tr><td><kbd>Ctrl/Cmd</kbd>+<kbd>F/H</kbd></td><td>Search / find and replace.</td></tr>
+<tr><td><kbd>F/A</kbd> (manual match)</td><td>Increase/decrease human narration speed.</td></tr><tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>L/J</kbd></td><td>Increase/decrease human narration level.</td></tr>
+<tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+Up/Down</td><td>Increase/decrease original-film level.</td></tr>
+</tbody></table>
+<p>Playback commands work only when the relevant timeline is focused, preventing accidental playback while typing or activating controls. Additional commands can be assigned in the Keyboard Shortcut Manager.</p></section>
+<section id="troubleshooting"><h2>Troubleshooting and good practice</h2>
+<h3>Narration does not fit</h3><p>Shorten the text first, then check automatic fitting and its safe maximum. Extend or split the event rather than using unintelligible speed.</p>
+<h3>Two descriptions overlap</h3><p>Preview includes neighboring narration. Move the event in fine steps and run quality control again.</p>
+<h3>Human matching is weak</h3><p>Use a clean narrator-only file, try Base or Small, and listen to candidates in the film mix before accepting them. Use manual matching for uncertain passages.</p>
+<h3>Recommended final sequence</h3><ol><li>Finish drafts and workflow states.</li><li>Run scene analysis.</li><li>Preview every narration in the film mix.</li><li>Resolve quality-control blockers and review notes.</li><li>Save the project, archive an Excel report, and create the final video or MP3.</li></ol>
+<p class="back"><a href="#top">Back to top</a></p></section>
+</main><footer><p>Accessible Video Editor - Description and Subtitle Editor quick start guide</p></footer></body></html>

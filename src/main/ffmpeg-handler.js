@@ -336,8 +336,18 @@ async function _mixAudioAdvanced(options, onProgress) {
         throw new Error("Missing paths for audio mix");
     }
 
-    const videoVolume = options.videoVolume !== undefined ? options.videoVolume : 1.0;
+    const videoVolume = Math.max(0, Math.min(2, Number(
+        options.videoVolume !== undefined ? options.videoVolume : 1.0
+    )));
     const audioVolume = options.audioVolume !== undefined ? options.audioVolume : 1.0;
+    const videoVolumeSegments = (Array.isArray(options.videoVolumeSegments) ? options.videoVolumeSegments : [])
+        .map((segment) => ({
+            start: Math.max(0, Number(segment?.start || 0)),
+            end: Math.max(0, Number(segment?.end || 0)),
+            volume: Number(Math.max(0, Math.min(2, Number(segment?.volume ?? videoVolume))).toFixed(3))
+        }))
+        .filter((segment) => segment.end > segment.start
+            && Math.abs(segment.volume - videoVolume) >= 0.0001);
     const insertTime = options.insertTime || 0;
     const audioTrimStart = options.audioTrimStart || 0;
     const audioTrimEnd = options.audioTrimEnd || 0; // 0 means no end trim usually
@@ -358,7 +368,15 @@ async function _mixAudioAdvanced(options, onProgress) {
 
             // 1. Prepare Video Audio [0:a] -> [a0]
             if (hasVideoAudio) {
-                filters.push(`[0:a]aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp,volume=${videoVolume}[a0]`);
+                let originalVolumeExpression = String(videoVolume);
+                for (let i = videoVolumeSegments.length - 1; i >= 0; i--) {
+                    const segment = videoVolumeSegments[i];
+                    originalVolumeExpression = `if(between(t\,${segment.start.toFixed(3)}\,${segment.end.toFixed(3)})\,${segment.volume}\,${originalVolumeExpression})`;
+                }
+                const volumeFilter = videoVolumeSegments.length
+                    ? `volume='${originalVolumeExpression}':eval=frame`
+                    : `volume=${videoVolume}`;
+                filters.push(`[0:a]aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp,${volumeFilter}[a0]`);
             } else {
                 // Generate silence matching video duration if no audio
                 filters.push(`anullsrc=r=44100:cl=stereo,atrim=0:${videoDuration}[a0]`);
@@ -396,8 +414,23 @@ async function _mixAudioAdvanced(options, onProgress) {
 
             // 3. Mix [a0][a1] -> [aout]
             // amix yerine amerge+pan kullanıyoruz (ses kaybını önlemek için)
-            filters.push(`[a0][a1]amerge=inputs=2[merged]`);
-            filters.push(`[merged]pan=stereo|c0=c0+c2|c1=c1+c3[aout]`);
+            let originalMixLabel = 'a0';
+            let externalMixLabel = 'a1';
+            if (options.preserveOriginalLevel && hasVideoAudio) {
+                // Keep the user's original-video gain authoritative. When both
+                // tracks peak together, reduce only TTS before the final safety limiter.
+                filters.push('[a0]asplit=2[a0mix][a0sidechain]');
+                filters.push('[a1][a0sidechain]sidechaincompress=threshold=0.125:ratio=10:attack=2:release=80:knee=2:link=maximum:detection=peak[a1protected]');
+                originalMixLabel = 'a0mix';
+                externalMixLabel = 'a1protected';
+            }
+            filters.push(`[${originalMixLabel}][${externalMixLabel}]amerge=inputs=2[merged]`);
+            const outputLimiter = options.limitOutput
+                ? (options.preserveOriginalLevel
+                    ? ',alimiter=limit=0.98:level=false'
+                    : ',alimiter=limit=0.95')
+                : '';
+            filters.push(`[merged]pan=stereo|c0=c0+c2|c1=c1+c3${outputLimiter}[aout]`);
 
             ffmpeg(videoPath)
                 .input(audioPath)
@@ -434,8 +467,9 @@ async function _createAudioFromMix(segments, outputPath, onProgress) {
             dubDuration = Number(metadata?.duration || metadata?.format?.duration || 0) || 0;
         } catch (_error) {}
         const sourceDuration = Math.max(0, Number(segment.sourceDuration || 0) || 0);
-        let tempo = 1;
-        if (sourceDuration >= 1 && dubDuration >= 0.5) {
+        const requestedTempo = Number(segment.tempo);
+        let tempo = Number.isFinite(requestedTempo) && requestedTempo > 0 ? requestedTempo : 1;
+        if (!(Number.isFinite(requestedTempo) && requestedTempo > 0) && sourceDuration >= 1 && dubDuration >= 0.5) {
             const desiredDuration = Math.max(0.5, sourceDuration * 0.9);
             tempo = Math.max(0.72, Math.min(1.28, dubDuration / desiredDuration));
         }
@@ -469,6 +503,8 @@ async function _createAudioFromMix(segments, outputPath, onProgress) {
             if (tempoFilters.length) {
                 f += `,${tempoFilters.join(',')}`;
             }
+            const segmentVolume = Math.max(0, Math.min(4, Number(seg.volume ?? 1)));
+            f += `,volume=${segmentVolume}`;
             if (delayMs > 0) {
                 f += `,adelay=${delayMs}|${delayMs}`;
             }
@@ -1171,8 +1207,9 @@ async function _addTickerOverlay(videoPath, output, options = {}, onProgress) {
     return new Promise((resolve, reject) => {
         const command = ffmpeg(input)
             .inputOptions([])
+            .outputOptions('-filter_complex_script', filterFile)
             .outputOptions([
-                '-filter_complex_script', filterFile, '-map', '[outv]', '-map', '0:a?',
+                '-map', '[outv]', '-map', '0:a?',
                 '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'copy', '-pix_fmt', 'yuv420p',
                 '-max_muxing_queue_size', '9999', ..._buildProcessedVideoColorOutputOptions(metadata)
             ])
@@ -2600,8 +2637,8 @@ module.exports = {
             // 3. Çalıştır
             let finalizeNotified = false;
             await new Promise((resolve, reject) => {
-                cmd.outputOptions([
-                        '-filter_complex_script', filterScriptPath,
+                cmd.outputOptions('-filter_complex_script', filterScriptPath)
+                    .outputOptions([
                         '-map', '[ov]',
                         '-map', '[oa]',
                         '-c:v', 'libx264', '-preset', 'fast',
@@ -2914,7 +2951,7 @@ module.exports = {
         });
     },
     overlayImageToVideo: async function () { const args = cleanArgs(arguments); return _overlayLayerJudge(args[0], args[1], args[2], args[3]); },
-    addImageOverlay: async function () { const args = cleanArgs(arguments); return _overlayLayerJudge(args[0], args[1], args[2], args[3]); },
+    addImageOverlay: async function () { const args = cleanArgs(arguments); return _overlayLayerJudge(args[0], args[1], args[2], args[3], args[4]); },
     addTextOverlay: async function () { const args = cleanArgs(arguments); return _addTextOverlay(args[0], args[1], args[2], args[3]); },
     addTickerOverlay: async function () { const args = cleanArgs(arguments); return _addTickerOverlay(args[0], args[1], args[2], args[3], args[4]); },
     addTransition: async function () { const args = cleanArgs(arguments); return _addTransition(args[0], args[1], args[2]); },
@@ -3081,7 +3118,7 @@ async function _replaceAudio(videoPath, audioPath, offsetMs, muteOriginal, outpu
 
 // V80 - FRESH START OVERLAY HANDLER
 // This version uses fluent-ffmpeg (simplified) with heavy logging and duration protection.
-async function _overlayLayerJudge(videoInput, imageInput, output, options = {}) {
+async function _overlayLayerJudge(videoInput, imageInput, output, options = {}, onProgress = null) {
     const vidPath = _getSafePath(videoInput);
     const imgPath = _getSafePath(imageInput);
     const isImage = (imgPath && ['.png', '.jpg', '.jpeg', '.bmp', '.webp', '.gif'].includes(path.extname(imgPath).toLowerCase()));
@@ -3093,7 +3130,7 @@ async function _overlayLayerJudge(videoInput, imageInput, output, options = {}) 
     let sourceMetadata = {};
     try {
         sourceMetadata = await _getVideoMetadata(vidPath);
-        duration = sourceMetadata.format.duration;
+        duration = Number(sourceMetadata.duration ?? sourceMetadata.format?.duration ?? 0);
         console.log(`[OverlayLayerJudge V80] Metadata Duration: ${duration}`);
     } catch (e) {
         console.warn('[OverlayLayerJudge V80] Metadata Error:', e);
@@ -3158,13 +3195,18 @@ async function _overlayLayerJudge(videoInput, imageInput, output, options = {}) 
             .on('start', (commandLine) => {
                 console.log('[OverlayLayerJudge V80] FFMPEG STARTED: ' + commandLine);
             })
-            .on('progress', () => {})
+            .on('progress', progress => {
+                if (typeof onProgress === 'function') {
+                    onProgress(Math.max(0, Math.min(99, Number(progress.percent || 0))));
+                }
+            })
             .on('end', () => {
                 console.log('[OverlayLayerJudge V80] FFmpeg End Event Triggered.');
                 try {
                     if (fs.existsSync(output)) fs.unlinkSync(output);
                     fs.copyFileSync(tempOutput, output);
                     fs.unlinkSync(tempOutput);
+                    if (typeof onProgress === 'function') onProgress(100);
                     console.log('[OverlayLayerJudge V80] SUCCESS: File swapped.');
                     resolve({ success: true, outputPath: output });
                 } catch (err) {
@@ -4800,4 +4842,3 @@ const _legacy_exports = {
 module.exports = { ..._legacy_exports, ...module.exports };
 module.exports.concatenateVideosFast = concatenateVideosFast;
 module.exports.concatenateVideos = concatenateVideos;
-

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guide de la Salle de diffusion EVD</title>
+  <style>
+    :root { --text:#1f2937; --muted:#4b5563; --accent:#0f766e; --line:#d1d5db; --soft:#f3f4f6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; color: var(--text); line-height: 1.55; background: white; }
+    .page { max-width: 920px; margin: 0 auto; padding: 40px 52px 72px; }
+    h1, h2, h3 { line-height: 1.25; margin: 0 0 14px; }
+    h1 { font-size: 30px; color: #0b3b36; margin-bottom: 10px; }
+    h2 { font-size: 22px; color: var(--accent); margin-top: 34px; padding-top: 14px; border-top: 2px solid var(--line); }
+    h3 { font-size: 17px; margin-top: 20px; }
+    p, li { font-size: 14px; }
+    p { margin: 0 0 12px; }
+    ul, ol { margin: 0 0 14px 22px; padding: 0; }
+    li { margin: 0 0 7px; }
+    .lead { font-size: 16px; color: var(--muted); margin-bottom: 18px; }
+    .meta { display: flex; gap: 18px; flex-wrap: wrap; padding: 12px 16px; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 28px; }
+    .meta span { font-size: 13px; color: var(--muted); }
+    .toc { background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin-bottom: 28px; }
+    .toc h2 { border: 0; padding-top: 0; margin-top: 0; font-size: 18px; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover, .toc a:focus { text-decoration: underline; }
+    .note, .tip { border-left: 4px solid var(--accent); background: #f0fdfa; padding: 12px 14px; margin: 14px 0 18px; border-radius: 8px; }
+    .note strong, .tip strong { color: #115e59; }
+    .shortcut-list li { margin-bottom: 6px; }
+    .footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    @media print { .page { max-width: none; padding: 20mm 16mm 18mm; } a { color: inherit; text-decoration: none; } }
+</style>
+</head>
+<body>
+  <main class="page">
+    <h1>Guide de la Salle de diffusion EVD</h1>
+    <p class="lead">Ce guide explique la Salle de diffusion EVD pour les directs, réunions, interviews, enregistrements, partages d’écran, sous-titres, traductions, doublage, gestion des participants et mise en scène accessible.</p>
+    <div class="meta">
+      <span><strong>Product:</strong> Éditeur vidéo accessible</span>
+      <span><strong>Section:</strong> Salle de diffusion</span>
+      <span><strong>Document:</strong> Guide HTML/PDF partageable</span>
+      <span><strong>Updated:</strong> 13 juin 2026</span>
+    </div>
+    <section class="toc">
+      <h2>Sommaire</h2>
+      <ol>
+        <li><a href="#section-01">Qu’est-ce que la Salle de diffusion ?</a></li>
+        <li><a href="#section-02">Interface</a></li>
+        <li><a href="#section-03">Ouvrir une salle temporaire ou persistante</a></li>
+        <li><a href="#section-04">Page invité</a></li>
+        <li><a href="#section-05">Mises en scène</a></li>
+        <li><a href="#section-06">Arrière-plans, logo et profils</a></li>
+        <li><a href="#section-07">Enregistrement</a></li>
+        <li><a href="#section-08">Sauvegarde locale invité et bot</a></li>
+        <li><a href="#section-09">Direct YouTube</a></li>
+        <li><a href="#section-10">Sous-titres, traduction et doublage</a></li>
+        <li><a href="#section-11">Doublage ElevenLabs après enregistrement</a></li>
+        <li><a href="#section-12">Clés API et services IA</a></li>
+        <li><a href="#section-13">Couche d’effets</a></li>
+        <li><a href="#section-14">Partage d’écran</a></li>
+        <li><a href="#section-15">Participants et chat</a></li>
+        <li><a href="#section-16">Webinar</a></li>
+        <li><a href="#section-17">Avis IA sur la scène</a></li>
+        <li><a href="#section-18">Raccourcis principaux</a></li>
+        <li><a href="#section-19">Dépannage</a></li>
+      </ol>
+    </section>
+
+    <section id="section-01">
+      <h2>1. Qu’est-ce que la Salle de diffusion ?</h2>
+      <p>C’est un espace de production où vous invitez des personnes par lien, recevez caméra, micro et partage d’écran, puis envoyez la scène vers l’enregistrement ou YouTube.</p>
+      <p>Le flux se fait en deux temps : ouvrir la salle, puis décider comment les personnes et contenus apparaissent.</p>
+      <ul>
+        <li>Salles temporaires et persistantes</li>
+        <li>Caméra, micro, chat, partage et commandes participants</li>
+        <li>Mises en scène manuelles, arrière-plans, logos, sous-titres, traduction, langue des signes, enregistrement, YouTube et effets</li>
+      </ul>
+    </section>
+
+    <section id="section-02">
+      <h2>2. Interface</h2>
+      <p>Alt+L ouvre la liste des régions. Utilisez les flèches et Entrée. Ctrl+Droite et Ctrl+Gauche changent rapidement de région.</p>
+      <ul>
+        <li>Salle et appareils</li>
+        <li>Participants et chat</li>
+        <li>Partage et sources</li>
+        <li>Mise en scène</li>
+        <li>Arrière-plans</li>
+        <li>OBS, enregistrement, YouTube, effets</li>
+        <li>Sous-titres et traduction</li>
+        <li>Diagnostic et historique</li>
+      </ul>
+    </section>
+
+    <section id="section-03">
+      <h2>3. Ouvrir une salle temporaire ou persistante</h2>
+      <p>Créez une salle rapide ou ouvrez Gestion de salle avec Alt+O pour une salle persistante avec clé de lien, mot de passe et règles sans hôte.</p>
+      <p>La liste se contrôle avec flèches, Entrée et Flèche droite pour le menu.</p>
+    </section>
+
+    <section id="section-04">
+      <h2>4. Page invité</h2>
+      <p>La page invité est simple. Les appareils sont dans Options des appareils ; le flux principal est nom, mot de passe éventuel et rejoindre.</p>
+      <ul>
+        <li>Micro : Ctrl+D</li>
+        <li>Caméra : Ctrl+E</li>
+        <li>Partager : Ctrl+Shift+E</li>
+        <li>Quitter : Ctrl+Shift+H</li>
+        <li>Chat, participants, informations, sous-titres et texte accessible sont dans des panneaux repliables.</li>
+      </ul>
+    </section>
+
+    <section id="section-05">
+      <h2>5. Mises en scène</h2>
+      <p>Elles déterminent l’apparence de l’hôte, des invités et des partages. Le menu d’affectation permet de placer les sources manuellement.</p>
+      <p>Pendant un partage, EVD peut garder les intervenants en petites fenêtres et revenir à la mise en scène précédente.</p>
+    </section>
+
+    <section id="section-06">
+      <h2>6. Arrière-plans, logo et profils</h2>
+      <p>JPG, PNG, WebP, BMP, MP4, WebM, MOV et MKV sont possibles. EVD avertit ou convertit si le format n’est pas adapté à 1920x1080.</p>
+      <p>Les profils gardent arrière-plan, ajustement, assombrissement, logo, position et taille.</p>
+    </section>
+
+    <section id="section-07">
+      <h2>7. Enregistrement</h2>
+      <p>Alt+R lance l’enregistrement quand OBS et la scène sont prêts. La sortie propre évite de capturer les contrôles.</p>
+      <p>Revenez à la Salle de diffusion pour changer la scène, gérer les invités, effets, partages ou arrêter.</p>
+    </section>
+
+    <section id="section-08">
+      <h2>8. Sauvegarde locale invité et bot</h2>
+      <p>Pendant un enregistrement local, les navigateurs compatibles peuvent créer des morceaux de secours. Ils peuvent remplacer des zones figées de l’enregistrement principal.</p>
+      <p>L’enregistrement bot est optionnel et se bascule avec Alt+Ctrl+B.</p>
+    </section>
+
+    <section id="section-09">
+      <h2>9. Direct YouTube</h2>
+      <p>Préparez scène et OBS, choisissez ou créez le direct, puis utilisez Alt+Ctrl+L pour démarrer ou arrêter. Un test privé est conseillé.</p>
+      <p>Un arrêt d’urgence est disponible si l’interface devient difficile à contrôler.</p>
+    </section>
+
+    <section id="section-10">
+      <h2>10. Sous-titres, traduction et doublage</h2>
+      <p>Activez traduction/sous-titres, choisissez service, langue source, cible et mode. OpenAI est conseillé pour le texte, Gemini Live Translate pour la voix, ElevenLabs surtout pour le doublage après enregistrement.</p>
+      <p>Chaque invité choisit sa langue. Si la parole est déjà dans la langue cible, la voix traduite identique n’est pas jouée.</p>
+    </section>
+
+    <section id="section-11">
+      <h2>11. Doublage ElevenLabs après enregistrement</h2>
+      <p>Après l’enregistrement, envoyez le fichier à ElevenLabs Dubbing pour créer un MP4 doublé avec voix traduite devant et original dessous.</p>
+      <p>Les segments gardés peuvent être remixés sans relancer le service.</p>
+    </section>
+
+    <section id="section-12">
+      <h2>12. Clés API et services IA</h2>
+      <p>Les clés sont dans le menu IA. Gemini sert au retour visuel et Live Translate ; OpenAI au texte et secours ; ElevenLabs à Scribe, voix et doublage.</p>
+    </section>
+
+    <section id="section-13">
+      <h2>13. Couche d’effets</h2>
+      <p>Déclenchez jingles, sons, vidéos et effets visuels pendant enregistrement ou direct. Ils vont dans la sortie finale.</p>
+    </section>
+
+    <section id="section-14">
+      <h2>14. Partage d’écran</h2>
+      <p>L’hôte utilise Alt+S. Choisissez écran, fenêtre ou source et éventuellement audio système. Les invités utilisent le sélecteur du navigateur.</p>
+      <p>Le partage de document accessible permet d’ajouter PowerPoint, Word ou autre fichier pour que les invités aveugles suivent le texte.</p>
+    </section>
+
+    <section id="section-15">
+      <h2>15. Participants et chat</h2>
+      <p>Alt+U ouvre la liste. Flèches pour naviguer, Flèche droite pour le menu, Flèche gauche ou Escape pour fermer.</p>
+      <p>Le menu contient expulser, message, muet, caméra, autorisations, paneliste, rôles interprètes et demandes de parole.</p>
+    </section>
+
+    <section id="section-16">
+      <h2>16. Webinar</h2>
+      <p>Mode pour grands publics : seuls certains panelistes parlent ou apparaissent. Les admins valident les demandes et fournissent une clé à l’hôte.</p>
+    </section>
+
+    <section id="section-17">
+      <h2>17. Avis IA sur la scène</h2>
+      <p>Analyse l’image réelle : visages visibles, placement du partage, zones noires ou contrôles indésirables. Gemini est prioritaire, OpenAI peut servir de secours.</p>
+    </section>
+
+    <section id="section-18">
+      <h2>18. Raccourcis principaux</h2>
+      <p>Hôte : Alt+A micro, Alt+V caméra, Alt+S partage, Alt+Y mise en scène, Alt+U participants, Alt+C chat, Alt+O gestion, Alt+Q quitter/terminer, Alt+R enregistrer, Alt+L régions, Alt+Ctrl+L YouTube, Alt+Ctrl+B bot, Alt+Ctrl+T sous-titres/traduction.</p>
+      <p>Invité : Ctrl+D micro, Ctrl+E caméra, Ctrl+Shift+E partage, Ctrl+Shift+H quitter.</p>
+    </section>
+
+    <section id="section-19">
+      <h2>19. Dépannage</h2>
+      <p>Pas d’audio invité : permissions et appareils. Pas d’audio de partage : vérifier le navigateur. Sous-titres/traduction : vérifier activation et clés API.</p>
+      <p>Consultez Diagnostic et historique pour audio, vidéo, participants, YouTube et enregistrement.</p>
+    </section>
+
+    <p class="footer">Ce document est le guide partageable de l’aide de la Salle de diffusion EVD.</p>
+  </main>
+</body>
+</html>

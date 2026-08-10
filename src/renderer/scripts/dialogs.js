@@ -643,6 +643,7 @@ const Dialogs = {
         this.transitionLibraryDialog = document.getElementById('transition-library-dialog');
         this.transitionListDialog = document.getElementById('transition-list-dialog');
         this.subtitleTtsDialog = document.getElementById('subtitle-tts-options-dialog');
+        this.subtitleTtsSegmentEditorDialog = document.getElementById('subtitle-tts-segment-editor-dialog');
         this.subtitleActionDialog = document.getElementById('subtitle-action-dialog'); // YENİ
         this.subtitleStyleDialog = document.getElementById('subtitle-style-dialog');
         this.videoLayerWizardDialog = document.getElementById('video-layer-wizard-dialog'); // VIDEO LAYER
@@ -667,7 +668,7 @@ const Dialogs = {
             this.aiDescriptionDialog, this.geminiApiKeyDialog, this.openAiApiKeyDialog, this.elevenLabsApiKeyDialog, this.accessibleConfirmDialog,
             this.instantVoiceTranslationDialog,
             this.imageWizardDialog, this.selectionQueueDialog, this.transitionLibraryDialog, this.transitionListDialog,
-            this.subtitleActionDialog, this.subtitleTtsDialog, this.subtitleStyleDialog,
+            this.subtitleActionDialog, this.subtitleTtsDialog, this.subtitleTtsSegmentEditorDialog, this.subtitleStyleDialog,
             this.videoLayerWizardDialog, this.ctaLibraryDialog,
             this.speedDialog
         ];
@@ -6061,7 +6062,8 @@ const Dialogs = {
             suggestBtn.id = 'btn-ai-suggest-areas';
             suggestBtn.type = 'button';
             suggestBtn.className = 'action-button';
-            suggestBtn.innerText = this.t('runtime.dialogs.ai_suggest_areas_button', 'Suggest Suitable Areas');
+            suggestBtn.setAttribute('data-i18n', 'runtime.dialogs.ai_suggest_areas_button');
+            suggestBtn.innerText = this.t('runtime.dialogs.ai_suggest_areas_button', 'Uygun Alan \u00d6ner');
             suggestBtn.title = this.t('runtime.dialogs.ai_suggest_areas_title', 'Find empty areas in the video with AI');
             suggestBtn.style.marginRight = '10px';
             suggestBtn.style.backgroundColor = '#2E7D32'; // Darker green
@@ -6069,6 +6071,7 @@ const Dialogs = {
 
             // Insert before 'Check' button
             aiPosBtn.parentNode.insertBefore(suggestBtn, aiPosBtn);
+            window.i18nHelper?.translateDOM(suggestBtn.parentNode);
 
             const self = this; // Capture 'this' explicity
             suggestBtn.addEventListener('click', async (e) => {
@@ -8421,7 +8424,12 @@ const Dialogs = {
                     } else if (result.wavPath || result.audioPath) {
                         // Dosya yolu döndü
                         const path = result.wavPath || result.audioPath;
+                        this.subtitleTtsPreviewAudio?.pause();
                         const audio = new Audio(`file:///${path.replace(/\\/g, '/')}`);
+                        this.subtitleTtsPreviewAudio = audio;
+                        audio.addEventListener('ended', () => {
+                            if (this.subtitleTtsPreviewAudio === audio) this.subtitleTtsPreviewAudio = null;
+                        }, { once: true });
                         await audio.play();
                         Accessibility.announce(this.t('runtime.subtitle.preview_playing', 'Preview is playing'));
                     }
@@ -8440,6 +8448,8 @@ const Dialogs = {
 
         // Onay
         confirmBtn?.addEventListener('click', () => {
+            this.subtitleTtsPreviewAudio?.pause();
+            this.subtitleTtsPreviewAudio = null;
             if (this.subtitleTtsResolve) {
                 const serviceVal = serviceSelect ? serviceSelect.value : 'system';
                 const voiceVal = voiceSelect ? voiceSelect.value : '';
@@ -8462,6 +8472,8 @@ const Dialogs = {
 
         // İptal (Tamamen iptal)
         cancelBtn?.addEventListener('click', () => {
+            this.subtitleTtsPreviewAudio?.pause();
+            this.subtitleTtsPreviewAudio = null;
             // İptal durumunda null döneriz
             if (this.subtitleTtsResolve) {
                 this.subtitleTtsResolve(null);
@@ -8471,6 +8483,8 @@ const Dialogs = {
         });
 
         dialog?.addEventListener('close', () => {
+            this.subtitleTtsPreviewAudio?.pause();
+            this.subtitleTtsPreviewAudio = null;
             if (this.subtitleTtsResolve) {
                 this.subtitleTtsResolve(null);
                 this.subtitleTtsResolve = null;
@@ -8531,6 +8545,844 @@ const Dialogs = {
     /**
      * Altyazı işlem diyaloğunu göster
      */
+    async loadSubtitleTtsProject(projectPath = '') {
+        let selectedPath = projectPath;
+        if (!selectedPath) {
+            const result = await window.api.openFileDialog({
+                title: this.t('dialog.subtitle_tts_editor.open_project_title', 'Altyazı Seslendirme Projesi Aç'),
+                filters: [{
+                    name: this.t('dialog.subtitle_tts_editor.project_filter', 'EVD Altyazı Seslendirme Projesi'),
+                    extensions: ['evdtts']
+                }],
+                properties: ['openFile']
+            });
+            if (result?.canceled || !result?.filePaths?.length) return null;
+            selectedPath = result.filePaths[0];
+        }
+        try {
+            const readResult = await window.api.readFileContent(selectedPath);
+            if (!readResult?.success) throw new Error(readResult?.error || 'project_read_failed');
+            const project = JSON.parse(readResult.content);
+            if (project?.format !== 'evd-subtitle-tts-project' || !Array.isArray(project.segments)) {
+                throw new Error(this.t('dialog.subtitle_tts_editor.invalid_project', 'Bu dosya geçerli bir altyazı seslendirme projesi değil.'));
+            }
+            const normalized = String(selectedPath).replace(/\\/g, '/');
+            const projectDirectory = normalized.slice(0, Math.max(0, normalized.lastIndexOf('/')));
+            const segments = [];
+            for (const segment of project.segments) {
+                const relativeAudio = String(segment.audioFile || '');
+                const wavPath = /^(?:[A-Za-z]:[\\/]|\/)/.test(relativeAudio)
+                    ? relativeAudio
+                    : projectDirectory + '/' + relativeAudio;
+                if (!await window.api.checkFileExists(wavPath)) {
+                    throw new Error(this.t('dialog.subtitle_tts_editor.missing_audio', 'Proje ses dosyası bulunamadı: {file}', {
+                        file: relativeAudio
+                    }));
+                }
+                segments.push({
+                    ...segment,
+                    wavPath,
+                    original: { ...(segment.original || {}) }
+                });
+            }
+            return {
+                ...project,
+                projectPath: selectedPath,
+                segments
+            };
+        } catch (error) {
+            Accessibility.announceError(this.t('dialog.subtitle_tts_editor.project_open_failed',
+                'Seslendirme projesi açılamadı: {error}', { error: error.message }));
+            return null;
+        }
+    },
+
+    async showSubtitleTtsSegmentEditor({ segments, videoPath, defaults, projectContext = {} }) {
+        const dialog = this.subtitleTtsSegmentEditorDialog;
+        const list = document.getElementById('subtitle-tts-segment-list');
+        const menu = document.getElementById('subtitle-tts-segment-menu');
+        const video = document.getElementById('subtitle-tts-segment-video');
+        const audio = document.getElementById('subtitle-tts-segment-audio');
+        const status = document.getElementById('subtitle-tts-segment-status');
+        const textInput = document.getElementById('subtitle-tts-segment-text');
+        const voiceSelect = document.getElementById('subtitle-tts-segment-voice');
+        const shortcuts = document.getElementById('subtitle-tts-shortcuts');
+        if (!dialog || !list || !menu || !video || !audio || !textInput || !voiceSelect) return Promise.resolve({ mode: 'defaults', segments });
+
+        const fileUrl = (value) => 'file:///' + String(value || '').replace(/\\/g, '/').replace(/^\/+/, '');
+        const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
+        const state = {
+            segments: (segments || []).map((segment, index) => ({
+                ...segment,
+                _previewRevision: Date.now() + index,
+                generatedText: segment.generatedText ?? segment.text,
+                voice: String(segment.voice ?? defaults.voice ?? ''),
+                generatedVoice: String(segment.generatedVoice ?? segment.voice ?? defaults.voice ?? ''),
+                original: {
+                    ...(segment.original || {}),
+                    text: segment.original?.text ?? segment.text,
+                    generatedText: segment.original?.generatedText ?? segment.generatedText ?? segment.text,
+                    voice: String(segment.original?.voice ?? segment.voice ?? defaults.voice ?? ''),
+                    generatedVoice: String(segment.original?.generatedVoice ?? segment.generatedVoice ?? segment.voice ?? defaults.voice ?? '')
+                }
+            })),
+            defaults: { ...defaults },
+            projectContext: { ...projectContext },
+            videoPath,
+            selectedIndex: Math.max(0, Math.min((segments || []).length - 1, Number(projectContext.selectedIndex || 0))),
+            previewToken: 0,
+            previewAudioTimers: [],
+            previewAuxAudios: [],
+            previewMixContext: null,
+            generatedTempPaths: [],
+            isRegeneratingText: false,
+            resolve: null
+        };
+        const voiceNames = new Map();
+        const addVoiceOption = (voiceId, voiceName) => {
+            const id = String(voiceId ?? '');
+            if (Array.from(voiceSelect.options).some((option) => option.value === id)) return;
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = String(voiceName || id || this.t('dialog.subtitle_tts.default_voice', 'Varsayılan'));
+            voiceSelect.appendChild(option);
+            voiceNames.set(id, option.textContent);
+        };
+        const loadVoiceOptions = async () => {
+            voiceSelect.textContent = '';
+            voiceNames.clear();
+            addVoiceOption('', this.t('dialog.subtitle_tts.default_voice', 'Varsayılan'));
+            try {
+                const voiceResult = await window.api.getTtsVoices({ service: state.defaults.service || 'system' });
+                if (voiceResult?.success) {
+                    for (const voice of (voiceResult.voices || [])) {
+                        const voiceId = typeof voice === 'string' ? voice : voice?.id;
+                        const voiceName = typeof voice === 'string' ? voice : voice?.name;
+                        if (voiceId && voiceName) addVoiceOption(voiceId, voiceName);
+                    }
+                }
+            } catch (error) {
+                console.warn('Subtitle segment voices could not be loaded:', error);
+            }
+            for (const segment of state.segments) {
+                if (segment.voice) addVoiceOption(segment.voice, segment.voice);
+            }
+            if (state.defaults.voice) addVoiceOption(state.defaults.voice, state.defaults.voice);
+        };
+        await loadVoiceOptions();
+
+        this.subtitleTtsSegmentEditorState = state;
+        window.VideoPlayer?.pause?.();
+        this.subtitleTtsPreviewAudio?.pause();
+        this.subtitleTtsPreviewAudio = null;
+        video.src = fileUrl(state.videoPath);
+
+        const selected = () => state.segments[state.selectedIndex] || null;
+        const formatSrtTimestamp = (value) => {
+            const totalMilliseconds = Math.max(0, Math.round(Number(value || 0) * 1000));
+            const hours = Math.floor(totalMilliseconds / 3600000);
+            const minutes = Math.floor((totalMilliseconds % 3600000) / 60000);
+            const seconds = Math.floor((totalMilliseconds % 60000) / 1000);
+            const milliseconds = totalMilliseconds % 1000;
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`;
+        };
+        const buildEditedSubtitleContent = () => [...state.segments]
+            .sort((left, right) => Number(left.startTime || 0) - Number(right.startTime || 0))
+            .map((segment, index) => `${index + 1}\n${formatSrtTimestamp(segment.startTime)} --> ${formatSrtTimestamp(segment.endTime)}\n${String(segment.text || '').trim()}`)
+            .join('\n\n') + '\n';
+        const stopPreview = () => {
+            state.previewToken += 1;
+            if (state.previewAudioTimer) {
+                clearTimeout(state.previewAudioTimer);
+                state.previewAudioTimer = null;
+            }
+            for (const timer of state.previewAudioTimers) clearTimeout(timer);
+            state.previewAudioTimers = [];
+            for (const previewAudio of state.previewAuxAudios) {
+                previewAudio.pause();
+                previewAudio.removeAttribute('src');
+            }
+            state.previewAuxAudios = [];
+            if (state.previewMixContext) {
+                state.previewMixContext.close().catch(() => {});
+                state.previewMixContext = null;
+            }
+            video.pause();
+            audio.pause();
+        };
+        const announce = (message) => {
+            if (status) status.textContent = message;
+            Accessibility.announce(message);
+        };
+        const applyOriginalPreviewVolume = async (volume) => {
+            try {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextClass) throw new Error('audio_context_unavailable');
+                if (!video._subtitleTtsGainContext) {
+                    video._subtitleTtsGainContext = new AudioContextClass();
+                    video._subtitleTtsGainSource = video._subtitleTtsGainContext.createMediaElementSource(video);
+                    video._subtitleTtsGainNode = video._subtitleTtsGainContext.createGain();
+                    video._subtitleTtsGainSource.connect(video._subtitleTtsGainNode);
+                    video._subtitleTtsGainNode.connect(video._subtitleTtsGainContext.destination);
+                }
+                if (video._subtitleTtsGainContext.state === 'suspended') {
+                    await video._subtitleTtsGainContext.resume();
+                }
+                video.volume = 1;
+                video._subtitleTtsGainNode.gain.value = clamp(volume, 0, 2);
+            } catch (error) {
+                console.warn('Subtitle original audio gain fallback:', error);
+                video.volume = clamp(volume, 0, 1);
+            }
+        };
+        const applyTtsPreviewVolume = async (volume, enabled = true) => {
+            const gain = enabled ? clamp(Number(volume || 0) / 100, 0, 2) : 0;
+            try {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextClass) throw new Error('audio_context_unavailable');
+                if (!audio._subtitleTtsVoiceGainContext) {
+                    audio._subtitleTtsVoiceGainContext = new AudioContextClass();
+                    audio._subtitleTtsVoiceGainSource = audio._subtitleTtsVoiceGainContext.createMediaElementSource(audio);
+                    audio._subtitleTtsVoiceGainNode = audio._subtitleTtsVoiceGainContext.createGain();
+                    audio._subtitleTtsVoiceGainSource.connect(audio._subtitleTtsVoiceGainNode);
+                    audio._subtitleTtsVoiceGainNode.connect(audio._subtitleTtsVoiceGainContext.destination);
+                }
+                if (audio._subtitleTtsVoiceGainContext.state === 'suspended') {
+                    await audio._subtitleTtsVoiceGainContext.resume();
+                }
+                audio.volume = 1;
+                audio._subtitleTtsVoiceGainNode.gain.value = gain;
+            } catch (error) {
+                console.warn('Subtitle TTS audio gain fallback:', error);
+                audio.volume = clamp(gain, 0, 1);
+            }
+        };
+        const prepareAuxPreviewAudio = async (segment) => {
+            const previewAudio = new Audio(`${fileUrl(segment.wavPath)}?evdPreview=${encodeURIComponent(segment._previewRevision || 0)}`);
+            previewAudio.preload = 'auto';
+            await waitForMediaReady(previewAudio);
+            previewAudio.playbackRate = clamp(
+                Number(segment.speed || 1) / Math.max(0.01, Number(segment.generatedSpeed || state.defaults.speed || 1)),
+                0.5,
+                2
+            );
+            const gainValue = segment.voiceEnabled === false
+                ? 0
+                : clamp(Number(segment.ttsVolume || 0) / 100, 0, 2);
+            try {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextClass) throw new Error('audio_context_unavailable');
+                if (!state.previewMixContext || state.previewMixContext.state === 'closed') {
+                    state.previewMixContext = new AudioContextClass();
+                }
+                if (state.previewMixContext.state === 'suspended') await state.previewMixContext.resume();
+                const source = state.previewMixContext.createMediaElementSource(previewAudio);
+                const gainNode = state.previewMixContext.createGain();
+                gainNode.gain.value = gainValue;
+                source.connect(gainNode);
+                gainNode.connect(state.previewMixContext.destination);
+                previewAudio.volume = 1;
+            } catch (error) {
+                console.warn('Subtitle overlapping TTS gain fallback:', error);
+                previewAudio.volume = clamp(gainValue, 0, 1);
+            }
+            state.previewAuxAudios.push(previewAudio);
+            return previewAudio;
+        };
+        const itemLabel = (segment, index) => this.t(
+            'dialog.subtitle_tts_editor.item_label',
+            '{index}. {text}. TTS başlangıcı {start} saniye. Hız %{speed}. TTS %{ttsVolume}. Özgün ses %{originalVolume}.{disabled}',
+            {
+                index: index + 1,
+                text: segment.text,
+                start: Number(segment.startTime || 0).toFixed(3),
+                speed: Math.round(Number(segment.speed || 1) * 100),
+                ttsVolume: Math.round(Number(segment.ttsVolume || 0)),
+                originalVolume: Math.round(Number(segment.originalVolume || 0) * 100),
+                disabled: segment.voiceEnabled === false
+                    ? ' ' + this.t('dialog.subtitle_tts_editor.voice_disabled_suffix', 'Seslendirme kapalı.')
+                    : ''
+            }
+        );
+        const render = () => {
+            list.textContent = '';
+            state.segments.forEach((segment, index) => {
+                const item = document.createElement('li');
+                item.id = 'subtitle-tts-segment-' + index;
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-selected', index === state.selectedIndex ? 'true' : 'false');
+                item.textContent = itemLabel(segment, index);
+                item.style.padding = '8px';
+                if (index === state.selectedIndex) item.classList.add('selected');
+                item.onclick = () => {
+                    state.selectedIndex = index;
+                    render();
+                    list.focus();
+                    previewSelected();
+                };
+                list.appendChild(item);
+            });
+            const active = list.children[state.selectedIndex];
+            if (active) {
+                list.setAttribute('aria-activedescendant', active.id);
+                active.scrollIntoView({ block: 'nearest' });
+            }
+            if (document.activeElement !== textInput) {
+                textInput.value = selected()?.text || '';
+            }
+            const selectedVoice = String(selected()?.voice ?? state.defaults.voice ?? '');
+            if (!Array.from(voiceSelect.options).some((option) => option.value === selectedVoice)) {
+                addVoiceOption(selectedVoice, selectedVoice);
+            }
+            voiceSelect.value = selectedVoice;
+            const toggle = menu.querySelector('[data-action="toggle-voice"]');
+            if (toggle) {
+                toggle.textContent = selected()?.voiceEnabled === false
+                    ? this.t('dialog.subtitle_tts_editor.enable_voice', 'Bu Seslendirmeyi Aç, V')
+                    : this.t('dialog.subtitle_tts_editor.disable_voice', 'Bu Seslendirmeyi Kapat, V');
+            }
+        };
+        const waitForMediaReady = (media) => new Promise((resolve, reject) => {
+            if (media.readyState >= 1) {
+                resolve();
+                return;
+            }
+            const cleanup = () => {
+                media.removeEventListener('loadedmetadata', onReady);
+                media.removeEventListener('error', onError);
+            };
+            const onReady = () => {
+                cleanup();
+                resolve();
+            };
+            const onError = () => {
+                cleanup();
+                reject(new Error('media_load_failed'));
+            };
+            media.addEventListener('loadedmetadata', onReady, { once: true });
+            media.addEventListener('error', onError, { once: true });
+            media.load();
+        });
+        const seekMedia = async (media, targetTime) => {
+            await waitForMediaReady(media);
+            const target = Math.max(0, Number(targetTime) || 0);
+            if (Math.abs(Number(media.currentTime || 0) - target) < 0.001) return;
+            await new Promise((resolve) => {
+                const onSeeked = () => resolve();
+                media.addEventListener('seeked', onSeeked, { once: true });
+                media.currentTime = target;
+                setTimeout(() => {
+                    media.removeEventListener('seeked', onSeeked);
+                    resolve();
+                }, 750);
+            });
+        };
+        const previewSelected = async () => {
+            const segment = selected();
+            if (!segment) return;
+            stopPreview();
+            const token = state.previewToken;
+            try {
+                const previewKey = `${segment.wavPath}:${segment._previewRevision || 0}`;
+                if (audio.dataset.previewKey !== previewKey) {
+                    audio.dataset.previewKey = previewKey;
+                    audio.src = `${fileUrl(segment.wavPath)}?evdPreview=${encodeURIComponent(segment._previewRevision || 0)}`;
+                    audio.load();
+                }
+                const leadInSeconds = Math.min(1, Math.max(0, Number(segment.startTime || 0)));
+                const previewStartTime = Math.max(0, Number(segment.startTime || 0) - leadInSeconds);
+                await Promise.all([
+                    seekMedia(video, previewStartTime),
+                    waitForMediaReady(audio)
+                ]);
+                if (token !== state.previewToken) return;
+                audio.currentTime = 0;
+                await applyOriginalPreviewVolume(segment.originalVolume);
+                await applyTtsPreviewVolume(segment.ttsVolume, segment.voiceEnabled !== false);
+                audio.playbackRate = clamp(
+                    Number(segment.speed || 1) / Math.max(0.01, Number(segment.generatedSpeed || state.defaults.speed || 1)),
+                    0.5,
+                    2
+                );
+                await video.play();
+                if (segment.voiceEnabled !== false) {
+                    state.previewAudioTimer = setTimeout(() => {
+                        state.previewAudioTimer = null;
+                        if (token !== state.previewToken) return;
+                        audio.play().catch((error) => console.error('Subtitle TTS preview playback failed:', error));
+                    }, Math.round((Number(segment.startTime || 0) - previewStartTime) * 1000));
+                }
+                if (token !== state.previewToken) return;
+                const spokenDuration = Number.isFinite(audio.duration)
+                    ? Number(audio.duration) / Math.max(0.5, Number(audio.playbackRate || 1))
+                    : Math.max(0.1, Number(segment.endTime || 0) - Number(segment.startTime || 0));
+                let endTime = Math.min(
+                    Number.isFinite(video.duration) ? Number(video.duration) : Number.MAX_SAFE_INTEGER,
+                    Math.max(Number(segment.endTime || 0), Number(segment.startTime || 0) + spokenDuration) + 1
+                );
+                const nearbySegments = state.segments.filter((candidate) => {
+                    if (candidate === segment || candidate.voiceEnabled === false || !candidate.wavPath) return false;
+                    const candidateStart = Number(candidate.startTime || 0);
+                    return candidateStart <= endTime && candidateStart >= previewStartTime - 30;
+                });
+                for (const candidate of nearbySegments) {
+                    if (token !== state.previewToken) return;
+                    const previewAudio = await prepareAuxPreviewAudio(candidate);
+                    if (token !== state.previewToken) {
+                        previewAudio.pause();
+                        return;
+                    }
+                    const candidateRate = Math.max(0.5, Number(previewAudio.playbackRate || 1));
+                    const candidateDuration = Number.isFinite(previewAudio.duration)
+                        ? Number(previewAudio.duration) / candidateRate
+                        : Math.max(0.1, Number(candidate.endTime || 0) - Number(candidate.startTime || 0));
+                    const candidateStart = Number(candidate.startTime || 0);
+                    const candidateEnd = candidateStart + candidateDuration;
+                    if (candidateEnd <= previewStartTime || candidateStart >= endTime) {
+                        previewAudio.pause();
+                        continue;
+                    }
+                    const timelineNow = Math.max(previewStartTime, Number(video.currentTime || previewStartTime));
+                    const elapsedAtPlayback = Math.max(0, timelineNow - candidateStart);
+                    previewAudio.currentTime = Math.min(
+                        Math.max(0, Number(previewAudio.duration || 0) - 0.01),
+                        elapsedAtPlayback * candidateRate
+                    );
+                    const delay = Math.max(0, candidateStart - timelineNow) * 1000;
+                    const timer = setTimeout(() => {
+                        if (token !== state.previewToken) return;
+                        previewAudio.play().catch((error) => console.error('Overlapping subtitle TTS preview failed:', error));
+                    }, Math.round(delay));
+                    state.previewAudioTimers.push(timer);
+                    endTime = Math.min(
+                        Number.isFinite(video.duration) ? Number(video.duration) : Number.MAX_SAFE_INTEGER,
+                        Math.max(endTime, candidateEnd + 1)
+                    );
+                }
+                const monitor = () => {
+                    if (token !== state.previewToken) return;
+                    if (video.currentTime >= endTime || video.paused) {
+                        video.pause();
+                        audio.pause();
+                    } else {
+                        requestAnimationFrame(monitor);
+                    }
+                };
+                requestAnimationFrame(monitor);
+            } catch (error) {
+                if (token !== state.previewToken) return;
+                console.error('Subtitle segment preview failed:', error);
+                announce(this.t('dialog.subtitle_tts_editor.preview_failed', 'Önizleme oynatılamadı.'));
+            }
+        };
+        const browseVideoBy = async (seconds) => {
+            const segment = selected();
+            if (!segment) return;
+            stopPreview();
+            const token = state.previewToken;
+            try {
+                await waitForMediaReady(video);
+                const baseTime = Number.isFinite(video.currentTime) ? Number(video.currentTime) : Number(segment.startTime || 0);
+                const duration = Number.isFinite(video.duration) ? Number(video.duration) : Math.max(baseTime, Number(segment.endTime || 0));
+                const targetTime = clamp(baseTime + Number(seconds || 0), 0, duration);
+                await seekMedia(video, targetTime);
+                if (token !== state.previewToken) return;
+                await applyOriginalPreviewVolume(segment.originalVolume);
+                audio.pause();
+                await video.play();
+                announce(this.t('dialog.subtitle_tts_editor.browse_position',
+                    'Film önizleme konumu {time} saniye.', { time: targetTime.toFixed(2) }));
+                setTimeout(() => {
+                    if (token === state.previewToken) video.pause();
+                }, 1500);
+            } catch (error) {
+                if (token !== state.previewToken) return;
+                console.error('Subtitle video browse failed:', error);
+                announce(this.t('dialog.subtitle_tts_editor.preview_failed', 'Önizleme oynatılamadı.'));
+            }
+        };
+        const updateSelected = (action) => {
+            const segment = selected();
+            if (!segment) return;
+            if (action === 'speed-up') segment.speed = clamp(Number(segment.speed || 1) + 0.05, 0.5, 2);
+            if (action === 'speed-down') segment.speed = clamp(Number(segment.speed || 1) - 0.05, 0.5, 2);
+            if (action === 'speed-reset') segment.speed = Number(state.defaults.speed || 1);
+            if (action === 'original-up') segment.originalVolume = clamp(Number(segment.originalVolume || 0) + 0.1, 0, 2);
+            if (action === 'original-down') segment.originalVolume = clamp(Number(segment.originalVolume || 0) - 0.1, 0, 2);
+            if (action === 'tts-up') segment.ttsVolume = clamp(Number(segment.ttsVolume || 0) + 10, 0, 200);
+            if (action === 'tts-down') segment.ttsVolume = clamp(Number(segment.ttsVolume || 0) - 10, 0, 200);
+            const timingSteps = {
+                earlier: -0.01,
+                later: 0.01,
+                'earlier-fine': -0.001,
+                'later-fine': 0.001,
+                'earlier-large': -0.1,
+                'later-large': 0.1,
+                'earlier-second': -1,
+                'later-second': 1
+            };
+            if (Object.prototype.hasOwnProperty.call(timingSteps, action)) {
+                const duration = Math.max(0.1, Number(segment.endTime) - Number(segment.startTime));
+                segment.startTime = Math.max(0, Number(segment.startTime) + timingSteps[action]);
+                segment.endTime = segment.startTime + duration;
+            }
+            if (action === 'toggle-voice') segment.voiceEnabled = segment.voiceEnabled === false;
+            if (action === 'reset') Object.assign(segment, segment.original);
+            render();
+            announce(this.t('dialog.subtitle_tts_editor.changed_status',
+                '{index}. bölüm, {text}. TTS başlangıcı {start} saniye. Hız %{speed}, TTS sesi %{ttsVolume}, özgün ses %{originalVolume}.', {
+                    index: state.selectedIndex + 1,
+                    text: segment.text,
+                    start: Number(segment.startTime || 0).toFixed(3),
+                    speed: Math.round(Number(segment.speed || 1) * 100),
+                    ttsVolume: Math.round(Number(segment.ttsVolume || 0)),
+                    originalVolume: Math.round(Number(segment.originalVolume || 0) * 100)
+                }));
+            previewSelected();
+        };
+        const closeMenu = () => {
+            menu.hidden = true;
+            list.focus();
+        };
+        const openMenu = () => {
+            render();
+            menu.hidden = false;
+            menu.querySelector('[role="menuitem"]')?.focus();
+        };
+
+        // These modal-only editing keys intentionally stay out of the global shortcut manager.
+        list.onkeydown = (event) => {
+            const key = String(event.key || '').toLowerCase();
+            let action = '';
+            if (event.altKey && event.shiftKey && event.key === 'ArrowUp') action = 'original-up';
+            else if (event.altKey && event.shiftKey && event.key === 'ArrowDown') action = 'original-down';
+            else if (event.altKey && event.shiftKey && key === 'l') action = 'tts-up';
+            else if (event.altKey && event.shiftKey && key === 'j') action = 'tts-down';
+            else if (!event.altKey && !event.ctrlKey && !event.metaKey && key === 'f') action = 'speed-up';
+            else if (!event.altKey && !event.ctrlKey && !event.metaKey && key === 'a') action = 'speed-down';
+            else if (!event.altKey && !event.ctrlKey && !event.metaKey && key === 'd') action = 'speed-reset';
+            else if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && key === 'v') action = 'toggle-voice';
+            else if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && key === 'r') action = 'reset';
+            else if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey && event.key === 'ArrowLeft') action = 'earlier';
+            else if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey && event.key === 'ArrowRight') action = 'later';
+            else if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && event.key === 'ArrowLeft') action = 'earlier-large';
+            else if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && event.key === 'ArrowRight') action = 'later-large';
+            else if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && key === 'g') action = 'earlier-fine';
+            else if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && key === 'h') action = 'later-fine';
+            else if (!event.altKey && event.ctrlKey && !event.metaKey && !event.shiftKey && key === 'j') action = 'earlier-second';
+            else if (!event.altKey && event.ctrlKey && !event.metaKey && !event.shiftKey && key === 'l') action = 'later-second';
+            if (action) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+                updateSelected(action);
+                return;
+            }
+            if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (key === 'j' || key === 'l')) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+                browseVideoBy(key === 'j' ? -5 : 5);
+                return;
+            }
+            if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.key === 'Home') state.selectedIndex = 0;
+                else if (event.key === 'End') state.selectedIndex = Math.max(0, state.segments.length - 1);
+                else if (event.key === 'PageUp') state.selectedIndex = Math.max(0, state.selectedIndex - 10);
+                else if (event.key === 'PageDown') state.selectedIndex = Math.min(state.segments.length - 1, state.selectedIndex + 10);
+                else {
+                    const delta = event.key === 'ArrowDown' ? 1 : -1;
+                    state.selectedIndex = (state.selectedIndex + delta + state.segments.length) % state.segments.length;
+                }
+                render();
+                previewSelected();
+            } else if (event.key === 'ArrowRight') {
+                event.preventDefault();
+                event.stopPropagation();
+                openMenu();
+            } else if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
+                previewSelected();
+            }
+        };
+        menu.onkeydown = (event) => {
+            const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+            const current = Math.max(0, items.indexOf(document.activeElement));
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                event.stopPropagation();
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                items[(current + delta + items.length) % items.length]?.focus();
+            } else if (event.key === 'ArrowLeft' || event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                closeMenu();
+            }
+        };
+        menu.onclick = (event) => {
+            const button = event.target.closest('[data-action]');
+            if (!button) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (button.dataset.action === 'preview') previewSelected();
+            else updateSelected(button.dataset.action);
+        };
+        textInput.oninput = () => {
+            const segment = selected();
+            if (segment) segment.text = textInput.value;
+        };
+        const regenerateSelectedText = async () => {
+            const segment = selected();
+            if (!segment || state.isRegeneratingText) return;
+            const nextText = String(textInput.value || '').trim();
+            if (!nextText) {
+                Accessibility.announceError(this.t('dialog.subtitle_tts_editor.text_required',
+                    'Seslendirme metni boş bırakılamaz.'));
+                return;
+            }
+            segment.text = nextText;
+            const focusTarget = document.activeElement === voiceSelect ? voiceSelect : textInput;
+            state.isRegeneratingText = true;
+            stopPreview();
+            textInput.disabled = true;
+            voiceSelect.disabled = true;
+            announce(this.t('dialog.subtitle_tts_editor.regenerating_text',
+                'Seçili metin yeniden seslendiriliyor.'));
+            try {
+                const regenerated = await window.api.generateTts({
+                    text: nextText,
+                    service: state.defaults.service || 'system',
+                    voice: segment.voice ?? state.defaults.voice,
+                    speed: 1,
+                    volume: 100
+                });
+                if (!regenerated?.success || !regenerated.wavPath) {
+                    throw new Error(regenerated?.error || 'tts_regeneration_failed');
+                }
+                segment.wavPath = regenerated.wavPath;
+                segment.generatedText = nextText;
+                segment.generatedSpeed = 1;
+                segment.generatedVoice = String(segment.voice ?? state.defaults.voice ?? '');
+                segment._previewRevision = Date.now();
+                state.generatedTempPaths.push(regenerated.wavPath);
+                render();
+                announce(this.t('dialog.subtitle_tts_editor.text_regenerated',
+                    'Seçili metin yeniden seslendirildi. Önizleme başlatılıyor.'));
+                previewSelected();
+            } catch (error) {
+                Accessibility.announceError(this.t('dialog.subtitle_tts_editor.text_regeneration_failed',
+                    'Metin yeniden seslendirilemedi: {error}', { error: error.message }));
+            } finally {
+                state.isRegeneratingText = false;
+                textInput.disabled = false;
+                voiceSelect.disabled = false;
+                focusTarget.focus();
+            }
+        };
+        voiceSelect.onchange = () => {
+            const segment = selected();
+            if (!segment) return;
+            segment.voice = voiceSelect.value;
+            announce(this.t('dialog.subtitle_tts_editor.voice_changed',
+                'Seçili bölümün sesi değiştirildi: {voice}. Yeniden seslendiriliyor.', {
+                    voice: voiceNames.get(segment.voice) || segment.voice || this.t('dialog.subtitle_tts.default_voice', 'Varsayılan')
+                }));
+            regenerateSelectedText();
+        };
+        textInput.onkeydown = (event) => {
+            if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+                event.preventDefault();
+                event.stopPropagation();
+                regenerateSelectedText();
+            }
+        };
+        textInput.onchange = () => {
+            const segment = selected();
+            if (!segment) return;
+            segment.text = textInput.value;
+            render();
+            announce(this.t('dialog.subtitle_tts_editor.text_changed',
+                'Altyazı metni güncellendi. Çıktı oluşturulurken yeniden seslendirilecek.'));
+        };
+        const saveProject = async () => {
+            stopPreview();
+            audio.removeAttribute('src');
+            audio.removeAttribute('data-preview-key');
+            audio.load();
+            let projectPath = String(state.projectContext.projectPath || '');
+            if (!projectPath) {
+                const sourceName = String(state.projectContext.subtitlePath || 'altyazi')
+                    .split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
+                const saveResult = await window.api.showSaveDialog({
+                    title: this.t('dialog.subtitle_tts_editor.save_project_title', 'Altyazı Seslendirme Projesini Kaydet'),
+                    defaultPath: sourceName + '.evdtts',
+                    filters: [{
+                        name: this.t('dialog.subtitle_tts_editor.project_filter', 'EVD Altyazı Seslendirme Projesi'),
+                        extensions: ['evdtts']
+                    }]
+                });
+                if (saveResult?.canceled || !saveResult?.filePath) return;
+                projectPath = String(saveResult.filePath);
+            }
+            try {
+                const normalized = projectPath.replace(/\\/g, '/');
+                const slash = normalized.lastIndexOf('/');
+                const projectDirectory = slash >= 0 ? normalized.slice(0, slash) : '';
+                const projectBaseName = normalized.slice(slash + 1).replace(/\.[^.]+$/, '');
+                const assetsFolderName = projectBaseName + '_assets';
+                const storedSegments = [];
+                for (let index = 0; index < state.segments.length; index++) {
+                    const segment = state.segments[index];
+                    const audioFile = assetsFolderName + '/tts_' + String(index + 1).padStart(4, '0') + '.wav';
+                    const destination = projectDirectory + '/' + audioFile;
+                    if (String(segment.wavPath).replace(/\\/g, '/').toLowerCase() !== destination.toLowerCase()) {
+                        const copyResult = await window.api.copyFile(segment.wavPath, destination);
+                        if (!copyResult?.success) throw new Error(copyResult?.error || 'audio_copy_failed');
+                    }
+                    segment.wavPath = destination;
+                    segment._previewRevision = Date.now() + index;
+                    const { wavPath, _previewRevision, ...serializable } = segment;
+                    storedSegments.push({ ...serializable, audioFile });
+                }
+                const editedSubtitlePath = projectDirectory + '/' + projectBaseName + '_duzenlenmis.srt';
+                const editedSubtitleContent = buildEditedSubtitleContent();
+                const subtitleWriteResult = await window.api.saveFileContent({
+                    filePath: editedSubtitlePath,
+                    content: editedSubtitleContent
+                });
+                if (!subtitleWriteResult?.success) {
+                    throw new Error(subtitleWriteResult?.error || 'edited_subtitle_write_failed');
+                }
+                state.projectContext.subtitlePath = editedSubtitlePath;
+                state.projectContext.subtitleContent = editedSubtitleContent;
+                const project = {
+                    format: 'evd-subtitle-tts-project',
+                    version: 1,
+                    savedAt: new Date().toISOString(),
+                    videoPath: state.videoPath,
+                    subtitlePath: editedSubtitlePath,
+                    subtitleContent: editedSubtitleContent,
+                    action: state.projectContext.action || 'tts-only',
+                    subtitleStyleOptions: state.projectContext.subtitleStyleOptions || null,
+                    ttsOptions: state.defaults,
+                    selectedIndex: state.selectedIndex,
+                    segments: storedSegments
+                };
+                const writeResult = await window.api.saveFileContent({
+                    filePath: projectPath,
+                    content: JSON.stringify(project, null, 2)
+                });
+                if (!writeResult?.success) throw new Error(writeResult?.error || 'project_write_failed');
+                state.projectContext.projectPath = projectPath;
+                state.projectContext.selectedIndex = state.selectedIndex;
+                announce(this.t('dialog.subtitle_tts_editor.project_saved_with_subtitles',
+                    'Seslendirme projesi ve güncellenen altyazı kaydedildi: {file}, {subtitleFile}', { file: projectPath.split(/[\\/]/).pop(), subtitleFile: editedSubtitlePath.split(/[\\/]/).pop() }));
+                render();
+            } catch (error) {
+                Accessibility.announceError(this.t('dialog.subtitle_tts_editor.project_save_failed',
+                    'Seslendirme projesi kaydedilemedi: {error}', { error: error.message }));
+            }
+        };
+        const openProject = async () => {
+            stopPreview();
+            const project = await this.loadSubtitleTtsProject();
+            if (!project) return;
+            state.defaults = { ...(project.ttsOptions || state.defaults) };
+            state.segments = project.segments.map((segment, index) => ({
+                ...segment,
+                _previewRevision: Date.now() + index,
+                generatedText: segment.generatedText ?? segment.text,
+                voice: String(segment.voice ?? state.defaults.voice ?? ''),
+                generatedVoice: String(segment.generatedVoice ?? segment.voice ?? state.defaults.voice ?? ''),
+                original: {
+                    ...(segment.original || {}),
+                    text: segment.original?.text ?? segment.text,
+                    generatedText: segment.original?.generatedText ?? segment.generatedText ?? segment.text,
+                    voice: String(segment.original?.voice ?? segment.voice ?? state.defaults.voice ?? ''),
+                    generatedVoice: String(segment.original?.generatedVoice ?? segment.generatedVoice ?? segment.voice ?? state.defaults.voice ?? '')
+                }
+            }));
+            await loadVoiceOptions();
+            state.projectContext = {
+                projectPath: project.projectPath,
+                subtitlePath: project.subtitlePath || '',
+                subtitleContent: project.subtitleContent || '',
+                action: project.action || 'tts-only',
+                subtitleStyleOptions: project.subtitleStyleOptions || null,
+                selectedIndex: Number(project.selectedIndex || 0)
+            };
+            state.videoPath = project.videoPath || state.videoPath;
+            state.selectedIndex = Math.max(0, Math.min(state.segments.length - 1, Number(project.selectedIndex || 0)));
+            video.src = fileUrl(state.videoPath);
+            render();
+            announce(this.t('dialog.subtitle_tts_editor.project_opened',
+                'Seslendirme projesi açıldı. {count} bölüm yüklendi.', { count: state.segments.length }));
+            list.focus();
+            previewSelected();
+        };
+
+        dialog.onkeydown = (event) => {
+            const key = String(event.key || '').toLowerCase();
+            if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && key === 's') {
+                event.preventDefault();
+                event.stopPropagation();
+                saveProject();
+                return;
+            }
+            let action = '';
+            if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && key === 'l') action = 'tts-up';
+            else if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && key === 'j') action = 'tts-down';
+            else if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && event.key === 'ArrowUp') action = 'original-up';
+            else if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && event.key === 'ArrowDown') action = 'original-down';
+            if (!action) return;
+            event.preventDefault();
+            event.stopPropagation();
+            updateSelected(action);
+        };
+
+        const finish = (result) => {
+            stopPreview();
+            menu.hidden = true;
+            if (state.resolve) {
+                state.resolve(result);
+                state.resolve = null;
+            }
+            dialog.close();
+        };
+        document.getElementById('subtitle-tts-segment-save-project').onclick = saveProject;
+        document.getElementById('subtitle-tts-segment-open-project').onclick = openProject;
+        document.getElementById('subtitle-tts-segment-finish').onclick = () => finish({ mode: 'edited', segments: state.segments, ttsOptions: state.defaults, projectContext: state.projectContext, videoPath: state.videoPath, generatedTempPaths: state.generatedTempPaths });
+        document.getElementById('subtitle-tts-segment-use-defaults').onclick = () => finish({ mode: 'defaults', segments: state.segments, ttsOptions: state.defaults, projectContext: state.projectContext, videoPath: state.videoPath, generatedTempPaths: state.generatedTempPaths });
+        document.getElementById('subtitle-tts-segment-cancel').onclick = () => finish(null);
+        dialog.oncancel = (event) => {
+            event.preventDefault();
+            finish(null);
+        };
+        dialog.onclose = () => {
+            stopPreview();
+            if (state.resolve) {
+                state.resolve(null);
+                state.resolve = null;
+            }
+        };
+        window.i18nHelper?.translateDOM?.(dialog);
+        render();
+        if (window.Keyboard) window.Keyboard.setEnabled(false);
+        dialog.showModal();
+        const openedMessage = this.t('dialog.subtitle_tts_editor.opened',
+            'Altyazı seslendirme düzenleyicisi açıldı.');
+        setTimeout(() => {
+            list.focus();
+            Accessibility.announceImmediate(`${openedMessage} ${shortcuts?.textContent || ''}`.trim());
+        }, 50);
+        return new Promise((resolve) => {
+            state.resolve = resolve;
+        });
+    },
+
     showSubtitleActionDialog(previewContext = null) {
         this.subtitleStylePreviewContext = previewContext || null;
         window.i18nHelper?.translateDOM?.(this.subtitleActionDialog);
@@ -11595,4 +12447,3 @@ const Dialogs = {
 
 // Global olarak erişilebilir yap
 window.Dialogs = Dialogs;
-

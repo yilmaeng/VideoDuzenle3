@@ -18,6 +18,11 @@ const VideoPlayer = {
     ignoreTimeline: false, // Sessizlik önizleme vb. durumlar için timeline'ı görmezden gel
     _isLoadingSource: false, // Kaynak değiştirme işlemi devam ediyor mu?
     allowPlaybackWithOpenDialog: false,
+    audioContext: null,
+    audioSourceNode: null,
+    audioGainNode: null,
+    currentContentGain: 1,
+    playbackVolumePercent: 100,
 
     // Kesim Önizleme değişkenleri
     isPreviewingCut: false,
@@ -54,12 +59,73 @@ const VideoPlayer = {
             return;
         }
 
+        const storedPlaybackVolumeValue = localStorage.getItem('evdPlaybackVolumePercent');
+        const storedPlaybackVolume = Number(storedPlaybackVolumeValue);
+        if (storedPlaybackVolumeValue !== null && Number.isFinite(storedPlaybackVolume)) {
+            this.playbackVolumePercent = Math.max(0, Math.min(400, storedPlaybackVolume));
+        }
+
         this.setupEventListeners();
         this.updateUI();
     },
 
     /**
      * Video yüklü ve hazır mı kontrol et
+     * @returns {boolean}
+     */
+    ensureAudioGain() {
+        if (this.audioGainNode) return true;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass || !this.video) return false;
+        try {
+            this.audioContext = new AudioContextClass();
+            this.audioSourceNode = this.audioContext.createMediaElementSource(this.video);
+            this.audioGainNode = this.audioContext.createGain();
+            this.audioGainNode.gain.value = 1;
+            this.audioSourceNode.connect(this.audioGainNode);
+            this.audioGainNode.connect(this.audioContext.destination);
+            this.video.volume = 1;
+            return true;
+        } catch (error) {
+            console.warn('Video audio gain could not be initialized:', error);
+            this.audioContext = null;
+            this.audioSourceNode = null;
+            this.audioGainNode = null;
+            return false;
+        }
+    },
+
+    applyPlaybackVolume(volumeFactor) {
+        this.currentContentGain = Math.max(0, Math.min(4, Number(volumeFactor) || 0));
+        this.applyEffectivePlaybackVolume();
+    },
+
+    applyEffectivePlaybackVolume() {
+        const playerGain = Math.max(0, Math.min(4, this.playbackVolumePercent / 100));
+        const gain = Math.max(0, Math.min(4, this.currentContentGain * playerGain));
+        if (this.audioGainNode) {
+            this.video.volume = 1;
+            this.audioGainNode.gain.value = gain;
+        } else {
+            this.video.volume = Math.min(1, gain);
+        }
+    },
+
+    adjustPlaybackVolume(deltaPercent, announceChange = true) {
+        if (!this.hasVideo()) return;
+        this.playbackVolumePercent = Math.max(0, Math.min(400,
+            this.playbackVolumePercent + Number(deltaPercent || 0)));
+        localStorage.setItem('evdPlaybackVolumePercent', String(this.playbackVolumePercent));
+        this.applyEffectivePlaybackVolume();
+        if (announceChange) {
+            Accessibility.announce(this.t('runtime.keyboard.playback_volume', 'Playback volume: {percent} percent', {
+                percent: this.playbackVolumePercent
+            }));
+        }
+    },
+
+    /**
+     * Video y?kl? ve haz?r m? kontrol et
      * @returns {boolean}
      */
     hasVideo() {
@@ -172,6 +238,9 @@ const VideoPlayer = {
                 }
             }
 
+            this.ensureAudioGain();
+            this.audioContext?.resume?.().catch?.(() => {});
+            this.syncSegmentProperties();
             this.isPlaying = true;
             this.updatePlayState();
         });
@@ -316,6 +385,7 @@ const VideoPlayer = {
 
             this.metadata = result.data;
             this.currentFilePath = filePath;
+            this.applyPlaybackVolume(1);
 
             // Video kaynağını ayarla
             // Türkçe ve özel karakterler için dosya yolunu düzgün encode et
@@ -479,6 +549,9 @@ const VideoPlayer = {
             }
         }
 
+        this.ensureAudioGain();
+        this.audioContext?.resume?.().catch?.(() => {});
+        this.syncSegmentProperties();
         this.video.play();
 
         // Eğer kesim önizleme modundaysak duyuruyu gizle
@@ -723,20 +796,12 @@ const VideoPlayer = {
             const seg = data.segment;
 
             // Ses Seviyesi
-            // Haritalama: audioVolume 0-200 → video.volume 0.0-1.0
-            // Orijinal ses (audioVolume=100) → video.volume=0.5
-            // Max ses (audioVolume=200) → video.volume=1.0
-            // Bu sayede hem artırım hem azaltım HTML5 volume aralığında kalır.
-            let vol = 0.5; // default: orijinal ses seviyesi
-            if (seg.isMuted) {
-                vol = 0;
-            } else if (seg.audioVolume !== undefined) {
-                vol = Math.min(1, Math.max(0, seg.audioVolume / 200));
-            }
-
-            if (Math.abs(this.video.volume - vol) > 0.01) {
-                this.video.volume = vol;
-            }
+            // Timeline volume uses unity semantics: 100% is the unmodified source level.
+            // Web Audio preserves the 0-400% range for boosted preview.
+            const volumeFactor = seg.isMuted
+                ? 0
+                : Math.max(0, Math.min(4, Number(seg.audioVolume ?? 100) / 100));
+            this.applyPlaybackVolume(volumeFactor);
 
             // Hız (Speed)
             let speed = seg.speed || 1.0;
@@ -1233,6 +1298,7 @@ const VideoPlayer = {
             this.video.load();
         }
 
+        this.applyPlaybackVolume(1);
         this.isPlaying = false;
         this.currentFilePath = null;
         this.metadata = null;
@@ -1501,12 +1567,10 @@ const VideoPlayer = {
 
     /**
      * Video ses seviyesini ayarla
-     * @param {number} volume - Ses seviyesi (0-1 arası)
+     * @param {number} volume - Ses kazancı (0-4 arası; 1 kaynak düzeyi)
      */
     setVolume(volume) {
-        if (this.video) {
-            this.video.volume = Math.min(1, Math.max(0, volume));
-        }
+        if (this.video) this.applyPlaybackVolume(volume);
     },
 
     /**

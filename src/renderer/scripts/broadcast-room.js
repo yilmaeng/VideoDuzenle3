@@ -27,6 +27,13 @@ const i18nState = {
                 el.textContent = value;
             }
         });
+        document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+            const key = el.getAttribute('data-i18n-html');
+            const value = this.t(key, '');
+            if (value) {
+                el.innerHTML = value;
+            }
+        });
         document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
             const key = el.getAttribute('data-i18n-placeholder');
             const value = this.t(key, '');
@@ -142,12 +149,12 @@ function getBroadcastRoomGlobalShortcutActionMap() {
 const AUDIO_BALANCE_PRESETS = {
     manual: null,
     balanced: {
-        micVolume: 260,
-        systemVolume: 85
+        micVolume: 90,
+        systemVolume: 115
     },
     remote_focus: {
-        micVolume: 225,
-        systemVolume: 110
+        micVolume: 80,
+        systemVolume: 125
     }
 };
 
@@ -824,6 +831,7 @@ const state = {
     youtube: {
         expanded: false,
         connected: false,
+        clientConfigured: false,
         accounts: [],
         activeAccountId: '',
         channelTitle: '',
@@ -936,7 +944,7 @@ const state = {
         lastState: 'idle',
         checking: false,
         pollTimer: null,
-        audioBalancePreset: 'manual',
+        audioBalancePreset: 'balanced',
         autoAddLiveTranslationTrack: false,
         liveInterpreterTrackRecorder: null,
         liveInterpreterTrackAudioContext: null,
@@ -1284,6 +1292,11 @@ const els = {
     youtubeAccountSelect: document.getElementById('youtube-account-select-room'),
     btnToggleYouTube: document.getElementById('btn-toggle-youtube-room'),
     youtubePanel: document.getElementById('youtube-panel-room'),
+    youtubeOauthSetup: document.getElementById('youtube-oauth-setup-room'),
+    youtubeClientId: document.getElementById('youtube-client-id-room'),
+    youtubeClientSecret: document.getElementById('youtube-client-secret-room'),
+    youtubeShowClientSecret: document.getElementById('youtube-show-client-secret-room'),
+    btnYoutubeSaveClient: document.getElementById('youtube-save-client-room'),
     youtubePlaylistSelect: document.getElementById('youtube-playlist-select-room'),
     btnYoutubeRefreshPlaylists: document.getElementById('btn-youtube-refresh-playlists-room'),
     btnYoutubeConnect: document.getElementById('btn-youtube-connect-room'),
@@ -6959,7 +6972,7 @@ async function stopIdleObsAudioBridge(reason = '') {
     await stopObsAudioBridge();
 }
 
-async function ensureObsAudioBridgeSourceForCurrentUrl() {
+async function ensureObsAudioBridgeSourceForCurrentUrl({ forceReload = false } = {}) {
     if (!state.liveRoom.obsAudioBridgeUrl) {
         return null;
     }
@@ -6967,13 +6980,17 @@ async function ensureObsAudioBridgeSourceForCurrentUrl() {
     const inputName = String(state.liveRoom.obsAudioBridgeInputName || '').trim()
         || `KVE Canli Oda Sesi ${Date.now()}`;
     state.liveRoom.obsAudioBridgeInputName = inputName;
+    const sourceTimeoutMs = forceReload
+        ? 8000
+        : (state.youtube.liveActive || state.recording.active ? 4000 : 6000);
     const sourceResult = await withTimeout(
         ipcRenderer.invoke('obs-ensure-live-room-audio-bridge-source', {
             sceneName: BROADCAST_ROOM_SCENE_NAME,
             url: currentUrl,
-            inputName
+            inputName,
+            forceReload
         }),
-        state.youtube.liveActive || state.recording.active ? 1200 : 5000,
+        sourceTimeoutMs,
         'obs_audio_bridge_source_timeout'
     );
     if (!sourceResult?.success) {
@@ -6998,6 +7015,39 @@ async function ensureObsAudioBridgeSourceForCurrentUrl() {
     return state.obsSceneItems.roomAudioInputName;
 }
 
+async function completeObsAudioBridgeHandshake(peer, { timeoutMs = 5000 } = {}) {
+    if (!peer || state.liveRoom.obsAudioBridgeReady) {
+        return state.liveRoom.obsAudioBridgeReady === true;
+    }
+    const bridgeUrl = String(state.liveRoom.obsAudioBridgeUrl || '').trim();
+    const token = String(state.liveRoom.obsAudioBridgeToken || '').trim();
+    if (!bridgeUrl || !token) {
+        return false;
+    }
+    const parsedBridgeUrl = new URL(bridgeUrl);
+    const pollUrl = `${parsedBridgeUrl.origin}/obs-audio-bridge/poll?role=renderer&token=${encodeURIComponent(token)}`;
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+        const resp = await fetch(`${pollUrl}&t=${Date.now()}`);
+        const payload = await resp.json();
+        if (payload.answer) {
+            if (!peer.currentRemoteDescription && !peer.remoteDescription) {
+                await peer.setRemoteDescription(payload.answer);
+            }
+            state.liveRoom.obsAudioBridgeReady = true;
+            await syncObsMicMuteForRoomAudioBridge({ bridgeActive: true });
+            logBroadcastRoomDebug('obs-audio-bridge-handshake-ready', {
+                connectionState: peer.connectionState || '',
+                iceConnectionState: peer.iceConnectionState || ''
+            });
+            addDiagnosticEvent('broadcast', t('broadcast_room.status_obs_audio_bridge_ready', 'OBS canlı oda sesi köprüsü hazır.'));
+            return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return false;
+}
+
 async function ensureObsAudioBridgeForBroadcast() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass || typeof RTCPeerConnection === 'undefined') {
@@ -7007,6 +7057,19 @@ async function ensureObsAudioBridgeForBroadcast() {
     if (state.liveRoom.obsAudioBridgePeer && state.liveRoom.obsAudioBridgeDestination) {
         refreshObsAudioBridgeGraph();
         await ensureObsAudioBridgeSourceForCurrentUrl();
+        if (state.liveRoom.obsAudioBridgeReady !== true) {
+            const connected = await completeObsAudioBridgeHandshake(
+                state.liveRoom.obsAudioBridgePeer,
+                { timeoutMs: 1500 }
+            );
+            if (!connected) {
+                await ensureObsAudioBridgeSourceForCurrentUrl({ forceReload: true });
+                await completeObsAudioBridgeHandshake(
+                    state.liveRoom.obsAudioBridgePeer,
+                    { timeoutMs: 5000 }
+                );
+            }
+        }
         return state.liveRoom.obsAudioBridgeUrl;
     }
 
@@ -7030,6 +7093,31 @@ async function ensureObsAudioBridgeForBroadcast() {
     state.liveRoom.obsAudioBridgePeer = peer;
     state.liveRoom.obsAudioBridgeSender = sender;
     state.liveRoom.obsAudioBridgeReady = false;
+    peer.addEventListener('connectionstatechange', () => {
+        const connectionState = String(peer.connectionState || '');
+        if (!['failed', 'closed', 'disconnected'].includes(connectionState)) {
+            return;
+        }
+        state.liveRoom.obsAudioBridgeReady = false;
+        logBroadcastRoomDebug('obs-audio-bridge-peer-not-ready', { connectionState });
+        const retryDelay = connectionState === 'disconnected' ? 1000 : 0;
+        window.setTimeout(() => {
+            if (state.liveRoom.obsAudioBridgePeer !== peer || peer.connectionState === 'connected') {
+                return;
+            }
+            stopObsAudioBridge()
+                .then(() => {
+                    if (state.recording.active || state.youtube.liveActive) {
+                        refreshObsAudioBridgeForActiveOutput();
+                    }
+                })
+                .catch((error) => {
+                    logBroadcastRoomDebug('obs-audio-bridge-peer-restart-failed', {
+                        error: error?.message || String(error || '')
+                    });
+                });
+        }, retryDelay);
+    });
     refreshObsAudioBridgeGraph();
     await audioContext.resume().catch(() => {});
     await ensureObsAudioBridgeSourceForCurrentUrl();
@@ -7041,21 +7129,14 @@ async function ensureObsAudioBridgeForBroadcast() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(peer.localDescription)
     });
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < 5000) {
-        const resp = await fetch(`http://127.0.0.1:${bridge.port}/obs-audio-bridge/poll?role=renderer&token=${encodeURIComponent(token)}&t=${Date.now()}`);
-        const payload = await resp.json();
-        if (payload.answer) {
-            await peer.setRemoteDescription(payload.answer);
-            state.liveRoom.obsAudioBridgeReady = true;
-            await syncObsMicMuteForRoomAudioBridge({ bridgeActive: true });
-            addDiagnosticEvent('broadcast', t('broadcast_room.status_obs_audio_bridge_ready', 'OBS canlı oda sesi köprüsü hazır.'));
-            return bridge.url;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250));
+    if (await completeObsAudioBridgeHandshake(peer, { timeoutMs: 5000 })) {
+        return bridge.url;
     }
-    addDiagnosticEvent('broadcast', t('broadcast_room.status_obs_audio_bridge_waiting', 'OBS canlı oda sesi köprüsü yanıt bekliyor. OBS Browser Source birkaç saniye içinde bağlanabilir.'));
-    return bridge.url;
+    await ensureObsAudioBridgeSourceForCurrentUrl({ forceReload: true });
+    if (await completeObsAudioBridgeHandshake(peer, { timeoutMs: 5000 })) {
+        return bridge.url;
+    }
+    throw new Error(t('broadcast_room.obs_audio_bridge_not_ready', 'OBS oda sesi köprüsü hazır değil. OBS’yi tamamen kapatıp yeniden açın ve yayını tekrar başlatın.'));
 }
 
 function refreshObsAudioBridgeForActiveOutput() {
@@ -13801,6 +13882,7 @@ function renderYouTubePanelState() {
 }
 
 function updateYouTubeAuthUi() {
+    if (els.youtubeOauthSetup) els.youtubeOauthSetup.hidden = state.youtube.clientConfigured;
     if (!els.youtubeAuthStatus) {
         return;
     }
@@ -13817,7 +13899,7 @@ function updateYouTubeAuthUi() {
         els.btnYoutubeDisconnect.disabled = !state.youtube.activeAccountId || state.youtube.checking;
     }
     if (els.btnYoutubeConnect) {
-        els.btnYoutubeConnect.disabled = state.youtube.checking;
+        els.btnYoutubeConnect.disabled = state.youtube.checking || !state.youtube.clientConfigured;
     }
     if (els.btnYoutubePrepare) {
         els.btnYoutubePrepare.disabled = state.youtube.checking || !state.youtube.connected || !state.youtube.activeAccountId;
@@ -17031,6 +17113,9 @@ async function ensureObsSceneForBroadcastRoom(options = {}) {
             addDiagnosticEvent('broadcast', t('broadcast_room.status_obs_audio_bridge_failed', 'OBS canlı oda sesi köprüsü başlatılamadı: {error}', {
                 error: error?.message || error || 'unknown_error'
             }));
+            if (forceLiveRoomAudioBridge && getConnectedRemoteParticipantCount() > 0) {
+                throw error;
+            }
         }
     }
 
@@ -17382,6 +17467,7 @@ async function loadYouTubeAuthState() {
     const response = await ipcRenderer.invoke('youtube-get-auth-state');
     if (!response.success) {
         state.youtube.connected = false;
+        state.youtube.clientConfigured = false;
         state.youtube.accounts = [];
         state.youtube.activeAccountId = '';
         state.youtube.channelTitle = '';
@@ -17392,6 +17478,7 @@ async function loadYouTubeAuthState() {
     }
 
     state.youtube.connected = !!response.connected;
+    state.youtube.clientConfigured = Boolean(String(response.clientId || '').trim());
     state.youtube.accounts = Array.isArray(response.accounts) ? response.accounts : [];
     state.youtube.activeAccountId = response.activeAccountId || '';
     state.youtube.channelTitle = response.channel?.title || '';
@@ -17452,6 +17539,28 @@ async function refreshYouTubeBroadcasts(options = {}) {
             ? t('broadcast_room.youtube_broadcasts_loaded', 'YouTube planlı yayın listesi hazır.')
             : t('broadcast_room.youtube_no_broadcasts', 'Planlı YouTube yayını bulunamadı.')
     );
+}
+
+// One-time OAuth setup intentionally has no shortcut-manager action.
+async function saveYouTubeClientConfig() {
+    const clientId = String(els.youtubeClientId?.value || '').trim();
+    const clientSecret = String(els.youtubeClientSecret?.value || '').trim();
+    if (!clientId) {
+        syncYouTubeStatusText(t('youtube_oauth_setup.client_id_required', 'YouTube OAuth Client ID gereklidir.'));
+        els.youtubeClientId?.focus();
+        return;
+    }
+    const response = await ipcRenderer.invoke('youtube-save-client-config', { clientId, clientSecret });
+    if (!response?.success) {
+        syncYouTubeStatusText(t('youtube_oauth_setup.save_failed', 'YouTube OAuth bilgileri kaydedilemedi: {error}', { error: response?.error || 'unknown_error' }));
+        return;
+    }
+    if (els.youtubeClientSecret) els.youtubeClientSecret.value = '';
+    await loadYouTubeAuthState();
+    const message = t('youtube_oauth_setup.saved', 'YouTube OAuth bilgileri kaydedildi. Şimdi YouTube hesabınızı bağlayabilirsiniz.');
+    syncYouTubeStatusText(message);
+    announce(message);
+    els.btnYoutubeConnect?.focus();
 }
 
 async function connectYouTubeAccount() {
@@ -17807,6 +17916,13 @@ async function startYouTubeLive() {
 
         state.youtube.liveActive = true;
         state.youtube.lastLiveState = 'active';
+        try {
+            await ensureObsAudioBridgeForBroadcast();
+        } catch (error) {
+            logBroadcastRoomDebug('obs-audio-bridge-youtube-activation-retry-failed', {
+                error: error?.message || String(error || '')
+            });
+        }
         await syncLiveRoomSettings();
         state.stageCapturePreparing = false;
         startYouTubeHealthDiagnostics();
@@ -22066,6 +22182,18 @@ function bindEvents() {
                 : t('broadcast_room.status_youtube_panel_collapsed', 'YouTube seçenekleri kapatıldı.')
         );
     });
+    els.youtubeShowClientSecret?.addEventListener('change', () => {
+        if (els.youtubeClientSecret) els.youtubeClientSecret.type = els.youtubeShowClientSecret.checked ? 'text' : 'password';
+    });
+    els.youtubeOauthSetup?.addEventListener('click', (event) => {
+        const link = event.target?.closest?.('a[href]');
+        if (!link) return;
+        event.preventDefault();
+        shell.openExternal(link.href).catch((error) => console.warn('YouTube OAuth guide link could not be opened:', error));
+    });
+    els.btnYoutubeSaveClient?.addEventListener('click', () => saveYouTubeClientConfig().catch((error) => {
+        syncYouTubeStatusText(t('youtube_oauth_setup.save_failed', 'YouTube OAuth bilgileri kaydedilemedi: {error}', { error: error.message || error }));
+    }));
     els.btnYoutubeConnect?.addEventListener('click', () => connectYouTubeAccount().catch((error) => {
         console.error('Broadcast room YouTube connect error:', error);
         syncYouTubeStatusText(t('broadcast_room.youtube_auth_failed', 'YouTube hesabı bağlanamadı: {error}', { error: error.message }));

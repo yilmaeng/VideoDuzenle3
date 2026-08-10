@@ -1,0 +1,70 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Paquete de revisión de EVD - Guía de uso</title><style>
+    :root { --ink:#18211c; --muted:#536159; --paper:#fffdf7; --panel:#f0f5ea; --accent:#075e54; --accent2:#b44820; --line:#c7d1c4; --code:#eef0e8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#e8efe1 0,#f8f2df 48%,#e9f1eb 100%); font-family:"Aptos","Segoe UI",sans-serif; font-size:18px; line-height:1.65; }
+    a { color:#064f83; text-underline-offset:.16em; }
+    a:focus { outline:3px solid #d36d22; outline-offset:3px; }
+    .skip { position:absolute; left:-9999px; top:0; padding:.7rem; background:#fff; z-index:3; }
+    .skip:focus { left:1rem; top:1rem; }
+    header { padding:3rem max(5vw,1.2rem) 2.5rem; color:#fff; background:radial-gradient(circle at 86% 13%,#287e69 0,transparent 26%),linear-gradient(120deg,#15372d,#075e54 62%,#174434); }
+    header p { max-width:75rem; margin:.5rem 0; }
+    header .eyebrow { letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:#ffe3a6; }
+    h1 { max-width:72rem; margin:.2rem 0 .8rem; font-family:Georgia,serif; font-size:clamp(2rem,5vw,4.1rem); line-height:1.08; }
+    main { width:min(1120px,94%); margin:-1.2rem auto 4rem; }
+    nav, section { margin:1.25rem 0; padding:1.5rem clamp(1rem,3vw,2.4rem); border:1px solid var(--line); border-radius:18px; background:rgba(255,253,247,.97); box-shadow:0 12px 32px rgba(30,50,35,.08); }
+    nav { border-top:7px solid var(--accent2); }
+    h2 { margin-top:0; padding-bottom:.35rem; border-bottom:2px solid var(--line); color:#124437; font-family:Georgia,serif; font-size:1.7rem; }
+    h3 { margin-top:1.6rem; color:#75401f; }
+    .toc { columns:2; column-gap:2rem; padding-left:1.4rem; }
+    .toc li { break-inside:avoid; margin:.35rem 0; }
+    .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(245px,1fr)); gap:1rem; counter-reset:step; }
+    .steps article { padding:1rem; border-left:5px solid var(--accent); border-radius:10px; background:var(--panel); }
+    .steps article::before { counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:2rem; height:2rem; margin-right:.5rem; border-radius:50%; color:#fff; background:var(--accent); font-weight:700; }
+    .note, .warning, .tip { margin:1rem 0; padding:1rem 1.1rem; border-radius:10px; }
+    .note { border-left:5px solid #3974a6; background:#edf5fb; }
+    .warning { border-left:5px solid #b44820; background:#fff0e7; }
+    .tip { border-left:5px solid #4f7d32; background:#eff7e8; }
+    kbd { display:inline-block; min-width:1.7em; padding:.08em .35em; border:1px solid #9ba49b; border-bottom-width:3px; border-radius:5px; background:var(--code); font:700 .9em Consolas,monospace; }
+    table { width:100%; margin:1rem 0; border-collapse:collapse; }
+    caption { margin-bottom:.55rem; text-align:left; font-weight:700; color:#124437; }
+    th, td { padding:.65rem .7rem; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#fff; background:#24584a; }
+    tbody tr:nth-child(even) { background:#f4f6ef; }
+    code { padding:.08rem .28rem; border-radius:4px; background:var(--code); }
+    .back { text-align:right; font-size:.92rem; }
+    footer { padding:2rem; color:#fff; background:#15372d; text-align:center; }
+    @media (max-width:700px) { .toc { columns:1; } body { font-size:17px; } }
+    @media print { body { background:#fff; font-size:11pt; } header { color:#000; background:#fff; padding:0 0 1rem; } header .eyebrow { color:#000; } main { width:100%; margin:0; } nav,section { border:0; box-shadow:none; break-inside:auto; } h2,h3 { break-after:avoid; } table { break-inside:avoid; } a { color:#000; } .back,.skip { display:none; } }
+  </style></head><body>
+<a class="skip" href="#contenido">Ir al contenido principal</a><header id="arriba"><p class="eyebrow">EVD 4.9 Beta</p><h1>Guía de uso del paquete de revisión</h1>
+<p>Abra vídeo o audio junto con un guion de audiodescripción con tiempos, encuentre el texto correspondiente mientras escucha, añada notas de revisión y exporte solo lo que debe corregirse en Word, TXT o Excel.</p><p><strong>Versión:</strong> 10 de agosto de 2026</p></header>
+<main id="contenido"><nav aria-labelledby="toc"><h2 id="toc">Contenido</h2><ol class="toc">
+<li><a href="#objetivo">Función del paquete</a></li><li><a href="#preparar">Preparar la carpeta</a></li><li><a href="#abrir">Abrir el paquete</a></li><li><a href="#espacio">Espacio de trabajo</a></li><li><a href="#flujo">Flujo completo</a></li><li><a href="#vinculada">Nota vinculada</a></li>
+<li><a href="#independiente">Nota independiente</a></li><li><a href="#proyecto">Guardar y continuar</a></li><li><a href="#exportar">Exportar informe</a></li><li><a href="#atajos">Atajos</a></li><li><a href="#consejos">Consejos</a></li><li><a href="#lista">Lista de comprobación</a></li></ol></nav>
+<section id="objetivo"><h2>Función del paquete de revisión</h2><p>Sirve para el control final de una audiodescripción terminada o casi terminada. El vídeo/audio y el guion SRT, VTT o Word se abren juntos. Al detenerse, el revisor localiza la descripción más cercana, adjunta una corrección o crea una nota independiente donde no existe descripción.</p>
+<div class="note"><strong>Dos tipos:</strong> la nota vinculada pertenece a una descripción existente; la independiente registra con sus propios tiempos algo como “Falta descripción aquí”.</div></section>
+<section id="preparar"><h2>Preparar la carpeta</h2><p>Guarde en una carpeta: un vídeo o MP3/WAV/M4A, el guion SRT/VTT/DOCX y, si existe, un proyecto <code>.evdscript</code>. Con un solo medio y un solo guion, EVD los selecciona automáticamente; con varios, permite elegir.</p>
+<div class="tip"><strong>Word:</strong> EVD extrae descripciones con tiempos. El texto en mayúsculas justo después del código, como “EMOCIONAL” o “LEER RÁPIDO”, se separa como indicación de locución. Revise la vista previa.</div><div class="warning">Convierta archivos antiguos <code>.doc</code> a <code>.docx</code>.</div></section>
+<section id="abrir"><h2>Abrir el paquete</h2><ol><li>Elija <strong>Añadir &gt; Editor de descripción/subtítulos</strong> y <strong>Abrir paquete de revisión</strong>.</li><li>Seleccione la carpeta.</li>
+<li>Un único <code>.evdscript</code> se abre directamente; si hay varios, EVD pregunta.</li><li>Sin proyecto, compruebe medio y guion y, para Word, la detección.</li><li>Pulse <strong>Abrir paquete seleccionado</strong>. Un par inequívoco se carga y la línea de tiempo recibe el foco.</li></ol>
+<p>En la instalación puede usar <strong>Abrir con paquete de revisión EVD</strong> en el menú de la carpeta o Enter sobre un proyecto asociado. En la versión portátil, abra desde EVD.</p></section>
+<section id="espacio"><h2>Espacio de trabajo</h2><ul><li><strong>Reproducción/línea experta:</strong> medio, tiempo, onda, marcadores y eventos.</li><li><strong>Lista:</strong> descripciones y notas; el nombre accesible empieza por el texto y después anuncia tiempos y detalles.</li><li><strong>Filtro:</strong> todos, con nota, no resueltos y estados.</li><li><strong>Proyecto:</strong> guardar, guardar como, abrir y exportar.</li></ul>
+<p><kbd>Alt</kbd>+<kbd>T</kbd> enfoca reproducción. <kbd>Alt</kbd>+<kbd>L</kbd> abre la lista y selecciona la descripción más próxima al punto pausado. Arriba/Abajo en la línea cambia el volumen de vista previa en 5 %.</p></section>
+<section id="flujo"><h2>Flujo completo</h2><div class="steps"><article><strong>Abra.</strong><br>Compruebe carpeta, medio y guion.</article><article><strong>Escuche.</strong><br>Alt+T y Espacio.</article><article><strong>Deténgase.</strong><br>Enter o K.</article>
+<article><strong>Busque el texto.</strong><br>Alt+L y flechas.</article><article><strong>Escriba.</strong><br>Alt+N para texto existente; dos M y A para nota independiente.</article><article><strong>Guarde y siga.</strong><br>Ctrl/Cmd+Enter vuelve a reproducción.</article>
+<article><strong>Proteja el proyecto.</strong><br>Alt+Mayús+S y guardado automático.</article><article><strong>Informe.</strong><br>Ctrl/Cmd+Mayús+E, Word/TXT/Excel.</article></div></section>
+<section id="vinculada"><h2>Nota para una descripción existente</h2><ol><li>Deténgase y pulse Alt+L.</li><li>Busque con Arriba/Abajo; Espacio o P escucha el intervalo.</li><li>Pulse <kbd>Alt</kbd>+<kbd>N</kbd> o <strong>Añadir/editar nota de revisión</strong> en el menú de flecha derecha.</li><li>Escriba; Enter crea línea.</li><li>Guarde con Ctrl/Cmd+Enter; el foco vuelve a la línea.</li></ol><p>Puede editar, borrar o marcar resuelta la nota. La exportación puede limitarse a las no resueltas.</p></section>
+<section id="independiente"><h2>Nota independiente sin descripción</h2><ol><li>Alt+T vuelve a la línea.</li><li>Pulse M al principio y al final.</li><li>Mayús+Espacio comprueba.</li><li>Pulse A; se enfoca el texto de nota.</li><li>Escriba y guarde con Ctrl/Cmd+Enter.</li></ol>
+<div class="tip">Ajuste temporal: G/H = 1 ms, Alt+Izquierda/Derecha = 10 ms, Alt+Mayús+Izquierda/Derecha = 100 ms, Ctrl+J/L = un segundo.</div></section>
+<section id="proyecto"><h2>Guardar y continuar</h2><p><kbd>Alt</kbd>+<kbd>Mayús</kbd>+<kbd>S</kbd> pide nombre la primera vez y crea <code>.evdscript</code>. Después actualiza el mismo archivo; Guardar como crea copia. También hay guardado automático.</p>
+<p>Continúe con Abrir proyecto, Enter sobre el archivo asociado o seleccionando la carpeta. Un proyecto se abre directamente; varios se ofrecen. Se restaura la posición y selección guardadas.</p></section>
+<section id="exportar"><h2>Exportar el informe</h2><ol><li>Ctrl/Cmd+Mayús+E o <strong>Exportar</strong>.</li><li>Elija Word, TXT o Excel.</li><li>Por defecto: <strong>solo descripciones con nota y notas independientes</strong>. También puede elegir no resueltas o todo.</li><li>Si no cambia nada más, pulse Enter en el formato.</li><li>Confirme destino; EVD anuncia progreso, cancelación, error y éxito.</li></ol>
+<table><thead><tr><th>Formato</th><th>Uso</th></tr></thead><tbody><tr><td>Word</td><td>Informe numerado con descripción, intervalo y nota como encabezado H3.</td></tr><tr><td>TXT</td><td>Texto sencillo y copiable.</td></tr><tr><td>Excel</td><td>Filtrar y seguir muchas notas.</td></tr><tr><td>SRT/VTT</td><td>Transferir texto temporizado; no sustituye al informe.</td></tr></tbody></table></section>
+<section id="atajos"><h2>Atajos principales</h2><table><thead><tr><th>Atajo</th><th>Acción</th></tr></thead><tbody>
+<tr><td>Espacio</td><td>Reproducir/pausar</td></tr><tr><td>K / Enter</td><td>Detener / alternar reproducción posicionada</td></tr><tr><td>Izquierda/Derecha</td><td>Desplazamiento fino y muestra breve</td></tr><tr><td>Arriba/Abajo</td><td>Volumen de vista previa 5 %</td></tr>
+<tr><td>Re Pág/Av Pág</td><td>5 segundos</td></tr><tr><td>Ctrl/Cmd+Izquierda/Derecha</td><td>30 segundos</td></tr><tr><td>M</td><td>Añadir marcador</td></tr><tr><td>Mayús+Espacio</td><td>Reproducir entre marcadores</td></tr>
+<tr><td>A</td><td>Nota independiente</td></tr><tr><td>Alt+N</td><td>Nota vinculada</td></tr><tr><td>Alt+L/T</td><td>Lista / línea</td></tr><tr><td>Alt+Mayús+S</td><td>Guardar proyecto</td></tr><tr><td>Ctrl/Cmd+Mayús+E</td><td>Abrir exportación</td></tr></tbody></table></section>
+<section id="consejos"><h2>Consejos y problemas</h2><p><strong>Volumen bajo:</strong> Alt+T y mantenga Arriba; solo cambia la monitorización. <strong>Alt+L elige mal:</strong> compruebe vecinos con flechas y Espacio/P. <strong>Muchos archivos:</strong> verifique cada selección. <strong>Tiempos desplazados:</strong> confirme el montaje correcto. <strong>Informe grande:</strong> use el alcance predeterminado o solo no resueltos.</p></section>
+<section id="lista"><h2>Lista de comprobación</h2><ol><li>Abrí medio y guion correctos.</li><li>Me detuve y encontré el texto con Alt+L.</li><li>Anoté descripciones con Alt+N.</li><li>Registré faltantes con dos M y A.</li><li>Escuché de nuevo los intervalos.</li><li>Guardé con Alt+Mayús+S.</li><li>Comprobé solo las notas necesarias en Word/TXT/Excel.</li><li>Archivé proyecto, medio e informe juntos.</li></ol><p class="back"><a href="#arriba">Volver arriba</a></p></section>
+</main><footer><p>Engelsiz Video Düzenleyicisi - Guía del paquete de revisión</p></footer></body></html>

@@ -18,6 +18,19 @@ let pendingLaunchPath = null;
 let instantTranslationTray = null;
 const allowMultiInstance = process.argv.includes('--multi-instance') || process.env.EVD_ALLOW_MULTI_INSTANCE === '1';
 
+if (allowMultiInstance) {
+    // Additional EVD windows are separate Electron processes. Sharing Chromium's
+    // session directory can make their media services interfere with each other.
+    const secondarySessionPath = path.join(app.getPath('temp'), 'evd-secondary-sessions', String(process.pid));
+    fs.mkdirSync(secondarySessionPath, { recursive: true });
+    app.setPath('sessionData', secondarySessionPath);
+    app.once('will-quit', () => {
+        try {
+            fs.rmSync(secondarySessionPath, { recursive: true, force: true });
+        } catch (_error) {}
+    });
+}
+
 function isInstantVoiceTranslationOnlyMode() {
     const appName = String(app.getName?.() || '').toLowerCase();
     return process.argv.includes('--instant-voice-translation')
@@ -67,7 +80,7 @@ const SUPPORTED_VIDEO_EXTENSIONS = new Set([
     '.mp4', '.wmv', '.avi', '.mkv', '.mov', '.webm', '.flv', '.3gp',
     '.mpg', '.mpeg', '.vob', '.m4v', '.ts', '.mts'
 ]);
-const SUPPORTED_PROJECT_EXTENSIONS = new Set(['.kve', '.eng']);
+const SUPPORTED_PROJECT_EXTENSIONS = new Set(['.kve', '.eng', '.evdscript']);
 
 function normalizeArgPath(arg) {
     if (!arg || typeof arg !== 'string') {
@@ -78,7 +91,8 @@ function normalizeArgPath(arg) {
         return null;
     }
 
-    const resolvedPath = path.resolve(arg);
+    const unquotedArg = arg.replace(/^(["'])(.*)\1$/, '$2').trim();
+    const resolvedPath = path.resolve(unquotedArg);
     if (!fs.existsSync(resolvedPath)) {
         return null;
     }
@@ -92,6 +106,23 @@ function isSupportedOpenPath(filePath) {
 }
 
 function extractLaunchPath(argv = []) {
+    const inlinePackageArg = argv.find(arg => typeof arg === 'string' && arg.startsWith('--open-control-package='));
+    if (inlinePackageArg) {
+        const directoryPath = normalizeArgPath(inlinePackageArg.slice('--open-control-package='.length));
+        if (directoryPath && fs.statSync(directoryPath).isDirectory()) return directoryPath;
+    }
+
+    const packageFlagIndex = argv.indexOf('--open-control-package');
+    if (packageFlagIndex >= 0) {
+        const directoryPath = normalizeArgPath(argv[packageFlagIndex + 1]);
+        if (directoryPath && fs.statSync(directoryPath).isDirectory()) return directoryPath;
+
+        // Windows shell launches can insert Electron arguments before the selected directory.
+        for (const arg of argv.slice(packageFlagIndex + 1)) {
+            const candidate = normalizeArgPath(arg);
+            if (candidate && fs.statSync(candidate).isDirectory()) return candidate;
+        }
+    }
     for (const arg of argv) {
         const normalizedPath = normalizeArgPath(arg);
         if (normalizedPath && isSupportedOpenPath(normalizedPath)) {
@@ -108,7 +139,13 @@ function sendOpenPathToRenderer(filePath) {
     }
 
     const ext = path.extname(filePath).toLowerCase();
-    if (ext === '.eng') {
+    if (fs.statSync(filePath).isDirectory()) {
+        const { openDescriptionSubtitleControlPackage } = require('./description-subtitle-editor-handler');
+        openDescriptionSubtitleControlPackage(mainWindow, filePath).catch(error => console.error('Control package could not be opened:', error));
+    } else if (ext === '.evdscript') {
+        const { openDescriptionSubtitleEditor } = require('./description-subtitle-editor-handler');
+        openDescriptionSubtitleEditor(mainWindow, { projectPath: filePath });
+    } else if (ext === '.eng') {
         const { openProjectFile } = require('./slideshow-handler');
         openProjectFile(mainWindow, filePath);
     } else if (ext === '.kve') {
@@ -242,6 +279,7 @@ app.whenReady().then(async () => {
             const { setupEmergencyBroadcastHandlers } = require('./emergency-broadcast-handler');
             const { setupSlideshowHandlers } = require('./slideshow-handler');
             const { setupObjectAnalysisHandlers } = require('./object-analysis-handler');
+            const { setupDescriptionSubtitleEditorHandlers } = require('./description-subtitle-editor-handler');
             setupDialogHandlers(mainWindow);
             setupObsIpcHandlers(mainWindow);
             setupElevenLabsHandlers(mainWindow);
@@ -249,6 +287,7 @@ app.whenReady().then(async () => {
             setupEmergencyBroadcastHandlers(mainWindow);
             setupSlideshowHandlers(mainWindow);
             setupObjectAnalysisHandlers(mainWindow);
+            setupDescriptionSubtitleEditorHandlers(mainWindow);
         }
 
         app.on('activate', () => {

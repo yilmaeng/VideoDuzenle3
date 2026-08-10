@@ -91,6 +91,42 @@ contextBridge.exposeInMainWorld('api', {
     openFileDialog: (options) => ipcRenderer.invoke('open-file-dialog', options),
     openTextOverlayDialog: (params) => ipcRenderer.invoke('open-text-overlay-dialog', params),
     openVideoTickerDialog: (params) => ipcRenderer.invoke('open-video-ticker-dialog', params),
+    openDescriptionSubtitleEditor: (params) => ipcRenderer.invoke('description-subtitle-editor-open', params),
+    descriptionSubtitleEditorGetInitialPayload: () => ipcRenderer.invoke('description-subtitle-editor-get-initial-payload'),
+    descriptionSubtitleEditorChooseVideo: () => ipcRenderer.invoke('description-subtitle-editor-choose-video'),
+    descriptionSubtitleEditorChooseControlPackage: () => ipcRenderer.invoke('description-subtitle-editor-choose-control-package'),
+    descriptionSubtitleEditorLoadProjectPath: (projectPath) => ipcRenderer.invoke('description-subtitle-editor-load-project-path', projectPath),
+    descriptionSubtitleEditorSourceInfo: (filePath) => ipcRenderer.invoke('description-subtitle-editor-source-info', filePath),
+    descriptionSubtitleEditorPathUrl: (filePath) => ipcRenderer.invoke('description-subtitle-editor-path-url', filePath),
+    descriptionSubtitleEditorNewProject: (source) => ipcRenderer.invoke('description-subtitle-editor-new-project', source),
+    descriptionSubtitleEditorGenerateWaveform: (options) => ipcRenderer.invoke('description-subtitle-editor-generate-waveform', options),
+    descriptionSubtitleEditorDetectScenes: (options) => ipcRenderer.invoke('description-subtitle-editor-detect-scenes', options),
+    descriptionSubtitleEditorCancelAnalysis: () => ipcRenderer.invoke('description-subtitle-editor-cancel-analysis'),
+    onDescriptionSubtitleAnalysisProgress: (callback) => ipcRenderer.on('description-subtitle-analysis-progress', (_event, payload) => callback(payload)),
+    descriptionSubtitleEditorOpenProject: () => ipcRenderer.invoke('description-subtitle-editor-open-project'),
+    descriptionSubtitleEditorSaveProject: (payload) => ipcRenderer.invoke('description-subtitle-editor-save-project', payload),
+    descriptionSubtitleEditorImportSubtitles: (payload) => ipcRenderer.invoke('description-subtitle-editor-import-subtitles', payload),
+    descriptionSubtitleEditorExport: (payload) => ipcRenderer.invoke('description-subtitle-editor-export', payload),
+    descriptionSubtitleEditorQualityExport: (payload) => ipcRenderer.invoke('description-subtitle-editor-quality-export', payload),
+    descriptionSubtitleEditorTtsVoices: (payload) => ipcRenderer.invoke('description-subtitle-editor-tts-voices', payload),
+    descriptionSubtitleEditorSynthesize: (payload) => ipcRenderer.invoke('description-subtitle-editor-synthesize', payload),
+    descriptionSubtitleEditorChooseNarration: () => ipcRenderer.invoke('description-subtitle-editor-choose-human-narration'),
+    descriptionSubtitleEditorAnalyzeNarration: (payload) => ipcRenderer.invoke('description-subtitle-editor-analyze-human-narration', payload),
+    descriptionSubtitleEditorTrimNarrationCandidate: (payload) => ipcRenderer.invoke('description-subtitle-editor-trim-human-narration-candidate', payload),
+    onDescriptionSubtitleHumanNarrationProgress: (callback) => ipcRenderer.on('description-subtitle-human-narration-progress', (_event, payload) => callback(payload)),
+    descriptionSubtitleContentStudioKeyStatus: () => ipcRenderer.invoke('description-subtitle-contentstudio-key-status'),
+    descriptionSubtitleContentStudioSaveKey: (payload) => ipcRenderer.invoke('description-subtitle-contentstudio-save-key', payload),
+    descriptionSubtitleContentStudioAccount: () => ipcRenderer.invoke('description-subtitle-contentstudio-account'),
+    descriptionSubtitleContentStudioCreateProject: (payload) => ipcRenderer.invoke('description-subtitle-contentstudio-create-project', payload),
+    descriptionSubtitleContentStudioFindProject: (payload) => ipcRenderer.invoke('description-subtitle-contentstudio-find-project', payload),
+    descriptionSubtitleContentStudioJob: (payload) => ipcRenderer.invoke('description-subtitle-contentstudio-job', payload),
+    descriptionSubtitleContentStudioDescriptions: (payload) => ipcRenderer.invoke('description-subtitle-contentstudio-descriptions', payload),
+    descriptionSubtitleContentStudioExport: (payload) => ipcRenderer.invoke('description-subtitle-contentstudio-export', payload),
+    onDescriptionSubtitleContentStudioProgress: (callback) => ipcRenderer.on('description-subtitle-contentstudio-progress', (_event, payload) => callback(payload)),
+    descriptionSubtitleEditorRenderVideo: (payload) => ipcRenderer.invoke('description-subtitle-editor-render-described-video', payload),
+    descriptionSubtitleEditorConfirmClose: () => ipcRenderer.invoke('description-subtitle-editor-confirm-close'),
+    onDescriptionSubtitleEditorInit: (callback) => ipcRenderer.on('description-subtitle-editor-init', (_event, payload) => callback(payload)),
+    onDescriptionSubtitleEditorCloseRequested: (callback) => ipcRenderer.on('description-subtitle-editor-close-requested', () => callback()),
 
     saveFileContent: (params) => ipcRenderer.invoke('save-file-content', params),
     readFileContent: (filePath) => ipcRenderer.invoke('read-file-content', filePath),
@@ -162,6 +198,7 @@ contextBridge.exposeInMainWorld('api', {
     addVideoLayer: (params) => ipcRenderer.invoke('add-video-layer', params),
     getVideoLayerAiSuggestion: (params) => ipcRenderer.invoke('get-video-layer-ai-suggestion', params),
     onInsertSubtitle: (callback) => ipcRenderer.on('insert-subtitle', (event, filePath) => callback(filePath)),
+    onOpenDescriptionSubtitleEditorRequest: (callback) => ipcRenderer.on('open-description-subtitle-editor-request', () => callback()),
 
     // Görünüm olayları
     onRotateVideo: (callback) => ipcRenderer.on('rotate-video', (event, degrees) => callback(degrees)),
@@ -366,4 +403,37 @@ contextBridge.exposeInMainWorld('api', {
         }
         ipcRenderer.removeAllListeners(channel);
     }
+});
+
+
+// Read-only multiline fields often expose only the caret line in screen-reader form mode.
+// Refreshing the accessible name on focus makes the full current value available without
+// changing editable textareas or producing background live-region announcements.
+window.addEventListener('DOMContentLoaded', () => {
+    const isSimulatedReadonly = control => control instanceof HTMLTextAreaElement
+        && control.getAttribute('aria-readonly') === 'true' && !control.readOnly;
+    ['beforeinput', 'paste', 'cut', 'drop'].forEach(type => {
+        document.addEventListener(type, event => {
+            if (isSimulatedReadonly(event.target)) event.preventDefault();
+        }, true);
+    });
+    document.addEventListener('focusin', event => {
+        const control = event.target;
+        if (isSimulatedReadonly(control)) {
+            try { control.setSelectionRange(0, 0); } catch (_error) { /* Non-selectable field. */ }
+            return;
+        }
+        if (!(control instanceof HTMLTextAreaElement) || !control.readOnly) return;
+        const explicitLabel = control.labels?.[0]?.textContent?.trim() || '';
+        const currentAriaLabel = control.getAttribute('aria-label')?.trim() || '';
+        if (!control.dataset.evdReadonlyBaseLabel) {
+            control.dataset.evdReadonlyBaseLabel = explicitLabel || currentAriaLabel;
+        }
+        const baseLabel = explicitLabel || control.dataset.evdReadonlyBaseLabel || currentAriaLabel;
+        const fullValue = String(control.value || '').trim();
+        if (baseLabel || fullValue) {
+            control.setAttribute('aria-label', [baseLabel, fullValue].filter(Boolean).join('. '));
+        }
+        try { control.setSelectionRange(0, 0); } catch (_error) { /* Non-selectable field. */ }
+    }, true);
 });

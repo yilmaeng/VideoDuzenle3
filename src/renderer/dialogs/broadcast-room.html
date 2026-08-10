@@ -1229,9 +1229,27 @@
             </div>
             <div id="youtube-panel-room" hidden>
             <div data-youtube-host-controls>
+                <section id="youtube-oauth-setup-room" class="card" hidden aria-labelledby="youtube-oauth-setup-title-room">
+                    <h3 id="youtube-oauth-setup-title-room" data-i18n="youtube_oauth_setup.title">YouTube OAuth bilgileri gerekli</h3>
+                    <p data-i18n="youtube_oauth_setup.required_help">Bu pakette YouTube OAuth bilgisi bulunmuyor. YouTube hesabı bağlamak için Google Cloud masaüstü istemci bilgilerinizi kaydedin.</p>
+                    <div class="form-group">
+                        <label for="youtube-client-id-room" data-i18n="youtube_oauth_setup.client_id">YouTube OAuth Client ID</label>
+                        <input id="youtube-client-id-room" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="youtube_oauth_setup.client_id_placeholder" placeholder="...apps.googleusercontent.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="youtube-client-secret-room" data-i18n="youtube_oauth_setup.client_secret">YouTube OAuth Client Secret</label>
+                        <input id="youtube-client-secret-room" type="password" autocomplete="new-password" spellcheck="false">
+                        <label><input id="youtube-show-client-secret-room" type="checkbox"> <span data-i18n="youtube_oauth_setup.show_secret">Client Secret bilgisini göster</span></label>
+                    </div>
+                    <div class="step-actions"><button id="youtube-save-client-room" type="button" data-i18n="youtube_oauth_setup.save">OAuth bilgilerini kaydet</button></div>
+                    <details>
+                        <summary data-i18n="youtube_oauth_setup.instructions_toggle">YouTube OAuth nasıl alınır? Adım adım yönerge</summary>
+                        <div data-i18n-html="youtube_oauth_setup.instructions_html"></div>
+                    </details>
+                </section>
             <p class="hint" data-i18n="broadcast_room.youtube_hint">Kayıt sihirbazındaki gibi YouTube hesabı bağlayabilir, planlı bir yayın hazırlayabilir veya mevcut planlı yayını seçebilirsiniz.</p>
             <div class="toolbar">
-                <button id="btn-youtube-connect-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_connect" data-i18n-aria="broadcast_room.youtube_connect">YouTube Hesabını Bağla</button>
+                <button id="btn-youtube-connect-room" type="button" class="secondary" disabled data-i18n="broadcast_room.youtube_connect" data-i18n-aria="broadcast_room.youtube_connect">YouTube Hesabını Bağla</button>
                 <button id="btn-youtube-disconnect-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_disconnect" data-i18n-aria="broadcast_room.youtube_disconnect">Bağlantıyı Kaldır</button>
                 <button id="btn-youtube-prepare-room" type="button" data-i18n="broadcast_room.youtube_prepare" data-i18n-aria="broadcast_room.youtube_prepare">Yayını Hazırla</button>
                 <button id="btn-youtube-start-room" type="button" data-i18n="broadcast_room.youtube_start_live" data-i18n-aria="broadcast_room.youtube_start_live">Canlı Yayını Başlat</button>

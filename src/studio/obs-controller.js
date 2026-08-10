@@ -155,15 +155,73 @@ class OBSController {
             return { success: false, error: 'OBS bulunamadı.' };
         }
         try {
-            const cwd = path.dirname(info.path);
+            let launchPath = info.path;
+            let cwd = path.dirname(launchPath);
             const args = info.bundled ? ['--portable'] : [];
+            let managedConfigDir = null;
+
+            if (info.bundled) {
+                const obsRoot = path.resolve(cwd, '..', '..');
+
+                if (app.isPackaged && process.platform === 'win32') {
+                    // Program Files is not writable for a normal user. Build a small
+                    // per-user portable root whose binary folders are junctions back
+                    // to the packaged OBS files while config remains user-writable.
+                    const runtimeRoot = path.join(app.getPath('userData'), 'obs-runtime', 'portable');
+                    fs.mkdirSync(runtimeRoot, { recursive: true });
+                    for (const directoryName of ['bin', 'data', 'obs-plugins']) {
+                        const targetPath = path.join(obsRoot, directoryName);
+                        const junctionPath = path.join(runtimeRoot, directoryName);
+                        let junctionIsCurrent = false;
+                        try {
+                            junctionIsCurrent = fs.realpathSync(junctionPath).toLowerCase()
+                                === fs.realpathSync(targetPath).toLowerCase();
+                        } catch (_error) {}
+                        if (!junctionIsCurrent) {
+                            fs.rmSync(junctionPath, { recursive: true, force: true });
+                            fs.symlinkSync(targetPath, junctionPath, 'junction');
+                        }
+                    }
+
+                    managedConfigDir = path.join(runtimeRoot, 'config', 'obs-studio');
+                    const seedConfigDir = path.join(obsRoot, 'config', 'obs-studio');
+                    fs.mkdirSync(managedConfigDir, { recursive: true });
+                    if (fs.existsSync(seedConfigDir)) {
+                        fs.cpSync(seedConfigDir, managedConfigDir, {
+                            recursive: true,
+                            force: false,
+                            errorOnExist: false
+                        });
+                    }
+                    launchPath = path.join(runtimeRoot, 'bin', '64bit', path.basename(info.path));
+                    cwd = path.dirname(launchPath);
+                } else {
+                    managedConfigDir = path.join(obsRoot, 'config', 'obs-studio');
+                }
+
+                // OBS 32 uses sentinel files to detect an unclean shutdown. EVD owns
+                // this portable profile, so stale sentinels must not block automated
+                // startup with the Safe Mode dialog after an interrupted EVD session.
+                const sentinelDir = path.join(managedConfigDir, '.sentinel');
+                try {
+                    for (const entry of fs.readdirSync(sentinelDir, { withFileTypes: true })) {
+                        if (entry.isFile() && entry.name.startsWith('run_')) {
+                            fs.unlinkSync(path.join(sentinelDir, entry.name));
+                        }
+                    }
+                } catch (cleanupError) {
+                    if (cleanupError.code !== 'ENOENT') {
+                        console.warn('[OBS] Stale shutdown sentinel could not be cleared:', cleanupError.message);
+                    }
+                }
+            }
 
             if (process.platform === 'darwin') {
                 // On macOS, 'open' handles the launch, cwd might not be needed but good practice
                 spawn('open', ['-a', info.path, '--args', ...args], { detached: true, stdio: 'ignore' }).unref();
             } else {
                 // Windows and Linux need generic spawn with cwd
-                spawn(info.path, args, { detached: true, stdio: 'ignore', cwd }).unref();
+                spawn(launchPath, args, { detached: true, stdio: 'ignore', cwd }).unref();
             }
             return { success: true };
         } catch (e) {
@@ -213,7 +271,7 @@ class OBSController {
             // 1. Create temp input (hidden)
             // Use try-catch to handle if it already exists
             try {
-                await this._call('CreateInput', {
+                const createResult = await this._call('CreateInput', {
                     sceneName,
                     inputName: tempInputName,
                     inputKind: 'window_capture',
@@ -258,7 +316,7 @@ class OBSController {
                 try {
                     await this._removeInput(tempInputName);
                 } catch (e) { }
-                await this._call('CreateInput', {
+                const createResult = await this._call('CreateInput', {
                     sceneName,
                     inputName: tempInputName,
                     inputKind,
@@ -748,30 +806,34 @@ class OBSController {
         }
 
         const shouldCreate = !exists;
+        let createdSceneItemId = null;
 
         if (shouldCreate) {
             try {
                 console.log(`Creating input "${inputName}" kind="${inputKind}" settings=`, JSON.stringify(inputSettings));
-                await this._call('CreateInput', {
+                const createResult = await this._call('CreateInput', {
                     sceneName,
                     inputName,
                     inputKind,
                     inputSettings: inputSettings || {},
                     sceneItemEnabled: true
                 });
+                createdSceneItemId = createResult?.sceneItemId ?? null;
             } catch (e) {
                 console.error(`CreateInput failed for "${inputName}":`, e.message);
                 // v4 fallback
                 try {
-                    await this._call('CreateInput', {
+                    const createResult = await this._call('CreateInput', {
                         'sceneName': sceneName,
                         'inputName': inputName,
                         'inputKind': inputKind,
                         'inputSettings': inputSettings || {},
                         'sceneItemEnabled': true
                     });
+                    createdSceneItemId = createResult?.sceneItemId ?? null;
                 } catch (e2) {
                     console.error(`CreateInput v4 fallback also failed:`, e2.message);
+                    throw e2;
                 }
             }
         } else {
@@ -805,7 +867,9 @@ class OBSController {
             return items.find(i => i.sourceName === inputName || i.inputName === inputName) || null;
         };
 
-        let item = await findSceneItem();
+        let item = Number.isInteger(createdSceneItemId)
+            ? { sceneItemId: createdSceneItemId }
+            : await findSceneItem();
         if (!item) {
             // OBS can occasionally lag behind CreateInput/SetInputSettings for media sources.
             await new Promise(r => setTimeout(r, 250));
@@ -851,7 +915,25 @@ class OBSController {
 
         if (!this.sceneItems[sceneName]) this.sceneItems[sceneName] = {};
         this.sceneItems[sceneName][inputName] = item.sceneItemId;
-        return { inputName, sceneItemId: item.sceneItemId };
+        return { inputName, sceneItemId: item.sceneItemId, created: shouldCreate };
+    }
+
+    async _setWindowsAudioDeviceTiming(inputName, inputKind = '', useDeviceTiming = false) {
+        if (process.platform !== 'win32' || !inputName) return;
+
+        const normalizedKind = String(inputKind || '').toLowerCase();
+        if (normalizedKind && !normalizedKind.startsWith('wasapi_')) return;
+
+        try {
+            await this._call('SetInputSettings', {
+                inputName,
+                inputSettings: { use_device_timing: !!useDeviceTiming },
+                overlay: true
+            });
+            console.log(`Set WASAPI device timing to ${useDeviceTiming ? "on" : "off"}: ${inputName}`);
+        } catch (error) {
+            console.warn(`Could not set WASAPI device timing for ${inputName}:`, error.message);
+        }
     }
 
     async _ensureInputWithKinds(sceneName, inputName, inputKinds, inputSettings, forceRecreate = false) {
@@ -1325,7 +1407,7 @@ class OBSController {
             console.log('  initialSettings:', JSON.stringify(initialSettings));
 
             try {
-                await this._call('CreateInput', {
+                const createResult = await this._call('CreateInput', {
                     sceneName,
                     inputName: screenInputName,
                     inputKind: kinds.screen,
@@ -1445,7 +1527,7 @@ class OBSController {
             const cameraProbeInputName = 'KVE Kamera Probe';
             try {
                 await this._removeInput(cameraProbeInputName);
-                await this._call('CreateInput', {
+                const createResult = await this._call('CreateInput', {
                     sceneName,
                     inputName: cameraProbeInputName,
                     inputKind: kinds.camera,
@@ -1554,6 +1636,7 @@ class OBSController {
             else if (specials.desktop2) desktopInputName = specials.desktop2;
 
             if (desktopInputName) {
+                await this._setWindowsAudioDeviceTiming(desktopInputName, kinds.system, true);
                 const shouldUseDesktopSystemAudio = includeSystemAudio && systemAudioMode !== 'window';
                 if (shouldUseDesktopSystemAudio) {
                     console.log(`Unmuting System Audio: ${desktopInputName}`);
@@ -1570,6 +1653,9 @@ class OBSController {
             else if (specials.mic2) defaultMicInputName = specials.mic2;
 
             console.log(`Default Mic Input: ${defaultMicInputName}`);
+            if (defaultMicInputName) {
+                await this._setWindowsAudioDeviceTiming(defaultMicInputName, kinds.mic, false);
+            }
 
             // Kullanılmayan diğer Mic/Aux kanallarını sustur (çift ses kaydını önle)
             const allMicSlots = [specials.mic1, specials.mic2, specials.mic3, specials.mic4].filter(Boolean);
@@ -1612,12 +1698,12 @@ class OBSController {
             const micProbeInputName = 'KVE Mikrofon Probe';
             const shouldUseDefaultMicDevice = !micDeviceId || micDeviceId === 'default';
             if (shouldUseDefaultMicDevice) {
-                micSettings = { device_id: 'default' };
+                micSettings = { device_id: 'default', use_device_timing: false };
                 console.log('Explicit mic device selected: OBS default input.');
             }
             try {
                 await this._removeInput(micProbeInputName);
-                await this._call('CreateInput', {
+                const createResult = await this._call('CreateInput', {
                     sceneName,
                     inputName: micProbeInputName,
                     inputKind: kinds.mic,
@@ -1655,10 +1741,13 @@ class OBSController {
                     }
 
                     if (micMatch) {
-                        micSettings = { device_id: micMatch.itemValue || micMatch.value };
+                        micSettings = {
+                            device_id: micMatch.itemValue || micMatch.value,
+                            use_device_timing: false
+                        };
                         console.log(`Explicit mic device selected: ${micMatch.itemName} (${micSettings.device_id})`);
                     } else {
-                        micSettings = { device_id: 'default' };
+                        micSettings = { device_id: 'default', use_device_timing: false };
                         console.log(`No explicit OBS mic match found for: ${micLabel || micDeviceId}. Falling back to OBS default input.`);
                     }
                 }
@@ -1672,6 +1761,7 @@ class OBSController {
             const micResult = await this._ensureInput(sceneName, 'KVE Mikrofon', kinds.mic, micSettings, false);
             if (micResult) {
                 micInputName = micResult.inputName || 'KVE Mikrofon';
+                await this._setWindowsAudioDeviceTiming(micInputName, kinds.mic, false);
                 try {
                     await this._call('SetInputMute', { inputName: micInputName, inputMuted: false });
                     console.log(`Explicit mic unmuted: ${micInputName}`);
@@ -1695,7 +1785,7 @@ class OBSController {
                 try {
                     await this._call('SetInputSettings', {
                         inputName: micInputName,
-                        inputSettings: { device_id: 'default' },
+                        inputSettings: { device_id: 'default', use_device_timing: false },
                         overlay: true
                     });
                     console.log('Default Mic/Aux device reset to OBS default input.');
@@ -1738,7 +1828,10 @@ class OBSController {
                             console.log(`Setting default Mic/Aux device to: ${micMatch.itemName} (${micMatch.itemValue})`);
                             await this._call('SetInputSettings', {
                                 inputName: micInputName,
-                                inputSettings: { device_id: micMatch.itemValue || micMatch.value },
+                                inputSettings: {
+                                    device_id: micMatch.itemValue || micMatch.value,
+                                    use_device_timing: false
+                                },
                                 overlay: true
                             });
                         } else {
@@ -1752,9 +1845,16 @@ class OBSController {
         } else if (includeMic) {
             // Fallback: Special inputs bulunamazsa eski yöntemi dene
             console.log('No special mic input found, creating KVE Mikrofon source...');
-            const micResult = await this._ensureInput(sceneName, 'KVE Mikrofon', kinds.mic, {}, true);
+            const micResult = await this._ensureInput(
+                sceneName,
+                'KVE Mikrofon',
+                kinds.mic,
+                process.platform === 'win32' ? { use_device_timing: false } : {},
+                true
+            );
             if (micResult) {
                 micInputName = 'KVE Mikrofon';
+                await this._setWindowsAudioDeviceTiming(micInputName, kinds.mic, false);
                 await this._call('SetInputMute', { inputName: micInputName, inputMuted: false }).catch(() => { });
             }
         }
@@ -1811,9 +1911,13 @@ class OBSController {
             if (systemDeviceId && systemDeviceId !== 'default') {
                 systemSettings.device_id = systemDeviceId;
             }
+            if (process.platform === 'win32') {
+                systemSettings.use_device_timing = true;
+            }
             const fallbackSystem = await this._ensureInput(sceneName, 'KVE Sistem Sesi', kinds.system, systemSettings, true);
             if (fallbackSystem) {
                 systemResult = { inputName: fallbackSystem.inputName, mode: 'system' };
+                await this._setWindowsAudioDeviceTiming(fallbackSystem.inputName, kinds.system, true);
                 try {
                     await this._call('SetInputMute', { inputName: fallbackSystem.inputName, inputMuted: false });
                     console.log(`Fallback system audio ensured unmuted: ${fallbackSystem.inputName}`);
@@ -3293,7 +3397,7 @@ class OBSController {
         return { inputName, muted };
     }
 
-    async ensureLiveRoomAudioBridgeSource({ sceneName = 'KVE Kayıt', url, inputName } = {}) {
+    async ensureLiveRoomAudioBridgeSource({ sceneName = 'KVE Kayıt', url, inputName, forceReload = false } = {}) {
         if (!url) {
             throw new Error('url required');
         }
@@ -3315,7 +3419,8 @@ class OBSController {
                 inputName: bridgeInputName
             });
             const currentSettings = existingSettings?.inputSettings || {};
-            shouldUpdateSettings = String(currentSettings.url || '').trim() !== String(url || '').trim();
+            shouldUpdateSettings = forceReload === true
+                || String(currentSettings.url || '').trim() !== String(url || '').trim();
         } catch (_error) {
             shouldUpdateSettings = true;
         }
@@ -3329,6 +3434,9 @@ class OBSController {
             reroute_audio: true
         } : {};
         const result = await this._ensureInput(sceneName, bridgeInputName, 'browser_source', inputSettings, shouldUpdateSettings);
+        if (!result?.sceneItemId) {
+            throw new Error('obs_audio_bridge_scene_item_missing');
+        }
         try {
             await this._call('SetInputMute', {
                 inputName: bridgeInputName,
@@ -3358,6 +3466,13 @@ class OBSController {
                     scaleY: 0.01
                 }
             }).catch(() => {});
+        }        if (result?.created || forceReload) {
+            try {
+                await this._call('PressInputPropertiesButton', {
+                    inputName: bridgeInputName,
+                    propertyName: 'refreshnocache'
+                });
+            } catch (_refreshError) { }
         }
         return {
             inputName: bridgeInputName,
