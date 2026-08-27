@@ -1,4 +1,4 @@
-const { ipcMain, dialog, Menu, BrowserWindow, Notification, app, shell } = require('electron');
+const { ipcMain, dialog, Menu, BrowserWindow, Notification, app, shell, systemPreferences } = require('electron');
 const ffmpegHandler = require('./ffmpeg-handler');
 const ttsHandler = require('./tts-handler');
 const mediaCompatibility = require('./media-compatibility-service');
@@ -12,6 +12,8 @@ const http = require('http');
 const logger = require('./logger');
 const broadcastRoomHandler = require('./broadcast-room-handler');
 const nativeAudioPlatform = require('./native-audio-platform');
+const { ExportService } = require('./export/export-service');
+const { validateOutput } = require('./export/output-validator');
 
 // const geminiHandler = require('./gemini-handler'); // Removed to prevent duplicate registration
 
@@ -375,6 +377,30 @@ function getFfmpegBinaryPath() {
 let obsAudioBridgeServer = null;
 let obsAudioBridgePort = 0;
 const obsAudioBridgeSessions = new Map();
+const virtualBackgroundImages = new Map();
+
+function getVirtualBackgroundAsset(fileName) {
+    const allowedFiles = new Map([
+        ['vision_wasm_internal.js', 'application/javascript; charset=utf-8'],
+        ['vision_wasm_internal.wasm', 'application/wasm'],
+        ['vision_wasm_nosimd_internal.js', 'application/javascript; charset=utf-8'],
+        ['vision_wasm_nosimd_internal.wasm', 'application/wasm'],
+        ['selfie_segmenter.tflite', 'application/octet-stream'],
+        ['blaze_face_short_range.tflite', 'application/octet-stream']
+    ]);
+    if (!allowedFiles.has(fileName)) return null;
+    const basePath = app.isPackaged
+        ? path.join(process.resourcesPath, 'app.asar.unpacked')
+        : path.join(__dirname, '..', '..');
+    const modelFolders = {
+        'selfie_segmenter.tflite': 'virtual-background',
+        'blaze_face_short_range.tflite': 'camera-framing'
+    };
+    const filePath = modelFolders[fileName]
+        ? path.join(basePath, 'src', 'renderer', 'assets', modelFolders[fileName], fileName)
+        : path.join(basePath, 'node_modules', '@mediapipe', 'tasks-vision', 'wasm', fileName);
+    return { filePath, contentType: allowedFiles.get(fileName) };
+}
 
 function getObsAudioBridgeHtml(token) {
     const safeToken = JSON.stringify(String(token || ''));
@@ -476,6 +502,46 @@ async function ensureObsAudioBridgeServer() {
     obsAudioBridgeServer = http.createServer(async (req, res) => {
         try {
             const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
+            if (requestUrl.pathname.startsWith('/virtual-background-assets/') && req.method === 'GET') {
+                const fileName = path.basename(decodeURIComponent(requestUrl.pathname));
+                const asset = getVirtualBackgroundAsset(fileName);
+                if (!asset || !fs.existsSync(asset.filePath)) {
+                    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                    res.end('Asset not found');
+                    return;
+                }
+                res.writeHead(200, {
+                    'Content-Type': asset.contentType,
+                    'Access-Control-Allow-Origin': '*',
+                    'Cache-Control': 'public, max-age=31536000, immutable'
+                });
+                fs.createReadStream(asset.filePath).pipe(res);
+                return;
+            }
+            if (requestUrl.pathname === '/virtual-background-user-image' && req.method === 'GET') {
+                const token = String(requestUrl.searchParams.get('token') || '');
+                const imagePath = virtualBackgroundImages.get(token) || '';
+                const extension = path.extname(imagePath).toLowerCase();
+                const contentTypes = {
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.webp': 'image/webp',
+                    '.bmp': 'image/bmp'
+                };
+                if (!imagePath || !contentTypes[extension] || !fs.existsSync(imagePath)) {
+                    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                    res.end('Image not found');
+                    return;
+                }
+                res.writeHead(200, {
+                    'Content-Type': contentTypes[extension],
+                    'Access-Control-Allow-Origin': '*',
+                    'Cache-Control': 'no-cache'
+                });
+                fs.createReadStream(imagePath).pipe(res);
+                return;
+            }
             if (requestUrl.pathname === '/obs-audio-bridge') {
                 const token = requestUrl.searchParams.get('token') || 'default';
                 res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -709,12 +775,52 @@ $windows | ConvertTo-Json -Compress
 }
 
 function setupIpcHandlers(mainWindow) {
+    const { cancelExportJob, runWithExportJob } = require('./export/export-process-registry');
+    const ffmpegPaths = ffmpegHandler.getFFmpegPaths();
+    const exportService = new ExportService({
+        ffmpegPath: ffmpegPaths.ffmpegPath,
+        ffprobePath: ffmpegPaths.ffprobePath,
+        legacyRenderer: (inputPath, segments, outputPath, onProgress, options) =>
+            ffmpegHandler.renderTimeline(inputPath, segments, outputPath, onProgress, options)
+    });
+    const sendExportProgress = (progress) => {
+        const payload = typeof progress === 'number'
+            ? { operation: 'render-timeline', percent: progress }
+            : {
+                operation: progress?.operation || 'render-timeline',
+                percent: progress?.percent,
+                current: progress?.current,
+                total: progress?.total,
+                stage: progress?.stage
+            };
+        mainWindow.webContents.send('ffmpeg-progress', payload);
+    };
     // Gemini handlers are already set up in index.js via gemini-handler module
 
     ipcMain.handle('get-main-process-info', async () => ({
         pid: process.pid,
         platform: process.platform
     }));
+
+    ipcMain.handle('request-microphone-access', async () => {
+        if (process.platform !== 'darwin') {
+            return { granted: true, status: 'granted' };
+        }
+
+        const currentStatus = systemPreferences.getMediaAccessStatus('microphone');
+        if (currentStatus === 'granted') {
+            return { granted: true, status: currentStatus };
+        }
+        if (currentStatus === 'denied' || currentStatus === 'restricted') {
+            return { granted: false, status: currentStatus };
+        }
+
+        const granted = await systemPreferences.askForMediaAccess('microphone');
+        return {
+            granted,
+            status: systemPreferences.getMediaAccessStatus('microphone')
+        };
+    });
 
     ipcMain.handle('get-native-audio-capabilities', async () => nativeAudioPlatform.getNativeAudioCapabilities());
 
@@ -741,6 +847,29 @@ function setupIpcHandlers(mainWindow) {
             port,
             token: bridgeToken,
             url: `http://127.0.0.1:${port}/obs-audio-bridge?token=${encodeURIComponent(bridgeToken)}`
+        };
+    });
+
+    ipcMain.handle('virtual-background-assets-ensure', async () => {
+        const port = await ensureObsAudioBridgeServer();
+        return {
+            success: true,
+            baseUrl: `http://127.0.0.1:${port}/virtual-background-assets`
+        };
+    });
+
+    ipcMain.handle('virtual-background-image-register', async (_event, { filePath = '' } = {}) => {
+        const normalizedPath = path.resolve(String(filePath || ''));
+        const extension = path.extname(normalizedPath).toLowerCase();
+        if (!['.png', '.jpg', '.jpeg', '.webp', '.bmp'].includes(extension) || !fs.existsSync(normalizedPath)) {
+            return { success: false, error: 'virtual_background_image_invalid' };
+        }
+        const token = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        virtualBackgroundImages.set(token, normalizedPath);
+        const port = await ensureObsAudioBridgeServer();
+        return {
+            success: true,
+            url: `http://127.0.0.1:${port}/virtual-background-user-image?token=${encodeURIComponent(token)}`
         };
     });
 
@@ -1100,26 +1229,78 @@ function setupIpcHandlers(mainWindow) {
     // Bu yöntem parçalama/birleştirme hatalarını önler
     // Timeline'ı tek seferde render et (Filter Complex - Single Pass)
     // Bu yöntem parçalama/birleştirme hatalarını önler
-    ipcMain.handle('render-timeline', async (event, { inputPath, segments, outputPath, options }) => {
+    ipcMain.handle('analyze-export-profile', async (_event, payload = {}) => {
         try {
-            await ffmpegHandler.renderTimeline(inputPath, segments, outputPath, (progress) => {
-                const payload = typeof progress === 'number'
-                    ? { operation: 'render-timeline', percent: progress }
-                    : {
-                        operation: progress?.operation || 'render-timeline',
-                        percent: progress?.percent,
-                        current: progress?.current,
-                        total: progress?.total,
-                        stage: progress?.stage
-                    };
-                mainWindow.webContents.send('ffmpeg-progress', payload);
-            }, options);
-            return { success: true };
+            return await exportService.analyze(payload);
         } catch (error) {
-            console.error('Render timeline hatası:', error);
+            console.error('Export profile analysis failed:', error);
             return { success: false, error: error.message };
         }
     });
+
+    ipcMain.handle('estimate-export-output', async (_event, payload = {}) => {
+        try {
+            return await exportService.analyze(payload);
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('validate-export-output', async (_event, payload = {}) => {
+        try {
+            const result = await validateOutput({ ffprobePath: ffmpegPaths.ffprobePath, ...payload });
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('render-source-aware', async (_event, payload = {}) => {
+        try {
+            return await exportService.render({ ...payload, mode: payload.mode || 'source_quality', onProgress: sendExportProgress });
+        } catch (error) {
+            return { success: false, error: error.message, fallbackRequired: true, fallbackMode: 'legacy' };
+        }
+    });
+
+    ipcMain.handle('render-hybrid-smart', async (_event, payload = {}) => {
+        try {
+            return await exportService.render({ ...payload, mode: 'hybrid_smart', onProgress: sendExportProgress });
+        } catch (error) {
+            return { success: false, error: error.message, fallbackRequired: true, fallbackMode: 'source_quality' };
+        }
+    });
+
+    ipcMain.handle('render-timeline', async (event, { inputPath, segments, outputPath, transitions = [], options = {} }) => {
+        try {
+            const mode = options.exportMode || 'legacy';
+            return await runWithExportJob(options.exportJobId, () => exportService.render({
+                inputPath,
+                segments,
+                outputPath,
+                mode,
+                transitions,
+                globalEffects: options.globalEffects || [],
+                ctaCount: Number(options.ctaCount || 0),
+                options,
+                onProgress: sendExportProgress
+            }));
+        } catch (error) {
+            console.error('Render timeline hatası:', error);
+            const cancelled = error?.code === 'EXPORT_CANCELLED' || error?.message === 'export_cancelled';
+            return {
+                success: false,
+                error: error.message,
+                cancelled,
+                fallbackRequired: !cancelled && Boolean(options.exportMode && options.exportMode !== 'legacy'),
+                fallbackMode: 'legacy'
+            };
+        }
+    });
+
+    ipcMain.handle('cancel-export-job', async (_event, jobId) => ({
+        success: cancelExportJob(jobId)
+    }));
 
     // Videoları birleştir
     ipcMain.handle('concat-videos', async (event, { inputPaths, outputPath }) => {
@@ -1349,8 +1530,9 @@ function setupIpcHandlers(mainWindow) {
         try {
             const { videoPath, imagePath, outputPath, options } = params;
             await ffmpegHandler.addImageOverlay(videoPath, imagePath, outputPath, options, (percent) => {
-                mainWindow.webContents.send('ffmpeg-progress', { operation: 'add-image', percent });
+                event.sender.send('ffmpeg-progress', { operation: 'add-image', percent });
             });
+            event.sender.send('ffmpeg-progress', { operation: 'add-image', percent: 100 });
             return { success: true, outputPath };
         } catch (error) {
             return { success: false, error: error.message };
@@ -1376,7 +1558,11 @@ function setupIpcHandlers(mainWindow) {
         try {
             const { videoPath, outputPath, transitions } = params;
             await ffmpegHandler.applyTransitionsSmart(videoPath, outputPath, transitions, (percent) => {
-                mainWindow.webContents.send('ffmpeg-progress', { operation: 'apply-transitions', percent });
+                const numericPercent = Math.max(0, Math.min(100, Number(percent) || 0));
+                const operation = numericPercent >= 99 && numericPercent < 100
+                    ? 'finalize-export'
+                    : 'apply-transitions';
+                mainWindow.webContents.send('ffmpeg-progress', { operation, percent: numericPercent });
             });
             return { success: true, outputPath };
         } catch (error) {
@@ -1629,13 +1815,15 @@ function setupIpcHandlers(mainWindow) {
     });
 
     // Dosya kopyala
-    ipcMain.handle('copy-file', async (event, { src, dest }) => {
-        const fs = require('fs');
+    ipcMain.handle('copy-file', async (event, { src, dest, options = {} }) => {
         try {
-            fs.copyFileSync(src, dest);
-            return { success: true };
+            const { copyFileWithProgress } = require('./export/progressive-file-copy');
+            return await runWithExportJob(options.exportJobId, () => copyFileWithProgress(src, dest, (percent, copiedBytes, totalBytes) => {
+                sendExportProgress({ operation: 'copy-file', percent, copiedBytes, totalBytes });
+            }));
         } catch (error) {
-            return { success: false, error: error.message };
+            const cancelled = error?.code === 'EXPORT_CANCELLED' || error?.message === 'export_cancelled';
+            return { success: false, cancelled, error: error.message };
         }
     });
 
@@ -2748,11 +2936,28 @@ function setupIpcHandlers(mainWindow) {
     // Dosya Yeniden Adlandır
     ipcMain.handle('rename-file', async (event, { oldPath, newPath }) => {
         try {
+            if (!oldPath || !newPath || !fs.existsSync(oldPath)) {
+                throw new Error('source_file_missing');
+            }
+            fs.mkdirSync(path.dirname(newPath), { recursive: true });
             // Önce hedef dosya varsa sil
             if (fs.existsSync(newPath)) {
                 fs.unlinkSync(newPath);
             }
-            fs.renameSync(oldPath, newPath);
+            try {
+                fs.renameSync(oldPath, newPath);
+            } catch (error) {
+                if (error?.code !== 'EXDEV') throw error;
+                // Windows cannot rename across drives. Copy, verify, then remove the source.
+                fs.copyFileSync(oldPath, newPath);
+                const sourceSize = fs.statSync(oldPath).size;
+                const targetSize = fs.statSync(newPath).size;
+                if (sourceSize !== targetSize || targetSize <= 0) {
+                    try { fs.unlinkSync(newPath); } catch (_cleanupError) {}
+                    throw new Error(`cross_device_copy_verification_failed:${sourceSize}:${targetSize}`);
+                }
+                fs.unlinkSync(oldPath);
+            }
             return { success: true };
         } catch (error) {
             console.error('Dosya yeniden adlandırma hatası:', error);

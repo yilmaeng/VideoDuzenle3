@@ -38,6 +38,7 @@ pkg.build.mac = {
         // Electron derives Helper.app names from CFBundleName during startup.
         // Keep it identical to the ASCII executable name; only the display name is localized.
         CFBundleName: asciiProductName,
+        NSMicrophoneUsageDescription: 'Accessible Video Editor needs microphone access to record audio selected by the user.',
         NSAudioCaptureUsageDescription: 'Accessible Video Editor needs system audio recording access for instant translation and broadcast room computer audio sharing.'
     }
 };

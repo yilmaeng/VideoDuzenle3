@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Ana Uygulama Modülü
  * Tüm modülleri başlatır ve koordine eder
  */
@@ -111,6 +111,13 @@ const App = {
         // Hazır
         this.isReady = true;
         await this.ensureI18nReady();
+        const confirmPatchHealthy = async (attempt = 0) => {
+            const result = await window.api?.markPatchHealthy?.();
+            if (result?.error === 'patch_renderer_injection_pending' && attempt < 5) {
+                setTimeout(() => confirmPatchHealthy(attempt + 1), 1000);
+            }
+        };
+        setTimeout(() => confirmPatchHealthy(), 1500);
         const shouldDelayStartupAnnouncement = window.StartupWelcome && window.StartupWelcome.shouldShow();
         if (!shouldDelayStartupAnnouncement) {
             this.handlePostStartupTasks();
@@ -143,16 +150,21 @@ const App = {
         });
     },
 
-    announceStartupReady() {
+    async announceStartupReady() {
         if (this.startupReadyAnnounced) {
             return;
         }
 
         this.startupReadyAnnounced = true;
-        Accessibility.announce(this.t(
-            'runtime.app.startup_ready',
-            'EVD is ready. Press Control plus O to open a video. Press F1 to learn the basic keyboard shortcuts. When a video is open, you may need to turn off browse mode in your screen reader to move with the arrow keys, pause with Space or Enter, select ranges, and place markers with M.'
-        ));
+        await this.ensureI18nReady();
+        const key = 'runtime.app.startup_ready';
+        let message = window.i18nHelper?.t?.(key);
+        if (!message || message.startsWith('[')) {
+            message = await window.api?.i18n?.t?.(key);
+        }
+        if (message && !message.startsWith('[')) {
+            Accessibility.announce(message);
+        }
     },
 
     handlePostStartupTasks() {
@@ -909,6 +921,53 @@ const App = {
         });
     },
 
+    async saveSelectionHybridItem(item, outputPath) {
+        const sourcePath = item.sourcePath || this.originalFilePath || this.currentFilePath;
+        const extension = String(this.parseFilePath(sourcePath || '').ext || '').toLowerCase();
+        const audioExtensions = new Set(['.wav', '.mp3', '.aac', '.ogg', '.m4a', '.wma', '.flac']);
+
+        if (audioExtensions.has(extension)) {
+            return window.api.cutVideo({
+                inputPath: sourcePath,
+                outputPath,
+                startTime: item.startTime,
+                endTime: item.endTime
+            });
+        }
+
+        const segments = [{
+            sourceFile: sourcePath,
+            start: Number(item.startTime || 0),
+            end: Number(item.endTime || 0),
+            speed: 1
+        }];
+        const hybridResult = await window.api.renderHybridSmart({
+            inputPath: sourcePath,
+            outputPath,
+            segments,
+            transitions: [],
+            globalEffects: [],
+            ctaCount: 0
+        });
+
+        if (hybridResult?.success) {
+            return { ...hybridResult, fallbackUsed: false };
+        }
+        if (hybridResult?.fallbackRequired === false) {
+            return hybridResult;
+        }
+
+        const fallbackResult = await window.api.renderSourceAware({
+            inputPath: sourcePath,
+            outputPath,
+            segments,
+            mode: 'source_quality'
+        });
+        return fallbackResult?.success
+            ? { ...fallbackResult, fallbackUsed: true }
+            : fallbackResult;
+    },
+
     async saveSelectionBatch(items, outputPaths, isLosslessOrOptions = false) {
         const options = typeof isLosslessOrOptions === 'object'
             ? isLosslessOrOptions
@@ -932,6 +991,7 @@ const App = {
             : this.t('runtime.app.saving_selection', 'Seçim kaydediliyor'));
 
         try {
+            let hybridFallbackCount = 0;
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 const outputPath = outputPaths[i];
@@ -953,22 +1013,25 @@ const App = {
                         endTime: item.endTime,
                         mode: options.fastMode || 'smart-exact'
                     })
-                    : await window.api.cutVideo({
-                        inputPath: item.sourcePath,
-                        outputPath,
-                        startTime: item.startTime,
-                        endTime: item.endTime
-                    });
+                    : await this.saveSelectionHybridItem(item, outputPath);
 
                 if (!result.success) {
-                    throw new Error(result.error || this.t('runtime.common.error', 'Hata: {error}', { error: 'Unknown' }));
+                    throw new Error(result.error || result.reason || this.t('runtime.common.error', 'Hata: {error}', { error: 'Unknown' }));
                 }
+                if (result.fallbackUsed) hybridFallbackCount += 1;
             }
 
             this.hideProgress();
             Accessibility.announceComplete(items.length > 1
                 ? this.t('runtime.app.selection_batch_save_operation', '{count} seçim kaydedildi', { count: String(items.length) })
                 : operationLabel);
+            if (hybridFallbackCount > 0) {
+                Accessibility.announce(this.t(
+                    'runtime.app.selection_hybrid_fallback_count',
+                    '{count} seçim hibrit olarak işlenemedi; tam sınırlar korunarak kaynağa yakın kaliteyle kaydedildi.',
+                    { count: String(hybridFallbackCount) }
+                ));
+            }
         } catch (error) {
             this.hideProgress();
             Accessibility.announceError(error.message);
@@ -1179,6 +1242,9 @@ const App = {
 
         window.api.onInsertSubtitle((filePath) => {
             this.insertSubtitle(filePath);
+        });
+        window.api.onOpenDescriptionSubtitleEditorRequest(() => {
+            window.api.openDescriptionSubtitleEditor({ videoPath: this.currentFilePath || '', userKeymap: Keyboard.getUserKeymap(), navigationStep: Settings.getNavigationStep() });
         });
 
         // Görünüm işlemleri
@@ -1988,6 +2054,93 @@ const App = {
     /**
      * Dosya kaydet (Timeline segment'lerini dışa aktar)
      */
+    getRememberedExportMode() {
+        const remembered = localStorage.getItem('evd.export.remember') === 'true';
+        const mode = localStorage.getItem('evd.export.mode');
+        const supportedModes = new Set(['legacy', 'source_quality', 'source_size', 'hybrid_smart', 'lossless_master']);
+        return remembered && supportedModes.has(mode) ? mode : 'legacy';
+    },
+
+    async resolveRememberedExportModeForSave(outputPath) {
+        const rememberedMode = this.getRememberedExportMode();
+        if (rememberedMode === 'legacy') return 'legacy';
+
+        const extension = String(this.parseFilePath(outputPath || '').ext || '').toLowerCase();
+        if (!['.mp4', '.mov', '.mkv'].includes(extension)
+            || (rememberedMode === 'lossless_master' && !['.mov', '.mkv'].includes(extension))) {
+            Accessibility.announce(this.t(
+                'runtime.app.remembered_export_mode_fallback',
+                'Hatırlanan dışa aktarım yöntemi bu proje için uygun değil; standart EVD yöntemi kullanılıyor.'
+            ));
+            return 'legacy';
+        }
+
+        try {
+            const inputPath = this.originalFilePath || this.currentFilePath;
+            const segments = this.getExportAnalysisSegments();
+            const transitions = typeof Transitions !== 'undefined' ? Transitions.getAll() : [];
+            const ctaCount = typeof CtaOverlayPreview !== 'undefined'
+                ? CtaOverlayPreview.getOverlayCount()
+                : 0;
+            const analysis = await window.api.analyzeExportProfile({
+                inputPath,
+                outputPath,
+                segments,
+                mode: rememberedMode,
+                // Hybrid applies these visual layers through its validated sparse post-processors.
+                transitions: rememberedMode === 'hybrid_smart' ? [] : transitions,
+                ctaCount: rememberedMode === 'hybrid_smart' ? 0 : ctaCount
+            });
+            const profiles = Array.isArray(analysis?.profiles) ? analysis.profiles : [];
+            const graph = analysis?.graph || {};
+            const hasMultipleAudioStreams = profiles.some((profile) => (profile.audio || []).length > 1);
+            const hasUnsupportedHdr = profiles.some((profile) => {
+                const transfer = String(profile.video?.colorTransfer || '').toLowerCase();
+                return ['smpte2084', 'arib-std-b67'].includes(transfer)
+                    || (profile.video?.sideData || []).some((entry) =>
+                        /dolby|dovi|mastering display|content light/i.test(String(entry?.side_data_type || '')));
+            });
+            const hasComplexAudio = segments.some((segment) =>
+                segment.noiseReduction?.enabled
+                || segment.speedBgAudio
+                || (Array.isArray(segment.audioEffects) && segment.audioEffects.length > 0));
+
+            const baseSuitable = Boolean(analysis?.success)
+                && profiles.length > 0
+                && !hasMultipleAudioStreams
+                && !hasUnsupportedHdr
+                && !hasComplexAudio;
+            if (rememberedMode === 'hybrid_smart'
+                && analysis?.hybrid?.reason === 'high_timeline_fragmentation'
+                && baseSuitable) {
+                // Keep the requested hybrid mode so its validated transition/overlay
+                // post-processors still run after the quality-first base render.
+                return 'hybrid_smart';
+            }
+
+            let suitable = baseSuitable;
+            if (rememberedMode === 'hybrid_smart') {
+                suitable = suitable
+                    && analysis.hybrid?.eligible === true
+                    && analysis.diskSpace?.sufficient !== false;
+            } else {
+                suitable = suitable
+                    && !graph.hasLocalVisualEffects
+                    && !graph.hasGlobalVisualEffects;
+            }
+
+            if (suitable) return rememberedMode;
+        } catch (error) {
+            console.warn('Remembered export mode preflight failed; using legacy export:', error);
+        }
+
+        Accessibility.announce(this.t(
+            'runtime.app.remembered_export_mode_fallback',
+            'Hatırlanan dışa aktarım yöntemi bu proje için uygun değil; standart EVD yöntemi kullanılıyor.'
+        ));
+        return 'legacy';
+    },
+
     async saveFile() {
         console.log('SaveFile tetiklendi');
 
@@ -2009,7 +2162,11 @@ const App = {
             });
 
             if (result && !result.canceled && result.filePath) {
-                await this.exportTimeline(result.filePath);
+                const exportMode = await this.resolveRememberedExportModeForSave(result.filePath);
+                await this.exportTimeline(result.filePath, {
+                    exportMode,
+                    automaticLegacyFallback: exportMode !== 'legacy'
+                });
                 this.currentFilePath = result.filePath;
 
                 // Tab bilgilerini güncelle
@@ -2047,7 +2204,11 @@ const App = {
 
         // Orijinal dosyanın üzerine yazma - önce farklı bir dosyaya kaydet
         const outputPath = this.originalFilePath.replace(/\.([^.]+)$/, '_saved.$1');
-        await this.exportTimeline(outputPath);
+        const exportMode = await this.resolveRememberedExportModeForSave(outputPath);
+        await this.exportTimeline(outputPath, {
+            exportMode,
+            automaticLegacyFallback: exportMode !== 'legacy'
+        });
     },
 
 
@@ -2055,6 +2216,214 @@ const App = {
      * Farklı kaydet
      * @param {string} filePath
      */
+    getExportAnalysisSegments() {
+        const inputPath = this.originalFilePath || this.currentFilePath;
+        return Timeline.getSegments().map((segment) => ({
+            start: segment.start,
+            end: segment.end,
+            sourceFile: segment.sourceFile || inputPath,
+            noiseReduction: segment.noiseReduction,
+            audioEffects: segment.audioEffects,
+            audioVolume: segment.audioVolume,
+            audioChannelMode: segment.audioChannelMode,
+            isMuted: segment.isMuted,
+            speed: segment.speed || 1,
+            speedBgAudio: segment.speedBgAudio
+        }));
+    },
+
+    formatExportSize(bytes) {
+        const value = Number(bytes || 0);
+        if (!value) return this.t('dialog.export_quality.unknown', 'Bilinmiyor');
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
+        return `${(value / (1024 ** index)).toFixed(index > 1 ? 2 : 0)} ${units[index]}`;
+    },
+
+    formatExportBitrate(bitsPerSecond) {
+        const value = Number(bitsPerSecond || 0);
+        if (!value) return this.t('dialog.export_quality.unknown', 'Bilinmiyor');
+        return value >= 1000000
+            ? `${(value / 1000000).toFixed(2)} Mbps`
+            : `${Math.round(value / 1000)} kbps`;
+    },
+
+    formatExportFallbackReason(reason) {
+        const code = String(reason || 'unknown');
+        return this.t(`dialog.export_quality.reason_${code}`, code);
+    },
+
+    buildExportAnalysisSummary(result, mode) {
+        if (!result?.success) {
+            return this.t('dialog.export_quality.analysis_failed', 'Kaynak analizi tamamlanamadı: {error}', {
+                error: result?.error || this.t('dialog.export_quality.unknown', 'Bilinmiyor')
+            });
+        }
+        const profiles = Array.isArray(result.profiles) ? result.profiles : [];
+        const estimator = result.estimator || {};
+        const graph = result.graph || {};
+        const lines = profiles.map((profile) => {
+            const video = profile.video || {};
+            const audio = profile.audio?.[0];
+            const sourceLine = this.t('dialog.export_quality.source_line', 'Kaynak: {size}, {duration} saniye, {bitrate}', {
+                size: this.formatExportSize(profile.fileSize),
+                duration: Number(profile.duration || 0).toFixed(2),
+                bitrate: this.formatExportBitrate(profile.container?.calculatedBitrate || profile.container?.bitrate)
+            });
+            const videoLine = this.t('dialog.export_quality.video_line', '{name}: {codec}, {width}x{height}, {fps} FPS, {bitDepth} bit, {pixelFormat}', {
+                name: profile.fileName || '',
+                codec: video.codec || '-',
+                width: video.width || 0,
+                height: video.height || 0,
+                fps: Number(video.averageFrameRate || video.realFrameRate || 0).toFixed(2),
+                bitDepth: video.bitDepth || 8,
+                pixelFormat: video.pixelFormat || '-'
+            });
+            const audioLine = audio
+                ? this.t('dialog.export_quality.audio_line', 'Ses: {codec}, {sampleRate} Hz, {channels}, {bitDepth} bit, {bitrate}{lossless}', {
+                    codec: audio.codec || '-',
+                    sampleRate: audio.sampleRate || 0,
+                    channels: audio.channelLayout || audio.channels || '-',
+                    bitDepth: audio.bitDepth || '-',
+                    bitrate: this.formatExportBitrate(audio.bitrate),
+                    lossless: audio.lossless ? this.t('dialog.export_quality.lossless_suffix', ', kayıpsız kaynak') : ''
+                })
+                : this.t('dialog.export_quality.no_audio', 'Ses akışı yok');
+            return `${sourceLine}\n${videoLine}\n${audioLine}`;
+        });
+        lines.push(this.t('dialog.export_quality.classification_line', 'Düzenleme sınıfı: {classification}', {
+            classification: this.t(`dialog.export_quality.class_${graph.classification || 'unknown'}`, graph.classification || 'unknown')
+        }));
+        if (mode === 'hybrid_smart') {
+            lines.push(result.hybrid?.eligible
+                ? this.t('dialog.export_quality.hybrid_eligible', 'Bu proje güvenli hibrit akıllı render için uygun görünüyor.')
+                : this.t('dialog.export_quality.hybrid_ineligible', 'Hibrit akıllı render uygun değil: {reason}', {
+                    reason: this.formatExportFallbackReason(result.hybrid?.reason)
+                }));
+            if (result.hybrid?.eligible && result.hybrid?.planReady !== false) {
+                lines.push(this.t('dialog.export_quality.hybrid_plan', 'Doğrudan kopyalanacak görüntü: {copied} saniye; yeniden kodlanacak sınırlar: {encoded} saniye.', {
+                    copied: Number(result.hybrid.copiedDuration || 0).toFixed(2),
+                    encoded: Number(result.hybrid.encodedDuration || 0).toFixed(2)
+                }));
+            }
+            if (result.diskSpace) {
+                lines.push(this.t('dialog.export_quality.disk_space_line', 'Hibrit çalışma alanı: {required} gerekli; {available} kullanılabilir.', {
+                    required: this.formatExportSize(result.diskSpace.requiredBytes),
+                    available: this.formatExportSize(result.diskSpace.availableBytes)
+                }));
+                if (!result.diskSpace.sufficient) {
+                    lines.push(this.t('dialog.export_quality.disk_space_warning', 'Bu sürücüde yeterli boş alan yok. Başka bir çıktı konumu seçin veya yer açın.'));
+                }
+            }
+        }
+        lines.push(this.t('dialog.export_quality.estimate_line', 'Tahmini çıktı: {size}; hedef video: {videoBitrate}; hedef ses: {audioBitrate}', {
+            size: this.formatExportSize(mode === 'legacy' ? estimator.legacyEstimatedSize : estimator.estimatedOutputSize),
+            videoBitrate: mode === 'source_quality' || mode === 'lossless_master'
+                ? this.t('dialog.export_quality.quality_driven', 'kalite odaklı')
+                : this.formatExportBitrate(estimator.targetVideoBitrate),
+            audioBitrate: this.formatExportBitrate(estimator.targetAudioBitrate)
+        }));
+        if (estimator.highCompressionWarning && mode === 'legacy') {
+            lines.push(this.t('dialog.export_quality.compression_warning', 'Uyarı: Standart çıktı, kaynak boyutunun dörtte birinden küçük olabilir.'));
+        }
+        if (mode === 'lossless_master') {
+            lines.push(this.t('dialog.export_quality.lossless_warning', 'Kayıpsız ana kopya çok büyük bir dosya oluşturabilir.'));
+        }
+        return lines.join('\n');
+    },
+
+    async showExportQualityDialog(outputPath = '') {
+        // This is part of the existing Save As command, so it intentionally has no separate shortcut-manager action.
+        const dialog = document.getElementById('export-quality-dialog');
+        const form = document.getElementById('export-quality-form');
+        const modeSelect = document.getElementById('export-quality-mode');
+        const summary = document.getElementById('export-quality-summary');
+        const remember = document.getElementById('export-quality-remember');
+        const cancel = document.getElementById('export-quality-cancel');
+        const start = document.getElementById('export-quality-start');
+        if (!dialog || !form || !modeSelect || !summary || !remember || !cancel || !start) {
+            return { mode: 'legacy' };
+        }
+
+        const rememberedMode = localStorage.getItem('evd.export.mode');
+        const remembered = localStorage.getItem('evd.export.remember') === 'true';
+        modeSelect.value = remembered && [...modeSelect.options].some((option) => option.value === rememberedMode)
+            ? rememberedMode
+            : 'legacy';
+        remember.checked = remembered;
+
+        if (!summary.dataset.simulatedReadonlyBound) {
+            const preventEdit = (event) => event.preventDefault();
+            summary.addEventListener('beforeinput', preventEdit);
+            summary.addEventListener('paste', preventEdit);
+            summary.addEventListener('cut', preventEdit);
+            summary.addEventListener('drop', preventEdit);
+            summary.dataset.simulatedReadonlyBound = 'true';
+        }
+
+        let analysisToken = 0;
+        const updateSummary = async () => {
+            const token = ++analysisToken;
+            const mode = modeSelect.value;
+            start.disabled = true;
+            summary.setAttribute('aria-busy', 'true');
+            summary.value = this.t('dialog.export_quality.analyzing', 'Kaynak analiz ediliyor...');
+            const inputPath = this.originalFilePath || this.currentFilePath;
+            const segments = this.getExportAnalysisSegments();
+            const transitions = typeof Transitions !== 'undefined' ? Transitions.getAll() : [];
+            const ctaCount = typeof CtaOverlayPreview !== 'undefined' ? CtaOverlayPreview.getOverlayCount() : 0;
+            // Hybrid first prepares cuts and joined sources. Pending visual layers are
+            // applied once afterwards without sending the project back to legacy render.
+            const result = await window.api.analyzeExportProfile({
+                inputPath,
+                outputPath,
+                segments,
+                mode,
+                transitions: mode === 'hybrid_smart' ? [] : transitions,
+                ctaCount: mode === 'hybrid_smart' ? 0 : ctaCount
+            });
+            if (token === analysisToken) {
+                summary.value = this.buildExportAnalysisSummary(result, mode);
+                summary.removeAttribute('aria-busy');
+                start.disabled = result?.diskSpace?.sufficient === false;
+            }
+        };
+
+        modeSelect.onchange = updateSummary;
+        await updateSummary();
+        dialog.showModal();
+        modeSelect.focus();
+
+        return new Promise((resolve) => {
+            const finish = (value) => {
+                form.removeEventListener('submit', onSubmit);
+                cancel.removeEventListener('click', onCancel);
+                dialog.removeEventListener('cancel', onDialogCancel);
+                if (dialog.open) dialog.close();
+                resolve(value);
+            };
+            const onSubmit = (event) => {
+                event.preventDefault();
+                if (remember.checked) {
+                    localStorage.setItem('evd.export.mode', modeSelect.value);
+                    localStorage.setItem('evd.export.remember', 'true');
+                } else {
+                    localStorage.removeItem('evd.export.mode');
+                    localStorage.removeItem('evd.export.remember');
+                }
+                finish({ mode: modeSelect.value });
+            };
+            const onCancel = () => finish(null);
+            const onDialogCancel = (event) => {
+                event.preventDefault();
+                finish(null);
+            };
+            form.addEventListener('submit', onSubmit);
+            cancel.addEventListener('click', onCancel);
+            dialog.addEventListener('cancel', onDialogCancel);
+        });
+    },
+
     async saveFileAs(filePath) {
         if (!VideoPlayer.hasVideo()) return;
 
@@ -2063,36 +2432,26 @@ const App = {
                 title: 'Farklı Kaydet',
                 defaultPath: this.currentFilePath ? this.currentFilePath.split(/[\\/]/).pop() : 'video.mp4',
                 filters: [
-                    { name: 'Video Dosyaları', extensions: ['mp4'] }
+                    { name: this.t('messages.file_filter_modern_video', 'Modern video dosyaları'), extensions: ['mp4', 'mov', 'mkv'] }
                 ]
             });
             if (result.canceled || !result.filePath) return;
             filePath = result.filePath;
         }
 
-        await this.exportTimeline(filePath);
+        const exportChoice = await this.showExportQualityDialog(filePath);
+        if (!exportChoice) return;
+        await this.exportTimeline(filePath, { exportMode: exportChoice.mode });
     },
 
     /**
-     * Hızlı Dışa Aktar (Smart Cut Mode)
+     * The legacy fast-export command now uses the validated hybrid renderer.
      * @param {string} filePath
      */
     async saveFileFast(filePath) {
         if (!VideoPlayer.hasVideo()) return;
-
-        // Geçiş kontrolü - Kullanıcı isteği üzerine engellendi
-        if (typeof Transitions !== 'undefined' && Transitions.getCount() > 0) {
-            Accessibility.announceError(this.t('runtime.app.fast_export_transition_short', 'Geçiş efektleri var, Hızlı Dışa Aktar kullanılamaz.'));
-            await window.api.showError({
-                title: this.t('runtime.app.operation_unavailable', 'İşlem Yapılamıyor'),
-                message: this.t('runtime.app.fast_export_transition_error', 'Projenizde geçiş efektleri (Transitions) bulunmaktadır. "Hızlı Dışa Aktar" özelliği geçiş efektleriyle uyumlu değildir. Lütfen "Videoyu Farklı Kaydet" seçeneğini kullanın.')
-            });
-            return;
-        }
-
         if (!filePath) return;
-        console.log('Hızlı Dışa Aktar (Smart Cut) başlatılıyor...');
-        await this.exportTimeline(filePath, { forceSmartCut: true });
+        await this.exportTimeline(filePath, { exportMode: 'hybrid_smart' });
     },
 
     /**
@@ -2102,13 +2461,16 @@ const App = {
      */
     async exportTimeline(outputPath, options = {}) {
         const segments = Timeline.getSegments();
+        const requestedExportMode = options.exportMode || 'legacy';
+        const exportJobId = `evd-export-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        const cancellableProgress = { cancellable: requestedExportMode !== 'legacy', exportJobId };
 
         if (segments.length === 0) {
             Accessibility.alert(this.t('runtime.app.nothing_to_export', 'Dışa aktarılacak içerik yok'));
             return;
         }
 
-        this.showProgress(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'));
+        this.showProgress(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'), cancellableProgress);
         Accessibility.announce(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'));
 
         try {
@@ -2157,7 +2519,7 @@ const App = {
                     } else {
                         Accessibility.announce(this.t('runtime.app.standard_render_continue', 'Standart render ile devam ediliyor.'));
                     }
-                    this.showProgress(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'));
+                    this.showProgress(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'), cancellableProgress);
                 } else if (isSafeFile) {
                     console.log('Dosya zaten güvenli/dönüştürülmüş (Lavf/Converted), Safe Render uyarısı atlandı.');
                     // Varsayılan olarak safeRenderMode = false (Smart Cut) devam eder.
@@ -2171,15 +2533,25 @@ const App = {
             }
 
             // Eğer tek segment varsa, değişiklik yoksa VE CTA yoksa, sadece kopyala
+            const unchangedSourceFile = this.originalFilePath || this.currentFilePath;
+            const sourceExtension = String(unchangedSourceFile || '').match(/\.[^.\\/]+$/)?.[0]?.toLowerCase() || '';
+            const outputExtension = String(outputPath || '').match(/\.[^.\\/]+$/)?.[0]?.toLowerCase() || '';
             if (segments.length === 1 &&
                 segments[0].start === 0 &&
                 segments[0].end === Timeline.sourceDuration &&
                 !segments[0].sourceFile &&
                 (segments[0].speed === undefined || segments[0].speed === 1.0) &&
-                ctaCount === 0) {
+                (typeof Transitions === 'undefined' || Transitions.getCount() === 0) &&
+                ctaCount === 0 &&
+                sourceExtension === outputExtension) {
                 // Değişiklik yok, dosya kopyala
-                const sourceFile = this.originalFilePath || this.currentFilePath;
-                await window.api.copyFile(sourceFile, outputPath);
+                const copyResult = await window.api.copyFile(unchangedSourceFile, outputPath, { exportJobId });
+                if (copyResult?.cancelled) {
+                    this.hideProgress();
+                    Accessibility.announce(this.t('runtime.app.export_cancelled', 'Dışa aktarım iptal edildi. Geçici dosyalar temizlendi.'));
+                    return;
+                }
+                if (copyResult?.success === false) throw new Error(copyResult.error || 'copy_failed');
                 this.hideProgress();
                 Accessibility.announceComplete(this.t('runtime.app.file_copied_unchanged', 'Dosya kopyalandı (değişiklik yok)'));
                 if (Utils && Utils.playSound) Utils.playSound('success');
@@ -2270,6 +2642,7 @@ const App = {
                     position: o.position,
                     scale: o.scale,
                     opacity: o.opacity,
+                    audioVolume: o.audioVolume,
                     sound: o.sound ? resolveAssetPath(o.sound) : null,
                     fade: o.fade,
                     removeBackground: 'black'
@@ -2356,21 +2729,136 @@ const App = {
                 speedBgAudio: seg.speedBgAudio
             }));
 
-            Accessibility.announce(this.t('runtime.app.single_pass_render', 'Timeline tek seferde render ediliyor (Single Pass)'));
+            Accessibility.announce(requestedExportMode === 'legacy'
+                ? this.t('runtime.app.single_pass_render', 'Timeline tek seferde render ediliyor (Single Pass)')
+                : this.t('dialog.export_quality.source_render_started', 'Kaynak duyarlı dışa aktarım başlatıldı.'));
 
             // Geçişleri al
             const transitions = typeof Transitions !== 'undefined' ? Transitions.getAll() : [];
 
-            const renderResult = await window.api.renderTimeline({
+            // A transition-only hybrid export already has a clean source. Avoid building
+            // an identical hybrid base before the sparse transition renderer runs.
+            if (requestedExportMode === 'hybrid_smart' && hasNoTimelineChanges && transitions.length > 0 && ctaCount === 0) {
+                Accessibility.announce(this.t('runtime.app.applying_transitions', 'Geçişler uygulanıyor...'));
+                const transitionOpts = transitions.map((transition) => ({
+                    ...transition,
+                    type: transition.ffmpegType || transition.transitionType || transition.transitionId || 'cross_dissolve',
+                    transitionType: transition.ffmpegType || transition.transitionType || transition.transitionId || 'cross_dissolve'
+                }));
+                const transitionResult = await window.api.applyTransitionsSmart({
+                    videoPath: inputPath,
+                    outputPath,
+                    transitions: transitionOpts
+                });
+                if (!transitionResult?.success) {
+                    throw new Error(transitionResult?.error || this.t('runtime.app.transition_apply_failed', 'Geçişler uygulanamadı.'));
+                }
+                this.hideProgress();
+                this.hasChanges = false;
+                Timeline.hasChanges = false;
+                if (Utils && Utils.playSound) Utils.playSound('success');
+                Accessibility.announceComplete(this.t('runtime.app.export_complete', 'Video dışa aktarma tamamlandı'));
+                return;
+            }
+
+            let renderResult = await window.api.renderTimeline({
                 inputPath: inputPath,
                 segments: renderSegments,
                 outputPath: outputPath,
-                transitions: transitions,
-                options: options
+                transitions: requestedExportMode === 'hybrid_smart' ? [] : transitions,
+                options: {
+                    ...options,
+                    ctaCount: requestedExportMode === 'hybrid_smart' ? 0 : ctaCount,
+                    exportJobId
+                }
             });
+
+            if (renderResult.cancelled || renderResult.error === 'export_cancelled') {
+                this.hideProgress();
+                Accessibility.announce(this.t('runtime.app.export_cancelled', 'Dışa aktarım iptal edildi. Geçici dosyalar temizlendi.'));
+                return;
+            }
+            if (!renderResult.success && renderResult.reason === 'insufficient_disk_space') {
+                this.hideProgress();
+                Accessibility.announceError(this.t(
+                    'dialog.export_quality.insufficient_disk_space',
+                    'Hibrit dışa aktarım için yeterli boş disk alanı yok. Gerekli: {required}. Kullanılabilir: {available}. Lütfen daha fazla boş alanı olan bir sürücü seçin.',
+                    {
+                        required: this.formatExportSize(renderResult.requiredBytes),
+                        available: this.formatExportSize(renderResult.availableBytes)
+                    }
+                ));
+                return;
+            }
+
+            if (!renderResult.success && renderResult.fallbackRequired && requestedExportMode !== 'legacy') {
+                this.hideProgress();
+                const reason = this.formatExportFallbackReason(
+                    renderResult.reason || renderResult.assessment?.reason || renderResult.error || 'unknown'
+                );
+                const fallbackExportMode = renderResult.fallbackMode === 'source_quality'
+                    ? 'source_quality'
+                    : 'legacy';
+                const confirmed = options.automaticLegacyFallback === true
+                    ? true
+                    : await Dialogs.showAccessibleConfirm(
+                        fallbackExportMode === 'source_quality'
+                            ? this.t('dialog.export_quality.quality_fallback_title', 'Güvenli kalite yöntemiyle devam edilsin mi?')
+                            : this.t('dialog.export_quality.fallback_title', 'Standart dışa aktarıma dönülsün mü?'),
+                        fallbackExportMode === 'source_quality'
+                            ? this.t('dialog.export_quality.quality_fallback_message', 'Bu proje güvenli hibrit sınırını aşıyor. Neden: {reason}. EVD, sesi kesintisiz ve kaliteyi kaynağa yakın tutan toplu dışa aktarım yöntemiyle devam edebilir.', { reason })
+                            : this.t('dialog.export_quality.fallback_message', 'Seçilen gelişmiş yöntem bu proje için güvenle uygulanamadı. Neden: {reason}. EVD standart ve kararlı dışa aktarım yöntemiyle devam edebilir.', { reason })
+                    );
+                if (!confirmed) {
+                    Accessibility.announce(this.t('dialog.export_quality.fallback_cancelled', 'Dışa aktarım iptal edildi.'));
+                    return;
+                }
+                this.showProgress(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'));
+                Accessibility.announce(fallbackExportMode === 'source_quality'
+                    ? this.t('runtime.app.fragmented_project_quality_mode', 'Proje {count} bölüm içeriyor; güvenilirlik ve kalite için kaynağa yakın toplu render kullanılıyor.', { count: String(renderSegments.length) })
+                    : this.t('dialog.export_quality.fallback_started', 'Standart dışa aktarım yöntemiyle devam ediliyor.'));
+                renderResult = await window.api.renderTimeline({
+                    inputPath,
+                    segments: renderSegments,
+                    outputPath,
+                    transitions: fallbackExportMode === 'source_quality' && requestedExportMode === 'hybrid_smart'
+                        ? []
+                        : transitions,
+                    options: {
+                        ...options,
+                        exportMode: fallbackExportMode,
+                        ctaCount: fallbackExportMode === 'source_quality' && requestedExportMode === 'hybrid_smart'
+                            ? 0
+                            : ctaCount,
+                        exportJobId
+                    }
+                });
+                if (!renderResult.success
+                    && fallbackExportMode === 'source_quality'
+                    && options.automaticLegacyFallback === true
+                    && !renderResult.cancelled
+                    && renderResult.error !== 'export_cancelled') {
+                    Accessibility.announce(this.t('dialog.export_quality.fallback_started', 'Standart dışa aktarım yöntemiyle devam ediliyor.'));
+                    renderResult = await window.api.renderTimeline({
+                        inputPath,
+                        segments: renderSegments,
+                        outputPath,
+                        transitions: requestedExportMode === 'hybrid_smart' ? [] : transitions,
+                        options: {
+                            ...options,
+                            exportMode: 'legacy',
+                            ctaCount: requestedExportMode === 'hybrid_smart' ? 0 : ctaCount,
+                            exportJobId
+                        }
+                    });
+                }
+            }
 
             if (!renderResult.success) {
                 throw new Error(`Render hatası: ${renderResult.error}`);
+            }
+            if (renderResult.validation?.reasons?.includes('size_outside_target')) {
+                Accessibility.announce(this.t('dialog.export_quality.size_target_warning', 'Çıktı güvenle oluşturuldu ancak kaynak boyutu hedefinin yüzde 10 dışında kaldı. Kaliteyi korumak için dosyaya yapay dolgu eklenmedi.'));
             }
 
             const expectedOutputDuration = renderSegments.reduce((sum, segment) => {
@@ -2387,6 +2875,33 @@ const App = {
                 const missingDuration = expectedOutputDuration - actualOutputDuration;
                 if (!actualOutputDuration || (missingDuration > 2 && actualOutputDuration < expectedOutputDuration * 0.75)) {
                     throw new Error(this.t('runtime.app.export_duration_validation_failed', 'Dışa aktarma tamamlanmış görünse de çıktı süresi beklenenden çok kısa. Dosya korunması için işlem başarısız sayıldı. Lütfen yeniden deneyin veya güvenli dışa aktar kullanın.'));
+                }
+            }
+
+            // The hybrid renderer keeps untouched spans bit-for-bit where possible.
+            // Render transitions only after that base is ready, and preserve the base
+            // audio stream unless an explicit transition sound must be mixed.
+            if (requestedExportMode === 'hybrid_smart' && transitions.length > 0) {
+                Accessibility.announce(this.t('runtime.app.applying_transitions', 'Geçişler uygulanıyor...'));
+                const transitionOutputPath = await window.api.getTempPath(`hybrid_transitions_${Date.now()}.mp4`);
+                const transitionOpts = transitions.map((transition) => ({
+                    ...transition,
+                    type: transition.ffmpegType || transition.transitionType || transition.transitionId || 'cross_dissolve',
+                    transitionType: transition.ffmpegType || transition.transitionType || transition.transitionId || 'cross_dissolve'
+                }));
+                const transitionResult = await window.api.applyTransitionsSmart({
+                    videoPath: outputPath,
+                    outputPath: transitionOutputPath,
+                    transitions: transitionOpts
+                });
+                if (!transitionResult?.success) {
+                    throw new Error(transitionResult?.error || this.t('runtime.app.transition_apply_failed', 'Geçişler uygulanamadı.'));
+                }
+                const transitionMoveResult = await window.api.renameFile({ oldPath: transitionOutputPath, newPath: outputPath });
+                if (!transitionMoveResult?.success) {
+                    throw new Error(this.t('runtime.app.transition_output_move_failed', 'Geçişli çıktı hedef klasöre taşınamadı: {error}', {
+                        error: transitionMoveResult?.error || 'unknown_error'
+                    }));
                 }
             }
 
@@ -2423,6 +2938,7 @@ const App = {
                     position: o.position,
                     scale: o.scale,
                     opacity: o.opacity,
+                    audioVolume: o.audioVolume,
                     sound: o.sound ? resolveAssetPath(o.sound) : null,
                     fade: o.fade,
                     removeBackground: 'black' // Varsayılan olarak siyah arka planı sil
@@ -2466,10 +2982,15 @@ const App = {
 
                     if (result.success) {
                         // Temp dosyayı asıl çıktıya taşı (overwrite)
-                        await window.api.renameFile({
+                        const overlayMoveResult = await window.api.renameFile({
                             oldPath: ctaOutputPath,
                             newPath: outputPath
                         });
+                        if (!overlayMoveResult?.success) {
+                            throw new Error(this.t('runtime.app.overlay_output_move_failed', 'Overlay çıktısı hedef klasöre taşınamadı: {error}', {
+                                error: overlayMoveResult?.error || 'unknown_error'
+                            }));
+                        }
                     } else {
                         console.error('CTA Smart Overlay Error:', result.error);
                         throw new Error('CTA Overlay hatası: ' + result.error);
@@ -2502,7 +3023,11 @@ const App = {
 
         } catch (error) {
             this.hideProgress();
-            Accessibility.announceError(error.message);
+            if (error?.code === 'EXPORT_CANCELLED' || error?.message === 'export_cancelled') {
+                Accessibility.announce(this.t('runtime.app.export_cancelled', 'Dışa aktarım iptal edildi. Geçici dosyalar temizlendi.'));
+            } else {
+                Accessibility.announceError(error.message);
+            }
         }
 
     },
@@ -3394,6 +3919,7 @@ const App = {
                         position: o.position,
                         scale: o.scale,
                         opacity: o.opacity,
+                        audioVolume: o.audioVolume,
                         sound: o.sound ? resolveAssetPath(o.sound) : null,
                         fade: o.fade,
                         removeBackground: 'black'
@@ -3409,6 +3935,7 @@ const App = {
                         position: item.options.position,
                         scale: item.options.scale,
                         opacity: item.options.opacity,
+                        audioVolume: item.options.audioVolume,
                         sound: item.options.sound ? resolveAssetPath(item.options.sound) : null,
                         fade: item.options.fade,
                         removeBackground: 'black'
@@ -3711,6 +4238,7 @@ const App = {
         this.hideProgress();
 
         if (result.success) {
+            if (Utils && Utils.playSound) Utils.playSound('success');
             Accessibility.announceComplete(this.t('runtime.app.image_add_operation', 'Görsel ekleme'));
             await this.openFile(outputPath);
         } else {
@@ -3723,7 +4251,8 @@ const App = {
      * @param {string} subtitlePath
      */
     async insertSubtitle(subtitlePath) {
-        if (!VideoPlayer.hasVideo()) return;
+        const isTtsProjectPath = /\.evdtts$/i.test(String(subtitlePath || ''));
+        if (!VideoPlayer.hasVideo() && !isTtsProjectPath) return;
 
         if (this.isProcessingSubtitle) {
             console.warn('[insertSubtitle] Re-entrance detected, skipping:', subtitlePath);
@@ -3733,6 +4262,37 @@ const App = {
         console.log('[insertSubtitle] Started:', subtitlePath);
 
         try {
+            let preloadedTtsProject = null;
+            let resumeTempSubtitlePath = '';
+            if (isTtsProjectPath) {
+                preloadedTtsProject = await Dialogs.loadSubtitleTtsProject(subtitlePath);
+                if (!preloadedTtsProject) return;
+                if (!preloadedTtsProject.videoPath || !await window.api.checkFileExists(preloadedTtsProject.videoPath)) {
+                    Accessibility.announceError(this.t('runtime.subtitle_tts_editor.video_missing',
+                        'Projenin kaynak videosu bulunamadı.'));
+                    return;
+                }
+                if (this.currentFilePath !== preloadedTtsProject.videoPath) {
+                    await this.openFile(preloadedTtsProject.videoPath);
+                }
+                const storedSubtitlePath = preloadedTtsProject.subtitlePath || '';
+                if (storedSubtitlePath && await window.api.checkFileExists(storedSubtitlePath)) {
+                    subtitlePath = storedSubtitlePath;
+                } else if (preloadedTtsProject.subtitleContent) {
+                    resumeTempSubtitlePath = await window.api.getTempPath(`evdtts_resume_${Date.now()}.srt`);
+                    const writeResult = await window.api.saveFileContent({
+                        filePath: resumeTempSubtitlePath,
+                        content: preloadedTtsProject.subtitleContent
+                    });
+                    if (!writeResult?.success) throw new Error(writeResult?.error || 'subtitle_restore_failed');
+                    subtitlePath = resumeTempSubtitlePath;
+                } else {
+                    Accessibility.announceError(this.t('runtime.subtitle_tts_editor.subtitle_missing',
+                        'Projenin altyazı dosyası ve gömülü altyazı metni bulunamadı.'));
+                    return;
+                }
+            }
+
             // 1. Altyazı dosyasını oku ve parse et (Önizleme metni için)
             const fileResult = await window.api.readFileContent(subtitlePath);
             if (!fileResult.success) {
@@ -3780,188 +4340,346 @@ const App = {
                 }
             }
 
-            Accessibility.announce(this.t('runtime.app.subtitle_analyzed_opening_options', 'Altyazı analiz edildi. Seçenekler açılıyor...'));
+            let action = preloadedTtsProject?.action || '';
+            let subtitleStyleOptions = preloadedTtsProject?.subtitleStyleOptions || null;
+            let ttsOptions = preloadedTtsProject?.ttsOptions
+                ? { ...preloadedTtsProject.ttsOptions, confirmed: true }
+                : null;
+            let editorChoice = preloadedTtsProject ? 0 : null;
 
-            // 2. İşlem Seçimi Diyaloğu
-            const subtitleActionResult = await Dialogs.showSubtitleActionDialog({
-                videoPath: this.currentFilePath,
-                previewText: firstText,
-                previewTime: firstSubtitleStartTime
-            });
-            console.log('[insertSubtitle] User Action:', subtitleActionResult);
-
-            if (subtitleActionResult === 'cancel' || !subtitleActionResult) {
-                Accessibility.announce(this.t('runtime.app.operation_cancelled', 'İşlem iptal edildi.'));
-                return;
-            }
-            const action = typeof subtitleActionResult === 'string'
-                ? subtitleActionResult
-                : subtitleActionResult.action;
-            let subtitleStyleOptions = null;
-
-            if (action === 'burn' || action === 'tts-burn') {
-                subtitleStyleOptions = await Dialogs.showSubtitleStyleDialog({
+            if (!preloadedTtsProject) {
+                Accessibility.announce(this.t('runtime.app.subtitle_analyzed_opening_options',
+                    'Altyazı analiz edildi. Seçenekler açılıyor...'));
+                const subtitleActionResult = await Dialogs.showSubtitleActionDialog({
                     videoPath: this.currentFilePath,
                     previewText: firstText,
                     previewTime: firstSubtitleStartTime
                 });
+                if (subtitleActionResult === 'cancel' || !subtitleActionResult) {
+                    Accessibility.announce(this.t('runtime.app.operation_cancelled', 'İşlem iptal edildi.'));
+                    return;
+                }
+                action = typeof subtitleActionResult === 'string'
+                    ? subtitleActionResult
+                    : subtitleActionResult.action;
 
-                if (subtitleStyleOptions === 'cancel' || !subtitleStyleOptions) {
+                if (action === 'burn' || action === 'tts-burn') {
+                    subtitleStyleOptions = await Dialogs.showSubtitleStyleDialog({
+                        videoPath: this.currentFilePath,
+                        previewText: firstText,
+                        previewTime: firstSubtitleStartTime
+                    });
+                    if (subtitleStyleOptions === 'cancel' || !subtitleStyleOptions) {
+                        Accessibility.announce(this.t('runtime.app.operation_cancelled', 'İşlem iptal edildi.'));
+                        return;
+                    }
+                }
+                if (action === 'burn') {
+                    await this.performSubtitleBurn(subtitlePath, subtitleStyleOptions);
+                    return;
+                }
+
+                ttsOptions = await Dialogs.showSubtitleTtsOptionsDialog(firstText);
+                if (!ttsOptions || !ttsOptions.confirmed) {
+                    Accessibility.announce(this.t('runtime.app.voiceover_cancelled', 'Seslendirme işlemi iptal edildi.'));
+                    return;
+                }
+                editorChoice = await Dialogs.showAccessibleChoice({
+                    title: this.t('dialog.subtitle_tts_editor.choice_title', 'Seslendirme Düzenleme'),
+                    message: this.t('dialog.subtitle_tts_editor.choice_message',
+                        'Seslendirmeleri tek tek dinleyip düzenleyebilir veya mevcut ayarlarla doğrudan oluşturabilirsiniz.'),
+                    buttons: [
+                        this.t('dialog.subtitle_tts_editor.open_editor', 'Seslendirmeleri Düzenle'),
+                        this.t('dialog.subtitle_tts_editor.build_directly', 'Doğrudan Mevcut Ayarlarla Oluştur'),
+                        this.t('dialog.cancel', 'İptal')
+                    ],
+                    cancelValue: 2
+                });
+                if (editorChoice === 2 || editorChoice === null || editorChoice === undefined) {
                     Accessibility.announce(this.t('runtime.app.operation_cancelled', 'İşlem iptal edildi.'));
                     return;
                 }
             }
+            const useSegmentEditor = editorChoice === 0;
 
-            // --- SEÇENEK A: Sadece Altyazı Göm ---
-            if (action === 'burn') {
-                console.log('[insertSubtitle] Action BURN selected. Executing...');
-                await this.performSubtitleBurn(subtitlePath, subtitleStyleOptions);
-                console.log('[insertSubtitle] Burn completed.');
-                return;
-            }
 
-            console.log('[insertSubtitle] Action is NOT burn:', action);
 
-            // --- SEÇENEK B ve C: TTS İşlemleri ---
-            const ttsOptions = await Dialogs.showSubtitleTtsOptionsDialog(firstText);
-
-            if (!ttsOptions || !ttsOptions.confirmed) {
-                Accessibility.announce(this.t('runtime.app.voiceover_cancelled', 'Seslendirme işlemi iptal edildi.'));
-                return;
-            }
-
-            // İşlem Başlıyor
-            this.showProgress('Seslendirme işlemi hazırlanıyor...');
-
-            // try { removed to fix nesting and ensure finally runs
-            // master_silence oluştur
+            this.showProgress(this.t('runtime.subtitle_tts_editor.preparing', 'Seslendirme işlemi hazırlanıyor...'));
             const tempSilencePath = await window.api.getTempPath(`master_silence_${Date.now()}.wav`);
             await window.api.generateSilence({ duration: 3600, outputPath: tempSilencePath });
 
-            const CHUNK_SIZE = 50;
-            const chunkFiles = [];
-            let currentChunkItems = [];
-            let currentChunkStartTime = -1;
             const audioFilesToDelete = [tempSilencePath];
-
-            // Helper: Chunk İşleme
-            const processCurrentChunk = async (chunkIndex) => {
-                if (currentChunkItems.length === 0) return;
-                this.updateProgress(`Parçalar birleştiriliyor... (${chunkIndex})`, (chunkIndex * CHUNK_SIZE / subtitles.length) * 100);
-
-                const chunkPath = await window.api.getTempPath(`chunk_${chunkIndex}_${Date.now()}.wav`);
-                audioFilesToDelete.push(chunkPath);
-
-                const mixRes = await window.api.createAudioFromMix({
-                    audioSegments: currentChunkItems,
-                    outputPath: chunkPath
-                });
-
-                if (!mixRes.success) throw new Error(`Chunk error: ${mixRes.error}`);
-
-                chunkFiles.push({ path: chunkPath, offset: currentChunkStartTime });
-                currentChunkItems = [];
-                currentChunkStartTime = -1;
+            if (resumeTempSubtitlePath) audioFilesToDelete.push(resumeTempSubtitlePath);
+            const parseTimestamp = (timestamp) => {
+                const parts = String(timestamp || '').split(':');
+                const seconds = String(parts[2] || '0').split(/[,\.]/);
+                return (parseInt(parts[0], 10) || 0) * 3600
+                    + (parseInt(parts[1], 10) || 0) * 60
+                    + (parseInt(seconds[0], 10) || 0)
+                    + (parseInt(seconds[1], 10) || 0) / 1000;
             };
 
-            // Helper: Zaman Parse
-            const parseTimestamp = (ts) => {
-                const parts = ts.split(':');
-                const sec = parts[2].split(/[,\.]/);
-                return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(sec[0]) + parseInt(sec[1]) / 1000;
+            const formatSrtTimestamp = (value) => {
+                const totalMilliseconds = Math.max(0, Math.round(Number(value || 0) * 1000));
+                const hours = Math.floor(totalMilliseconds / 3600000);
+                const minutes = Math.floor((totalMilliseconds % 3600000) / 60000);
+                const seconds = Math.floor((totalMilliseconds % 60000) / 1000);
+                const milliseconds = totalMilliseconds % 1000;
+                return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`;
             };
 
-            // 3. Tüm Altyazıları Dön (TTS Üretimi)
-            for (let k = 0; k < subtitles.length; k++) {
-                const sub = subtitles[k];
-                const times = sub.timing.split('-->').map(t => t.trim());
+            const generatedSegments = preloadedTtsProject
+                ? preloadedTtsProject.segments.map((segment) => ({ ...segment }))
+                : [];
+            if (!preloadedTtsProject) {
+            for (let index = 0; index < subtitles.length; index++) {
+                const subtitle = subtitles[index];
+                if (!subtitle.timing) continue;
+                const times = subtitle.timing.split('-->').map((value) => value.trim());
                 const startTime = parseTimestamp(times[0]);
-
-                this.updateProgress(`Seslendiriliyor: ${k + 1}/${subtitles.length}`, (k / subtitles.length) * 90);
-
-                if (currentChunkStartTime === -1) currentChunkStartTime = startTime;
-
-                const ttsRes = await window.api.generateTts({
-                    text: sub.text,
+                const endTime = Math.max(startTime + 0.1, parseTimestamp(times[1]));
+                this.updateProgress(
+                    this.t('runtime.subtitle_tts_editor.generating_item', 'Seslendiriliyor: {current}/{total}', {
+                        current: index + 1,
+                        total: subtitles.length
+                    }),
+                    (index / Math.max(1, subtitles.length)) * 80
+                );
+                const ttsResult = await window.api.generateTts({
+                    text: subtitle.text,
                     service: ttsOptions.service || 'system',
                     voice: ttsOptions.voice,
-                    speed: ttsOptions.speed,
-                    volume: ttsOptions.volume
-                }).catch(e => ({ success: false }));
-
-                if (ttsRes.success) {
-                    audioFilesToDelete.push(ttsRes.wavPath);
-                    const relativeOffset = Math.max(0, startTime - currentChunkStartTime);
-                    currentChunkItems.push({ path: ttsRes.wavPath, offset: relativeOffset });
-                }
-
-                if (currentChunkItems.length >= CHUNK_SIZE) await processCurrentChunk(chunkFiles.length + 1);
+                    speed: useSegmentEditor ? 1 : ttsOptions.speed,
+                    volume: useSegmentEditor ? 100 : ttsOptions.volume
+                }).catch(() => ({ success: false }));
+                if (!ttsResult.success) continue;
+                audioFilesToDelete.push(ttsResult.wavPath);
+                const original = {
+                    text: subtitle.text,
+                    generatedText: subtitle.text,
+                    startTime,
+                    endTime,
+                    speed: Number(ttsOptions.speed || 1),
+                    generatedSpeed: useSegmentEditor ? 1 : Number(ttsOptions.speed || 1),
+                    voice: String(ttsOptions.voice || ''),
+                    generatedVoice: String(ttsOptions.voice || ''),
+                    ttsVolume: useSegmentEditor ? Number(ttsOptions.volume ?? 100) : 100,
+                    originalVolume: Number(ttsOptions.originalVolume ?? 0.8),
+                    voiceEnabled: true
+                };
+                generatedSegments.push({
+                    id: String(subtitle.id || index + 1),
+                    subtitleIndex: index,
+                    text: subtitle.text,
+                    wavPath: ttsResult.wavPath,
+                    ...original,
+                    original: { ...original }
+                });
             }
-            if (currentChunkItems.length > 0) await processCurrentChunk(chunkFiles.length + 1);
+            }
+            if (!generatedSegments.length) {
+                throw new Error(this.t('runtime.subtitle_tts_editor.no_audio', 'Hiçbir altyazı seslendirmesi üretilemedi.'));
+            }
 
-            // 4. Final Ses Mixi
-            this.showProgress('Sesler birleştiriliyor...');
+            let finalSegments = generatedSegments;
+            let editedMode = false;
+            if (useSegmentEditor) {
+                this.hideProgress();
+                const editorResult = await Dialogs.showSubtitleTtsSegmentEditor({
+                    segments: generatedSegments,
+                    videoPath: this.currentFilePath,
+                    defaults: ttsOptions,
+                    projectContext: {
+                        projectPath: preloadedTtsProject?.projectPath || '',
+                        subtitlePath,
+                        subtitleContent: content,
+                        action,
+                        subtitleStyleOptions,
+                        selectedIndex: Number(preloadedTtsProject?.selectedIndex || 0)
+                    }
+                });
+                if (!editorResult) {
+                    await window.api.deleteFiles(audioFilesToDelete);
+                    Accessibility.announce(this.t('runtime.app.operation_cancelled', 'İşlem iptal edildi.'));
+                    return;
+                }
+                if (editorResult.ttsOptions) {
+                    ttsOptions = { ...editorResult.ttsOptions, confirmed: true };
+                }
+                if (editorResult.videoPath && editorResult.videoPath !== this.currentFilePath) {
+                    if (!await window.api.checkFileExists(editorResult.videoPath)) {
+                        throw new Error(this.t('runtime.subtitle_tts_editor.video_missing', 'Projenin kaynak videosu bulunamadı.'));
+                    }
+                    await this.openFile(editorResult.videoPath);
+                }
+                if (editorResult.projectContext) {
+                    action = editorResult.projectContext.action || action;
+                    subtitleStyleOptions = editorResult.projectContext.subtitleStyleOptions || subtitleStyleOptions;
+                    const restoredSubtitlePath = editorResult.projectContext.subtitlePath || '';
+                    if (restoredSubtitlePath && await window.api.checkFileExists(restoredSubtitlePath)) {
+                        subtitlePath = restoredSubtitlePath;
+                    } else if (editorResult.projectContext.subtitleContent) {
+                        const restoredTempPath = await window.api.getTempPath(`evdtts_editor_${Date.now()}.srt`);
+                        const restoredWrite = await window.api.saveFileContent({
+                            filePath: restoredTempPath,
+                            content: editorResult.projectContext.subtitleContent
+                        });
+                        if (!restoredWrite?.success) throw new Error(restoredWrite?.error || 'subtitle_restore_failed');
+                        subtitlePath = restoredTempPath;
+                        audioFilesToDelete.push(restoredTempPath);
+                    }
+                }
+                finalSegments = editorResult.segments || generatedSegments;
+                editedMode = editorResult.mode === 'edited';
+                for (const generatedPath of (editorResult.generatedTempPaths || [])) {
+                    if (generatedPath && !audioFilesToDelete.includes(generatedPath)) {
+                        audioFilesToDelete.push(generatedPath);
+                    }
+                }
+                this.showProgress(this.t('runtime.subtitle_tts_editor.applying', 'Düzenlemeler uygulanıyor...'));
+
+                if (editedMode) {
+                    for (let index = 0; index < finalSegments.length; index++) {
+                        const segment = finalSegments[index];
+                        if (segment.voiceEnabled === false) continue;
+                        const textChanged = String(segment.text || '') !== String(segment.generatedText ?? segment.original?.generatedText ?? segment.text ?? '');
+                        const voiceChanged = String(segment.voice ?? ttsOptions.voice ?? '') !== String(segment.generatedVoice ?? segment.original?.generatedVoice ?? ttsOptions.voice ?? '');
+                        if (!textChanged && !voiceChanged) continue;
+                        this.updateProgress(
+                            this.t('runtime.subtitle_tts_editor.regenerating_item', 'Değiştirilen seslendirme yeniden oluşturuluyor: {current}/{total}', {
+                                current: index + 1,
+                                total: finalSegments.length
+                            }),
+                            (index / Math.max(1, finalSegments.length)) * 25
+                        );
+                        const regenerated = await window.api.generateTts({
+                            text: segment.text,
+                            service: ttsOptions.service || 'system',
+                            voice: segment.voice ?? ttsOptions.voice,
+                            speed: 1,
+                            volume: 100
+                        });
+                        if (!regenerated.success) throw new Error(regenerated.error || 'tts_regeneration_failed');
+                        audioFilesToDelete.push(regenerated.wavPath);
+                        segment.wavPath = regenerated.wavPath;
+                        segment.generatedSpeed = 1;
+                        segment.generatedText = segment.text;
+                        segment.generatedVoice = String(segment.voice ?? ttsOptions.voice ?? '');
+                    }
+                }
+            }
+
+            const activeSegments = finalSegments
+                .filter((segment) => segment.voiceEnabled !== false && segment.wavPath)
+                .sort((left, right) => Number(left.startTime) - Number(right.startTime));
+            if (!activeSegments.length) {
+                throw new Error(this.t('runtime.subtitle_tts_editor.all_disabled', 'Tüm altyazı seslendirmeleri kapatıldı.'));
+            }
+
+            let subtitleBurnPath = subtitlePath;
+            if (action === 'tts-burn' && editedMode) {
+                const updatedSubtitleContent = [...finalSegments]
+                    .sort((left, right) => Number(left.startTime || 0) - Number(right.startTime || 0))
+                    .map((segment, index) => `${index + 1}\n${formatSrtTimestamp(segment.startTime)} --> ${formatSrtTimestamp(segment.endTime)}\n${String(segment.text || '').trim()}`)
+                    .join('\n\n') + '\n';
+                subtitleBurnPath = await window.api.getTempPath(`edited_subtitles_${Date.now()}.srt`);
+                const subtitleWriteResult = await window.api.saveFileContent({
+                    filePath: subtitleBurnPath,
+                    content: updatedSubtitleContent
+                });
+                if (!subtitleWriteResult?.success) {
+                    throw new Error(subtitleWriteResult?.error || 'edited_subtitle_write_failed');
+                }
+                audioFilesToDelete.push(subtitleBurnPath);
+            }
+
+            const CHUNK_SIZE = 50;
+            const chunkFiles = [];
+            for (let chunkStart = 0; chunkStart < activeSegments.length; chunkStart += CHUNK_SIZE) {
+                const chunk = activeSegments.slice(chunkStart, chunkStart + CHUNK_SIZE);
+                const chunkOffset = Number(chunk[0].startTime || 0);
+                const chunkPath = await window.api.getTempPath(`chunk_${chunkFiles.length + 1}_${Date.now()}.wav`);
+                audioFilesToDelete.push(chunkPath);
+                this.updateProgress(
+                    this.t('runtime.subtitle_tts_editor.mixing_chunks', 'Parçalar birleştiriliyor: {current}/{total}', {
+                        current: chunkFiles.length + 1,
+                        total: Math.ceil(activeSegments.length / CHUNK_SIZE)
+                    }),
+                    25 + ((chunkStart / activeSegments.length) * 45)
+                );
+                const chunkResult = await window.api.createAudioFromMix({
+                    audioSegments: chunk.map((segment) => ({
+                        path: segment.wavPath,
+                        offset: Math.max(0, Number(segment.startTime) - chunkOffset),
+                        volume: useSegmentEditor ? Number(segment.ttsVolume || 0) / 100 : 1,
+                        tempo: useSegmentEditor
+                            ? Number(segment.speed || 1) / Math.max(0.01, Number(segment.generatedSpeed || 1))
+                            : 1
+                    })),
+                    outputPath: chunkPath
+                });
+                if (!chunkResult.success) throw new Error(`Chunk error: ${chunkResult.error}`);
+                chunkFiles.push({ path: chunkPath, offset: chunkOffset });
+            }
+
             const fullTtsPath = await window.api.getTempPath(`full_tts_${Date.now()}.wav`);
             audioFilesToDelete.push(fullTtsPath);
-
-            const concatRes = await window.api.createAudioFromMix({
+            const concatResult = await window.api.createAudioFromMix({
                 audioSegments: chunkFiles,
                 outputPath: fullTtsPath
             });
-            if (!concatRes.success) throw new Error(concatRes.error);
+            if (!concatResult.success) throw new Error(concatResult.error);
 
-            // 5. Videoya Ses Ekleme (Mix)
-            this.showProgress('Videoya işleniyor...');
-            // Son ek: TTS only ise _tts.mp4, TTS+Burn ise _tts_sub.mp4
-            const suffix = (action === 'tts-burn') ? '_tts_sub' : '_tts';
-            let finalOutputPath = this.currentFilePath.replace(/\.[^.]+$/, `${suffix}.mp4`);
-
-            // Eğer hem TTS hem Burn ise, burada oluşturacağımız dosya ARA dosyadır.
-            // Çünkü henüz altyazıyı gömmedik, sadece sesi ekliyoruz.
-            // Ama eğer sadece TTS ise final budur.
+            this.showProgress(this.t('runtime.subtitle_tts_editor.processing_video', 'Videoya işleniyor...'));
+            const suffix = action === 'tts-burn' ? '_tts_sub' : '_tts';
+            const finalOutputPath = this.currentFilePath.replace(/\.[^.]+$/, `${suffix}.mp4`);
             let audioMixOutputPath = finalOutputPath;
             if (action === 'tts-burn') {
                 audioMixOutputPath = await window.api.getTempPath(`pre_burn_mix_${Date.now()}.mp4`);
                 audioFilesToDelete.push(audioMixOutputPath);
             }
 
-            const mixRes = await window.api.mixAudio({
+            const mixResult = await window.api.mixAudio({
                 videoPath: this.currentFilePath,
                 audioPath: fullTtsPath,
                 outputPath: audioMixOutputPath,
-                videoVolume: ttsOptions.originalVolume, // Dialogdan gelen parametre
-                audioVolume: 1.0
+                videoVolume: ttsOptions.originalVolume,
+                videoVolumeSegments: editedMode
+                    ? finalSegments
+                        .filter((segment) => Math.abs(
+                            Number(segment.originalVolume) - Number(ttsOptions.originalVolume)
+                        ) >= 0.0001)
+                        .map((segment) => ({
+                            start: segment.startTime,
+                            end: segment.endTime,
+                            volume: segment.originalVolume
+                        }))
+                    : [],
+                audioVolume: 1,
+                preserveOriginalLevel: true,
+                limitOutput: true
             });
+            if (!mixResult.success) throw new Error(mixResult.error);
 
-            if (!mixRes.success) throw new Error(mixRes.error);
-
-            // 6. Seçenek C ise: Altyazı Göm (Burn)
             if (action === 'tts-burn') {
-                this.showProgress('Altyazılar görüntüye işleniyor (Gömülüyor)...');
-
-                // Mixlenmiş video (audioMixOutputPath) üzerine altyazı göm
-                const burnRes = await window.api.burnSubtitles({
+                this.showProgress(this.t('runtime.subtitle_tts_editor.burning', 'Altyazılar görüntüye işleniyor...'));
+                const burnResult = await window.api.burnSubtitles({
                     videoPath: audioMixOutputPath,
-                    subtitlePath: subtitlePath,
+                    subtitlePath: subtitleBurnPath,
                     outputPath: finalOutputPath,
                     styleOptions: subtitleStyleOptions
                 });
-
-                if (!burnRes.success) throw new Error(`Altyazı gömme hatası: ${burnRes.error}`);
+                if (!burnResult.success) throw new Error(burnResult.error);
             }
 
             this.hideProgress();
-
-            // Sonucu Aç
+            if (Utils && Utils.playSound) Utils.playSound('success');
             Accessibility.announceComplete(this.t('runtime.app.operation_generic', 'İşlem'));
-            console.log('Yeni dosya yükleniyor:', finalOutputPath);
             await this.openFile(finalOutputPath);
             Accessibility.announce(this.t('runtime.app.operation_completed_file_opened', 'İşlem tamamlandı. Dosya açıldı: {filename}', {
                 filename: finalOutputPath.split(/[\\/]/).pop()
             }));
-
-            // Geçici dosyaları sil
-            await window.api.invoke('delete-files', audioFilesToDelete);
+            await window.api.deleteFiles(audioFilesToDelete);
 
         } catch (err) {
             this.hideProgress();
@@ -4113,11 +4831,12 @@ const App = {
      * İlerleme göstergesini göster
      * @param {string} message
      */
-    showProgress(message) {
+    showProgress(message, options = {}) {
         const overlay = document.getElementById('progress-overlay');
         const messageEl = document.getElementById('progress-message');
         const bar = document.getElementById('progress-bar');
         const percentEl = document.getElementById('progress-percent');
+        const cancelButton = document.getElementById('progress-cancel-button');
 
         // Durum Çubuğu Elementleri
         const statusBarText = document.getElementById('status-bar-text');
@@ -4128,6 +4847,15 @@ const App = {
             messageEl.textContent = message + '...';
             bar.value = 0;
             percentEl.textContent = '%0';
+        }
+        this._activeExportJobId = options.cancellable ? options.exportJobId : '';
+        this._exportCancellationRequested = false;
+        if (cancelButton) {
+            cancelButton.classList.toggle('hidden', !this._activeExportJobId);
+            cancelButton.disabled = false;
+            cancelButton.textContent = this.t('runtime.app.cancel_export', 'Dışa aktarımı iptal et');
+            cancelButton.onclick = () => this.cancelActiveExport();
+            if (this._activeExportJobId) setTimeout(() => cancelButton.focus(), 0);
         }
 
         if (statusBarText) statusBarText.textContent = message + '...';
@@ -4145,9 +4873,17 @@ const App = {
      */
     hideProgress() {
         const overlay = document.getElementById('progress-overlay');
+        const cancelButton = document.getElementById('progress-cancel-button');
         if (overlay) {
             overlay.classList.add('hidden');
         }
+        if (cancelButton) {
+            cancelButton.classList.add('hidden');
+            cancelButton.disabled = false;
+            cancelButton.onclick = null;
+        }
+        this._activeExportJobId = '';
+        this._exportCancellationRequested = false;
 
         // Durum Çubuğu Elementleri - Sıfırla
         const statusBarText = document.getElementById('status-bar-text');
@@ -4162,6 +4898,19 @@ const App = {
 
         // Klavye kısayollarını etkinleştir
         Keyboard.setEnabled(true);
+    },
+
+    async cancelActiveExport() {
+        // Deliberately no global shortcut: cancelling a long export must require an explicit button action.
+        if (!this._activeExportJobId || this._exportCancellationRequested) return;
+        this._exportCancellationRequested = true;
+        const cancelButton = document.getElementById('progress-cancel-button');
+        if (cancelButton) {
+            cancelButton.disabled = true;
+            cancelButton.textContent = this.t('runtime.app.cancelling_export', 'Dışa aktarım iptal ediliyor...');
+        }
+        Accessibility.announce(this.t('runtime.app.cancelling_export', 'Dışa aktarım iptal ediliyor...'));
+        await window.api.cancelExportJob(this._activeExportJobId);
     },
 
     resetProgressEstimate() {
@@ -4221,8 +4970,13 @@ const App = {
     renderProgressState(operation, percent, skipMilestones = false, meta = null) {
         const bar = document.getElementById('progress-bar');
         const percentEl = document.getElementById('progress-percent');
-        const roundedPercent = Math.round(percent || 0);
-        const etaSeconds = this.getProgressEstimate(operation, roundedPercent);
+        const numericPercent = Math.max(0, Math.min(100, Number(percent) || 0));
+        const roundedPercent = numericPercent >= 100 ? 100 : Math.floor(numericPercent);
+        const detailedProgress = /^(source-aware|hybrid-smart)/.test(String(operation || ''));
+        const displayedPercent = detailedProgress && numericPercent > 0 && numericPercent < 10
+            ? numericPercent.toFixed(1)
+            : String(roundedPercent);
+        const etaSeconds = this.getProgressEstimate(operation, numericPercent);
         const isFinalizingExport = operation === 'finalize-export' && roundedPercent < 100;
         const etaSuffix = etaSeconds != null
             ? this.t('runtime.app.progress_eta_suffix', ' · Yaklaşık {eta} kaldı', {
@@ -4231,7 +4985,7 @@ const App = {
             : '';
         const progressLabel = isFinalizingExport
             ? this.t('runtime.app.progress_finalizing_label', 'Son aşama')
-            : `%${roundedPercent}${etaSuffix}`;
+            : `%${displayedPercent}${etaSuffix}`;
         const stepSuffix = meta && Number.isFinite(Number(meta.current)) && Number.isFinite(Number(meta.total)) && Number(meta.total) > 0
             ? this.t('runtime.app.progress_step_suffix', ' · Parça {current}/{total}', {
                 current: Math.max(1, Math.round(Number(meta.current))),
@@ -4241,14 +4995,29 @@ const App = {
         const fullProgressLabel = `${progressLabel}${stepSuffix}`;
 
         if (bar && percentEl) {
-            bar.value = roundedPercent;
+            bar.value = numericPercent;
             percentEl.textContent = fullProgressLabel;
         }
 
         const operationNames = {
             'cut': this.t('runtime.app.operation_cut', 'Video kesme'),
             'concat': this.t('runtime.app.operation_concat', 'Video birleştirme'),
+            'copy-file': this.t('runtime.app.operation_copy_file', 'Kaynak dosya kopyalanıyor'),
             'render-timeline': this.t('runtime.app.operation_render_timeline', 'Zaman çizelgesi işleniyor'),
+            'source-aware-pass-1': this.t('runtime.app.operation_source_pass_1', 'İlk analiz ve kodlama geçişi'),
+            'source-aware-pass-2': this.t('runtime.app.operation_source_pass_2', 'Son kodlama geçişi'),
+            'source-aware-video': this.t('runtime.app.operation_source_video', 'Kaynak duyarlı görüntü işleniyor'),
+            'source-aware-video-batch': this.t('runtime.app.operation_source_video_batch', 'Kaynağa yakın görüntü grupları işleniyor'),
+            'source-aware-video-batch-concat': this.t('runtime.app.operation_source_video_batch_concat', 'Görüntü grupları birleştiriliyor'),
+            'source-aware-audio': this.t('runtime.app.operation_source_audio', 'Kesintisiz ses hazırlanıyor'),
+            'source-aware-mux': this.t('runtime.app.operation_source_mux', 'Görüntü ve ses birleştiriliyor'),
+            'source-aware-validate': this.t('runtime.app.operation_source_validate', 'Çıktı doğrulanıyor'),
+            'hybrid-smart-video-copy': this.t('runtime.app.operation_hybrid_video', 'Hibrit görüntü hazırlanıyor'),
+            'hybrid-smart-analyze': this.t('runtime.app.operation_hybrid_analyze', 'Hibrit kesim sınırları analiz ediliyor'),
+            'hybrid-smart-video-concat': this.t('runtime.app.operation_hybrid_concat', 'Hibrit görüntü birleştiriliyor'),
+            'hybrid-smart-audio': this.t('runtime.app.operation_source_audio', 'Kesintisiz ses hazırlanıyor'),
+            'hybrid-smart-finalize': this.t('runtime.app.operation_source_mux', 'Görüntü ve ses birleştiriliyor'),
+            'hybrid-smart-validate-boundaries': this.t('runtime.app.operation_hybrid_validate_boundaries', 'Kesim sınırları doğrulanıyor'),
             'finalize-export': this.t('runtime.app.operation_finalize_export', 'Çıktı dosyası tamamlanıyor'),
             'rotate': this.t('runtime.app.operation_rotate', 'Video döndürme'),
             'extract-audio': this.t('runtime.app.operation_extract_audio', 'Ses çıkarma'),
@@ -4257,17 +5026,33 @@ const App = {
             'mix-audio-advanced': this.t('runtime.app.operation_mix_audio_advanced', 'Gelişmiş ses miksajı'),
             'burn-subtitles': this.t('runtime.app.operation_burn_subtitles', 'Altyazı gömme'),
             'add-text': this.t('runtime.app.operation_add_text', 'Metin ekleme'),
+            'add-image': this.t('runtime.app.image_add_operation', 'G?rsel ekleme'),
             'images-to-video': this.t('runtime.app.operation_images_to_video', 'Video oluşturma'),
             'convert': this.t('runtime.app.operation_convert', 'Video dönüştürme'),
+            'apply-transitions': this.t('runtime.app.applying_transitions', 'Geçişler uygulanıyor...'),
             'apply-cta-smart': this.t('runtime.app.operation_apply_cta', 'CTA overlay ekleme')
         };
         const operationName = operationNames[operation] || operation || this.t('runtime.app.operation_processing', 'İşleniyor');
 
         const statusBarText = document.getElementById('status-bar-text');
         const statusBarPercent = document.getElementById('status-bar-percent');
+        const messageEl = document.getElementById('progress-message');
 
+        if (messageEl) messageEl.textContent = `${operationName}...`;
         if (statusBarText) statusBarText.textContent = `${operationName}...`;
         if (statusBarPercent) statusBarPercent.textContent = fullProgressLabel;
+
+        const announcedValidationOperations = new Set([
+            'hybrid-smart-validate-boundaries',
+            'source-aware-validate'
+        ]);
+        if (announcedValidationOperations.has(operation)
+            && this._lastAnnouncedValidationOperation !== operation) {
+            this._lastAnnouncedValidationOperation = operation;
+            Accessibility.announce(operationName);
+        } else if (!announcedValidationOperations.has(operation) && operation !== 'finalize-export') {
+            this._lastAnnouncedValidationOperation = null;
+        }
 
         if (isFinalizingExport) {
             if (!this._announcedFinalizeExport) {
@@ -4295,6 +5080,7 @@ const App = {
             }
             if (roundedPercent >= 100) {
                 this._lastProgressMilestone = -1;
+                this._lastAnnouncedValidationOperation = null;
             }
 
             if (this._lastPlayedPercent !== roundedPercent && roundedPercent > 0 && roundedPercent < 100) {
@@ -4393,11 +5179,12 @@ const App = {
      * @param {number} percent - Yüzde (0-100)
      */
     updateProgress(operation, percent, meta = null) {
-        const roundedPercent = Math.round(percent || 0);
+        const numericPercent = Math.max(0, Math.min(100, Number(percent) || 0));
+        const roundedPercent = Math.round(numericPercent);
 
         if (operation === 'concat' && roundedPercent >= 90 && roundedPercent < 100) {
             this.ensureSyntheticConcatProgress(roundedPercent);
-            this.renderProgressState(operation, Math.max(roundedPercent, this._syntheticConcatProgressValue || roundedPercent), false, meta);
+            this.renderProgressState(operation, Math.max(numericPercent, this._syntheticConcatProgressValue || numericPercent), false, meta);
             return;
         }
 
@@ -4405,7 +5192,7 @@ const App = {
             this.stopSyntheticConcatProgress();
         }
 
-        this.renderProgressState(operation, roundedPercent, false, meta);
+        this.renderProgressState(operation, numericPercent, false, meta);
     },
 
     /**
@@ -5142,9 +5929,12 @@ App.addAudioToVideo = async function (options) {
             outputPath: result.filePath,
             videoVolume: options.sourceVolume,
             audioVolume: options.targetVolume,
-            loop: options.asBackground,
-            trimStart: options.trimStart,
-            trimEnd: options.trimEnd
+            insertTime: Number.isFinite(Number(options.insertTime))
+                ? Number(options.insertTime)
+                : VideoPlayer.getCurrentTime(),
+            loopAudio: options.asBackground === true,
+            audioTrimStart: options.trimStart || 0,
+            audioTrimEnd: options.asBackground ? 0 : (options.trimEnd || 0)
         });
         this.hideProgress();
         if (response && response.success) {
@@ -5162,3 +5952,11 @@ App.addAudioToVideo = async function (options) {
 };
 
 window.App = App;
+
+
+
+
+
+
+
+

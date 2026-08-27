@@ -13,6 +13,9 @@ const heicConvert = require('heic-convert');
 const sharp = require('sharp');
 const i18n = require('./i18n');
 const { getVisualOrientation, buildSmartStillImagePlacementFilter, buildFitPadFilter, buildCropFillFilter, buildBlurFillFilter } = require('./media-placement');
+const karaokeForcedAlignment = require('./karaoke-forced-alignment');
+const karaokeEngineManager = require('./karaoke-engine-manager');
+const { installMacEditingShortcuts } = require('./mac-editing-shortcuts');
 
 let newProjectWindow = null;
 let slideshowEditorWindow = null;
@@ -640,6 +643,45 @@ function setupSlideshowHandlers(mainWindow) {
     ipcMain.on('slideshow-karaoke-save', (_event, karaokeTracks) => {
         if (slideshowEditorWindow && !slideshowEditorWindow.isDestroyed()) {
             slideshowEditorWindow.webContents.send('slideshow-karaoke-result', karaokeTracks);
+        }
+    });
+
+    ipcMain.handle('slideshow-karaoke-forced-align', async (event, data = {}) => {
+        try {
+            if (!karaokeForcedAlignment.isRuntimeAvailable()) {
+                const targetWindow = BrowserWindow.fromWebContents(event.sender) || karaokeEditorWindow || slideshowEditorWindow;
+                const dialogOptions = {
+                    type: 'question',
+                    title: t('dialog.slideshow_karaoke.engine_install_title', 'Install karaoke engine'),
+                    message: t('dialog.slideshow_karaoke.engine_install_message', 'The lyric alignment engine is required for this feature.'),
+                    detail: t('dialog.slideshow_karaoke.engine_install_detail', 'It will be downloaded once and kept on this computer. No additional component is downloaded when EVD starts.'),
+                    buttons: [
+                        t('dialog.slideshow_karaoke.engine_install_button', 'Download and continue'),
+                        t('dialog.slideshow_karaoke.engine_install_cancel', 'Cancel')
+                    ],
+                    defaultId: 0,
+                    cancelId: 1,
+                    noLink: true
+                };
+                await announceDialogForAccessibility(targetWindow, dialogOptions);
+                const { response } = await dialog.showMessageBox(targetWindow, dialogOptions);
+                if (response !== 0) return { success: false, canceled: true, error: 'karaoke_engine_install_canceled' };
+                await karaokeEngineManager.ensureInstalled({
+                    onProgress: progress => {
+                        if (!event.sender.isDestroyed()) {
+                            event.sender.send('slideshow-karaoke-forced-align-progress', progress);
+                        }
+                    }
+                });
+            }
+            return await karaokeForcedAlignment.alignLyrics({
+                audioPath: String(data.audioPath || ''),
+                lyrics: String(data.lyrics || ''),
+                language: String(data.language || 'tr'),
+                onProgress: stage => event.sender.send('slideshow-karaoke-forced-align-progress', { stage })
+            });
+        } catch (error) {
+            return { success: false, error: error?.message || String(error) };
         }
     });
 
@@ -1364,6 +1406,7 @@ function openTextOverlayForSlideshow(mainWindow, data = {}) {
     });
 
     textOverlayWindow.setMenu(null);
+    installMacEditingShortcuts(textOverlayWindow);
     textOverlayWindow.loadFile(path.join(__dirname, '../renderer/dialogs/slideshow-text-overlay.html'));
 
     // Pencere hazır olduğunda göster
@@ -1439,6 +1482,7 @@ function openTickerOverlayForSlideshow(mainWindow, data = {}) {
     });
 
     tickerOverlayWindow.setMenu(null);
+    installMacEditingShortcuts(tickerOverlayWindow);
     tickerOverlayWindow.loadFile(path.join(__dirname, '../renderer/dialogs/slideshow-ticker-overlay.html'));
     tickerOverlayWindow.once('ready-to-show', () => {
         tickerOverlayWindow.show();
@@ -1474,6 +1518,7 @@ function openKaraokeEditorForSlideshow(mainWindow, data = {}) {
         webPreferences: { nodeIntegration: true, contextIsolation: false }
     });
     karaokeEditorWindow.setMenu(null);
+    installMacEditingShortcuts(karaokeEditorWindow);
     karaokeEditorWindow.loadFile(path.join(__dirname, '../renderer/dialogs/slideshow-karaoke-editor.html'));
     karaokeEditorWindow.once('ready-to-show', () => {
         karaokeEditorWindow.show();
@@ -1507,6 +1552,7 @@ function openNewProjectDialog(mainWindow) {
     });
 
     newProjectWindow.setMenu(null);
+    installMacEditingShortcuts(newProjectWindow);
     newProjectWindow.loadFile(path.join(__dirname, '../renderer/dialogs/new-project.html'));
 
     // Pencere hazır olduğunda göster
@@ -1546,6 +1592,7 @@ function openSlideshowEditor(mainWindow, settings) {
     });
 
     slideshowEditorWindow.setMenu(null);
+    installMacEditingShortcuts(slideshowEditorWindow);
     slideshowEditorWindow.loadFile(path.join(__dirname, '../renderer/dialogs/slideshow-editor.html'));
 
     // Pencere hazır olduğunda göster ve öne getir
@@ -3399,3 +3446,10 @@ async function openProjectFile(mainWindow, directFilePath = null) {
 }
 
 module.exports = { setupSlideshowHandlers, openNewProjectDialog, openProjectFile };
+
+
+
+
+
+
+

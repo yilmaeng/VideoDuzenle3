@@ -137,6 +137,6 @@ jobs:
       - name: Upload Mac ARM64 DMG
         uses: actions/upload-artifact@v6
         with:
-          name: evd-mac-arm64-dmg-v4.8.0
+          name: evd-mac-arm64-dmg-v5.0.0
           path: dist/*.dmg
           retention-days: 5

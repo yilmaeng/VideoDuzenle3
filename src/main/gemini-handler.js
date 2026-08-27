@@ -1241,7 +1241,7 @@ async function uploadToGemini(apiKey, filePath, mimeType) {
 async function waitForFileActive(apiKey, fileUri) {
     const checkUrl = `${fileUri}?key=${apiKey}`;
     let attempts = 0;
-    while (attempts < 10) {
+    while (attempts < 60) {
         const state = await new Promise((resolve, reject) => {
             https.get(checkUrl, (res) => {
                 let data = '';
@@ -1666,7 +1666,7 @@ function setupGeminiHandlers(mainWindow) {
 /**
  * Grup içerikli Gemini isteği gönder
  */
-async function sendGeminiRequestBatch(apiKey, model, contents, systemInstruction = '') {
+async function sendGeminiRequestBatch(apiKey, model, contents, systemInstruction = '', generationConfig = {}) {
     return new Promise((resolve, reject) => {
         const modelName = normalizeAiModel(model);
         console.log(`Gemini Batch İsteği Başlıyor - Kullanılan Model: ${modelName}`);
@@ -1679,7 +1679,8 @@ async function sendGeminiRequestBatch(apiKey, model, contents, systemInstruction
                 temperature: 0.7,
                 topK: 40,
                 topP: 0.95,
-                maxOutputTokens: 8192
+                maxOutputTokens: 8192,
+                ...generationConfig
             }
         };
 
@@ -1729,12 +1730,12 @@ async function sendGeminiRequestBatch(apiKey, model, contents, systemInstruction
     });
 }
 
-async function sendGeminiRequestBatchWithRetry(apiKey, model, contents, systemInstruction = '', maxRetries = 2) {
+async function sendGeminiRequestBatchWithRetry(apiKey, model, contents, systemInstruction = '', maxRetries = 2, generationConfig = {}) {
     let lastError = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            return await sendGeminiRequestBatch(apiKey, model, contents, systemInstruction);
+            return await sendGeminiRequestBatch(apiKey, model, contents, systemInstruction, generationConfig);
         } catch (error) {
             lastError = error;
 

@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+build/native-audio/
+tools/EvdMacAudioCapture/.build/
 
 # Logs
 *.log
@@ -11,6 +13,14 @@ npm-debug.log*
 # Temp files
 temp_*.mp4
 *.tmp
+__pycache__/
+*.pyc
+temp/karaoke-align-packages/
+temp/karaoke-align-venv/
+temp/karaoke-transcription-cache/
+temp/mms-align-packages/
+temp/ees-mms-aligned.json
+temp/ees-forced-*.json
 .DS_Store
 Thumbs.db
 

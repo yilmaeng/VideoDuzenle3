@@ -1,1 +1,2 @@
 "NSAudioCaptureUsageDescription" = "Der barrierefreie Video-Editor benötigt Zugriff auf die Systemaudioaufnahme für Sofortübersetzungen und zum Teilen des Computertons im Übertragungsraum.";
+"NSMicrophoneUsageDescription" = "Der barrierefreie Video-Editor benötigt Mikrofonzugriff, um Audio mit dem ausgewählten Mikrofon aufzunehmen.";

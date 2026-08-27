@@ -87,6 +87,60 @@ let recordingWizardReady = false;
 let interviewQuickStartAttempted = false;
 let recordingTimelineInterval = null;
 let obsStatsInterval = null;
+let recordingAudioKeepAlive = null;
+
+async function startRecordingAudioKeepAlive() {
+    if (recordingAudioKeepAlive || state.mode === 'broadcast' || !els.systemAudioEnable?.checked) {
+        return false;
+    }
+
+    try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return false;
+
+        const context = new AudioContextClass({ latencyHint: 'playback' });
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(997, context.currentTime);
+        gain.gain.setValueAtTime(1e-7, context.currentTime);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start();
+        if (context.state === 'suspended') {
+            await context.resume();
+        }
+
+        recordingAudioKeepAlive = { context, oscillator, gain };
+        logRecordingWizard('recording_audio_keepalive_started', {
+            sampleRate: context.sampleRate,
+            state: context.state
+        });
+        await delay(350);
+        return true;
+    } catch (error) {
+        console.warn('[RecordingWizard] Audio keep-alive could not be started:', error);
+        logRecordingWizard('recording_audio_keepalive_failed', {
+            error: error?.message || String(error)
+        });
+        return false;
+    }
+}
+
+async function stopRecordingAudioKeepAlive(reason = 'recording_stopped') {
+    const keepAlive = recordingAudioKeepAlive;
+    recordingAudioKeepAlive = null;
+    if (!keepAlive) return;
+
+    try {
+        keepAlive.gain.gain.setValueAtTime(0, keepAlive.context.currentTime);
+        keepAlive.oscillator.stop();
+    } catch (error) { }
+    try {
+        await keepAlive.context.close();
+    } catch (error) { }
+    logRecordingWizard('recording_audio_keepalive_stopped', { reason });
+}
 
 ipcRenderer.on('recording-wizard-init', (_event, options) => {
     pendingLaunchOptions = options || {};
@@ -464,6 +518,7 @@ const state = {
     youtubeStreamMethod: 'manual',
     youtubeApiMode: 'instant',
     youtubeConnected: false,
+    youtubeClientConfigured: false,
     youtubeAccounts: [],
     youtubeActiveAccountId: '',
     youtubeChannelTitle: '',
@@ -512,6 +567,7 @@ const state = {
     systemInputName: null,
     screenItemId: null,
     cameraItemId: null,
+    cameraInputName: null,
     screenInputName: null,
     sceneBackground: {
         type: 'none',
@@ -551,6 +607,22 @@ const state = {
     liveEffectsLastFocusEl: null,
     recordingDebugStartedAt: 0,
     latestObsStats: null
+};
+
+const recordingCameraTest = {
+    active: false,
+    detector: null,
+    timer: null,
+    statusRefreshTimer: null,
+    inFlight: false,
+    pendingSignature: '',
+    pendingCount: 0,
+    frameFailureCount: 0,
+    lastAnnouncedSignature: '',
+    lastAnnouncementAt: 0,
+    lastMessage: '',
+    lastDetailedMessage: '',
+    canvas: null
 };
 
 let pendingChatNotificationQueue = [];
@@ -626,6 +698,13 @@ const els = {
     camX: document.getElementById('cam-x'),
     camY: document.getElementById('cam-y'),
     camScale: document.getElementById('cam-scale'),
+    btnTestRecordingCamera: document.getElementById('btn-test-recording-camera'),
+    recordingCameraTestDialog: document.getElementById('recording-camera-test-dialog'),
+    recordingCameraTestTitle: document.getElementById('recording-camera-test-title'),
+    recordingCameraTestPreview: document.getElementById('recording-camera-test-preview'),
+    recordingCameraTestStatus: document.getElementById('recording-camera-test-status'),
+    btnReadRecordingCameraTestStatus: document.getElementById('btn-read-recording-camera-test-status'),
+    btnCloseRecordingCameraTest: document.getElementById('btn-close-recording-camera-test'),
     btnApplyPreset: document.getElementById('btn-apply-preset'),
     camPanelFillColor: document.getElementById('cam-panel-fill-color'),
     btnSelectSceneBackground: document.getElementById('btn-select-scene-background-recording'),
@@ -669,6 +748,11 @@ const els = {
     youtubeStreamMethodPanel: document.getElementById('youtube-stream-method-panel'),
     youtubeStreamMethod: document.getElementById('youtube-stream-method'),
     youtubeApiPanel: document.getElementById('youtube-api-panel'),
+    youtubeOauthSetup: document.getElementById('youtube-oauth-setup'),
+    youtubeClientId: document.getElementById('youtube-client-id'),
+    youtubeClientSecret: document.getElementById('youtube-client-secret'),
+    youtubeShowClientSecret: document.getElementById('youtube-show-client-secret'),
+    btnYoutubeSaveClient: document.getElementById('youtube-save-client'),
     btnYoutubeConnect: document.getElementById('btn-youtube-connect'),
     btnYoutubeDisconnect: document.getElementById('btn-youtube-disconnect'),
     youtubeAuthStatus: document.getElementById('youtube-auth-status'),
@@ -1416,6 +1500,7 @@ async function syncRecordingWizardSession(forceClear = false) {
             systemInputName: state.systemInputName,
             screenItemId: state.screenItemId,
             cameraItemId: state.cameraItemId,
+            cameraInputName: state.cameraInputName,
             screenInputName: state.screenInputName,
             videoSettings: state.videoSettings,
             recordingActive: state.recordingActive,
@@ -1482,6 +1567,7 @@ function restoreRecordingWizardSession(session) {
         systemInputName: session.systemInputName || null,
         screenItemId: session.screenItemId || null,
         cameraItemId: session.cameraItemId || null,
+        cameraInputName: session.cameraInputName || null,
         screenInputName: session.screenInputName || null,
         videoSettings: session.videoSettings || state.videoSettings,
         recordingActive: !!session.recordingActive,
@@ -4616,6 +4702,8 @@ function syncYoutubeStatusText(messageKey = 'recording_wizard.broadcast.youtube_
 }
 
 function updateYouTubeAuthUi() {
+    if (els.youtubeOauthSetup) els.youtubeOauthSetup.hidden = state.youtubeClientConfigured;
+    if (els.btnYoutubeConnect) els.btnYoutubeConnect.disabled = !state.youtubeClientConfigured;
     if (!els.youtubeAuthStatus) return;
     if (state.youtubeConnected) {
         els.youtubeAuthStatus.textContent = t('recording_wizard.broadcast.youtube_auth_connected', 'YouTube hesabi bagli: {channel}', {
@@ -4727,6 +4815,7 @@ function populateYouTubeBroadcastList() {
 async function loadYouTubeAuthState() {
     const response = await ipcRenderer.invoke('youtube-get-auth-state');
     if (!response.success) {
+        state.youtubeClientConfigured = false;
         state.youtubeAccounts = [];
         state.youtubeActiveAccountId = '';
         state.youtubePlaylists = [];
@@ -4737,6 +4826,7 @@ async function loadYouTubeAuthState() {
     }
 
     state.youtubeConnected = !!response.connected;
+    state.youtubeClientConfigured = Boolean(String(response.clientId || '').trim());
     state.youtubeAccounts = Array.isArray(response.accounts) ? response.accounts : [];
     state.youtubeActiveAccountId = response.activeAccountId || '';
     state.youtubeChannelTitle = response.channel?.title || '';
@@ -4804,6 +4894,27 @@ async function refreshYouTubeBroadcasts(options = {}) {
     } else {
         syncYoutubeStatusText('recording_wizard.broadcast.youtube_no_broadcasts', 'Planli YouTube yayini bulunamadi.');
     }
+}
+
+// One-time OAuth setup intentionally has no shortcut-manager action.
+async function saveYouTubeClientConfig() {
+    const clientId = String(els.youtubeClientId?.value || '').trim();
+    const clientSecret = String(els.youtubeClientSecret?.value || '').trim();
+    if (!clientId) {
+        syncYoutubeStatusText('youtube_oauth_setup.client_id_required', 'YouTube OAuth Client ID gereklidir.');
+        els.youtubeClientId?.focus();
+        return;
+    }
+    const response = await ipcRenderer.invoke('youtube-save-client-config', { clientId, clientSecret });
+    if (!response?.success) {
+        syncYoutubeStatusText('youtube_oauth_setup.save_failed', 'YouTube OAuth bilgileri kaydedilemedi: {error}', { error: response?.error || 'unknown_error' });
+        return;
+    }
+    if (els.youtubeClientSecret) els.youtubeClientSecret.value = '';
+    await loadYouTubeAuthState();
+    syncYoutubeStatusText('youtube_oauth_setup.saved', 'YouTube OAuth bilgileri kaydedildi. Şimdi YouTube hesabınızı bağlayabilirsiniz.');
+    announce(t('youtube_oauth_setup.saved', 'YouTube OAuth bilgileri kaydedildi. Şimdi YouTube hesabınızı bağlayabilirsiniz.'));
+    els.btnYoutubeConnect?.focus();
 }
 
 async function connectYouTubeAccount() {
@@ -5991,6 +6102,22 @@ async function init() {
             });
         });
     }
+    if (els.youtubeShowClientSecret) {
+        els.youtubeShowClientSecret.addEventListener('change', () => {
+            if (els.youtubeClientSecret) els.youtubeClientSecret.type = els.youtubeShowClientSecret.checked ? 'text' : 'password';
+        });
+    }
+    els.youtubeOauthSetup?.addEventListener('click', (event) => {
+        const link = event.target?.closest?.('a[href]');
+        if (!link) return;
+        event.preventDefault();
+        shell.openExternal(link.href).catch((error) => console.warn('YouTube OAuth guide link could not be opened:', error));
+    });
+    if (els.btnYoutubeSaveClient) {
+        els.btnYoutubeSaveClient.addEventListener('click', () => saveYouTubeClientConfig().catch((error) => {
+            syncYoutubeStatusText('youtube_oauth_setup.save_failed', 'YouTube OAuth bilgileri kaydedilemedi: {error}', { error: error.message || error });
+        }));
+    }
     if (els.btnYoutubeConnect) {
         els.btnYoutubeConnect.addEventListener('click', async () => {
             try {
@@ -6393,6 +6520,15 @@ async function init() {
     }
 
     els.btnApplyPreset.addEventListener('click', () => applySelectedPreset());
+    // Camera framing is an occasional setup check, so it remains a focused wizard
+    // button rather than occupying a configurable or global keyboard shortcut.
+    els.btnTestRecordingCamera?.addEventListener('click', () => startRecordingCameraTest());
+    els.btnReadRecordingCameraTestStatus?.addEventListener('click', readRecordingCameraTestStatus);
+    els.btnCloseRecordingCameraTest?.addEventListener('click', () => stopRecordingCameraTest());
+    els.recordingCameraTestDialog?.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        stopRecordingCameraTest();
+    });
     els.btnAiSuggest.addEventListener('click', requestAiSuggestion);
     els.btnApplyAi.addEventListener('click', applyAiSuggestion);
     if (els.btnSelectSceneBackground) {
@@ -7565,6 +7701,7 @@ async function setupObsSources() {
     state.screenItemId = result.screenItemId;
     state.screenInputName = result.screenInputName || (state.captureMode === 'window' ? 'KVE Pencere 1' : 'KVE Ekran');
     state.cameraItemId = result.cameraItemId;
+    state.cameraInputName = result.cameraInputName || null;
     state.micInputName = result.micInputName;
     state.systemInputName = result.systemInputName;
     state.windowItems = Array.isArray(result.windowItems) ? result.windowItems : [];
@@ -7614,13 +7751,11 @@ async function setupObsSources() {
     // (Step 5'teki slider değerleri)
     if (state.micInputName) {
         const micVol = parseInt(els.micVolume.value, 10) || 100;
-        if (micVol !== 100) {
-            await ipcRenderer.invoke('obs-set-input-volume', {
-                inputName: state.micInputName,
-                volumePercent: micVol
-            });
-            console.log(`Applied mic volume: ${micVol}%`);
-        }
+        await ipcRenderer.invoke('obs-set-input-volume', {
+            inputName: state.micInputName,
+            volumePercent: micVol
+        });
+        console.log(`Applied mic volume: ${micVol}%`);
     }
     if (state.systemInputName && !els.systemVolume.disabled) {
         const sysVol = parseInt(els.systemVolume.value, 10) || 100;
@@ -8323,6 +8458,292 @@ async function getObsPreviewBase64() {
     }
     return null;
 }
+
+function setRecordingCameraTestStatus(message, { forceRepeat = false } = {}) {
+    if (!els.recordingCameraTestStatus) return;
+    clearTimeout(recordingCameraTest.statusRefreshTimer);
+    recordingCameraTest.statusRefreshTimer = null;
+    const normalizedMessage = String(message || '').trim();
+    if (forceRepeat && els.recordingCameraTestStatus.textContent === normalizedMessage) {
+        els.recordingCameraTestStatus.textContent = '';
+        recordingCameraTest.statusRefreshTimer = window.setTimeout(() => {
+            recordingCameraTest.statusRefreshTimer = null;
+            els.recordingCameraTestStatus.textContent = normalizedMessage;
+        }, 30);
+        return;
+    }
+    els.recordingCameraTestStatus.textContent = normalizedMessage;
+}
+
+function getRecordingCameraBrightness(image) {
+    if (!image?.naturalWidth || !image?.naturalHeight) return 128;
+    if (!recordingCameraTest.canvas) {
+        recordingCameraTest.canvas = document.createElement('canvas');
+        recordingCameraTest.canvas.width = 64;
+        recordingCameraTest.canvas.height = 36;
+    }
+    const context = recordingCameraTest.canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return 128;
+    context.drawImage(image, 0, 0, 64, 36);
+    const pixels = context.getImageData(0, 0, 64, 36).data;
+    let total = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+        total += (pixels[index] * 0.2126) + (pixels[index + 1] * 0.7152) + (pixels[index + 2] * 0.0722);
+    }
+    return total / Math.max(1, pixels.length / 4);
+}
+
+function getRecordingCameraBrightnessResult(brightness) {
+    if (brightness < 55) {
+        return { signature: 'brightness-low', message: t('broadcast_room.camera_test_brightness_low', 'Işık düşük. Yüzünüzü aydınlatın.') };
+    }
+    if (brightness > 210) {
+        return { signature: 'brightness-high', message: t('broadcast_room.camera_test_brightness_high', 'Işık çok yüksek. Doğrudan ışığı azaltın.') };
+    }
+    return { signature: 'brightness-normal', message: t('broadcast_room.camera_test_brightness_normal', 'Işık düzeyi uygun.') };
+}
+
+function buildRecordingCameraTestAnalysis(result, image) {
+    const brightnessResult = getRecordingCameraBrightnessResult(getRecordingCameraBrightness(image));
+    const detections = Array.isArray(result?.detections) ? result.detections : [];
+    if (!detections.length) {
+        const guidance = t('broadcast_room.camera_test_no_face', 'Yüz algılanmadı. Kameraya dönün veya kameraya yaklaşın.');
+        const message = t('broadcast_room.camera_test_guidance_with_brightness', '{guidance} {brightness}', {
+            guidance,
+            brightness: brightnessResult.message
+        });
+        return { signature: `no-face:${brightnessResult.signature}`, message, detailedMessage: message };
+    }
+
+    const ordered = [...detections].sort((left, right) => {
+        const leftBox = left?.boundingBox || {};
+        const rightBox = right?.boundingBox || {};
+        return (Number(rightBox.width || 0) * Number(rightBox.height || 0))
+            - (Number(leftBox.width || 0) * Number(leftBox.height || 0));
+    });
+    const detection = ordered[0];
+    const box = detection?.boundingBox || {};
+    const frameWidth = Math.max(1, Number(image.naturalWidth) || 1);
+    const frameHeight = Math.max(1, Number(image.naturalHeight) || 1);
+    const centerX = (Number(box.originX || 0) + (Number(box.width || 0) / 2)) / frameWidth;
+    const centerY = (Number(box.originY || 0) + (Number(box.height || 0) / 2)) / frameHeight;
+    const faceSize = Math.max(Number(box.width || 0) / frameWidth, Number(box.height || 0) / frameHeight);
+    const guidanceParts = [];
+    const signatureParts = [];
+
+    if (ordered.length > 1) {
+        signatureParts.push('multiple');
+        guidanceParts.push(t('broadcast_room.camera_test_multiple_faces', 'Kadrajda birden fazla yüz algılandı.'));
+    }
+    if (centerX < 0.38) {
+        signatureParts.push('move-left');
+        guidanceParts.push(t('broadcast_room.camera_test_move_left', 'Biraz sola doğru hareket edin.'));
+    } else if (centerX > 0.62) {
+        signatureParts.push('move-right');
+        guidanceParts.push(t('broadcast_room.camera_test_move_right', 'Biraz sağa doğru hareket edin.'));
+    }
+    if (centerY < 0.34) {
+        signatureParts.push('move-down');
+        guidanceParts.push(t('broadcast_room.camera_test_move_down', 'Biraz aşağı doğru hareket edin.'));
+    } else if (centerY > 0.66) {
+        signatureParts.push('move-up');
+        guidanceParts.push(t('broadcast_room.camera_test_move_up', 'Biraz yukarı doğru hareket edin.'));
+    }
+    if (faceSize < 0.2) {
+        signatureParts.push('closer');
+        guidanceParts.push(t('broadcast_room.camera_test_move_closer', 'Kameraya biraz yaklaşın.'));
+    } else if (faceSize > 0.58) {
+        signatureParts.push('farther');
+        guidanceParts.push(t('broadcast_room.camera_test_move_farther', 'Kameradan biraz uzaklaşın.'));
+    }
+
+    const keypoints = Array.isArray(detection?.keypoints) ? detection.keypoints : [];
+    if (keypoints.length >= 3) {
+        const eyeCenterX = (Number(keypoints[0]?.x || 0) + Number(keypoints[1]?.x || 0)) / 2;
+        const eyeDistance = Math.abs(Number(keypoints[0]?.x || 0) - Number(keypoints[1]?.x || 0));
+        const noseOffset = eyeDistance > 0.001 ? (Number(keypoints[2]?.x || 0) - eyeCenterX) / eyeDistance : 0;
+        if (noseOffset > 0.18) {
+            signatureParts.push('turn-right');
+            guidanceParts.push(t('broadcast_room.camera_test_turn_right', 'Başınızı biraz sağa çevirin.'));
+        } else if (noseOffset < -0.18) {
+            signatureParts.push('turn-left');
+            guidanceParts.push(t('broadcast_room.camera_test_turn_left', 'Başınızı biraz sola çevirin.'));
+        }
+    }
+
+    if (!guidanceParts.length) {
+        signatureParts.push('centered');
+        guidanceParts.push(t('broadcast_room.camera_test_centered', 'Yüzünüz ortada ve kameraya uygun uzaklıkta.'));
+    }
+    const guidance = guidanceParts.join(' ');
+    const message = t('broadcast_room.camera_test_guidance_with_brightness', '{guidance} {brightness}', {
+        guidance,
+        brightness: brightnessResult.message
+    });
+    return {
+        signature: `${signatureParts.join(',')}:${brightnessResult.signature}`,
+        message,
+        detailedMessage: t('broadcast_room.camera_test_detailed_status', 'Yatay konum yüzde {horizontal}, dikey konum yüzde {vertical}, kadrajdaki yüz büyüklüğü yüzde {size}. {guidance} {brightness}', {
+            horizontal: Math.round(centerX * 100),
+            vertical: Math.round(centerY * 100),
+            size: Math.round(faceSize * 100),
+            guidance,
+            brightness: brightnessResult.message
+        })
+    };
+}
+
+function waitForRecordingCameraImage(image, source) {
+    return new Promise((resolve, reject) => {
+        const cleanup = () => {
+            image.onload = null;
+            image.onerror = null;
+        };
+        image.onload = () => {
+            cleanup();
+            resolve();
+        };
+        image.onerror = () => {
+            cleanup();
+            reject(new Error('camera_preview_failed'));
+        };
+        image.src = source;
+    });
+}
+
+function scheduleRecordingCameraTest(delay = 700) {
+    if (!recordingCameraTest.active) return;
+    clearTimeout(recordingCameraTest.timer);
+    recordingCameraTest.timer = window.setTimeout(runRecordingCameraTestFrame, delay);
+}
+
+async function runRecordingCameraTestFrame() {
+    if (!recordingCameraTest.active || recordingCameraTest.inFlight || !recordingCameraTest.detector) return;
+    recordingCameraTest.inFlight = true;
+    try {
+        const sourceName = state.cameraInputName || (state.cameraItemId ? 'KVE Kamera' : '');
+        const shot = await ipcRenderer.invoke('obs-get-source-screenshot', {
+            sourceName,
+            width: 640,
+            height: 360,
+            format: 'png'
+        });
+        if (!shot?.success || !shot.imageData) {
+            throw new Error(shot?.error || 'camera_preview_unavailable');
+        }
+        const imageSource = String(shot.imageData).startsWith('data:')
+            ? shot.imageData
+            : `data:image/png;base64,${shot.imageData}`;
+        await waitForRecordingCameraImage(els.recordingCameraTestPreview, imageSource);
+        const result = recordingCameraTest.detector.detect(els.recordingCameraTestPreview);
+        recordingCameraTest.frameFailureCount = 0;
+        const analysis = buildRecordingCameraTestAnalysis(result, els.recordingCameraTestPreview);
+        recordingCameraTest.lastMessage = analysis.message;
+        recordingCameraTest.lastDetailedMessage = analysis.detailedMessage;
+        if (analysis.signature === recordingCameraTest.pendingSignature) {
+            recordingCameraTest.pendingCount += 1;
+        } else {
+            recordingCameraTest.pendingSignature = analysis.signature;
+            recordingCameraTest.pendingCount = 1;
+        }
+        const canAnnounce = recordingCameraTest.pendingCount >= 2
+            && analysis.signature !== recordingCameraTest.lastAnnouncedSignature
+            && Date.now() - recordingCameraTest.lastAnnouncementAt >= 1200;
+        if (canAnnounce) {
+            recordingCameraTest.lastAnnouncedSignature = analysis.signature;
+            recordingCameraTest.lastAnnouncementAt = Date.now();
+            setRecordingCameraTestStatus(analysis.message);
+        }
+    } catch (error) {
+        console.warn('Recording camera framing analysis failed:', error);
+        recordingCameraTest.frameFailureCount += 1;
+        if (recordingCameraTest.frameFailureCount === 3) {
+            setRecordingCameraTestStatus(t('broadcast_room.camera_test_failed', 'Kamera testi başlatılamadı: {error}', {
+                error: error?.message || error || 'camera_preview_unavailable'
+            }));
+        }
+    } finally {
+        recordingCameraTest.inFlight = false;
+        scheduleRecordingCameraTest();
+    }
+}
+
+function cleanupRecordingCameraTest() {
+    recordingCameraTest.active = false;
+    clearTimeout(recordingCameraTest.timer);
+    clearTimeout(recordingCameraTest.statusRefreshTimer);
+    recordingCameraTest.timer = null;
+    recordingCameraTest.statusRefreshTimer = null;
+    recordingCameraTest.inFlight = false;
+    if (recordingCameraTest.detector) {
+        try { recordingCameraTest.detector.close(); } catch (_error) {}
+        recordingCameraTest.detector = null;
+    }
+    recordingCameraTest.pendingSignature = '';
+    recordingCameraTest.pendingCount = 0;
+    recordingCameraTest.frameFailureCount = 0;
+    if (els.recordingCameraTestPreview) {
+        els.recordingCameraTestPreview.removeAttribute('src');
+    }
+}
+
+function stopRecordingCameraTest({ restoreFocus = true, announceStatus = true } = {}) {
+    cleanupRecordingCameraTest();
+    if (els.recordingCameraTestDialog?.open) {
+        els.recordingCameraTestDialog.close();
+    }
+    if (announceStatus) {
+        announce(t('broadcast_room.camera_test_stopped', 'Kamera ve kadraj testi kapatıldı.'));
+    }
+    if (restoreFocus) els.btnTestRecordingCamera?.focus();
+}
+
+async function startRecordingCameraTest() {
+    const sourceName = state.cameraInputName || (state.cameraItemId ? 'KVE Kamera' : '');
+    if (!state.cameraItemId || !sourceName) {
+        announce(t('recording_wizard.step4.camera_test_source_required', 'Kamera testi için önce Kaynak Seçimi adımında kamera overlayini etkinleştirin ve kamera kaynağını hazırlayın.'));
+        return;
+    }
+    if (!els.recordingCameraTestDialog?.open) els.recordingCameraTestDialog.showModal();
+    els.recordingCameraTestTitle?.focus();
+    cleanupRecordingCameraTest();
+    recordingCameraTest.lastMessage = '';
+    recordingCameraTest.lastDetailedMessage = '';
+    setRecordingCameraTestStatus(t('broadcast_room.camera_test_starting', 'Kamera ve çevrimdışı kadraj yardımı hazırlanıyor...'));
+    try {
+        const assets = await ipcRenderer.invoke('virtual-background-assets-ensure');
+        if (!assets?.success || !assets.baseUrl) throw new Error('camera_test_assets_unavailable');
+        const visionTasks = require('@mediapipe/tasks-vision');
+        const vision = await visionTasks.FilesetResolver.forVisionTasks(assets.baseUrl);
+        recordingCameraTest.detector = await visionTasks.FaceDetector.createFromOptions(vision, {
+            baseOptions: {
+                modelAssetPath: `${assets.baseUrl}/blaze_face_short_range.tflite`,
+                delegate: 'CPU'
+            },
+            runningMode: 'IMAGE',
+            minDetectionConfidence: 0.55,
+            minSuppressionThreshold: 0.3
+        });
+        recordingCameraTest.active = true;
+        recordingCameraTest.lastAnnouncedSignature = '';
+        recordingCameraTest.lastAnnouncementAt = 0;
+        setRecordingCameraTestStatus(t('broadcast_room.camera_test_active', 'Kamera açık. Kadraj yardımı yüzünüzü inceliyor.'));
+        scheduleRecordingCameraTest(0);
+    } catch (error) {
+        cleanupRecordingCameraTest();
+        setRecordingCameraTestStatus(t('broadcast_room.camera_test_failed', 'Kamera testi başlatılamadı: {error}', {
+            error: error?.message || error || 'unknown_error'
+        }));
+    }
+}
+
+function readRecordingCameraTestStatus() {
+    const message = recordingCameraTest.lastDetailedMessage
+        || recordingCameraTest.lastMessage
+        || t('broadcast_room.camera_test_starting', 'Kamera ve çevrimdışı kadraj yardımı hazırlanıyor...');
+    setRecordingCameraTestStatus(message, { forceRepeat: true });
+}
+
 async function applyAiSuggestion() {
     if (!state.aiSuggestion || !state.cameraItemId) return;
     const cam = state.aiSuggestion.camera || {};
@@ -8687,6 +9108,7 @@ async function startRecording() {
             await syncLiveEffectVisual(introSlot, { visible: false, restart: false });
         }
 
+        await startRecordingAudioKeepAlive();
         await minimizeAppForRecordingStartIfNeeded();
         const result = await ipcRenderer.invoke('obs-start-recording');
         logRecordingWizard('recording_start_result', {
@@ -8700,6 +9122,7 @@ async function startRecording() {
             els.recordingStatus.textContent = t('recording_wizard.recording.start_failed', 'Error: {error}', { error: result.error });
             announce(t('recording_wizard.recording.start_failed_announce', 'Recording could not be started: {error}', { error: result.error }));
             els.btnStartRecord.disabled = false;
+            await stopRecordingAudioKeepAlive('recording_start_failed');
             return;
         }
         state.recordingActive = true;
@@ -8750,6 +9173,7 @@ async function startRecording() {
         if (els.btnStartRecord) {
             els.btnStartRecord.disabled = false;
         }
+        await stopRecordingAudioKeepAlive('recording_start_exception');
     } finally {
         state.sessionActionInProgress = false;
     }
@@ -8883,6 +9307,7 @@ async function stopRecording() {
         state.recordingActive = false;
         state.recordingPaused = false;
         state.lastOutputPath = result.outputPath || null;
+        await stopRecordingAudioKeepAlive('recording_stopped');
         await resetLiveEffectsSession();
 
         if (els.btnStartRecord) {
@@ -8986,6 +9411,7 @@ window.refreshDevices = refreshDevices;
 window.requestCameraPermission = requestCameraPermission;
 
 window.addEventListener('beforeunload', () => {
+    cleanupRecordingCameraTest();
     clearRecordingTimelineLogger();
     clearObsStatsPolling();
     stopYouTubeChatPolling();

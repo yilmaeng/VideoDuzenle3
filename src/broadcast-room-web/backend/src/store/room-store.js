@@ -512,6 +512,9 @@ class RoomStore {
                 ? participant.shareStereoRequested === true
                 : existingParticipant?.shareStereoRequested === true,
             preferredLanguage: String(participant.preferredLanguage || existingParticipant?.preferredLanguage || '').trim(),
+            avatarUrl: participant.avatarUrl !== undefined
+                ? String(participant.avatarUrl || '').trim()
+                : String(existingParticipant?.avatarUrl || '').trim(),
             allowCamera: participant.allowCamera !== undefined
                 ? participant.allowCamera === true
                 : existingParticipant?.allowCamera !== false,
@@ -542,10 +545,14 @@ class RoomStore {
             joinedAt: Number(existingParticipant?.joinedAt) || now,
             updatedAt: now
         };
-        if (participant.cameraEnabled !== undefined) {
+        if (participant.cameraEnabled !== undefined
+            && nextParticipant.requestedCameraEnabled !== undefined
+            && nextParticipant.cameraEnabled === nextParticipant.requestedCameraEnabled) {
             nextParticipant.requestedCameraEnabled = undefined;
         }
-        if (participant.microphoneEnabled !== undefined) {
+        if (participant.microphoneEnabled !== undefined
+            && nextParticipant.requestedMicrophoneEnabled !== undefined
+            && nextParticipant.microphoneEnabled === nextParticipant.requestedMicrophoneEnabled) {
             nextParticipant.requestedMicrophoneEnabled = undefined;
         }
         const existingIndex = room.participants.findIndex((item) => item.identity === identity);

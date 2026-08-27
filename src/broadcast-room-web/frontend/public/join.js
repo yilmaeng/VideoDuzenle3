@@ -1,9 +1,12 @@
 (function () {
-    const ASSET_VERSION = '20260620a';
+    const ASSET_VERSION = '20260819a';
     const LOCAL_BACKUP_DB_NAME = 'evd-local-backup-recordings';
     const LOCAL_BACKUP_DB_VERSION = 1;
     const LOCAL_BACKUP_CHUNK_STORE = 'chunks';
     const PARTICIPANT_PRESENCE_AUTO_ANNOUNCE_STORAGE_KEY = 'evd.broadcastRoomJoin.participantPresenceAutoAnnounce';
+    const MICROPHONE_ECHO_CANCELLATION_STORAGE_KEY = 'evd.broadcastRoomJoin.microphoneEchoCancellation';
+    const MICROPHONE_NOISE_SUPPRESSION_STORAGE_KEY = 'evd.broadcastRoomJoin.microphoneNoiseSuppression';
+    const MICROPHONE_AUTO_GAIN_CONTROL_STORAGE_KEY = 'evd.broadcastRoomJoin.microphoneAutoGainControl';
     let localBackupDbPromise = null;
 
     function loadStoredBoolean(key, fallback = true) {
@@ -35,6 +38,10 @@
         participantRole: 'guest',
         canPublishMedia: true,
         roleRefreshInProgress: false,
+        intentionalDisconnect: false,
+        reconnectInProgress: false,
+        reconnectAttempts: 0,
+        reconnectTimer: null,
         roomConnection: null,
         localVideoTrack: null,
         localAudioTrack: null,
@@ -124,8 +131,11 @@
         handRaiseActive: false,
         lastHandRaiseSeenAt: 0,
         roomStatusTimer: null,
+        roomStatusPollIntervalMs: 0,
+        participantHeartbeatTimer: null,
         roomEventSource: null,
         roomEventSourceRoomId: '',
+        roomEventSourceConnected: false,
         lastSceneAnnouncementKey: '',
         lastHostActivityKey: '',
         activeSpeakerIdentities: [],
@@ -152,13 +162,35 @@
             microphoneAudio: null,
             microphoneStopTimer: null
         },
+        cameraTest: {
+            session: null,
+            active: false,
+            stream: null,
+            ownsStream: false,
+            detector: null,
+            timer: null,
+            statusRefreshTimer: null,
+            pendingSignature: '',
+            pendingCount: 0,
+            lastAnnouncedSignature: '',
+            lastAnnouncementAt: 0,
+            lastMessage: '',
+            lastDetailedMessage: '',
+            canvas: null
+        },
         devices: {
             cameras: [],
             microphones: [],
             speakers: []
         },
         microphoneVolume: 1,
-        speakerVolume: 1
+        speakerVolume: 1,
+        microphoneEchoCancellation: loadStoredBoolean(MICROPHONE_ECHO_CANCELLATION_STORAGE_KEY, false),
+        microphoneNoiseSuppression: loadStoredBoolean(MICROPHONE_NOISE_SUPPRESSION_STORAGE_KEY, false),
+        microphoneAutoGainControl: loadStoredBoolean(MICROPHONE_AUTO_GAIN_CONTROL_STORAGE_KEY, false),
+        avatarDataUrl: '',
+        avatarUrl: '',
+        avatarFileName: ''
     };
 
     const els = {
@@ -185,11 +217,24 @@
         speakerDevice: document.getElementById('speaker-device'),
         microphoneVolume: document.getElementById('microphone-volume'),
         microphoneVolumeValue: document.getElementById('microphone-volume-value'),
+        microphoneEchoCancellation: document.getElementById('microphone-echo-cancellation'),
+        microphoneNoiseSuppression: document.getElementById('microphone-noise-suppression'),
+        microphoneAutoGainControl: document.getElementById('microphone-auto-gain-control'),
         speakerVolume: document.getElementById('speaker-volume'),
         speakerVolumeValue: document.getElementById('speaker-volume-value'),
         btnTestSpeaker: document.getElementById('btn-test-speaker'),
         btnTestMicrophone: document.getElementById('btn-test-microphone'),
         audioTestStatus: document.getElementById('audio-test-status'),
+        btnTestCameraFraming: document.getElementById('btn-test-camera-framing'),
+        cameraFramingDialog: document.getElementById('camera-framing-dialog'),
+        cameraFramingTitle: document.getElementById('camera-framing-title'),
+        cameraFramingPreview: document.getElementById('camera-framing-preview'),
+        cameraFramingStatus: document.getElementById('camera-framing-status'),
+        btnReadCameraFramingStatus: document.getElementById('btn-read-camera-framing-status'),
+        btnCloseCameraFraming: document.getElementById('btn-close-camera-framing'),
+        participantAvatarFile: document.getElementById('participant-avatar-file'),
+        btnRemoveParticipantAvatar: document.getElementById('btn-remove-participant-avatar'),
+        participantAvatarStatus: document.getElementById('participant-avatar-status'),
         screenShareCard: document.getElementById('screen-share-card'),
         screenShareStatus: document.getElementById('screen-share-status'),
         screenShareAudioMode: document.getElementById('screen-share-audio-mode'),
@@ -218,6 +263,7 @@
         localBackupRecordingStatus: document.getElementById('local-backup-recording-status'),
         localPreview: document.getElementById('local-preview'),
         remoteMediaList: document.getElementById('remote-media-list'),
+        remoteVisualStage: document.getElementById('remote-visual-stage'),
         remoteAudioHost: document.getElementById('remote-audio-host'),
         lowBandwidthMode: document.getElementById('low-bandwidth-mode'),
         focusedShareView: document.getElementById('focused-share-view'),
@@ -377,14 +423,6 @@
         }
         el.setAttribute('aria-label', label);
         el.setAttribute('title', label);
-    }
-
-    function clearShortcutAccessibleLabel(el) {
-        if (!el) {
-            return;
-        }
-        el.removeAttribute('aria-label');
-        el.removeAttribute('title');
     }
 
     function playRoomTone(type = 'join') {
@@ -584,11 +622,9 @@
         if (els.postJoinSection) {
             els.postJoinSection.hidden = !joined;
         }
-        if (els.joinedDisplayName && joined) {
+        if (els.joinedDisplayName && joined && !String(els.joinedDisplayName.value || '').trim()) {
             const nextName = String(els.displayName?.value || '').trim();
-            if (document.activeElement !== els.joinedDisplayName || !els.joinedDisplayName.matches(':focus')) {
-                els.joinedDisplayName.value = nextName;
-            }
+            els.joinedDisplayName.value = nextName;
         }
         if (!joined && !joinInProgress && !state.lastJoinError) {
             if (els.joinResultGroup) {
@@ -829,37 +865,59 @@
         updateAudioLevelLabels();
     }
 
-    function updateMediaActionButton(button, isEnabled, enabledLabelKey, enabledFallback, disabledLabelKey, disabledFallback) {
+    function updateMediaActionButton(button, isEnabled, buttonLabelKey, buttonFallback) {
         if (!button) {
             return;
         }
         const enabled = Boolean(isEnabled);
-        const label = enabled
-            ? t(enabledLabelKey, enabledFallback)
-            : t(disabledLabelKey, disabledFallback);
+        const label = t(buttonLabelKey, buttonFallback);
         button.checked = enabled;
-        button.textContent = label;
-        button.setAttribute('aria-label', label);
-        button.removeAttribute('aria-pressed');
+        if (button.getAttribute('data-i18n') !== buttonLabelKey) {
+            button.setAttribute('data-i18n', buttonLabelKey);
+        }
+        if (button.textContent !== label) {
+            button.textContent = label;
+        }
+        // Keep the accessible name stable; expose the binary media state natively.
+        if (button.hasAttribute('aria-label')) {
+            button.removeAttribute('aria-label');
+        }
+        const pressedValue = enabled ? 'true' : 'false';
+        if (button.getAttribute('aria-pressed') !== pressedValue) {
+            button.setAttribute('aria-pressed', pressedValue);
+        }
     }
 
     function updateJoinMediaToggleButtons() {
         updateMediaActionButton(
             els.microphoneEnabled,
             typeof els.microphoneEnabled?.checked === 'boolean' ? els.microphoneEnabled.checked : true,
-            'broadcast_room_join.microphone_stop_button',
-            'Sesiniz açık, sesi kapat',
-            'broadcast_room_join.microphone_start_button',
-            'Sesiniz kapalı, sesi aç'
+            'broadcast_room_join.microphone_toggle',
+            'Mikrofon (Ctrl+D)'
         );
         updateMediaActionButton(
             els.cameraEnabled,
             typeof els.cameraEnabled?.checked === 'boolean' ? els.cameraEnabled.checked : true,
-            'broadcast_room_join.camera_stop_button',
-            'Videonuz açık, videoyu durdur',
-            'broadcast_room_join.camera_start_button',
-            'Videonuz kapalı, videoyu başlat'
+            'broadcast_room_join.camera_toggle',
+            'Video (Ctrl+E)'
         );
+    }
+
+    function announceLocalMediaToggleResult(type) {
+        if (!state.roomConnection) {
+            return;
+        }
+        const isCamera = type === 'camera';
+        const enabled = isCamera
+            ? Boolean(els.cameraEnabled?.checked) && !!state.localVideoTrack
+            : Boolean(els.microphoneEnabled?.checked) && !!state.localAudioTrack;
+        const key = isCamera
+            ? (enabled ? 'broadcast_room.status_camera_enabled_self' : 'broadcast_room.status_camera_disabled_self')
+            : (enabled ? 'broadcast_room.status_microphone_enabled_self' : 'broadcast_room.status_microphone_disabled_self');
+        const fallback = isCamera
+            ? (enabled ? 'Videonuz açıldı.' : 'Videonuz kapatıldı.')
+            : (enabled ? 'Sesiniz açıldı.' : 'Sesiniz kapatıldı.');
+        setStatus(t(key, fallback));
     }
 
     function setAudioTestStatus(message) {
@@ -942,12 +1000,7 @@
         }
         const deviceId = String(els.microphoneDevice?.value || '').trim();
         const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                deviceId: deviceId ? { exact: deviceId } : undefined,
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false
-            }
+            audio: buildAudioCaptureOptions(deviceId ? { exact: deviceId } : undefined)
         });
         const audio = document.createElement('audio');
         audio.autoplay = true;
@@ -966,12 +1019,338 @@
         await audio.play().catch(() => {});
     }
 
+    function setCameraFramingStatus(message, { forceRepeat = false } = {}) {
+        if (!els.cameraFramingStatus) return;
+        clearTimeout(state.cameraTest.statusRefreshTimer);
+        state.cameraTest.statusRefreshTimer = null;
+        const normalizedMessage = String(message || '').trim();
+        if (forceRepeat && els.cameraFramingStatus.textContent === normalizedMessage) {
+            els.cameraFramingStatus.textContent = '';
+            state.cameraTest.statusRefreshTimer = window.setTimeout(() => {
+                state.cameraTest.statusRefreshTimer = null;
+                els.cameraFramingStatus.textContent = normalizedMessage;
+            }, 30);
+            return;
+        }
+        els.cameraFramingStatus.textContent = normalizedMessage;
+    }
+
+    function getCameraFramingBrightness(video) {
+        if (!video?.videoWidth || !video?.videoHeight) return 128;
+        if (!state.cameraTest.canvas) {
+            state.cameraTest.canvas = document.createElement('canvas');
+            state.cameraTest.canvas.width = 64;
+            state.cameraTest.canvas.height = 36;
+        }
+        const context = state.cameraTest.canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return 128;
+        context.drawImage(video, 0, 0, 64, 36);
+        const pixels = context.getImageData(0, 0, 64, 36).data;
+        let total = 0;
+        for (let index = 0; index < pixels.length; index += 4) {
+            total += (pixels[index] * 0.2126) + (pixels[index + 1] * 0.7152) + (pixels[index + 2] * 0.0722);
+        }
+        return total / Math.max(1, pixels.length / 4);
+    }
+
+    function getCameraFramingBrightnessResult(brightness) {
+        if (brightness < 55) {
+            return { signature: 'brightness-low', message: t('broadcast_room.camera_test_brightness_low', 'Işık düşük. Yüzünüzü aydınlatın.') };
+        }
+        if (brightness > 210) {
+            return { signature: 'brightness-high', message: t('broadcast_room.camera_test_brightness_high', 'Işık çok yüksek. Doğrudan ışığı azaltın.') };
+        }
+        return { signature: 'brightness-normal', message: t('broadcast_room.camera_test_brightness_normal', 'Işık düzeyi uygun.') };
+    }
+
+    function buildCameraFramingAnalysis(result, video) {
+        const brightnessResult = getCameraFramingBrightnessResult(getCameraFramingBrightness(video));
+        const detections = Array.isArray(result?.detections) ? result.detections : [];
+        if (!detections.length) {
+            const guidance = t('broadcast_room.camera_test_no_face', 'Yüz algılanmadı. Kameraya dönün veya kameraya yaklaşın.');
+            const message = t('broadcast_room.camera_test_guidance_with_brightness', '{guidance} {brightness}', {
+                guidance,
+                brightness: brightnessResult.message
+            });
+            return { signature: `no-face:${brightnessResult.signature}`, message, detailedMessage: message };
+        }
+
+        const ordered = [...detections].sort((left, right) => {
+            const leftBox = left?.boundingBox || {};
+            const rightBox = right?.boundingBox || {};
+            return (Number(rightBox.width || 0) * Number(rightBox.height || 0))
+                - (Number(leftBox.width || 0) * Number(leftBox.height || 0));
+        });
+        const detection = ordered[0];
+        const box = detection?.boundingBox || {};
+        const frameWidth = Math.max(1, Number(video.videoWidth) || 1);
+        const frameHeight = Math.max(1, Number(video.videoHeight) || 1);
+        const centerX = (Number(box.originX || 0) + (Number(box.width || 0) / 2)) / frameWidth;
+        const centerY = (Number(box.originY || 0) + (Number(box.height || 0) / 2)) / frameHeight;
+        const faceSize = Math.max(Number(box.width || 0) / frameWidth, Number(box.height || 0) / frameHeight);
+        const guidanceParts = [];
+        const signatureParts = [];
+
+        if (ordered.length > 1) {
+            signatureParts.push('multiple');
+            guidanceParts.push(t('broadcast_room.camera_test_multiple_faces', 'Kadrajda birden fazla yüz algılandı.'));
+        }
+        if (centerX < 0.38) {
+            signatureParts.push('move-left');
+            guidanceParts.push(t('broadcast_room.camera_test_move_left', 'Biraz sola doğru hareket edin.'));
+        } else if (centerX > 0.62) {
+            signatureParts.push('move-right');
+            guidanceParts.push(t('broadcast_room.camera_test_move_right', 'Biraz sağa doğru hareket edin.'));
+        }
+        if (centerY < 0.34) {
+            signatureParts.push('move-down');
+            guidanceParts.push(t('broadcast_room.camera_test_move_down', 'Biraz aşağı doğru hareket edin.'));
+        } else if (centerY > 0.66) {
+            signatureParts.push('move-up');
+            guidanceParts.push(t('broadcast_room.camera_test_move_up', 'Biraz yukarı doğru hareket edin.'));
+        }
+        if (faceSize < 0.2) {
+            signatureParts.push('closer');
+            guidanceParts.push(t('broadcast_room.camera_test_move_closer', 'Kameraya biraz yaklaşın.'));
+        } else if (faceSize > 0.58) {
+            signatureParts.push('farther');
+            guidanceParts.push(t('broadcast_room.camera_test_move_farther', 'Kameradan biraz uzaklaşın.'));
+        }
+
+        const keypoints = Array.isArray(detection?.keypoints) ? detection.keypoints : [];
+        if (keypoints.length >= 3) {
+            const eyeCenterX = (Number(keypoints[0]?.x || 0) + Number(keypoints[1]?.x || 0)) / 2;
+            const eyeDistance = Math.abs(Number(keypoints[0]?.x || 0) - Number(keypoints[1]?.x || 0));
+            const noseOffset = eyeDistance > 0.001 ? (Number(keypoints[2]?.x || 0) - eyeCenterX) / eyeDistance : 0;
+            if (noseOffset > 0.18) {
+                signatureParts.push('turn-right');
+                guidanceParts.push(t('broadcast_room.camera_test_turn_right', 'Başınızı biraz sağa çevirin.'));
+            } else if (noseOffset < -0.18) {
+                signatureParts.push('turn-left');
+                guidanceParts.push(t('broadcast_room.camera_test_turn_left', 'Başınızı biraz sola çevirin.'));
+            }
+        }
+
+        if (!guidanceParts.length) {
+            signatureParts.push('centered');
+            guidanceParts.push(t('broadcast_room.camera_test_centered', 'Yüzünüz ortada ve kameraya uygun uzaklıkta.'));
+        }
+        const guidance = guidanceParts.join(' ');
+        const message = t('broadcast_room.camera_test_guidance_with_brightness', '{guidance} {brightness}', {
+            guidance,
+            brightness: brightnessResult.message
+        });
+        return {
+            signature: `${signatureParts.join(',')}:${brightnessResult.signature}`,
+            message,
+            detailedMessage: t('broadcast_room.camera_test_detailed_status', 'Yatay konum yüzde {horizontal}, dikey konum yüzde {vertical}, kadrajdaki yüz büyüklüğü yüzde {size}. {guidance} {brightness}', {
+                horizontal: Math.round(centerX * 100),
+                vertical: Math.round(centerY * 100),
+                size: Math.round(faceSize * 100),
+                guidance,
+                brightness: brightnessResult.message
+            })
+        };
+    }
+
+    function waitForCameraFramingPreview() {
+        if (els.cameraFramingPreview?.readyState >= 2 && els.cameraFramingPreview.videoWidth > 0) {
+            return Promise.resolve();
+        }
+        return new Promise((resolve, reject) => {
+            const timeout = window.setTimeout(() => {
+                cleanup();
+                reject(new Error('camera_preview_timeout'));
+            }, 8000);
+            const cleanup = () => {
+                clearTimeout(timeout);
+                els.cameraFramingPreview?.removeEventListener('loadeddata', onReady);
+                els.cameraFramingPreview?.removeEventListener('error', onError);
+            };
+            const onReady = () => {
+                cleanup();
+                resolve();
+            };
+            const onError = () => {
+                cleanup();
+                reject(new Error('camera_preview_failed'));
+            };
+            els.cameraFramingPreview?.addEventListener('loadeddata', onReady, { once: true });
+            els.cameraFramingPreview?.addEventListener('error', onError, { once: true });
+        });
+    }
+
+    function scheduleCameraFramingAnalysis(delay = 1000) {
+        if (!state.cameraTest.active) return;
+        clearTimeout(state.cameraTest.timer);
+        state.cameraTest.timer = window.setTimeout(runCameraFramingAnalysis, delay);
+    }
+
+    async function runCameraFramingAnalysis() {
+        if (!state.cameraTest.active || !state.cameraTest.detector || !els.cameraFramingPreview) return;
+        if (document.hidden) {
+            scheduleCameraFramingAnalysis(1500);
+            return;
+        }
+        try {
+            const result = state.cameraTest.detector.detectForVideo(els.cameraFramingPreview, performance.now());
+            const analysis = buildCameraFramingAnalysis(result, els.cameraFramingPreview);
+            state.cameraTest.lastMessage = analysis.message;
+            state.cameraTest.lastDetailedMessage = analysis.detailedMessage;
+            if (analysis.signature === state.cameraTest.pendingSignature) {
+                state.cameraTest.pendingCount += 1;
+            } else {
+                state.cameraTest.pendingSignature = analysis.signature;
+                state.cameraTest.pendingCount = 1;
+            }
+            const canAnnounce = state.cameraTest.pendingCount >= 2
+                && analysis.signature !== state.cameraTest.lastAnnouncedSignature
+                && Date.now() - state.cameraTest.lastAnnouncementAt >= 1500;
+            if (canAnnounce) {
+                state.cameraTest.lastAnnouncedSignature = analysis.signature;
+                state.cameraTest.lastAnnouncementAt = Date.now();
+                setCameraFramingStatus(analysis.message);
+            }
+        } catch (error) {
+            console.warn('Camera framing analysis failed:', error);
+        } finally {
+            scheduleCameraFramingAnalysis();
+        }
+    }
+
+    function cleanupCameraFramingTest() {
+        state.cameraTest.session = null;
+        state.cameraTest.active = false;
+        clearTimeout(state.cameraTest.timer);
+        clearTimeout(state.cameraTest.statusRefreshTimer);
+        state.cameraTest.timer = null;
+        state.cameraTest.statusRefreshTimer = null;
+        if (state.cameraTest.detector) {
+            try { state.cameraTest.detector.close(); } catch (_error) {}
+            state.cameraTest.detector = null;
+        }
+        if (els.cameraFramingPreview) {
+            try { els.cameraFramingPreview.pause(); } catch (_error) {}
+            els.cameraFramingPreview.srcObject = null;
+        }
+        if (state.cameraTest.ownsStream && state.cameraTest.stream) {
+            state.cameraTest.stream.getTracks().forEach((track) => {
+                try { track.stop(); } catch (_error) {}
+            });
+        }
+        state.cameraTest.stream = null;
+        state.cameraTest.ownsStream = false;
+        state.cameraTest.pendingSignature = '';
+        state.cameraTest.pendingCount = 0;
+    }
+
+    function stopCameraFramingTest({ restoreFocus = true, announceStatus = true } = {}) {
+        cleanupCameraFramingTest();
+        if (els.cameraFramingDialog?.open) els.cameraFramingDialog.close();
+        if (announceStatus) setStatus(t('broadcast_room.camera_test_stopped', 'Kamera ve kadraj testi kapatıldı.'));
+        if (restoreFocus) els.btnTestCameraFraming?.focus?.();
+    }
+
+    async function startCameraFramingTest() {
+        if (!els.cameraFramingDialog || !els.cameraFramingPreview) return;
+        cleanupCameraFramingTest();
+        const session = {};
+        let previewStarted = false;
+        state.cameraTest.session = session;
+        if (!els.cameraFramingDialog.open) els.cameraFramingDialog.showModal();
+        els.cameraFramingTitle?.focus?.();
+        state.cameraTest.lastMessage = '';
+        state.cameraTest.lastDetailedMessage = '';
+        setCameraFramingStatus(t('broadcast_room.camera_test_starting', 'Kamera ve çevrimdışı kadraj yardımı hazırlanıyor...'));
+        try {
+            const nativeTrack = getNativeVideoTrackFromLocalTrack(state.localVideoTrack);
+            let stream = null;
+            let ownsStream = false;
+            if (nativeTrack?.kind === 'video' && nativeTrack.readyState !== 'ended') {
+                stream = new MediaStream([nativeTrack]);
+            } else {
+                const deviceId = String(els.cameraDevice?.value || '').trim();
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        deviceId: deviceId ? { exact: deviceId } : undefined,
+                        width: { ideal: 640, max: 1280 },
+                        height: { ideal: 360, max: 720 },
+                        frameRate: { ideal: 12, max: 15 }
+                    },
+                    audio: false
+                });
+                ownsStream = true;
+            }
+            if (state.cameraTest.session !== session) {
+                if (ownsStream) stream?.getTracks().forEach((track) => track.stop());
+                return;
+            }
+            state.cameraTest.stream = stream;
+            state.cameraTest.ownsStream = ownsStream;
+            els.cameraFramingPreview.srcObject = state.cameraTest.stream;
+            await els.cameraFramingPreview.play();
+            await waitForCameraFramingPreview();
+            previewStarted = true;
+            if (state.cameraTest.session !== session) return;
+
+            const visionTasks = await import(`/yayinodasi/camera-framing/vision_bundle.mjs?v=${ASSET_VERSION}`);
+            const vision = await visionTasks.FilesetResolver.forVisionTasks('/yayinodasi/camera-framing');
+            const detector = await visionTasks.FaceDetector.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: '/yayinodasi/camera-framing/blaze_face_short_range.tflite',
+                    delegate: 'CPU'
+                },
+                runningMode: 'VIDEO',
+                minDetectionConfidence: 0.55,
+                minSuppressionThreshold: 0.3
+            });
+            if (state.cameraTest.session !== session) {
+                try { detector.close(); } catch (_error) {}
+                return;
+            }
+            state.cameraTest.detector = detector;
+            state.cameraTest.active = true;
+            state.cameraTest.lastAnnouncedSignature = '';
+            state.cameraTest.lastAnnouncementAt = 0;
+            setCameraFramingStatus(t('broadcast_room.camera_test_active', 'Kamera açık. Kadraj yardımı yüzünüzü inceliyor.'));
+            scheduleCameraFramingAnalysis(0);
+        } catch (error) {
+            if (state.cameraTest.session !== session) return;
+            if (!previewStarted) {
+                cleanupCameraFramingTest();
+            } else {
+                // Face analysis is optional. Keep a working camera preview visible
+                // until the user closes the test, even if the analysis model fails.
+                state.cameraTest.active = true;
+            }
+            const statusKey = previewStarted
+                ? 'broadcast_room.camera_analysis_failed_preview_continues'
+                : 'broadcast_room.camera_test_failed';
+            const statusFallback = previewStarted
+                ? 'Kamera önizlemesi açık kalacak, ancak kadraj analizi başlatılamadı: {error}'
+                : 'Kamera testi başlatılamadı: {error}';
+            setCameraFramingStatus(t(statusKey, statusFallback, {
+                error: formatErrorMessage(error)
+            }));
+        }
+    }
+
+    function readCameraFramingStatus() {
+        const message = state.cameraTest.lastDetailedMessage
+            || state.cameraTest.lastMessage
+            || t('broadcast_room.camera_test_starting', 'Kamera ve çevrimdışı kadraj yardımı hazırlanıyor...');
+        setCameraFramingStatus(message, { forceRepeat: true });
+    }
+
     function renderMoreInfoPanel() {
         if (els.moreInfoPanel) {
             els.moreInfoPanel.hidden = !state.moreInfoPanelExpanded;
         }
         if (els.btnToggleMoreInfoPanel) {
             els.btnToggleMoreInfoPanel.setAttribute('aria-expanded', state.moreInfoPanelExpanded ? 'true' : 'false');
+        }
+        if (state.moreInfoPanelExpanded) {
+            syncLocalCameraPreview();
         }
     }
 
@@ -1193,7 +1572,7 @@
     }
 
     async function postParticipantState(payload = {}) {
-        if (!state.room?.roomId || !state.participantIdentity) {
+        if (!state.roomConnection || !state.room?.roomId || !state.participantIdentity) {
             return;
         }
 
@@ -1971,6 +2350,7 @@
         }
         state.roomEventSource = null;
         state.roomEventSourceRoomId = '';
+        state.roomEventSourceConnected = false;
     }
 
     function connectRoomEventSource() {
@@ -1986,6 +2366,12 @@
             const eventSource = new EventSource(`/api/broadcast-room/${encodeURIComponent(roomId)}/events`);
             state.roomEventSource = eventSource;
             state.roomEventSourceRoomId = roomId;
+            eventSource.addEventListener('open', () => {
+                state.roomEventSourceConnected = true;
+                if (state.roomConnection) {
+                    startRoomStatusPolling(30000);
+                }
+            });
             eventSource.addEventListener('liveCaption', (event) => {
                 try {
                     const payload = JSON.parse(event.data || '{}');
@@ -2025,12 +2411,15 @@
                     // Periodic polling remains as a fallback if a chat event payload is malformed.
                 }
             });
-            eventSource.addEventListener('roomSettings', (event) => {
+            eventSource.addEventListener('roomSettings', async (event) => {
                 try {
                     const payload = JSON.parse(event.data || '{}');
-                    applyRoomSettingsFromPayload(payload, { announce: true }).catch(() => {});
+                    await applyRoomSettingsFromPayload(payload, { announce: true });
+                    await applyOwnParticipantControlsFromPayload(payload);
                     updateHostActivityFromPayload(payload, { announce: true });
                     updateScenePositionFromPayload(payload, { announce: false });
+                    updateAccessibleShareFromPayload(payload, { announce: true });
+                    updateLiveCaptionFromPayload(payload, { announce: true });
                 } catch (_error) {
                     // Periodic polling remains as a fallback if settings events fail.
                 }
@@ -2056,7 +2445,10 @@
                 });
             });
             eventSource.addEventListener('error', () => {
-                // EventSource reconnects automatically; periodic polling remains active as backup.
+                state.roomEventSourceConnected = false;
+                if (state.roomConnection) {
+                    startRoomStatusPolling(5000);
+                }
             });
         } catch (_error) {
             closeRoomEventSource();
@@ -2085,6 +2477,7 @@
                 identity: String(participantState.identity || '').trim(),
                 name: String(participantState.name || '').trim(),
                 role: getParticipantRole(participantState.identity),
+                avatarUrl: getParticipantAvatarUrl(participantState.identity),
                 audioChannel: state.audioChannel,
                 videoTracks: (Array.isArray(participantState.videoTracks) ? participantState.videoTracks : [])
                     .map((trackState) => ({
@@ -2881,6 +3274,7 @@
             }
 
             stopRoomStatusPolling();
+            stopParticipantHeartbeat();
             state.hostRecordingActive = false;
             stopLocalBackupRecording();
             await stopScreenShare({ announceStatus: false, notifyState: false });
@@ -3046,25 +3440,42 @@
             updateHostActivityFromPayload(payload, { announce: true });
             updateAccessibleShareFromPayload(payload, { announce: true });
             updateLiveCaptionFromPayload(payload, { announce: true });
-            sendParticipantHeartbeat().catch(() => {});
         } catch (_error) {
             // best effort only
         }
     }
 
-    function startRoomStatusPolling() {
-        if (state.roomStatusTimer) {
-            clearInterval(state.roomStatusTimer);
+    function startRoomStatusPolling(intervalMs = state.roomEventSourceConnected ? 30000 : 5000) {
+        const normalizedInterval = Math.max(5000, Number(intervalMs || 0) || 30000);
+        if (state.roomStatusTimer && state.roomStatusPollIntervalMs === normalizedInterval) {
+            return;
         }
+        stopRoomStatusPolling();
+        state.roomStatusPollIntervalMs = normalizedInterval;
         state.roomStatusTimer = window.setInterval(() => {
             pollRoomStatus().catch(() => {});
-        }, 2500);
+        }, normalizedInterval);
     }
 
     function stopRoomStatusPolling() {
         if (state.roomStatusTimer) {
             clearInterval(state.roomStatusTimer);
             state.roomStatusTimer = null;
+        }
+        state.roomStatusPollIntervalMs = 0;
+    }
+
+    function startParticipantHeartbeat() {
+        stopParticipantHeartbeat();
+        state.participantHeartbeatTimer = window.setInterval(() => {
+            sendParticipantHeartbeat().catch(() => {});
+        }, 15000);
+    }
+
+    function stopParticipantHeartbeat() {
+        if (state.participantHeartbeatTimer) {
+            clearInterval(state.participantHeartbeatTimer);
+            state.participantHeartbeatTimer = null;
         }
     }
 
@@ -3229,57 +3640,7 @@
         }
         updateHandRaiseButtonUi();
         updateScreenShareControls();
-        refreshGuestShortcutLabels();
         updateJoinMediaToggleButtons();
-    }
-
-    function refreshGuestShortcutLabels() {
-        clearShortcutAccessibleLabel(els.microphoneEnabled);
-        clearShortcutAccessibleLabel(els.cameraEnabled);
-        clearShortcutAccessibleLabel(els.btnStartScreenShare);
-        clearShortcutAccessibleLabel(els.btnStopScreenShare);
-        clearShortcutAccessibleLabel(els.btnLeaveRoom);
-    }
-
-    function focusEditableInput(inputEl) {
-        if (!inputEl || inputEl.disabled || inputEl.hidden) {
-            return;
-        }
-        try {
-            inputEl.focus({ preventScroll: true });
-        } catch (_error) {
-            inputEl.focus();
-        }
-        try {
-            const end = String(inputEl.value || '').length;
-            inputEl.setSelectionRange(end, end);
-        } catch (_error) {
-            // Some input types do not support text selection.
-        }
-    }
-
-    function bindMobileInputFocusAssist(inputEl, containerEl) {
-        if (!inputEl) {
-            return;
-        }
-        const focusFromUserGesture = (event) => {
-            if (state.roomConnection || inputEl.disabled) {
-                return;
-            }
-            const target = event.target;
-            if (target && ['BUTTON', 'SELECT', 'TEXTAREA'].includes(String(target.tagName || '').toUpperCase())) {
-                return;
-            }
-            focusEditableInput(inputEl);
-        };
-        inputEl.addEventListener('pointerdown', focusFromUserGesture, { passive: true });
-        inputEl.addEventListener('pointerup', focusFromUserGesture, { passive: true });
-        inputEl.addEventListener('touchstart', focusFromUserGesture, { passive: true });
-        inputEl.addEventListener('touchend', focusFromUserGesture, { passive: true });
-        inputEl.addEventListener('click', focusFromUserGesture);
-        containerEl?.addEventListener('pointerdown', focusFromUserGesture, { passive: true });
-        containerEl?.addEventListener('touchstart', focusFromUserGesture, { passive: true });
-        containerEl?.addEventListener('click', focusFromUserGesture);
     }
 
     function isEditableShortcutTarget(target) {
@@ -3296,6 +3657,7 @@
         }
         els.cameraEnabled.checked = !els.cameraEnabled.checked;
         await handleCameraToggleChange();
+        announceLocalMediaToggleResult('camera');
     }
 
     async function toggleGuestMicrophoneShortcut() {
@@ -3304,6 +3666,7 @@
         }
         els.microphoneEnabled.checked = !els.microphoneEnabled.checked;
         await handleMicrophoneToggleChange();
+        announceLocalMediaToggleResult('microphone');
     }
 
     function focusScreenShareSection() {
@@ -3323,9 +3686,193 @@
     }
 
     function clearLocalPreview() {
-        if (els.localPreview) {
-            els.localPreview.srcObject = null;
+        if (!els.localPreview) return;
+        try {
+            state.localVideoTrack?.detach?.(els.localPreview);
+        } catch (_error) {
+            // Clearing srcObject below is sufficient for older LiveKit clients.
         }
+        try { els.localPreview.pause(); } catch (_error) {}
+        els.localPreview.srcObject = null;
+    }
+
+    function syncLocalCameraPreview() {
+        if (!els.localPreview) return;
+        const cameraEnabled = Boolean(els.cameraEnabled?.checked);
+        const localTrack = state.localVideoTrack;
+        const nativeTrack = getNativeVideoTrackFromLocalTrack(localTrack);
+        const cameraActive = cameraEnabled
+            && !!localTrack
+            && (!nativeTrack || nativeTrack.readyState === 'live');
+        if (!cameraActive) {
+            clearLocalPreview();
+            return;
+        }
+
+        els.localPreview.muted = true;
+        els.localPreview.defaultMuted = true;
+        els.localPreview.autoplay = true;
+        els.localPreview.playsInline = true;
+        const attachedTrack = els.localPreview.srcObject?.getVideoTracks?.()[0] || null;
+        if (!attachedTrack || (nativeTrack && attachedTrack.id !== nativeTrack.id)) {
+            try {
+                localTrack.attach(els.localPreview);
+            } catch (_error) {
+                if (nativeTrack) {
+                    els.localPreview.srcObject = new MediaStream([nativeTrack]);
+                }
+            }
+        }
+        const playPromise = els.localPreview.play?.();
+        if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => {});
+        }
+    }
+
+    function getParticipantRecord(identity) {
+        const key = String(identity || '').trim();
+        return (Array.isArray(state.participants) ? state.participants : [])
+            .find((item) => String(item?.identity || '').trim() === key) || null;
+    }
+
+    function getParticipantAvatarUrl(identity) {
+        if (String(identity || '').trim() === String(state.participantIdentity || '').trim()) {
+            return String(state.avatarUrl || state.avatarDataUrl || '').trim();
+        }
+        return String(getParticipantRecord(identity)?.avatarUrl || '').trim();
+    }
+
+    function getParticipantInitials(name) {
+        const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+        if (!parts.length) return '?';
+        if (parts.length === 1) return Array.from(parts[0]).slice(0, 2).join('').toLocaleUpperCase(state.lang || 'tr');
+        return `${Array.from(parts[0])[0] || ''}${Array.from(parts.at(-1))[0] || ''}`.toLocaleUpperCase(state.lang || 'tr');
+    }
+
+    function getParticipantAvatarHue(identity, name) {
+        const value = `${String(identity || '')}|${String(name || '')}`;
+        let hash = 0;
+        for (const character of value) hash = ((hash * 31) + character.codePointAt(0)) >>> 0;
+        return hash % 360;
+    }
+
+    function appendParticipantAvatar(container, { identity = '', name = '' } = {}) {
+        const card = document.createElement('div');
+        card.className = 'participant-avatar-card';
+        const avatarUrl = getParticipantAvatarUrl(identity);
+        if (avatarUrl) {
+            const image = document.createElement('img');
+            image.className = 'participant-avatar-image';
+            image.src = avatarUrl;
+            image.alt = t('broadcast_room_join.participant_avatar_alt', '{name} profil fotoğrafı', { name });
+            image.addEventListener('error', () => image.remove(), { once: true });
+            card.appendChild(image);
+        } else {
+            const initials = document.createElement('span');
+            initials.className = 'participant-avatar-initials';
+            initials.setAttribute('aria-hidden', 'true');
+            initials.textContent = getParticipantInitials(name);
+            initials.style.setProperty('--participant-avatar-hue', String(getParticipantAvatarHue(identity, name)));
+            card.appendChild(initials);
+        }
+        const label = document.createElement('span');
+        label.className = 'participant-avatar-name';
+        label.textContent = name;
+        card.appendChild(label);
+        container.appendChild(card);
+    }
+
+    function renderLocalAvatarFallback() {
+        const holder = document.getElementById('local-avatar-fallback');
+        if (!holder || !els.localPreview) return;
+        const nativeTrack = getNativeVideoTrackFromLocalTrack(state.localVideoTrack);
+        const cameraActive = !!state.localVideoTrack
+            && Boolean(els.cameraEnabled?.checked)
+            && (!nativeTrack || nativeTrack.readyState === 'live');
+        if (cameraActive) {
+            syncLocalCameraPreview();
+        }
+        els.localPreview.hidden = !cameraActive;
+        holder.hidden = cameraActive;
+        if (!cameraActive) {
+            holder.innerHTML = '';
+            appendParticipantAvatar(holder, {
+                identity: state.participantIdentity,
+                name: String(els.joinedDisplayName?.value || els.displayName?.value || t('broadcast_room_join.you_label', 'Siz')).trim()
+            });
+        }
+    }
+
+    async function resizeAvatarFile(file) {
+        if (!file || !/^image\/(?:jpeg|png|webp)$/i.test(file.type || '')) {
+            throw new Error('participant_avatar_invalid');
+        }
+        const sourceUrl = URL.createObjectURL(file);
+        try {
+            const image = new Image();
+            await new Promise((resolve, reject) => {
+                image.onload = resolve;
+                image.onerror = reject;
+                image.src = sourceUrl;
+            });
+            const maxSide = 512;
+            const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL('image/jpeg', 0.86);
+        } finally {
+            URL.revokeObjectURL(sourceUrl);
+        }
+    }
+
+    async function syncParticipantAvatar({ clear = false } = {}) {
+        if (!state.room?.roomId || !state.participantIdentity) return;
+        const response = await fetch('/api/broadcast-room/participant-avatar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                roomId: state.room.roomId,
+                identity: state.participantIdentity,
+                dataUrl: clear ? '' : state.avatarDataUrl,
+                clear
+            })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.success === false) throw new Error(payload.error || 'participant_avatar_failed');
+        state.avatarUrl = String(payload.avatarUrl || '');
+        state.participants = Array.isArray(payload.participants) ? payload.participants : state.participants;
+        renderLocalAvatarFallback();
+        await renderRemoteParticipants();
+    }
+
+    async function handleParticipantAvatarSelection() {
+        const file = els.participantAvatarFile?.files?.[0] || null;
+        if (!file) return;
+        try {
+            state.avatarDataUrl = await resizeAvatarFile(file);
+            state.avatarFileName = file.name || '';
+            if (els.participantAvatarStatus) {
+                els.participantAvatarStatus.textContent = t('broadcast_room_join.participant_avatar_selected', 'Seçili fotoğraf: {name}.', { name: state.avatarFileName });
+            }
+            if (state.roomConnection) await syncParticipantAvatar();
+            renderLocalAvatarFallback();
+        } catch (error) {
+            setStatus(t('broadcast_room_join.participant_avatar_failed', 'Fotoğraf hazırlanamadı: {error}', { error: formatErrorMessage(error) }));
+        }
+    }
+
+    async function removeParticipantAvatar() {
+        state.avatarDataUrl = '';
+        state.avatarUrl = '';
+        state.avatarFileName = '';
+        if (els.participantAvatarFile) els.participantAvatarFile.value = '';
+        if (state.roomConnection) await syncParticipantAvatar({ clear: true }).catch(() => {});
+        if (els.participantAvatarStatus) {
+            els.participantAvatarStatus.textContent = t('broadcast_room_join.participant_avatar_empty', 'Fotoğraf seçilmedi. Kamera kapalıyken adınız gösterilir.');
+        }
+        renderLocalAvatarFallback();
     }
 
     function getRemoteParticipantLabel(participantState) {
@@ -3439,8 +3986,8 @@
         if (isMobileBrowser()) {
             return {
                 deviceId: deviceId || undefined,
-                width: { ideal: 960, max: 1280 },
-                height: { ideal: 540, max: 720 },
+                width: { ideal: 640, max: 960 },
+                height: { ideal: 360, max: 540 },
                 frameRate: { ideal: 15, max: 20 }
             };
         }
@@ -3509,10 +4056,25 @@
             channelCount: { ideal: 2 },
             sampleRate: 48000,
             volume: getMicrophoneVolume(),
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: false
+            echoCancellation: state.microphoneEchoCancellation,
+            noiseSuppression: state.microphoneNoiseSuppression,
+            autoGainControl: state.microphoneAutoGainControl
         };
+    }
+
+    async function handleMicrophoneProcessingChange() {
+        state.microphoneEchoCancellation = Boolean(els.microphoneEchoCancellation?.checked);
+        state.microphoneNoiseSuppression = Boolean(els.microphoneNoiseSuppression?.checked);
+        state.microphoneAutoGainControl = Boolean(els.microphoneAutoGainControl?.checked);
+        saveStoredBoolean(MICROPHONE_ECHO_CANCELLATION_STORAGE_KEY, state.microphoneEchoCancellation);
+        saveStoredBoolean(MICROPHONE_NOISE_SUPPRESSION_STORAGE_KEY, state.microphoneNoiseSuppression);
+        saveStoredBoolean(MICROPHONE_AUTO_GAIN_CONTROL_STORAGE_KEY, state.microphoneAutoGainControl);
+
+        const message = t('broadcast_room_join.microphone_processing_updated', 'Mikrofon sinyal işleme ayarları güncellendi.');
+        if (state.audioTest.microphoneStream) {
+            stopMicrophoneTest({ announceStatus: false });
+        }
+        await handleMicrophoneDeviceChange({ statusMessage: message });
     }
 
     function getScreenShareAudioMode() {
@@ -3707,9 +4269,10 @@
 
     function startConnectionQualityDiagnostics() {
         stopConnectionQualityDiagnostics();
+        const intervalMs = isMobileBrowser() ? 30000 : 15000;
         state.qualityStatsTimer = window.setInterval(() => {
             sendConnectionQualityReport().catch(() => {});
-        }, 10000);
+        }, intervalMs);
         sendConnectionQualityReport({ force: true }).catch(() => {});
     }
 
@@ -3806,17 +4369,32 @@
         return 'screen';
     }
 
-    async function applySpeakerSelectionToElement(mediaEl) {
+    async function applySpeakerSelectionToElement(mediaEl, { reportError = true } = {}) {
         const selectedSpeakerId = String(els.speakerDevice?.value || '').trim();
         if (!mediaEl || !selectedSpeakerId || typeof mediaEl.setSinkId !== 'function') {
-            return;
+            return true;
         }
         try {
             await mediaEl.setSinkId(selectedSpeakerId);
+            return true;
         } catch (error) {
-            setStatus(t('broadcast_room_join.speaker_apply_failed', 'Seçili hoparlör uygulanamadı: {error}', {
-                error: formatErrorMessage(error)
-            }));
+            if (reportError) {
+                setStatus(t('broadcast_room_join.speaker_apply_failed', 'Seçili hoparlör uygulanamadı: {error}', {
+                    error: formatErrorMessage(error)
+                }));
+            }
+            return false;
+        }
+    }
+
+    async function applySpeakerSelectionToRemoteAudioElements() {
+        const audioElements = Array.from(els.remoteAudioHost?.querySelectorAll?.('audio') || []);
+        let reportedError = false;
+        for (const audio of audioElements) {
+            const applied = await applySpeakerSelectionToElement(audio, { reportError: !reportedError });
+            if (!applied) {
+                reportedError = true;
+            }
         }
     }
 
@@ -4172,6 +4750,61 @@
         return state.remoteParticipants[identity];
     }
 
+    function updateRemoteVisualActiveSpeakerState() {
+        if (!els.remoteVisualStage) {
+            return;
+        }
+        const activeIdentities = new Set(
+            (Array.isArray(state.activeSpeakerIdentities) ? state.activeSpeakerIdentities : [])
+                .map((identity) => String(identity || '').trim())
+                .filter(Boolean)
+        );
+        els.remoteVisualStage.querySelectorAll('.remote-visual-tile').forEach((tile) => {
+            const identity = String(tile.dataset.participantIdentity || '').trim();
+            tile.classList.toggle('is-speaking', activeIdentities.has(identity));
+        });
+    }
+
+    function appendRemoteVisualTile(participantState, cameraTrackState = null) {
+        if (!els.remoteVisualStage) {
+            return;
+        }
+        const tile = document.createElement('div');
+        tile.className = 'remote-visual-tile';
+        tile.dataset.participantIdentity = String(participantState.identity || '');
+
+        if (cameraTrackState?.track) {
+            const video = document.createElement('video');
+            video.className = 'remote-visual-video';
+            video.autoplay = true;
+            video.playsInline = true;
+            video.muted = true;
+            video.defaultMuted = true;
+            cameraTrackState.track.attach(video);
+            bindRemoteVideoRecovery(
+                video,
+                cameraTrackState,
+                `visual:${participantState.identity || ''}:${cameraTrackState.sid || ''}`
+            );
+            const playPromise = video.play?.();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {});
+            }
+            tile.appendChild(video);
+
+            const name = document.createElement('div');
+            name.className = 'remote-visual-name';
+            name.textContent = getRemoteParticipantLabel(participantState);
+            tile.appendChild(name);
+        } else {
+            appendParticipantAvatar(tile, {
+                identity: participantState.identity,
+                name: getRemoteParticipantLabel(participantState)
+            });
+        }
+        els.remoteVisualStage.appendChild(tile);
+    }
+
     async function renderRemoteParticipants() {
         if (!els.remoteMediaList) {
             return;
@@ -4192,11 +4825,19 @@
 
         if (!participants.length) {
             els.remoteMediaList.innerHTML = `<p>${t('broadcast_room_join.no_remote_media', 'Henüz başka bir katılımcı bağlanmadı.')}</p>`;
+            if (els.remoteVisualStage) {
+                els.remoteVisualStage.innerHTML = '';
+                els.remoteVisualStage.hidden = true;
+            }
             updateFocusedShareView();
             return;
         }
 
         els.remoteMediaList.innerHTML = '';
+        if (els.remoteVisualStage) {
+            els.remoteVisualStage.innerHTML = '';
+            els.remoteVisualStage.hidden = false;
+        }
         for (const participantState of participants) {
             const wrapper = document.createElement('section');
             wrapper.style.marginBottom = '16px';
@@ -4223,6 +4864,7 @@
                     return String(left?.sid || '').localeCompare(String(right?.sid || ''));
                 })
                 : [];
+            const cameraTrackState = videoTracks.find((trackState) => !isShareTrack(trackState)) || null;
 
             if (videoTracks.length > 0) {
                 videoTracks.forEach((trackState, index) => {
@@ -4275,10 +4917,12 @@
                     }
                 });
             } else {
-                const noVideo = document.createElement('p');
-                noVideo.textContent = t('broadcast_room_join.remote_media_waiting_camera', 'Bu katılımcının kamera görüntüsü henüz gelmedi.');
-                wrapper.appendChild(noVideo);
+                appendParticipantAvatar(wrapper, {
+                    identity: participantState.identity,
+                    name: getRemoteParticipantLabel(participantState)
+                });
             }
+            appendRemoteVisualTile(participantState, cameraTrackState);
 
             const audioStatus = document.createElement('p');
             audioStatus.textContent = Array.isArray(participantState.audioTracks) && participantState.audioTracks.length > 0
@@ -4300,13 +4944,16 @@
                     if (playPromise && typeof playPromise.catch === 'function') {
                         playPromise.catch(() => {});
                     }
-                    await applySpeakerSelectionToElement(audio);
+                    // Track changes can rebuild media without a user gesture on iOS.
+                    // Fall back to Safari's active output silently in that background path.
+                    await applySpeakerSelectionToElement(audio, { reportError: false });
                     els.remoteAudioHost.appendChild(audio);
                 }
             }
 
             els.remoteMediaList.appendChild(wrapper);
         }
+        updateRemoteVisualActiveSpeakerState();
         updateFocusedShareView();
     }
 
@@ -4365,10 +5012,8 @@
                 return item?.track !== track;
             });
         }
-        if ((!participantState.videoTracks || participantState.videoTracks.length === 0)
-            && (!participantState.audioTracks || participantState.audioTracks.length === 0)) {
-            delete state.remoteParticipants[identity];
-        }
+        // Keep camera-off participants in the media list so their avatar/name
+        // remains visible until an actual participant disconnect event arrives.
         if (removedFocusedShare || !getFocusedShareTrackState()) {
             state.focusedShareDismissedKey = '';
             closeFocusedShareView({ dismiss: false });
@@ -4544,11 +5189,19 @@
     }
 
     async function disconnectRoom({ announceStatus = true } = {}) {
+        state.intentionalDisconnect = true;
+        state.reconnectInProgress = false;
+        state.reconnectAttempts = 0;
+        if (state.reconnectTimer) {
+            clearTimeout(state.reconnectTimer);
+            state.reconnectTimer = null;
+        }
         if (state.mediaStabilizerTimer) {
             clearTimeout(state.mediaStabilizerTimer);
             state.mediaStabilizerTimer = null;
         }
         stopRoomStatusPolling();
+        stopParticipantHeartbeat();
         stopConnectionQualityDiagnostics();
         state.hostRecordingActive = false;
         stopLocalBackupRecording();
@@ -4627,6 +5280,70 @@
         updateScreenShareControls();
     }
 
+    function scheduleUnexpectedRoomReconnect() {
+        if (state.intentionalDisconnect || state.roleRefreshInProgress || state.reconnectTimer || !state.room?.roomId || !state.participantIdentity) {
+            return;
+        }
+        const delays = [750, 2000, 5000, 10000, 15000];
+        if (state.reconnectAttempts >= delays.length) {
+            setConnectionStatus(t('broadcast_room_join.connection_failed', 'Canlı oda bağlantısı kurulamadı.'));
+            return;
+        }
+        const delay = delays[state.reconnectAttempts];
+        state.reconnectTimer = window.setTimeout(() => {
+            state.reconnectTimer = null;
+            recoverUnexpectedRoomDisconnect().catch(() => {});
+        }, delay);
+    }
+
+    async function recoverUnexpectedRoomDisconnect() {
+        if (state.intentionalDisconnect || state.roleRefreshInProgress || state.reconnectInProgress || !state.room?.roomId || !state.participantIdentity) {
+            return;
+        }
+        state.reconnectInProgress = true;
+        state.reconnectAttempts += 1;
+        setConnectionStatus(t('broadcast_room.status_live_media_reconnecting', 'Canlı oda medya bağlantısı yeniden bağlanıyor.'));
+        try {
+            const response = await fetch('/api/broadcast-room/participant-role-token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    roomId: state.room.roomId,
+                    identity: state.participantIdentity
+                })
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.success === false) {
+                if (response.status === 404 || payload.error === 'room_or_participant_not_found') {
+                    await disconnectRoom({ announceStatus: false });
+                    setJoinResult(t('broadcast_room_join.removed_from_room', 'Host sizi odadan çıkardı.'));
+                    setConnectionStatus(t('broadcast_room_join.connection_removed', 'Oda bağlantısı host tarafından kapatıldı.'));
+                    return;
+                }
+                throw new Error(payload.error || `http_${response.status}`);
+            }
+
+            state.token = String(payload.token || '');
+            state.livekitUrl = String(payload.livekitUrl || state.livekitUrl || '');
+            state.participantRole = String(payload.participantRole || state.participantRole || 'guest');
+            state.canPublishMedia = roleCanPublishMedia(state.participantRole);
+            state.intentionalDisconnect = false;
+            await connectToLiveKit({
+                ...payload,
+                token: state.token,
+                livekitUrl: state.livekitUrl
+            });
+            state.reconnectAttempts = 0;
+            setConnectionStatus(t('broadcast_room.status_live_media_reconnected', 'Canlı oda medya bağlantısı yeniden kuruldu.'));
+        } catch (_error) {
+            scheduleUnexpectedRoomReconnect();
+        } finally {
+            state.reconnectInProgress = false;
+        }
+    }
+
     async function stabilizeJoinedMedia() {
         if (!state.roomConnection) {
             return;
@@ -4640,9 +5357,7 @@
             try {
                 state.localVideoTrack = await client.createLocalVideoTrack(buildVideoCaptureOptions(String(els.cameraDevice?.value || '').trim()));
                 await state.roomConnection.localParticipant.publishTrack(state.localVideoTrack);
-                if (els.localPreview) {
-                    state.localVideoTrack.attach(els.localPreview);
-                }
+                syncLocalCameraPreview();
             } catch (_error) {
                 // keep last visible error path unchanged; this is only a quiet retry
             }
@@ -4676,6 +5391,7 @@
             throw new Error(t('broadcast_room_join.livekit_unavailable', 'LiveKit istemcisi yüklenemedi.'));
         }
 
+        state.intentionalDisconnect = false;
         setJoinResult(t('broadcast_room_join.join_step_connecting', 'Canlı odaya bağlanılıyor...'));
         setConnectionStatus(t('broadcast_room_join.connection_connecting', 'Canlı oda bağlantısı kuruluyor...'));
         const room = new client.Room({
@@ -4684,11 +5400,39 @@
         });
 
         room.on(client.RoomEvent.Disconnected, () => {
-            if (state.roleRefreshInProgress) {
+            if (state.roleRefreshInProgress || state.intentionalDisconnect) {
                 return;
             }
-            disconnectRoom({ announceStatus: false }).catch(() => {});
+            if (state.roomConnection === room) {
+                state.roomConnection = null;
+            }
+            closeMonitorAudioSocket();
+            closeTranslationAudioSocket({ closeContext: true });
+            closeRemoteAudioContext();
+            if (state.localVideoTrack) {
+                try { state.localVideoTrack.stop(); } catch (_error) {}
+                state.localVideoTrack = null;
+            }
+            if (state.localAudioTrack) {
+                try { state.localAudioTrack.stop(); } catch (_error) {}
+                state.localAudioTrack = null;
+            }
+            state.remoteParticipants = {};
+            state.remoteMediaRenderSignature = '';
+            renderRemoteParticipants().catch(() => {});
+            scheduleUnexpectedRoomReconnect();
         });
+        if (client.RoomEvent.Reconnecting) {
+            room.on(client.RoomEvent.Reconnecting, () => {
+                setConnectionStatus(t('broadcast_room.status_live_media_reconnecting', 'Canlı oda medya bağlantısı yeniden bağlanıyor.'));
+            });
+        }
+        if (client.RoomEvent.Reconnected) {
+            room.on(client.RoomEvent.Reconnected, () => {
+                state.reconnectAttempts = 0;
+                setConnectionStatus(t('broadcast_room.status_live_media_reconnected', 'Canlı oda medya bağlantısı yeniden kuruldu.'));
+            });
+        }
         room.on(client.RoomEvent.ParticipantConnected, (participant) => {
             ensureRemoteParticipantState(participant);
             renderRemoteParticipants().catch(() => {});
@@ -4712,6 +5456,7 @@
             state.activeSpeakerIdentities = (Array.isArray(speakers) ? speakers : [])
                 .map((speaker) => String(speaker?.identity || '').trim())
                 .filter(Boolean);
+            updateRemoteVisualActiveSpeakerState();
         });
 
         await room.connect(payload.livekitUrl, payload.token);
@@ -4746,9 +5491,7 @@
             try {
                 state.localVideoTrack = await client.createLocalVideoTrack(buildVideoCaptureOptions(cameraDeviceId));
                 await room.localParticipant.publishTrack(state.localVideoTrack);
-                if (els.localPreview) {
-                    state.localVideoTrack.attach(els.localPreview);
-                }
+                syncLocalCameraPreview();
             } catch (error) {
                 mediaWarning = t('broadcast_room_join.camera_publish_failed', 'Kamera açılamadı: {error}', {
                     error: formatErrorMessage(error)
@@ -4781,7 +5524,8 @@
             connected: true
         });
         await pollRoomStatus();
-        startRoomStatusPolling();
+        startRoomStatusPolling(state.roomEventSourceConnected ? 30000 : 5000);
+        startParticipantHeartbeat();
         setConnectionStatus(t('broadcast_room_join.connection_connected', 'Canlı oda bağlantısı kuruldu.'));
         playRoomTone('join');
         attachMediaSessionHandlers();
@@ -4828,9 +5572,7 @@
         if (enabled && !state.localVideoTrack) {
             state.localVideoTrack = await client.createLocalVideoTrack(buildVideoCaptureOptions(String(els.cameraDevice?.value || '').trim()));
             await state.roomConnection.localParticipant.publishTrack(state.localVideoTrack);
-            if (els.localPreview) {
-                state.localVideoTrack.attach(els.localPreview);
-            }
+            syncLocalCameraPreview();
             if (state.hostRecordingActive === true) {
                 stopLocalBackupRecording();
             }
@@ -4845,6 +5587,7 @@
         }
 
         updateJoinMediaToggleButtons();
+        renderLocalAvatarFallback();
         await postParticipantState({
             cameraEnabled: enabled,
             microphoneEnabled: Boolean(els.microphoneEnabled?.checked),
@@ -4959,12 +5702,10 @@
                 try { previousTrack.stop(); } catch (_error) {}
             }
             state.localVideoTrack = null;
+            clearLocalPreview();
             await state.roomConnection.localParticipant.publishTrack(nextTrack);
             state.localVideoTrack = nextTrack;
-            if (els.localPreview) {
-                clearLocalPreview();
-                nextTrack.attach(els.localPreview);
-            }
+            syncLocalCameraPreview();
             if (state.hostRecordingActive === true) {
                 stopLocalBackupRecording();
             }
@@ -5093,6 +5834,10 @@
             updateHandRaiseStateFromParticipants({ announce: false });
             setJoinResult(t('broadcast_room_join.join_step_token_ready', 'Katılım bilgisi alındı. Canlı oda bağlantısı kuruluyor...'));
             await connectToLiveKit(payload);
+            if (state.avatarDataUrl) {
+                await syncParticipantAvatar();
+            }
+            renderLocalAvatarFallback();
             const joinResultText = String(els.joinResult?.textContent || '').trim();
             if (!joinResultText || joinResultText === t('broadcast_room_join.join_step_connected', 'Canlı oda bağlantısı kuruldu. Medya hazırlanıyor...') || joinResultText === t('broadcast_room_join.join_step_token_ready', 'Katılım bilgisi alındı. Canlı oda bağlantısı kuruluyor...')) {
                 setJoinResult(t('broadcast_room_join.join_success', 'Katılım tamamlandı. Oda bağlantısı kuruldu.'));
@@ -5120,16 +5865,24 @@
     }
 
     function bindEvents() {
-        bindMobileInputFocusAssist(els.displayName, els.displayNameGroup);
-        bindMobileInputFocusAssist(els.roomPassword, els.roomPasswordGroup);
-        els.btnJoinRoom?.addEventListener('click', () => {
-            joinRoom().catch((error) => {
-                const message = t('broadcast_room_join.join_failed', 'Katılım jetonu alınamadı: {error}', {
-                    error: formatErrorMessage(error)
-                });
-                setJoinResult(message);
-                setConnectionStatus(t('broadcast_room_join.connection_failed', 'Canlı oda bağlantısı kurulamadı.'));
-                setStatus(message);
+        els.participantAvatarFile?.addEventListener('change', () => {
+            handleParticipantAvatarSelection().catch(() => {});
+        });
+        els.btnRemoveParticipantAvatar?.addEventListener('click', () => {
+            removeParticipantAvatar().catch(() => {});
+        });
+        [els.displayName, els.joinedDisplayName].filter(Boolean).forEach((input) => {
+            input.addEventListener('click', () => {
+                if (document.activeElement === input) {
+                    return;
+                }
+                // VoiceOver's virtual cursor and Safari's keyboard focus can diverge.
+                // Keep this synchronous with the trusted activation so iOS may open the keyboard.
+                try {
+                    input.focus({ preventScroll: true });
+                } catch (_error) {
+                    input.focus();
+                }
             });
         });
         els.btnUpdateDisplayName?.addEventListener('click', () => {
@@ -5163,19 +5916,6 @@
                 setStatus(message);
             });
         });
-        els.displayName?.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                joinRoom().catch((error) => {
-                    const message = t('broadcast_room_join.join_failed', 'Katılım jetonu alınamadı: {error}', {
-                        error: formatErrorMessage(error)
-                    });
-                    setJoinResult(message);
-                    setConnectionStatus(t('broadcast_room_join.connection_failed', 'Canlı oda bağlantısı kurulamadı.'));
-                    setStatus(message);
-                });
-            }
-        });
         els.btnLeaveRoom?.addEventListener('click', () => {
             disconnectRoom().catch((error) => {
                 setStatus(t('broadcast_room_join.leave_failed', 'Odadan ayrılırken hata oluştu: {error}', {
@@ -5202,27 +5942,31 @@
         els.cameraEnabled?.addEventListener('click', () => {
             els.cameraEnabled.checked = !Boolean(els.cameraEnabled.checked);
             updateJoinMediaToggleButtons();
-            handleCameraToggleChange().catch((error) => {
-                els.cameraEnabled.checked = !Boolean(els.cameraEnabled.checked);
-                updateJoinMediaToggleButtons();
-                setStatus(t('broadcast_room_join.join_failed', 'Katılım jetonu alınamadı: {error}', {
-                    error: formatErrorMessage(error)
-                }));
-            });
+            handleCameraToggleChange()
+                .then(() => announceLocalMediaToggleResult('camera'))
+                .catch((error) => {
+                    els.cameraEnabled.checked = !Boolean(els.cameraEnabled.checked);
+                    updateJoinMediaToggleButtons();
+                    setStatus(t('broadcast_room_join.camera_publish_failed', 'Kamera açılamadı: {error}', {
+                        error: formatErrorMessage(error)
+                    }));
+                });
         });
         els.microphoneEnabled?.addEventListener('click', () => {
             els.microphoneEnabled.checked = !Boolean(els.microphoneEnabled.checked);
             updateJoinMediaToggleButtons();
-            handleMicrophoneToggleChange().catch((error) => {
-                els.microphoneEnabled.checked = !Boolean(els.microphoneEnabled.checked);
-                updateJoinMediaToggleButtons();
-                setStatus(t('broadcast_room_join.join_failed', 'Katılım jetonu alınamadı: {error}', {
-                    error: formatErrorMessage(error)
-                }));
-            });
+            handleMicrophoneToggleChange()
+                .then(() => announceLocalMediaToggleResult('microphone'))
+                .catch((error) => {
+                    els.microphoneEnabled.checked = !Boolean(els.microphoneEnabled.checked);
+                    updateJoinMediaToggleButtons();
+                    setStatus(t('broadcast_room_join.microphone_publish_failed', 'Mikrofon açılamadı: {error}', {
+                        error: formatErrorMessage(error)
+                    }));
+                });
         });
         els.speakerDevice?.addEventListener('change', () => {
-            renderRemoteParticipants().catch((error) => {
+            applySpeakerSelectionToRemoteAudioElements().catch((error) => {
                 setStatus(t('broadcast_room_join.speaker_apply_failed', 'Seçili hoparlör uygulanamadı: {error}', {
                     error: formatErrorMessage(error)
                 }));
@@ -5232,6 +5976,19 @@
             state.microphoneVolume = getMicrophoneVolume();
             updateAudioLevelLabels();
             applyMicrophoneVolumeToTrack().catch(() => {});
+        });
+        [
+            els.microphoneEchoCancellation,
+            els.microphoneNoiseSuppression,
+            els.microphoneAutoGainControl
+        ].filter(Boolean).forEach((control) => {
+            control.addEventListener('change', () => {
+                handleMicrophoneProcessingChange().catch((error) => {
+                    setStatus(t('broadcast_room_join.microphone_processing_failed', 'Mikrofon sinyal işleme ayarları uygulanamadı: {error}', {
+                        error: formatErrorMessage(error)
+                    }));
+                });
+            });
         });
         els.speakerVolume?.addEventListener('input', () => {
             state.speakerVolume = getSpeakerVolume();
@@ -5252,6 +6009,18 @@
                     error: formatErrorMessage(error)
                 }));
             });
+        });
+        // Deliberately button-only: camera analysis must never start implicitly or via a global shortcut.
+        els.btnTestCameraFraming?.addEventListener('click', () => {
+            startCameraFramingTest();
+        });
+        els.btnReadCameraFramingStatus?.addEventListener('click', readCameraFramingStatus);
+        els.btnCloseCameraFraming?.addEventListener('click', () => {
+            stopCameraFramingTest();
+        });
+        els.cameraFramingDialog?.addEventListener('cancel', (event) => {
+            event.preventDefault();
+            stopCameraFramingTest();
         });
         els.cameraDevice?.addEventListener('change', () => {
             handleCameraDeviceChange().catch((error) => {
@@ -5517,9 +6286,11 @@
             }
         });
         window.addEventListener('pagehide', () => {
+            cleanupCameraFramingTest();
             sendLeaveBeacon();
         });
         window.addEventListener('beforeunload', () => {
+            cleanupCameraFramingTest();
             sendLeaveBeacon();
             disconnectRoom({ announceStatus: false }).catch(() => {});
         });
@@ -5549,6 +6320,15 @@
         if (els.microphoneEnabled) {
             els.microphoneEnabled.checked = false;
         }
+        if (els.microphoneEchoCancellation) {
+            els.microphoneEchoCancellation.checked = state.microphoneEchoCancellation;
+        }
+        if (els.microphoneNoiseSuppression) {
+            els.microphoneNoiseSuppression.checked = state.microphoneNoiseSuppression;
+        }
+        if (els.microphoneAutoGainControl) {
+            els.microphoneAutoGainControl.checked = state.microphoneAutoGainControl;
+        }
         updateJoinMediaToggleButtons();
         bindEvents();
         setJoinResult('');
@@ -5572,7 +6352,6 @@
         updateScreenShareControls();
         updateJoinViewState();
         await loadInviteInfo();
-        await requestInitialMediaPermissions();
         await refreshDevices();
         updateJoinMediaToggleButtons();
         updateButtons();

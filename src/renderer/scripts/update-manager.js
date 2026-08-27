@@ -5,6 +5,8 @@ const UpdateManager = {
     startupCheckDone: false,
     pendingUpdateInfo: null,
     pendingPromptFlushTimer: null,
+    patchProgressUnsubscribe: null,
+    lastPatchProgressStage: '',
 
     t(key, fallback, params = {}) {
         if (!window.i18nHelper) return fallback;
@@ -145,21 +147,23 @@ const UpdateManager = {
                 throw new Error(this.t('runtime.update.invalid_file', 'The update file is missing a valid version number.'));
             }
 
-            if (this.compareVersions(latestVersion, this.currentVersion) <= 0) {
-                if (announceIfCurrent) {
-                    Accessibility.announce(this.t('runtime.update.up_to_date', 'You are using the latest version.'));
+            if (this.compareVersions(latestVersion, this.currentVersion) > 0) {
+                if (this.shouldDelayPrompt()) {
+                    this.pendingUpdateInfo = info;
+                    this.schedulePendingPromptFlush();
+                    return { updateAvailable: true, info, deferred: true };
                 }
-                return { updateAvailable: false, info };
+
+                await this.showUpdatePrompt(info);
+                return { updateAvailable: true, info };
             }
 
-            if (this.shouldDelayPrompt()) {
-                this.pendingUpdateInfo = info;
-                this.schedulePendingPromptFlush();
-                return { updateAvailable: true, info, deferred: true };
+            const patchResult = await this.checkForPatchUpdate(info, { silent });
+            if (patchResult?.available) return { updateAvailable: true, patchAvailable: true, info, patchResult };
+            if (announceIfCurrent) {
+                Accessibility.announce(this.t('runtime.update.up_to_date', 'You are using the latest version.'));
             }
-
-            await this.showUpdatePrompt(info);
-            return { updateAvailable: true, info };
+            return { updateAvailable: false, info };
         } catch (error) {
             console.error('Update check failed:', error);
             if (!silent) {
@@ -169,6 +173,98 @@ const UpdateManager = {
             }
             return { updateAvailable: false, error };
         }
+    },
+
+    getLocalizedPatchNotes(manifest) {
+        return this.getLocalizedReleaseNotes({ releaseNotes: manifest?.releaseNotes || {} });
+    },
+
+    async checkForPatchUpdate(info, { silent = false } = {}) {
+        const manifestUrl = String(info?.patchManifestUrl || '').trim();
+        if (!manifestUrl || !window.api?.checkPatchUpdate) return { available: false };
+        const result = await window.api.checkPatchUpdate({ manifestUrl });
+        if (!result?.success) {
+            console.warn('Patch update check failed:', result?.error);
+            if (!silent && result?.error && result.error !== 'patch_base_version_mismatch') {
+                Accessibility.announce(this.t('runtime.update.patch_check_failed', '', {
+                    error: this.t('runtime.update.unknown_error', '')
+                }));
+            }
+            return { available: false, error: result?.error };
+        }
+        if (!result.available) return result;
+        await this.showPatchPrompt(result.manifest, info);
+        return result;
+    },
+
+    bindPatchProgress() {
+        if (this.patchProgressUnsubscribe || !window.api?.onPatchUpdateProgress) return;
+        this.patchProgressUnsubscribe = window.api.onPatchUpdateProgress((progress = {}) => {
+            const stage = String(progress.stage || '');
+            const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
+            const labels = {
+                download: this.t('runtime.update.patch_downloading', ''),
+                verify: this.t('runtime.update.patch_verifying', ''),
+                ready: this.t('runtime.update.patch_ready', '')
+            };
+            if (window.App?.showProgress && stage !== 'ready') {
+                window.App.showProgress(labels[stage] || labels.download, percent);
+            }
+            if (stage && stage !== this.lastPatchProgressStage) {
+                this.lastPatchProgressStage = stage;
+                Accessibility.announce(labels[stage] || labels.download);
+            }
+        });
+    },
+
+    async showPatchPrompt(manifest, updateInfo = {}) {
+        const revision = Number(manifest?.revision || 0);
+        const result = await Dialogs.showAccessibleChoice({
+            title: this.t('runtime.update.patch_available_title', ''),
+            message: this.t(
+                'runtime.update.patch_available_message',
+                '',
+                { version: this.currentVersion, revision }
+            ),
+            buttons: [
+                this.t('runtime.update.patch_download', ''),
+                this.t('runtime.update.later', 'Later'),
+                this.t('runtime.update.open_full_download', '')
+            ],
+            cancelValue: 1,
+            focusIndex: 0,
+            details: this.getLocalizedPatchNotes(manifest),
+            detailsLabel: this.t('runtime.update.release_notes_label', 'Release notes')
+        });
+        if (result === 2) {
+            const url = updateInfo.setupUrl || updateInfo.notesUrl || updateInfo.url || '';
+            if (url) await window.api?.openExternalUrl?.(url);
+            return;
+        }
+        if (result !== 0) return;
+
+        this.bindPatchProgress();
+        this.lastPatchProgressStage = '';
+        const installResult = await window.api.installPatchUpdate(manifest);
+        window.App?.hideProgress?.();
+        if (!installResult?.success) {
+            console.error('Patch update install failed:', installResult?.error);
+            Accessibility.announceError(this.t('runtime.update.patch_install_failed', '', {
+                error: this.t('runtime.update.unknown_error', '')
+            }));
+            return;
+        }
+        const restartChoice = await Dialogs.showAccessibleChoice({
+            title: this.t('runtime.update.patch_installed_title', ''),
+            message: this.t('runtime.update.patch_installed_message', ''),
+            buttons: [
+                this.t('runtime.update.restart_now', ''),
+                this.t('runtime.update.restart_later', '')
+            ],
+            cancelValue: 1,
+            focusIndex: 0
+        });
+        if (restartChoice === 0) await window.api.relaunchAfterPatchUpdate();
     },
 
     async showUpdatePrompt(info) {

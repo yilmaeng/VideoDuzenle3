@@ -9,6 +9,7 @@ class I18nManager {
         this.defaultLocale = 'tr';
         this.resources = {};
         this.currentLocale = this.defaultLocale;
+        this.patchManager = null;
         // Don't call app.getLocale() here, it causes errors before app is ready
     }
 
@@ -50,6 +51,18 @@ class I18nManager {
                 }
             }
         }
+
+        const overrides = this.patchManager?.getLocaleOverrides?.() || {};
+        for (const loc of this.supportedLocales) {
+            if (overrides[loc] && typeof overrides[loc] === 'object') {
+                if (!this.resources[loc]) this.resources[loc] = {};
+                this.deepMerge(this.resources[loc], overrides[loc]);
+            }
+        }
+    }
+
+    setPatchManager(patchManager) {
+        this.patchManager = patchManager || null;
     }
 
     getValueFromObj(obj, pathKeys) {

@@ -159,6 +159,31 @@
             background: #161616;
         }
 
+        .camera-test-dialog {
+            width: min(760px, calc(100vw - 40px));
+            max-height: calc(100vh - 40px);
+            padding: 22px;
+            border: 1px solid #555;
+            border-radius: 14px;
+            background: #1d1d1d;
+            color: #ececec;
+        }
+
+        .camera-test-dialog::backdrop {
+            background: rgba(0, 0, 0, 0.76);
+        }
+
+        .camera-test-preview {
+            display: block;
+            width: 100%;
+            max-height: 55vh;
+            margin: 12px 0;
+            border: 2px solid #59636b;
+            border-radius: 12px;
+            background: #050505;
+            object-fit: contain;
+        }
+
         .stage-preview-grid {
             position: relative;
             display: grid;
@@ -440,6 +465,52 @@
             border: 0;
         }
 
+        .participant-avatar-card {
+            position: relative;
+            display: flex;
+            width: 100%;
+            min-height: 260px;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: linear-gradient(145deg, #243546, #101820);
+            color: #fff;
+        }
+
+        .participant-avatar-image {
+            width: min(72%, 280px);
+            aspect-ratio: 1;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .participant-avatar-initials {
+            display: flex;
+            width: min(58%, 220px);
+            aspect-ratio: 1;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: hsl(var(--participant-avatar-hue, 205) 52% 38%);
+            color: #fff;
+            font-size: clamp(48px, 8vw, 108px);
+            font-weight: 800;
+            letter-spacing: .03em;
+            box-shadow: 0 10px 35px rgba(0, 0, 0, .38);
+        }
+
+        .participant-avatar-name {
+            position: absolute;
+            right: 12px;
+            bottom: 10px;
+            left: 12px;
+            padding: 7px 10px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            text-align: center;
+            font-weight: 700;
+        }
+
         @media (max-width: 960px) {
             .stage-preview-grid {
                 grid-template-columns: 1fr;
@@ -492,6 +563,7 @@
                     <label for="host-live-preview" data-i18n="broadcast_room.host_live_preview_label">Host canlı kamera önizlemesi</label>
                     <div class="stage-preview-frame">
                         <video id="host-live-preview" autoplay playsinline muted></video>
+                        <div id="host-avatar-fallback" hidden></div>
                     </div>
                 </div>
                 <div class="stage-preview-panel">
@@ -573,6 +645,22 @@
                     <input id="host-microphone-volume" type="range" min="0" max="200" step="5" value="100" data-i18n-aria="broadcast_room.host_microphone_volume_label">
                     <div id="host-microphone-volume-value" class="hint">100%</div>
                 </div>
+                <fieldset>
+                    <legend data-i18n="broadcast_room.microphone_processing_label">Mikrofon sinyal işleme</legend>
+                    <p class="hint" data-i18n="broadcast_room.microphone_processing_hint">Varsayılan olarak EVD ek ses filtresi uygulamaz; mikrofonunuzun ve işletim sisteminizin hazırladığı ses korunur.</p>
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input id="host-microphone-echo-cancellation" type="checkbox">
+                        <span data-i18n="broadcast_room.microphone_echo_cancellation">Yankı engellemeyi etkinleştir</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input id="host-microphone-noise-suppression" type="checkbox">
+                        <span data-i18n="broadcast_room.microphone_noise_suppression">Gürültü gidermeyi etkinleştir</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input id="host-microphone-auto-gain-control" type="checkbox">
+                        <span data-i18n="broadcast_room.microphone_auto_gain_control">Otomatik mikrofon kazancını etkinleştir</span>
+                    </label>
+                </fieldset>
                 <div>
                     <label for="host-speaker-device" data-i18n="broadcast_room.speaker_device_label">Hoparlör</label>
                     <select id="host-speaker-device" data-i18n-aria="broadcast_room.speaker_device_label"></select>
@@ -589,7 +677,37 @@
                     <button id="btn-test-host-microphone" type="button" class="secondary" data-i18n="broadcast_room.test_microphone_button" data-i18n-aria="broadcast_room.test_microphone_button">Mikrofonu test et</button>
                     <div id="host-audio-test-status" class="hint" role="status" aria-live="polite"></div>
                 </div>
+                <div>
+                    <button id="btn-test-host-camera" type="button" class="secondary" data-i18n="broadcast_room.test_camera_button" data-i18n-aria="broadcast_room.test_camera_button">Kamerayı ve kadrajı test et</button>
+                </div>
             </div>
+            <details id="personal-virtual-background-panel" class="subpanel" style="margin-top:16px;" data-room-section-id="device_controls">
+                <summary data-i18n="broadcast_room.personal_virtual_background_section">Kişisel sanal arka plan</summary>
+                <p class="hint" data-i18n="broadcast_room.personal_virtual_background_hint">Kameranız odaya gönderilmeden önce arka planınızı bulanıklaştırın veya kendi görselinizle değiştirin. Seçiminiz yalnızca bu bilgisayardaki kameranıza uygulanır.</p>
+                <div class="grid" style="margin-top:12px;">
+                    <div>
+                        <label for="personal-virtual-background-mode" data-i18n="broadcast_room.personal_virtual_background_mode_label">Sanal arka plan biçimi</label>
+                        <select id="personal-virtual-background-mode" data-i18n-aria="broadcast_room.personal_virtual_background_mode_label">
+                            <option value="none" data-i18n="broadcast_room.personal_virtual_background_none">Normal kamera görüntüsü</option>
+                            <option value="blur" data-i18n="broadcast_room.personal_virtual_background_blur">Arka planı bulanıklaştır</option>
+                            <option value="image" data-i18n="broadcast_room.personal_virtual_background_image">Arka plan görseli kullan</option>
+                        </select>
+                    </div>
+                    <div>
+                        <button id="btn-select-personal-virtual-background" type="button" class="secondary" data-i18n="broadcast_room.select_personal_virtual_background_image" data-i18n-aria="broadcast_room.select_personal_virtual_background_image">Arka plan görseli seç</button>
+                    </div>
+                </div>
+                <div id="personal-virtual-background-status" class="hint" role="status" aria-live="polite"></div>
+            </details>
+            <details id="participant-avatar-panel" class="subpanel" style="margin-top:16px;" data-room-section-id="device_controls">
+                <summary data-i18n="broadcast_room.participant_avatar_section">Kamera kapalıyken profil fotoğrafı</summary>
+                <p class="hint" data-i18n="broadcast_room.participant_avatar_hint">Kameranız kapalıyken sahnede adınızla birlikte bu fotoğraf gösterilir. Seçim bu bilgisayarda saklanır.</p>
+                <div class="toolbar" style="margin-top:12px;">
+                    <button id="btn-select-participant-avatar" type="button" class="secondary" data-i18n="broadcast_room.participant_avatar_select" data-i18n-aria="broadcast_room.participant_avatar_select">Profil fotoğrafı seç</button>
+                    <button id="btn-remove-participant-avatar" type="button" class="secondary" data-i18n="broadcast_room.participant_avatar_remove" data-i18n-aria="broadcast_room.participant_avatar_remove">Profil fotoğrafını kaldır</button>
+                </div>
+                <div id="participant-avatar-status" class="hint" role="status" aria-live="polite"></div>
+            </details>
             <div class="grid" style="margin-top: 16px;">
                 <div>
                     <h3 data-i18n="broadcast_room.room_status_label">Durum</h3>
@@ -1229,13 +1347,32 @@
             </div>
             <div id="youtube-panel-room" hidden>
             <div data-youtube-host-controls>
+                <section id="youtube-oauth-setup-room" class="card" hidden aria-labelledby="youtube-oauth-setup-title-room">
+                    <h3 id="youtube-oauth-setup-title-room" data-i18n="youtube_oauth_setup.title">YouTube OAuth bilgileri gerekli</h3>
+                    <p data-i18n="youtube_oauth_setup.required_help">Bu pakette YouTube OAuth bilgisi bulunmuyor. YouTube hesabı bağlamak için Google Cloud masaüstü istemci bilgilerinizi kaydedin.</p>
+                    <div class="form-group">
+                        <label for="youtube-client-id-room" data-i18n="youtube_oauth_setup.client_id">YouTube OAuth Client ID</label>
+                        <input id="youtube-client-id-room" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="youtube_oauth_setup.client_id_placeholder" placeholder="...apps.googleusercontent.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="youtube-client-secret-room" data-i18n="youtube_oauth_setup.client_secret">YouTube OAuth Client Secret</label>
+                        <input id="youtube-client-secret-room" type="password" autocomplete="new-password" spellcheck="false">
+                        <label><input id="youtube-show-client-secret-room" type="checkbox"> <span data-i18n="youtube_oauth_setup.show_secret">Client Secret bilgisini göster</span></label>
+                    </div>
+                    <div class="step-actions"><button id="youtube-save-client-room" type="button" data-i18n="youtube_oauth_setup.save">OAuth bilgilerini kaydet</button></div>
+                    <details>
+                        <summary data-i18n="youtube_oauth_setup.instructions_toggle">YouTube OAuth nasıl alınır? Adım adım yönerge</summary>
+                        <div data-i18n-html="youtube_oauth_setup.instructions_html"></div>
+                    </details>
+                </section>
             <p class="hint" data-i18n="broadcast_room.youtube_hint">Kayıt sihirbazındaki gibi YouTube hesabı bağlayabilir, planlı bir yayın hazırlayabilir veya mevcut planlı yayını seçebilirsiniz.</p>
             <div class="toolbar">
-                <button id="btn-youtube-connect-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_connect" data-i18n-aria="broadcast_room.youtube_connect">YouTube Hesabını Bağla</button>
+                <button id="btn-youtube-connect-room" type="button" class="secondary" disabled data-i18n="broadcast_room.youtube_connect" data-i18n-aria="broadcast_room.youtube_connect">YouTube Hesabını Bağla</button>
                 <button id="btn-youtube-disconnect-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_disconnect" data-i18n-aria="broadcast_room.youtube_disconnect">Bağlantıyı Kaldır</button>
                 <button id="btn-youtube-prepare-room" type="button" data-i18n="broadcast_room.youtube_prepare" data-i18n-aria="broadcast_room.youtube_prepare">Yayını Hazırla</button>
                 <button id="btn-youtube-start-room" type="button" data-i18n="broadcast_room.youtube_start_live" data-i18n-aria="broadcast_room.youtube_start_live">Canlı Yayını Başlat</button>
                 <button id="btn-youtube-stop-room" type="button" class="secondary" data-i18n="broadcast_room.youtube_stop_live" data-i18n-aria="broadcast_room.youtube_stop_live">Canlı Yayını Durdur</button>
+                <button id="btn-youtube-recover-room-audio" type="button" class="secondary" hidden data-i18n="broadcast_room.youtube_recover_room_audio" data-i18n-aria="broadcast_room.youtube_recover_room_audio">Konuk Sesini Yeniden Bağla</button>
             </div>
             <div class="grid" style="margin-top: 16px;">
                 <div>
@@ -1318,7 +1455,16 @@
                     </div>
                 </div>
                 <div class="window-selection-row" style="margin-top:10px;">
-                    <label data-youtube-host-controls><input type="checkbox" id="youtube-chat-visible-toggle-room" checked> <span data-i18n="recording_wizard.chat.visible_on_stream">Sohbeti yayında göster</span></label>
+                    <label data-youtube-host-controls><input type="checkbox" id="youtube-chat-visible-toggle-room"> <span data-i18n="recording_wizard.chat.visible_on_stream">Sohbeti yayında göster</span></label>
+                    <label data-youtube-host-controls for="youtube-chat-overlay-layout-room" data-i18n="recording_wizard.chat.overlay_position_label">Yayındaki sohbet konumu</label>
+                    <select data-youtube-host-controls id="youtube-chat-overlay-layout-room" data-i18n-aria="recording_wizard.chat.overlay_position_label">
+                        <option value="bottom-band" data-i18n="recording_wizard.chat.overlay_position_bottom_band">Kompakt alt bant, önerilen</option>
+                        <option value="top-left" data-i18n="recording_wizard.chat.overlay_position_top_left">Sol üst</option>
+                        <option value="top-right" data-i18n="recording_wizard.chat.overlay_position_top_right">Sağ üst</option>
+                        <option value="bottom-left" data-i18n="recording_wizard.chat.overlay_position_bottom_left">Sol alt</option>
+                        <option value="bottom-right" data-i18n="recording_wizard.chat.overlay_position_bottom_right">Sağ alt</option>
+                    </select>
+                    <p data-youtube-host-controls class="hint" data-i18n="recording_wizard.chat.overlay_position_hint">Alt bant konuşmacıların yüzlerini kapatma olasılığını azaltır. Köşe yerleşimlerini sahne düzeninize göre seçebilirsiniz.</p>
                     <label><input type="checkbox" id="youtube-chat-auto-read-toggle-room"> <span data-i18n="recording_wizard.chat.auto_read">Yeni mesajları ekran okuyucuya otomatik duyur</span></label>
                     <label><input type="checkbox" id="youtube-chat-background-notification-toggle-room"> <span data-i18n="recording_wizard.chat.background_notification">Arka planda yeni mesaj geldiğinde sistem bildirimi göster</span></label>
                     <label><input type="checkbox" id="youtube-chat-background-flash-toggle-room"> <span data-i18n="recording_wizard.chat.background_flash">Arka planda yeni mesaj geldiğinde görev çubuğunda dikkat çek</span></label>
@@ -1326,7 +1472,7 @@
                 </div>
                 <div id="youtube-chat-visual-panel-room" style="margin-top:12px; display:none;">
                     <div class="form-group">
-                        <label for="youtube-live-stats-room" data-i18n="broadcast_room.youtube_live_stats_label">YouTube yayın istatistikleri</label>
+                        <label id="youtube-live-stats-label-room" for="youtube-live-stats-room" data-i18n="broadcast_room.youtube_live_stats_label">YouTube yayın istatistikleri</label>
                         <textarea id="youtube-live-stats-room" class="value-box" rows="8" readonly
                             data-i18n-aria="broadcast_room.youtube_live_stats_label"
                             aria-live="off"></textarea>
@@ -1697,6 +1843,18 @@
             </div>
         </section>
     </div>
+
+    <dialog id="host-camera-test-dialog" class="camera-test-dialog" aria-labelledby="host-camera-test-title" aria-describedby="host-camera-test-help">
+        <h2 id="host-camera-test-title" tabindex="-1" data-i18n="broadcast_room.camera_test_dialog_title">Kamera ve kadraj testi</h2>
+        <p id="host-camera-test-help" class="hint" data-i18n="broadcast_room.camera_test_help">Kamera görüntünüz yalnız bu bilgisayarda incelenir. Kadraj yardımı yüzünüzün konumunu, uzaklığını ve ışığı bildirir; görüntü hiçbir sunucuya gönderilmez.</p>
+        <label for="host-camera-test-preview" data-i18n="broadcast_room.camera_test_preview_label">Kamera testi önizlemesi</label>
+        <video id="host-camera-test-preview" class="camera-test-preview" autoplay playsinline muted data-i18n-aria="broadcast_room.camera_test_preview_label"></video>
+        <p id="host-camera-test-status" class="status-line" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div class="dialog-buttons">
+            <button id="btn-read-host-camera-test-status" type="button" data-i18n="broadcast_room.camera_test_read_status_button" data-i18n-aria="broadcast_room.camera_test_read_status_button">Mevcut kadraj bilgisini oku</button>
+            <button id="btn-close-host-camera-test" type="button" class="secondary" data-i18n="broadcast_room.stop_camera_test_button" data-i18n-aria="broadcast_room.stop_camera_test_button">Kamera testini kapat</button>
+        </div>
+    </dialog>
 
     <div id="scene-slot-context-menu" class="live-effects-overlay" aria-hidden="true" style="background: transparent; display:none;">
         <section id="scene-slot-context-menu-panel" class="live-effects-panel" role="dialog" aria-modal="true" aria-labelledby="scene-slot-context-menu-title" tabindex="-1" style="width:min(520px, calc(100vw - 40px));">

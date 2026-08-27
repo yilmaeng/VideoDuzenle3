@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="broadcast_room_join.window_title">EVD Yayın Odası Katılımı</title>
-    <link rel="stylesheet" href="/yayinodasi/join.css?v=20260524a">
+    <link rel="stylesheet" href="/yayinodasi/join.css?v=20260820a">
 </head>
 <body>
     <main class="page">
@@ -34,12 +34,12 @@
             <h2 data-i18n="broadcast_room_join.identity_section">Katılımcı Bilgisi</h2>
             <form id="join-form" action="javascript:void(0)" autocomplete="on">
                 <div id="display-name-group" class="field-group">
-                    <label for="display-name" data-i18n="broadcast_room_join.display_name_label">Görünen ad</label>
-                    <input id="display-name" type="text" class="value-box" enterkeyhint="go" inputmode="text" autocomplete="name" data-i18n-placeholder="broadcast_room_join.display_name_placeholder" placeholder="Adınızı yazın">
+                    <label for="display-name" aria-hidden="true" data-i18n="broadcast_room_join.display_name_label">Görünen ad</label>
+                    <input id="display-name" name="displayName" type="text" class="value-box" enterkeyhint="go" inputmode="text" autocomplete="name" autocapitalize="words" data-i18n-aria="broadcast_room_join.display_name_label" data-i18n-placeholder="broadcast_room_join.display_name_placeholder" placeholder="Adınızı yazın">
                 </div>
                 <div id="room-password-group" class="field-group" hidden>
-                    <label for="room-password" data-i18n="broadcast_room_join.room_password_label">Oda parolası</label>
-                    <input id="room-password" type="password" class="value-box" enterkeyhint="go" inputmode="text" autocomplete="current-password" data-i18n-aria="broadcast_room_join.room_password_label" data-i18n-placeholder="broadcast_room_join.room_password_placeholder">
+                    <label for="room-password" aria-hidden="true" data-i18n="broadcast_room_join.room_password_label">Oda parolası</label>
+                    <input id="room-password" name="roomPassword" type="password" class="value-box" enterkeyhint="go" inputmode="text" autocomplete="current-password" data-i18n-aria="broadcast_room_join.room_password_label" data-i18n-placeholder="broadcast_room_join.room_password_placeholder">
                     <p class="hint" data-i18n="broadcast_room_join.room_password_hint">Bu oda parola istiyorsa katılmadan önce parolayı yazın.</p>
                 </div>
             </form>
@@ -69,8 +69,8 @@
                     <div id="room-summary-status" class="value-box"></div>
                 </div>
                 <div class="field-group">
-                    <label for="joined-display-name" data-i18n="broadcast_room_join.joined_display_name_label">Görünen adınız</label>
-                    <input id="joined-display-name" type="text" class="value-box" data-i18n-aria="broadcast_room_join.joined_display_name_label">
+                    <label for="joined-display-name" aria-hidden="true" data-i18n="broadcast_room_join.joined_display_name_label">Görünen adınız</label>
+                    <input id="joined-display-name" name="joinedDisplayName" type="text" class="value-box" enterkeyhint="done" inputmode="text" autocomplete="name" autocapitalize="words" data-i18n-aria="broadcast_room_join.joined_display_name_label">
                     <button id="btn-update-display-name" type="button" class="secondary" style="margin-top: 8px;" data-i18n="broadcast_room_join.update_display_name" data-i18n-aria="broadcast_room_join.update_display_name">Adımı değiştir</button>
                 </div>
                 <div id="local-backup-recording-group" class="field-group" hidden>
@@ -91,6 +91,7 @@
                 </div>
             </div>
             <div id="remote-audio-host" aria-hidden="true" style="display:none;"></div>
+            <div id="remote-visual-stage" class="remote-visual-stage" aria-hidden="true" hidden></div>
 
             <div class="field-group" style="margin-top: 16px;">
                 <button id="btn-toggle-more-info-panel" type="button" class="secondary" aria-expanded="false" aria-controls="more-info-panel" data-i18n="broadcast_room_join.more_info_panel_button">Diğer bilgiler</button>
@@ -127,6 +128,7 @@
                         <label for="local-preview" data-i18n="broadcast_room_join.local_preview_label">Yerel kamera önizlemesi</label>
                         <div class="value-box">
                             <video id="local-preview" autoplay playsinline muted style="width: 100%; max-height: 260px; background: #111;"></video>
+                            <div id="local-avatar-fallback" hidden></div>
                         </div>
                     </div>
                     <div class="field-group" style="margin-top: 16px;">
@@ -227,8 +229,8 @@
 
         <section class="meeting-controls-card" aria-label="Katılım kontrolleri" data-i18n-aria="broadcast_room_join.meeting_controls_label">
             <div class="meeting-controls-dock">
-                <button id="microphone-enabled" type="button" class="meeting-control-button" data-i18n="broadcast_room_join.microphone_stop_button" data-i18n-aria="broadcast_room_join.microphone_stop_button">Sesiniz açık, sesi kapat</button>
-                <button id="camera-enabled" type="button" class="meeting-control-button" data-i18n="broadcast_room_join.camera_stop_button" data-i18n-aria="broadcast_room_join.camera_stop_button">Videonuz açık, videoyu durdur</button>
+                <button id="microphone-enabled" type="button" class="meeting-control-button" aria-pressed="false" data-i18n="broadcast_room_join.microphone_toggle">Mikrofon (Ctrl+D)</button>
+                <button id="camera-enabled" type="button" class="meeting-control-button" aria-pressed="false" data-i18n="broadcast_room_join.camera_toggle">Video (Ctrl+E)</button>
                 <div id="join-device-panel-group" class="meeting-control-device-panel">
                     <button id="btn-toggle-join-device-panel" type="button" class="meeting-control-button" aria-expanded="false" aria-controls="join-device-panel" data-i18n="broadcast_room_join.join_device_panel_button">Ses ve görüntü ayarları</button>
                     <div id="join-device-panel" class="meeting-control-device-panel-body" hidden>
@@ -242,6 +244,22 @@
                                 <input id="microphone-volume" type="range" min="0" max="200" step="5" value="100" data-i18n-aria="broadcast_room_join.microphone_volume_label">
                                 <div id="microphone-volume-value" class="hint">100%</div>
                             </div>
+                            <fieldset class="field-group">
+                                <legend data-i18n="broadcast_room_join.microphone_processing_label">Mikrofon sinyal işleme</legend>
+                                <p class="hint" data-i18n="broadcast_room_join.microphone_processing_hint">Varsayılan olarak EVD ek ses filtresi uygulamaz; mikrofonunuzun ve işletim sisteminizin hazırladığı ses korunur.</p>
+                                <label class="meeting-control-toggle">
+                                    <input id="microphone-echo-cancellation" type="checkbox">
+                                    <span data-i18n="broadcast_room_join.microphone_echo_cancellation">Yankı engellemeyi etkinleştir</span>
+                                </label>
+                                <label class="meeting-control-toggle">
+                                    <input id="microphone-noise-suppression" type="checkbox">
+                                    <span data-i18n="broadcast_room_join.microphone_noise_suppression">Gürültü gidermeyi etkinleştir</span>
+                                </label>
+                                <label class="meeting-control-toggle">
+                                    <input id="microphone-auto-gain-control" type="checkbox">
+                                    <span data-i18n="broadcast_room_join.microphone_auto_gain_control">Otomatik mikrofon kazancını etkinleştir</span>
+                                </label>
+                            </fieldset>
                             <div class="field-group">
                                 <label for="speaker-device" data-i18n="broadcast_room_join.speaker_device_label">Hoparlör</label>
                                 <select id="speaker-device"></select>
@@ -256,21 +274,42 @@
                                 <select id="camera-device"></select>
                             </div>
                             <div class="field-group">
+                                <label for="participant-avatar-file" data-i18n="broadcast_room_join.participant_avatar_label">Kamera kapalıyken gösterilecek fotoğraf</label>
+                                <input id="participant-avatar-file" type="file" accept="image/jpeg,image/png,image/webp" data-i18n-aria="broadcast_room_join.participant_avatar_label">
+                                <button id="btn-remove-participant-avatar" type="button" class="secondary" data-i18n="broadcast_room_join.participant_avatar_remove">Fotoğrafı kaldır</button>
+                                <p id="participant-avatar-status" class="hint" role="status" aria-live="polite" data-i18n="broadcast_room_join.participant_avatar_empty">Fotoğraf seçilmedi. Kamera kapalıyken adınız gösterilir.</p>
+                            </div>
+                            <div class="field-group">
                                 <button id="btn-test-speaker" type="button" class="secondary" data-i18n="broadcast_room_join.test_speaker_button">Hoparlörü test et</button>
                             </div>
                             <div class="field-group">
                                 <button id="btn-test-microphone" type="button" class="secondary" data-i18n="broadcast_room_join.test_microphone_button">Mikrofonu test et</button>
                                 <div id="audio-test-status" class="hint" role="status" aria-live="polite"></div>
                             </div>
+                            <div class="field-group">
+                                <button id="btn-test-camera-framing" type="button" class="secondary" data-i18n="broadcast_room.test_camera_button" data-i18n-aria="broadcast_room.test_camera_button">Kamerayı ve kadrajı test et</button>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <button id="btn-join-room" type="button" class="meeting-control-button" data-i18n="broadcast_room_join.join_button">Odaya Katıl</button>
+                <button id="btn-join-room" type="submit" form="join-form" class="meeting-control-button" data-i18n="broadcast_room_join.join_button">Odaya Katıl</button>
                 <button id="btn-leave-room" type="button" class="meeting-control-button meeting-control-button-danger" data-i18n="broadcast_room_join.leave_button">Odadan Ayrıl</button>
                 <button id="btn-return-focused-share" type="button" class="meeting-control-button" hidden data-i18n="broadcast_room_join.focused_share_return">Paylaşım büyük görünümüne dön</button>
             </div>
         </section>
     </main>
+
+    <dialog id="camera-framing-dialog" class="camera-framing-dialog" aria-labelledby="camera-framing-title" aria-describedby="camera-framing-help">
+        <h2 id="camera-framing-title" tabindex="-1" data-i18n="broadcast_room.camera_test_dialog_title">Kamera ve kadraj testi</h2>
+        <p id="camera-framing-help" class="hint" data-i18n="broadcast_room.camera_test_help">Kamera görüntünüz yalnız bu cihazda incelenir. Kadraj yardımı yüzünüzün konumunu, uzaklığını ve ışığı bildirir; görüntü hiçbir sunucuya gönderilmez.</p>
+        <label for="camera-framing-preview" data-i18n="broadcast_room.camera_test_preview_label">Kamera testi önizlemesi</label>
+        <video id="camera-framing-preview" class="camera-framing-preview" autoplay playsinline muted data-i18n-aria="broadcast_room.camera_test_preview_label"></video>
+        <p id="camera-framing-status" class="status-line" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div class="toolbar">
+            <button id="btn-read-camera-framing-status" type="button" data-i18n="broadcast_room.camera_test_read_status_button" data-i18n-aria="broadcast_room.camera_test_read_status_button">Mevcut kadraj bilgisini oku</button>
+            <button id="btn-close-camera-framing" type="button" class="secondary" data-i18n="broadcast_room.stop_camera_test_button" data-i18n-aria="broadcast_room.stop_camera_test_button">Kamera testini kapat</button>
+        </div>
+    </dialog>
 
     <div id="focused-share-view" class="focused-share-view" hidden role="dialog" aria-modal="true" data-i18n-aria="broadcast_room_join.focused_share_view_label">
         <div class="focused-share-header">
@@ -299,6 +338,6 @@
     <div id="live-region" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
     <div id="chat-live-region" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
-    <script src="/yayinodasi/join.js?v=20260611c"></script>
+    <script src="/yayinodasi/join.js?v=20260820a"></script>
 </body>
 </html>

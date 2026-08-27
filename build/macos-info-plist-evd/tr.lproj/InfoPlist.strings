@@ -1,1 +1,2 @@
 "NSAudioCaptureUsageDescription" = "Engelsiz Video Düzenleyicisi, anlık çeviri ve yayın odasında bilgisayar sesini paylaşmak için sistem sesi kaydı erişimine ihtiyaç duyar.";
+"NSMicrophoneUsageDescription" = "Engelsiz Video Düzenleyicisi, seçtiğiniz mikrofondan ses kaydetmek için mikrofon erişimine ihtiyaç duyar.";

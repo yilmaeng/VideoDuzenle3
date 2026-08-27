@@ -4,6 +4,8 @@ const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 const { buildVerticalPlacementFilter } = require('./media-placement');
+const { renderSparseTransitions } = require('./export/sparse-transition-renderer');
+const { renderSparseOverlays } = require('./export/sparse-overlay-renderer');
 
 /* =========================================
    DIAGNOSTIC & UTILS (V61 AUDIO MIXER REVIVAL)
@@ -107,6 +109,50 @@ function _getVerticalOutputOptions(options = {}, isPreview = false) {
     const crf = quality === 'high' ? '18' : quality === 'fast' ? '28' : '23';
     const preset = quality === 'high' ? 'slow' : quality === 'fast' ? 'veryfast' : 'medium';
     return ['-c:v', 'libx264', '-preset', preset, '-crf', crf, '-c:a', 'aac', '-movflags', '+faststart'];
+}
+
+function _getSourcePreservingVisualOptions(metadata = {}, { audioMode = 'copy', audioBitrate = '320k' } = {}) {
+    const sourceCodec = String(metadata.codec || '').toLowerCase();
+    const sourcePixelFormat = String(
+        (Array.isArray(metadata.streams)
+            ? metadata.streams.find((stream) => stream.codec_type === 'video')?.pix_fmt
+            : '') || 'yuv420p'
+    ).toLowerCase();
+    const useHevc = ['hevc', 'h265'].includes(sourceCodec);
+    const streams = Array.isArray(metadata.streams) ? metadata.streams : [];
+    const videoStream = streams.find((stream) => stream.codec_type === 'video');
+    const audioBitrateTotal = streams
+        .filter((stream) => stream.codec_type === 'audio')
+        .reduce((total, stream) => total + (Number.parseInt(stream.bit_rate, 10) || 0), 0);
+    const containerBitrate = Number.parseInt(metadata.bitrate, 10) || 0;
+    const measuredVideoBitrate = Number.parseInt(videoStream?.bit_rate, 10)
+        || Math.max(0, containerBitrate - audioBitrateTotal);
+    const pixelFormat = /^yuv(420|422|444)p(10|12)le$/.test(sourcePixelFormat)
+        ? sourcePixelFormat
+        : 'yuv420p';
+    const options = [
+        '-c:v', useHevc ? 'libx265' : 'libx264',
+        '-preset', 'medium'
+    ];
+    if (measuredVideoBitrate >= 250000) {
+        const targetBitrate = Math.round(measuredVideoBitrate);
+        options.push(
+            '-b:v', String(targetBitrate),
+            '-maxrate', String(Math.round(targetBitrate * 1.25)),
+            '-bufsize', String(Math.round(targetBitrate * 2))
+        );
+    } else {
+        options.push('-crf', useHevc ? '20' : '18');
+    }
+    options.push(
+        '-pix_fmt', pixelFormat,
+        '-max_muxing_queue_size', '9999',
+        '-movflags', '+faststart'
+    );
+    if (audioMode === 'copy') options.push('-c:a', 'copy');
+    else if (audioMode === 'none') options.push('-an');
+    else options.push('-c:a', 'aac', '-b:a', audioBitrate);
+    return [...options, ..._buildProcessedVideoColorOutputOptions(metadata)];
 }
 
 function _isKnownColorValue(value) {
@@ -336,8 +382,18 @@ async function _mixAudioAdvanced(options, onProgress) {
         throw new Error("Missing paths for audio mix");
     }
 
-    const videoVolume = options.videoVolume !== undefined ? options.videoVolume : 1.0;
+    const videoVolume = Math.max(0, Math.min(2, Number(
+        options.videoVolume !== undefined ? options.videoVolume : 1.0
+    )));
     const audioVolume = options.audioVolume !== undefined ? options.audioVolume : 1.0;
+    const videoVolumeSegments = (Array.isArray(options.videoVolumeSegments) ? options.videoVolumeSegments : [])
+        .map((segment) => ({
+            start: Math.max(0, Number(segment?.start || 0)),
+            end: Math.max(0, Number(segment?.end || 0)),
+            volume: Number(Math.max(0, Math.min(2, Number(segment?.volume ?? videoVolume))).toFixed(3))
+        }))
+        .filter((segment) => segment.end > segment.start
+            && Math.abs(segment.volume - videoVolume) >= 0.0001);
     const insertTime = options.insertTime || 0;
     const audioTrimStart = options.audioTrimStart || 0;
     const audioTrimEnd = options.audioTrimEnd || 0; // 0 means no end trim usually
@@ -350,7 +406,11 @@ async function _mixAudioAdvanced(options, onProgress) {
 
             const videoDuration = videoMeta.format.duration;
             const remainingDuration = videoDuration - insertTime;
-            const hasVideoAudio = videoMeta.streams.some(s => s.codec_type === 'audio');
+            const sourceAudioStream = videoMeta.streams.find(s => s.codec_type === 'audio');
+            const hasVideoAudio = Boolean(sourceAudioStream);
+            const sourceSampleRate = Number(sourceAudioStream?.sample_rate || 48000);
+            const supportedSampleRates = new Set([32000, 44100, 48000, 88200, 96000]);
+            const mixSampleRate = supportedSampleRates.has(sourceSampleRate) ? sourceSampleRate : 48000;
             const delayMs = Math.round(insertTime * 1000);
 
             // Filter Chain Construction
@@ -358,10 +418,18 @@ async function _mixAudioAdvanced(options, onProgress) {
 
             // 1. Prepare Video Audio [0:a] -> [a0]
             if (hasVideoAudio) {
-                filters.push(`[0:a]aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp,volume=${videoVolume}[a0]`);
+                let originalVolumeExpression = String(videoVolume);
+                for (let i = videoVolumeSegments.length - 1; i >= 0; i--) {
+                    const segment = videoVolumeSegments[i];
+                    originalVolumeExpression = `if(between(t\,${segment.start.toFixed(3)}\,${segment.end.toFixed(3)})\,${segment.volume}\,${originalVolumeExpression})`;
+                }
+                const volumeFilter = videoVolumeSegments.length
+                    ? `volume='${originalVolumeExpression}':eval=frame`
+                    : `volume=${videoVolume}`;
+                filters.push(`[0:a]aformat=sample_rates=${mixSampleRate}:channel_layouts=stereo:sample_fmts=fltp,${volumeFilter}[a0]`);
             } else {
                 // Generate silence matching video duration if no audio
-                filters.push(`anullsrc=r=44100:cl=stereo,atrim=0:${videoDuration}[a0]`);
+                filters.push(`anullsrc=r=${mixSampleRate}:cl=stereo,atrim=0:${videoDuration}[a0]`);
             }
 
             // 2. Prepare External Audio [1:a] -> [a1]
@@ -376,7 +444,7 @@ async function _mixAudioAdvanced(options, onProgress) {
             }
 
             // Standardize
-            audioFilters.push('aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp');
+            audioFilters.push(`aformat=sample_rates=${mixSampleRate}:channel_layouts=stereo:sample_fmts=fltp`);
             audioFilters.push(`volume=${audioVolume}`);
 
             // Delay or Loop
@@ -396,8 +464,23 @@ async function _mixAudioAdvanced(options, onProgress) {
 
             // 3. Mix [a0][a1] -> [aout]
             // amix yerine amerge+pan kullanıyoruz (ses kaybını önlemek için)
-            filters.push(`[a0][a1]amerge=inputs=2[merged]`);
-            filters.push(`[merged]pan=stereo|c0=c0+c2|c1=c1+c3[aout]`);
+            let originalMixLabel = 'a0';
+            let externalMixLabel = 'a1';
+            if (options.preserveOriginalLevel && hasVideoAudio) {
+                // Keep the user's original-video gain authoritative. When both
+                // tracks peak together, reduce only TTS before the final safety limiter.
+                filters.push('[a0]asplit=2[a0mix][a0sidechain]');
+                filters.push('[a1][a0sidechain]sidechaincompress=threshold=0.125:ratio=10:attack=2:release=80:knee=2:link=maximum:detection=peak[a1protected]');
+                originalMixLabel = 'a0mix';
+                externalMixLabel = 'a1protected';
+            }
+            filters.push(`[${originalMixLabel}][${externalMixLabel}]amerge=inputs=2[merged]`);
+            const outputLimiter = options.limitOutput
+                ? (options.preserveOriginalLevel
+                    ? ',alimiter=limit=0.98:level=false'
+                    : ',alimiter=limit=0.95')
+                : '';
+            filters.push(`[merged]pan=stereo|c0=c0+c2|c1=c1+c3${outputLimiter}[aout]`);
 
             ffmpeg(videoPath)
                 .input(audioPath)
@@ -408,6 +491,9 @@ async function _mixAudioAdvanced(options, onProgress) {
                     '-c:v copy',    // Copy video stream (FAST)
                     '-c:a aac',     // Encode audio
                     '-b:a 320k',    // High Quality Audio
+                    `-ar ${mixSampleRate}`,
+                    '-map_metadata 0',
+                    '-map_chapters 0',
                     '-shortest'
                 ])
                 .output(outputPath)
@@ -434,8 +520,9 @@ async function _createAudioFromMix(segments, outputPath, onProgress) {
             dubDuration = Number(metadata?.duration || metadata?.format?.duration || 0) || 0;
         } catch (_error) {}
         const sourceDuration = Math.max(0, Number(segment.sourceDuration || 0) || 0);
-        let tempo = 1;
-        if (sourceDuration >= 1 && dubDuration >= 0.5) {
+        const requestedTempo = Number(segment.tempo);
+        let tempo = Number.isFinite(requestedTempo) && requestedTempo > 0 ? requestedTempo : 1;
+        if (!(Number.isFinite(requestedTempo) && requestedTempo > 0) && sourceDuration >= 1 && dubDuration >= 0.5) {
             const desiredDuration = Math.max(0.5, sourceDuration * 0.9);
             tempo = Math.max(0.72, Math.min(1.28, dubDuration / desiredDuration));
         }
@@ -469,6 +556,8 @@ async function _createAudioFromMix(segments, outputPath, onProgress) {
             if (tempoFilters.length) {
                 f += `,${tempoFilters.join(',')}`;
             }
+            const segmentVolume = Math.max(0, Math.min(4, Number(seg.volume ?? 1)));
+            f += `,volume=${segmentVolume}`;
             if (delayMs > 0) {
                 f += `,adelay=${delayMs}|${delayMs}`;
             }
@@ -941,8 +1030,8 @@ async function _overlayImageToVideo(videoInput, imageInput, output, options = {}
 
         cmd.complexFilter(filterParts.join(';'))
             .outputOptions([
-                '-map [outv]', '-map 0:a?', '-c:v libx264', '-preset ultrafast', '-c:a copy', '-pix_fmt yuv420p', '-max_muxing_queue_size 9999',
-                ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
+                '-map [outv]', '-map 0:a?',
+                ..._getSourcePreservingVisualOptions(sourceMetadata)
             ]);
 
         if (totalDuration > 0) {
@@ -1048,13 +1137,7 @@ async function _addTextOverlay(videoPath, output, text, options) {
         return new Promise((resolve, reject) => {
             let cmd = ffmpeg(sIn)
                 .input(tempImg)
-                .outputOptions([
-                    '-c:v', 'libx264',
-                    '-c:a', 'copy',
-                    '-preset', 'ultrafast',
-                    '-max_muxing_queue_size', '9999',
-                    ..._buildProcessedVideoColorOutputOptions(meta)
-                ]);
+                .outputOptions(_getSourcePreservingVisualOptions(meta));
 
             // Simple overlay filter
             // Note: Use enable if timeline specified
@@ -1171,10 +1254,10 @@ async function _addTickerOverlay(videoPath, output, options = {}, onProgress) {
     return new Promise((resolve, reject) => {
         const command = ffmpeg(input)
             .inputOptions([])
+            .outputOptions('-filter_complex_script', filterFile)
             .outputOptions([
-                '-filter_complex_script', filterFile, '-map', '[outv]', '-map', '0:a?',
-                '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'copy', '-pix_fmt', 'yuv420p',
-                '-max_muxing_queue_size', '9999', ..._buildProcessedVideoColorOutputOptions(metadata)
+                '-map', '[outv]', '-map', '0:a?',
+                ..._getSourcePreservingVisualOptions(metadata)
             ])
             .output(target)
             .on('progress', progress => { if (typeof onProgress === 'function') onProgress(Math.max(0, Math.min(100, Number(progress.percent || 0)))); })
@@ -1339,6 +1422,50 @@ async function _cutVideoDeepFilter(input, output, start, end, onProgress, noiseR
     } catch (e) { [tV, tA, tC].forEach(f => { try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (ex) { } }); throw e; }
 }
 
+function _resolveOverlayAsset(assetPath) {
+    if (!assetPath) return null;
+    const safePath = _getSafePath(assetPath);
+    if (!safePath) return null;
+    if (path.isAbsolute(safePath)) return safePath;
+    const candidates = [
+        path.join(process.cwd(), 'src', 'renderer', safePath),
+        path.join(process.cwd(), 'resources', safePath),
+        path.join(__dirname, '../renderer', safePath),
+        path.join(__dirname, '../../renderer', safePath),
+        path.join(process.cwd(), safePath)
+    ];
+    return candidates.find((candidate) => fs.existsSync(candidate)) || safePath;
+}
+
+async function _collectOverlayAudioItems(overlays) {
+    const items = [];
+    for (const overlay of Array.isArray(overlays) ? overlays : []) {
+        const assetPath = _resolveOverlayAsset(overlay.assetPath || overlay);
+        const soundPath = _resolveOverlayAsset(overlay.sound);
+        let audioPath = null;
+        if (soundPath && fs.existsSync(soundPath)) {
+            audioPath = soundPath;
+        } else if (!overlay.sound && assetPath && fs.existsSync(assetPath) && !_isImageFile(assetPath)) {
+            try {
+                const metadata = await _getVideoMetadata(assetPath);
+                if (metadata.hasAudio) audioPath = assetPath;
+            } catch (_error) {}
+        }
+        if (!audioPath) continue;
+        const rawVolume = Number(overlay.audioVolume);
+        const volume = Number.isFinite(rawVolume) ? (rawVolume > 4 ? rawVolume / 100 : rawVolume) : 1;
+        items.push({
+            file: audioPath,
+            time: Number(overlay.startTime || 0),
+            delayTime: Number(overlay.startTime || 0),
+            duration: Number(overlay.duration || 0),
+            trimDuration: Number(overlay.duration || 0),
+            volume: Math.max(0, volume)
+        });
+    }
+    return items;
+}
+
 async function _processSegmentWithOverlays(input, output, start, duration, overlays, onProgress) {
     const sIn = _getSafePath(input);
     console.log(`[ProcessSegmentWithOverlays] START. Input: ${sIn}, Duration: ${duration}`);
@@ -1355,6 +1482,32 @@ async function _processSegmentWithOverlays(input, output, start, duration, overl
         console.warn('[ProcessSegmentWithOverlays] Metadata error, defaulting to 1080p:', e);
     }
 
+    const preparedOverlays = await Promise.all((Array.isArray(overlays) ? overlays : []).map(async (ov, id) => {
+        let assetPath = _resolveOverlayAsset(ov.assetPath || ov);
+        if (assetPath && assetPath.endsWith('.webm')) {
+            const pngFallback = assetPath.replace('.webm', '.png');
+            if (fs.existsSync(pngFallback)) assetPath = pngFallback;
+        }
+        const isImage = Boolean(assetPath && _isImageFile(assetPath));
+        let hasEmbeddedAudio = false;
+        if (assetPath && fs.existsSync(assetPath) && !isImage && !ov.sound) {
+            try {
+                const overlayMetadata = await _getVideoMetadata(assetPath);
+                hasEmbeddedAudio = Boolean(overlayMetadata.hasAudio);
+            } catch (error) {
+                console.warn(`[ProcessSegmentWithOverlays] Overlay metadata unavailable: ${assetPath}`, error);
+            }
+        }
+        return {
+            obj: ov,
+            id,
+            assetPath,
+            isImage,
+            hasEmbeddedAudio,
+            soundPath: _resolveOverlayAsset(ov.sound)
+        };
+    }));
+
     return new Promise((resolve, reject) => {
         const cmd = ffmpeg()
             .input(sIn)
@@ -1367,33 +1520,18 @@ async function _processSegmentWithOverlays(input, output, start, duration, overl
             lastV = 'hdr_base';
         }
 
-        const resolveAsset = (p) => {
-            if (!p) return null;
-            if (path.isAbsolute(p)) return p;
-            const candidates = [
-                path.join(process.cwd(), 'src', 'renderer', p),
-                path.join(process.cwd(), 'resources', p),
-                path.join(__dirname, '../renderer', p),
-                path.join(__dirname, '../../renderer', p),
-                path.join(process.cwd(), p)
-            ];
-            for (const c of candidates) { if (fs.existsSync(c)) return c; }
-            return p;
-        };
-
-        overlays.forEach((ov, i) => {
-            let s = _getSafePath(ov.assetPath || ov);
-            s = resolveAsset(s);
-            if (s && s.endsWith('.webm')) { const p = s.replace('.webm', '.png'); if (fs.existsSync(p)) s = p; }
+        preparedOverlays.forEach(({ obj: ov, id: i, assetPath: s, isImage, hasEmbeddedAudio, soundPath }) => {
             if (s && fs.existsSync(s)) {
-                const isImage = s.toLowerCase().endsWith('.png') || s.toLowerCase().endsWith('.jpg') || s.toLowerCase().endsWith('.jpeg');
                 if (isImage) cmd.input(s).inputOption('-loop 1'); else cmd.input(s);
-                subInputs.push({ type: 'video', index: currentInputIdx, obj: ov, isImage, path: s, id: i }); currentInputIdx++;
+                const assetInputIndex = currentInputIdx;
+                subInputs.push({ type: 'video', index: assetInputIndex, obj: ov, isImage, path: s, id: i });
+                if (hasEmbeddedAudio) {
+                    subInputs.push({ type: 'audio', index: assetInputIndex, obj: ov, relStart: (ov.startTime || 0) - start, id: i, embedded: true });
+                }
+                currentInputIdx++;
             } else {
                 console.warn(`[ProcessSegmentWithOverlays] Overlay path not found: ${s}`);
             }
-            let soundPath = _getSafePath(ov.sound);
-            soundPath = resolveAsset(soundPath);
             if (soundPath && fs.existsSync(soundPath)) {
                 cmd.input(soundPath); subInputs.push({ type: 'audio', index: currentInputIdx, obj: ov, relStart: (ov.startTime || 0) - start, id: i }); currentInputIdx++;
             }
@@ -1578,13 +1716,22 @@ async function _processSegmentWithOverlays(input, output, start, duration, overl
             } else if (item.type === 'audio') {
                 const delayMs = Math.floor(relStart * 1000);
                 const audPad = `aud_${item.index}`;
-                const filterStr = `[${item.index}:a]aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp,adelay=${delayMs}|${delayMs},apad[${audPad}]`;
+                const overlayDuration = Math.max(0.01, Number(item.obj.duration) || duration);
+                const rawVolume = Number(item.obj.audioVolume);
+                const audioVolume = Number.isFinite(rawVolume)
+                    ? (rawVolume > 4 ? rawVolume / 100 : rawVolume)
+                    : 1;
+                const filterStr = `[${item.index}:a]atrim=0:${overlayDuration},asetpts=PTS-STARTPTS,aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp,volume=${Math.max(0, audioVolume)},adelay=${delayMs}|${delayMs},apad[${audPad}]`;
                 filters.push(filterStr);
             }
         });
         const audios = subInputs.filter(x => x.type === 'audio');
         if (audios.length > 0) {
-            filters.push(`[0:a]aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp[v_aud]`);
+            if (sourceMetadata.hasAudio) {
+                filters.push(`[0:a]aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp[v_aud]`);
+            } else {
+                filters.push(`anullsrc=r=44100:cl=stereo,atrim=0:${duration}[v_aud]`);
+            }
             let inputs = ['[v_aud]'];
             audios.forEach(x => inputs.push(`[aud_${x.index}]`));
 
@@ -1607,20 +1754,21 @@ async function _processSegmentWithOverlays(input, output, start, duration, overl
             cmd.complexFilter(filters);
         }
 
-        const mapV = filters.length > 0 ? `[${lastV}]` : '0:v'; const mapA = (filters.length > 0 && audios.length > 0) ? '[aout]' : '0:a';
+        const mapV = filters.length > 0 ? `[${lastV}]` : '0:v';
+        const hasOverlayAudio = audios.length > 0;
+        const mapA = (filters.length > 0 && hasOverlayAudio) ? '[aout]' : '0:a?';
 
         // V114 FIX: Added explicit -t ${duration} to output to prevent hangs.
         // Also ensured CRF 23 and ultrafast are used for reliable export.
         cmd.outputOptions([
             '-map', mapV,
             '-map', mapA,
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-crf', '23',
-            '-c:a', 'aac',
+            ..._getSourcePreservingVisualOptions(sourceMetadata, {
+                audioMode: hasOverlayAudio ? 'aac' : 'copy',
+                audioBitrate: '320k'
+            }),
             '-t', duration.toString(),
-            '-shortest',
-            ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
+            '-shortest'
         ]);
 
         if (typeof onProgress === 'function') {
@@ -2600,8 +2748,8 @@ module.exports = {
             // 3. Çalıştır
             let finalizeNotified = false;
             await new Promise((resolve, reject) => {
-                cmd.outputOptions([
-                        '-filter_complex_script', filterScriptPath,
+                cmd.outputOptions('-filter_complex_script', filterScriptPath)
+                    .outputOptions([
                         '-map', '[ov]',
                         '-map', '[oa]',
                         '-c:v', 'libx264', '-preset', 'fast',
@@ -2883,6 +3031,26 @@ module.exports = {
         try {
             const md = await _getVideoMetadata(i);
             const realDur = md.duration || 10;
+            const sparseOverlayMinimumDuration = Math.max(0, Number(process.env.EVD_SPARSE_OVERLAY_MIN_DURATION || 120));
+            if (realDur >= sparseOverlayMinimumDuration && Array.isArray(ovs) && ovs.length > 0) {
+                const audioItems = await _collectOverlayAudioItems(ovs);
+                const sparseResult = await renderSparseOverlays({
+                    ffmpegPath,
+                    ffprobePath,
+                    inputPath: _getSafePath(i),
+                    outputPath: o,
+                    overlays: ovs,
+                    audioItems,
+                    renderEffectChunk: ({ inputPath, outputPath, start, duration, overlays: chunkOverlays, onProgress }) => (
+                        _processSegmentWithOverlays(inputPath, outputPath, start, duration, chunkOverlays, onProgress)
+                    ),
+                    onProgress: onP
+                });
+                if (sparseResult.success) return sparseResult;
+                console.info('[ProcessSegmentWithOverlays] Sparse path unavailable; using full-frame fallback.', {
+                    reason: sparseResult.reason
+                });
+            }
             return _processSegmentWithOverlays(i, o, 0, realDur, ovs, onP);
         } catch (e) {
             return _processSegmentWithOverlays(i, o, 0, 30, ovs, onP);
@@ -2914,7 +3082,7 @@ module.exports = {
         });
     },
     overlayImageToVideo: async function () { const args = cleanArgs(arguments); return _overlayLayerJudge(args[0], args[1], args[2], args[3]); },
-    addImageOverlay: async function () { const args = cleanArgs(arguments); return _overlayLayerJudge(args[0], args[1], args[2], args[3]); },
+    addImageOverlay: async function () { const args = cleanArgs(arguments); return _overlayLayerJudge(args[0], args[1], args[2], args[3], args[4]); },
     addTextOverlay: async function () { const args = cleanArgs(arguments); return _addTextOverlay(args[0], args[1], args[2], args[3]); },
     addTickerOverlay: async function () { const args = cleanArgs(arguments); return _addTickerOverlay(args[0], args[1], args[2], args[3], args[4]); },
     addTransition: async function () { const args = cleanArgs(arguments); return _addTransition(args[0], args[1], args[2]); },
@@ -3081,7 +3249,7 @@ async function _replaceAudio(videoPath, audioPath, offsetMs, muteOriginal, outpu
 
 // V80 - FRESH START OVERLAY HANDLER
 // This version uses fluent-ffmpeg (simplified) with heavy logging and duration protection.
-async function _overlayLayerJudge(videoInput, imageInput, output, options = {}) {
+async function _overlayLayerJudge(videoInput, imageInput, output, options = {}, onProgress = null) {
     const vidPath = _getSafePath(videoInput);
     const imgPath = _getSafePath(imageInput);
     const isImage = (imgPath && ['.png', '.jpg', '.jpeg', '.bmp', '.webp', '.gif'].includes(path.extname(imgPath).toLowerCase()));
@@ -3093,7 +3261,7 @@ async function _overlayLayerJudge(videoInput, imageInput, output, options = {}) 
     let sourceMetadata = {};
     try {
         sourceMetadata = await _getVideoMetadata(vidPath);
-        duration = sourceMetadata.format.duration;
+        duration = Number(sourceMetadata.duration ?? sourceMetadata.format?.duration ?? 0);
         console.log(`[OverlayLayerJudge V80] Metadata Duration: ${duration}`);
     } catch (e) {
         console.warn('[OverlayLayerJudge V80] Metadata Error:', e);
@@ -3141,11 +3309,7 @@ async function _overlayLayerJudge(videoInput, imageInput, output, options = {}) 
             .outputOptions([
                 '-map [outv]',
                 '-map 0:a?',
-                '-c:v libx264',
-                '-preset ultrafast',
-                '-c:a copy',
-                '-pix_fmt yuv420p',
-                ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
+                ..._getSourcePreservingVisualOptions(sourceMetadata)
             ]);
 
         // THE FIX: Force duration limit to match main video
@@ -3158,13 +3322,18 @@ async function _overlayLayerJudge(videoInput, imageInput, output, options = {}) 
             .on('start', (commandLine) => {
                 console.log('[OverlayLayerJudge V80] FFMPEG STARTED: ' + commandLine);
             })
-            .on('progress', () => {})
+            .on('progress', progress => {
+                if (typeof onProgress === 'function') {
+                    onProgress(Math.max(0, Math.min(99, Number(progress.percent || 0))));
+                }
+            })
             .on('end', () => {
                 console.log('[OverlayLayerJudge V80] FFmpeg End Event Triggered.');
                 try {
                     if (fs.existsSync(output)) fs.unlinkSync(output);
                     fs.copyFileSync(tempOutput, output);
                     fs.unlinkSync(tempOutput);
+                    if (typeof onProgress === 'function') onProgress(100);
                     console.log('[OverlayLayerJudge V80] SUCCESS: File swapped.');
                     resolve({ success: true, outputPath: output });
                 } catch (err) {
@@ -3368,8 +3537,8 @@ async function _applyTransitionsSmart(videoPath, outputPath, transitions, onProg
     // ======================================================================
 
     // SFX Finder
-    const _findSfx = (type) => {
-        if (!type) return null;
+    const _findSfx = (type, requestedFile = null) => {
+        if (!type && !requestedFile) return null;
         const nameMap = {
             'dip_white': 'dip_to_black.wav', 'flash': 'dip_to_black.wav',
             'dip_black': 'dip_to_black.wav', 'dipToBlack': 'dip_to_black.wav',
@@ -3380,7 +3549,8 @@ async function _applyTransitionsSmart(videoPath, outputPath, transitions, onProg
             'wipeleft': 'cross_dissolve.wav', 'wiperight': 'cross_dissolve.wav',
             'wipeLeft': 'cross_dissolve.wav', 'wipeRight': 'cross_dissolve.wav'
         };
-        const fileName = nameMap[type] || (type && nameMap[type.toLowerCase()]);
+        const requestedName = requestedFile ? path.basename(String(requestedFile)) : null;
+        const fileName = requestedName || nameMap[type] || (type && nameMap[type.toLowerCase()]);
         if (!fileName) return null;
         const candidates = [
             path.join(process.cwd(), 'src', 'renderer', 'assets', 'sfx', fileName),
@@ -3463,15 +3633,51 @@ async function _applyTransitionsSmart(videoPath, outputPath, transitions, onProg
     normalizedTransitions.forEach(tr => {
         const transType = tr.type || tr.transitionType;
         let file = null;
-        if (tr.customSfxPath && fs.existsSync(tr.customSfxPath)) {
-            file = tr.customSfxPath;
+        if (tr.customSfxPath && fs.existsSync(_getSafePath(tr.customSfxPath))) {
+            file = _getSafePath(tr.customSfxPath);
         } else if (tr.useSfx !== false) {
-            file = _findSfx(transType);
+            file = _findSfx(transType, tr.defaultSfx || tr.customSfxPath);
         }
-        if (file) sfxFiles.push({ file, time: parseFloat(tr.time), duration: parseFloat(tr.duration) || 1.0 });
+        if (file) {
+            const configuredVolume = Number(tr.sfxVolume ?? tr.audioVolume);
+            sfxFiles.push({
+                file,
+                time: parseFloat(tr.time),
+                duration: parseFloat(tr.duration) || 1.0,
+                volume: Number.isFinite(configuredVolume)
+                    ? (configuredVolume > 4 ? configuredVolume / 100 : configuredVolume)
+                    : 0.75
+            });
+        }
+    });
+
+    console.info('[SmartTransition] Resolved transition audio.', {
+        requestedCount: normalizedTransitions.filter((transition) => transition.useSfx !== false).length,
+        resolvedCount: sfxFiles.length,
+        files: sfxFiles.map((item) => path.basename(item.file))
     });
 
     const needsSfxMix = sfxFiles.length > 0;
+
+    // Long sources should not be fully re-encoded for a few short transitions.
+    // The sparse renderer copies clean GOP ranges and encodes only transition windows.
+    const sparseTransitionMinimumDuration = Math.max(0, Number(process.env.EVD_SPARSE_TRANSITION_MIN_DURATION || 120));
+    if (videoDuration >= sparseTransitionMinimumDuration) {
+        const sparseResult = await renderSparseTransitions({
+            ffmpegPath,
+            ffprobePath,
+            inputPath: sIn,
+            outputPath,
+            transitions: normalizedTransitions,
+            sfxFiles,
+            onProgress
+        });
+        if (sparseResult.success) return sparseResult;
+        console.info('[SmartTransition] Sparse path unavailable; using full-frame fallback.', {
+            reason: sparseResult.reason
+        });
+    }
+
     const tempDir = path.dirname(outputPath);
     const ts = Date.now();
     const videoTarget = needsSfxMix ? path.join(tempDir, `st_vf_${ts}.mp4`) : outputPath;
@@ -3484,15 +3690,7 @@ async function _applyTransitionsSmart(videoPath, outputPath, transitions, onProg
                 .outputOptions([
                     '-map', '0:v:0',
                     '-map', '0:a:0?',
-                    '-c:v', 'libx264',
-                    '-preset', 'medium',
-                    '-crf', '18',
-                    '-pix_fmt', 'yuv420p',
-                    '-c:a', 'aac',
-                    '-b:a', '320k',
-                    '-af', 'aresample=async=1:first_pts=0',
-                    '-max_muxing_queue_size', '9999',
-                    ..._buildProcessedVideoColorOutputOptions(videoMeta)
+                    ..._getSourcePreservingVisualOptions(videoMeta)
                 ])
                 .output(videoTarget)
                 .on('start', (cl) => console.log(`[SmartTransition V77] FFmpeg: ${cl}`))
@@ -4431,17 +4629,7 @@ async function _burnSubtitles(videoPath, srtPath, outputPath, styleOptions = nul
     return new Promise((resolve, reject) => {
         ffmpeg(sIn)
             .videoFilters(_joinVideoFilters(_buildHdrToSdrFilter(sourceMetadata), subtitleFilter))
-            .outputOptions([
-                '-c:v', 'libx264',
-                '-preset', 'veryfast',
-                '-crf', '18',
-                '-pix_fmt', 'yuv420p',
-                '-c:a', 'aac',
-                '-b:a', '192k',
-                '-max_muxing_queue_size', '9999',
-                '-movflags', '+faststart',
-                ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
-            ])
+            .outputOptions(_getSourcePreservingVisualOptions(sourceMetadata))
             .output(outputPath)
             .on('progress', (p) => { if (onProgress) onProgress(p.percent); })
             .on('end', () => resolve({ success: true, outputPath }))
@@ -4509,24 +4697,27 @@ async function addCtaOverlay(params, onProgress) {
 
             const cmd = ffmpeg(mainSafe).input(resolvedCtaPath);
             let outputMaps = ['-map', '[outv]'];
+            let mixesAudio = false;
 
             // Ses Ayarları
             if (sound === 'embedded' && ctaMeta.audioCodec) {
+                mixesAudio = true;
                 const delayMs = Math.round(startTime * 1000);
                 filterChain += `;[1:a]atrim=0:${effectiveDuration},asetpts=PTS-STARTPTS,adelay=${delayMs}|${delayMs}[delayed_snd];[0:a][delayed_snd]amix=inputs=2:duration=first[outa]`;
                 outputMaps.push('-map', '[outa]');
             } else if (sound && sound !== 'none' && sound !== 'embedded') {
                 const sSound = _getSafePath(sound);
                 if (fs.existsSync(sSound)) {
+                    mixesAudio = true;
                     cmd.input(sSound);
                     const delayMs = Math.round(startTime * 1000);
                     filterChain += `;[2:a]atrim=0:${effectiveDuration},asetpts=PTS-STARTPTS,adelay=${delayMs}|${delayMs}[delayed_snd];[0:a][delayed_snd]amix=inputs=2:duration=first[outa]`;
                     outputMaps.push('-map', '[outa]');
                 } else {
-                    outputMaps.push('-map', '0:a');
+                    outputMaps.push('-map', '0:a?');
                 }
             } else {
-                outputMaps.push('-map', '0:a');
+                outputMaps.push('-map', '0:a?');
             }
 
             // Encoder detection reuse or default
@@ -4539,11 +4730,18 @@ async function addCtaOverlay(params, onProgress) {
 
             cmd.complexFilter(filterChain)
                 .outputOptions([
-                    '-c:v', videoCodec,
-                    '-preset', preset,
-                    '-c:a', 'aac',
                     ...outputMaps,
-                    ..._buildProcessedVideoColorOutputOptions(mainMeta)
+                    ...(_detectedGpuEncoder
+                        ? [
+                            '-c:v', videoCodec,
+                            '-preset', preset,
+                            '-c:a', mixesAudio ? 'aac' : 'copy',
+                            ..._buildProcessedVideoColorOutputOptions(mainMeta)
+                        ]
+                        : _getSourcePreservingVisualOptions(mainMeta, {
+                            audioMode: mixesAudio ? 'aac' : 'copy',
+                            audioBitrate: '320k'
+                        }))
                 ])
                 .output(outputPath)
                 .on('progress', (p) => { if (onProgress) onProgress(p.percent); })
@@ -4667,12 +4865,12 @@ async function _addVideoLayer(params, onProgress) {
 
             cmd.complexFilter(filters)
                 .outputOptions([
-                    '-c:v', 'libx264',
-                    '-preset', 'ultrafast',
-                    '-c:a', 'aac',
+                    ..._getSourcePreservingVisualOptions(meta, {
+                        audioMode: shouldMixAudio ? 'aac' : 'copy',
+                        audioBitrate: '320k'
+                    }),
                     '-t', totalDuration.toString(), // Hard limit output duration
-                    '-shortest',
-                    ..._buildProcessedVideoColorOutputOptions(meta)
+                    '-shortest'
                 ])
                 .output(outputPath)
                 .on('progress', (p) => {
@@ -4701,11 +4899,11 @@ async function _addVideoLayer(params, onProgress) {
             // Fallback: run without manual duration calculation
             cmd.complexFilter(filters)
                 .outputOptions([
-                    '-c:v', 'libx264',
-                    '-preset', 'ultrafast',
-                    '-c:a', 'aac',
-                    '-shortest',
-                    ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
+                    ..._getSourcePreservingVisualOptions(sourceMetadata, {
+                        audioMode: shouldMixAudio ? 'aac' : 'copy',
+                        audioBitrate: '320k'
+                    }),
+                    '-shortest'
                 ])
                 .output(outputPath)
                 .on('progress', (p) => { if (onProgress) onProgress(Math.min(99, Math.round(p.percent || 0))); })
@@ -4800,4 +4998,6 @@ const _legacy_exports = {
 module.exports = { ..._legacy_exports, ...module.exports };
 module.exports.concatenateVideosFast = concatenateVideosFast;
 module.exports.concatenateVideos = concatenateVideos;
+
+
 

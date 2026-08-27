@@ -14,6 +14,11 @@ $portableExeSource = Join-Path $portableFolder 'Engelsiz Video Düzenleyicisi.ex
 $portableExeTarget = Join-Path $portableFolder 'EVD.exe'
 $zipPath = Join-Path $distDir ("EVD-Portable-v{0}.zip" -f $Version)
 
+& (Join-Path $PSScriptRoot 'build-native-audio.ps1')
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
 Write-Host "Building Windows NSIS + dir targets..."
 & $builder --win nsis dir --x64
 if ($LASTEXITCODE -ne 0) {

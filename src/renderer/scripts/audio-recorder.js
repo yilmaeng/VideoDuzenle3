@@ -62,6 +62,13 @@ const AudioRecorder = {
 
     async initDevices() {
         try {
+            if (window.api?.platform === 'darwin' && window.api?.requestMicrophoneAccess) {
+                const permission = await window.api.requestMicrophoneAccess();
+                if (!permission?.granted) {
+                    return false;
+                }
+            }
+
             // İzin iste (cihazları listelemek için gerekebilir)
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             stream.getTracks().forEach(track => track.stop());

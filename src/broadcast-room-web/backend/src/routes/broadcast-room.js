@@ -2,7 +2,9 @@ const express = require('express');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { RoomServiceClient } = require('livekit-server-sdk');
 const { buildIdentity, createJoinToken } = require('../services/token-service');
+const { createParticipantAvatarStore } = require('../services/participant-avatar-store');
 
 const ADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const LOCAL_RECORDING_RETENTION_MS = 72 * 60 * 60 * 1000;
@@ -12,6 +14,15 @@ function createBroadcastRoomRouter({ config, roomStore }) {
     const inviteBaseUrl = `${config.appBaseUrl}${config.broadcastRoomBasePath}`;
     const adminSessions = new Map();
     const roomEventClients = new Map();
+    const livekitServiceUrl = String(config.livekitUrl || '')
+        .replace(/^wss:/i, 'https:')
+        .replace(/^ws:/i, 'http:');
+    const roomService = new RoomServiceClient(
+        livekitServiceUrl,
+        config.livekitApiKey,
+        config.livekitApiSecret
+    );
+    const avatarStore = createParticipantAvatarStore({ dataDir: config.dataDir });
 
     function isAdminSecretConfigured() {
         return String(config.webinarAdminSecret || '').trim().length > 0;
@@ -64,6 +75,18 @@ function createBroadcastRoomRouter({ config, roomStore }) {
     function verifyRoomOwnerRequest(req, room) {
         const expectedOwnerKey = String(room?.settings?.ownerKey || '').trim();
         return !expectedOwnerKey || getRoomOwnerKey(req) === expectedOwnerKey;
+    }
+
+    function requireRoomOwnerRequest(req, res, room) {
+        if (!room) {
+            res.status(404).json({ success: false, error: 'room_not_found' });
+            return false;
+        }
+        if (!verifyRoomOwnerRequest(req, room)) {
+            res.status(403).json({ success: false, error: 'room_owner_required' });
+            return false;
+        }
+        return true;
     }
 
     function requireAdminSession(req, res) {
@@ -1010,13 +1033,37 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             return;
         }
 
+        const existingParticipant = Array.isArray(currentRoom?.participants)
+            ? currentRoom.participants.find((participant) => String(participant.identity || '').trim() === identity)
+            : null;
+        const participantEventSignature = (participant) => JSON.stringify({
+            displayName: String(participant?.displayName || '').trim(),
+            role: String(participant?.role || '').trim(),
+            cameraEnabled: participant?.cameraEnabled !== false,
+            microphoneEnabled: participant?.microphoneEnabled !== false,
+            shareEnabled: participant?.shareEnabled === true,
+            shareAudioEnabled: participant?.shareAudioEnabled === true,
+            shareSourceType: String(participant?.shareSourceType || '').trim(),
+            shareStereoRequested: participant?.shareStereoRequested === true,
+            preferredLanguage: String(participant?.preferredLanguage || '').trim(),
+            avatarUrl: String(participant?.avatarUrl || '').trim(),
+            connected: participant?.connected !== false
+        });
+        const previousParticipantSignature = existingParticipant
+            ? participantEventSignature(existingParticipant)
+            : '';
+        if (req.body?.connected !== false && !existingParticipant) {
+            res.status(409).json({ success: false, error: 'participant_not_joined' });
+            return;
+        }
+
         const room = req.body?.connected === false
             ? roomStore.removeParticipant(roomId, identity)
             : roomStore.upsertParticipant(roomId, {
                 identity,
                 displayName: req.body?.displayName,
                 displayNameChange: req.body?.displayNameChange === true,
-                role: req.body?.role,
+                role: existingParticipant?.role,
                 cameraEnabled: req.body?.cameraEnabled,
                 microphoneEnabled: req.body?.microphoneEnabled,
                 shareEnabled: req.body?.shareEnabled,
@@ -1033,11 +1080,15 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             return;
         }
 
-        broadcastRoomEvent(room.roomId, 'liveCaption', {
-            roomId: room.roomId,
-            liveCaption: room.liveCaption
-        });
-        broadcastRoomEvent(room.roomId, 'roomSettings', buildRoomResponse(room));
+        const nextParticipant = Array.isArray(room.participants)
+            ? room.participants.find((participant) => String(participant.identity || '').trim() === identity)
+            : null;
+        const nextParticipantSignature = nextParticipant
+            ? participantEventSignature(nextParticipant)
+            : '';
+        if (previousParticipantSignature !== nextParticipantSignature) {
+            broadcastRoomEvent(room.roomId, 'roomSettings', buildRoomResponse(room));
+        }
 
         res.json({
             success: true,
@@ -1047,6 +1098,52 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             settings: room.settings,
             chatMessages: room.chatMessages
         });
+    });
+
+    router.get('/broadcast-room/avatar/:roomId/:fileName', (req, res) => {
+        const filePath = avatarStore.resolveAvatarPath(req.params.roomId, req.params.fileName);
+        if (!filePath) {
+            res.status(404).end();
+            return;
+        }
+        res.set('Cache-Control', 'private, max-age=300');
+        res.sendFile(filePath);
+    });
+
+    router.post('/broadcast-room/participant-avatar', (req, res) => {
+        const roomId = String(req.body?.roomId || '').trim();
+        const identity = String(req.body?.identity || '').trim();
+        const room = roomStore.getRoom(roomId);
+        const participant = Array.isArray(room?.participants)
+            ? room.participants.find((item) => String(item.identity || '').trim() === identity)
+            : null;
+        if (!room || !participant) {
+            res.status(404).json({ success: false, error: 'room_or_participant_not_found' });
+            return;
+        }
+        try {
+            let avatarUrl = '';
+            if (req.body?.clear !== true) {
+                avatarUrl = avatarStore.saveParticipantAvatar(roomId, identity, req.body?.dataUrl);
+            } else {
+                avatarStore.clearParticipantAvatar(roomId, identity);
+            }
+            const updatedRoom = roomStore.upsertParticipant(roomId, {
+                identity,
+                role: participant.role,
+                avatarUrl
+            });
+            broadcastRoomEvent(roomId, 'roomSettings', buildRoomResponse(updatedRoom));
+            res.json({
+                success: true,
+                avatarUrl,
+                participants: updatedRoom.participants
+            });
+        } catch (error) {
+            const code = String(error?.message || error || 'participant_avatar_invalid');
+            const status = code === 'participant_avatar_too_large' ? 413 : 400;
+            res.status(status).json({ success: false, error: code });
+        }
     });
 
     router.post('/broadcast-room/room-settings', (req, res) => {
@@ -1118,6 +1215,11 @@ function createBroadcastRoomRouter({ config, roomStore }) {
         const identity = String(req.body?.identity || '').trim();
         if (!roomId || !identity) {
             res.status(400).json({ success: false, error: 'participant_control_missing' });
+            return;
+        }
+
+        const currentRoom = roomStore.getRoom(roomId);
+        if (!requireRoomOwnerRequest(req, res, currentRoom)) {
             return;
         }
 
@@ -1197,6 +1299,11 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             return;
         }
 
+        const currentRoom = roomStore.getRoom(roomId);
+        if (!requireRoomOwnerRequest(req, res, currentRoom)) {
+            return;
+        }
+
         const room = roomStore.updateAllGuestControls(roomId, {
             allowCamera: req.body?.allowCamera,
             allowMicrophone: req.body?.allowMicrophone,
@@ -1209,6 +1316,8 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             res.status(404).json({ success: false, error: 'room_not_found' });
             return;
         }
+
+        broadcastRoomEvent(room.roomId, 'roomSettings', buildRoomResponse(room));
 
         res.json({
             success: true,
@@ -1425,32 +1534,124 @@ function createBroadcastRoomRouter({ config, roomStore }) {
         });
     });
 
-    router.post('/broadcast-room/leave', (req, res) => {
-        const roomId = String(req.body?.roomId || '').trim();
-        const identity = String(req.body?.identity || '').trim();
-        if (!roomId || !identity) {
-            res.status(400).json({ success: false, error: 'participant_state_missing' });
-            return;
-        }
+    router.post('/broadcast-room/leave', async (req, res, next) => {
+        try {
+            const roomId = String(req.body?.roomId || '').trim();
+            const identity = String(req.body?.identity || '').trim();
+            if (!roomId || !identity) {
+                res.status(400).json({ success: false, error: 'participant_state_missing' });
+                return;
+            }
 
-        const room = roomStore.removeParticipant(roomId, identity);
-        if (!room) {
-            res.status(404).json({ success: false, error: 'room_not_found' });
-            return;
-        }
-        broadcastRoomEvent(room.roomId, 'participantRemoved', {
-            roomId: room.roomId,
-            identity
-        });
+            const currentRoom = roomStore.getRoom(roomId);
+            if (!currentRoom) {
+                res.status(404).json({ success: false, error: 'room_not_found' });
+                return;
+            }
+            const participant = Array.isArray(currentRoom.participants)
+                ? currentRoom.participants.find((item) => String(item.identity || '').trim() === identity)
+                : null;
+            const suppliedOwnerKey = getRoomOwnerKey(req);
+            const isLegacyOwnerRemoval = Boolean(suppliedOwnerKey)
+                && verifyRoomOwnerRequest(req, currentRoom)
+                && participant
+                && String(participant.role || '').trim() !== 'host';
 
-        res.json({
-            success: true,
-            roomId: room.roomId,
-            participants: room.participants,
-            chatMessages: room.chatMessages,
-            sceneState: room.sceneState,
-            settings: room.settings
-        });
+            const room = roomStore.removeParticipant(roomId, identity);
+            broadcastRoomEvent(room.roomId, 'participantRemoved', {
+                roomId: room.roomId,
+                identity
+            });
+            broadcastRoomEvent(room.roomId, 'roomSettings', buildRoomResponse(room));
+
+            // Older EVD builds used /leave for host removals. Disconnect the media
+            // participant as well so an active heartbeat cannot recreate the guest.
+            if (isLegacyOwnerRemoval) {
+                try {
+                    await roomService.removeParticipant(roomId, identity);
+                } catch (error) {
+                    const message = String(error?.message || error || '');
+                    const status = Number(error?.status || error?.statusCode || 0);
+                    if (status !== 404 && !/not[ -]?found/i.test(message)) {
+                        console.error('broadcast-room legacy participant LiveKit removal failed:', {
+                            roomId,
+                            identity,
+                            error: message
+                        });
+                    }
+                }
+            }
+
+            res.json({
+                success: true,
+                roomId: room.roomId,
+                participants: room.participants,
+                chatMessages: room.chatMessages,
+                sceneState: room.sceneState,
+                settings: room.settings
+            });
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    router.post('/broadcast-room/participant-remove', async (req, res, next) => {
+        try {
+            const roomId = String(req.body?.roomId || '').trim();
+            const identity = String(req.body?.identity || '').trim();
+            if (!roomId || !identity) {
+                res.status(400).json({ success: false, error: 'participant_state_missing' });
+                return;
+            }
+
+            const currentRoom = roomStore.getRoom(roomId);
+            if (!requireRoomOwnerRequest(req, res, currentRoom)) {
+                return;
+            }
+            const participant = Array.isArray(currentRoom.participants)
+                ? currentRoom.participants.find((item) => String(item.identity || '').trim() === identity)
+                : null;
+            if (!participant) {
+                res.status(404).json({ success: false, error: 'room_or_participant_not_found' });
+                return;
+            }
+            if (String(participant.role || '').trim() === 'host') {
+                res.status(403).json({ success: false, error: 'host_cannot_be_removed' });
+                return;
+            }
+
+            const room = roomStore.removeParticipant(roomId, identity);
+            broadcastRoomEvent(room.roomId, 'participantRemoved', {
+                roomId: room.roomId,
+                identity
+            });
+            broadcastRoomEvent(room.roomId, 'roomSettings', buildRoomResponse(room));
+
+            try {
+                await roomService.removeParticipant(roomId, identity);
+            } catch (error) {
+                const message = String(error?.message || error || '');
+                const status = Number(error?.status || error?.statusCode || 0);
+                if (status !== 404 && !/not[ -]?found/i.test(message)) {
+                    console.error('broadcast-room participant LiveKit removal failed:', {
+                        roomId,
+                        identity,
+                        error: message
+                    });
+                }
+            }
+
+            res.json({
+                success: true,
+                roomId: room.roomId,
+                participants: room.participants,
+                chatMessages: room.chatMessages,
+                sceneState: room.sceneState,
+                settings: room.settings
+            });
+        } catch (error) {
+            next(error);
+        }
     });
 
     router.get('/broadcast-room/invite/:inviteId', (req, res) => {
@@ -1476,6 +1677,9 @@ function createBroadcastRoomRouter({ config, roomStore }) {
         if (!room) {
             res.status(404).json({ success: false, error: 'room_not_found' });
             return;
+        }
+        if (room.active === false) {
+            avatarStore.clearRoomAvatars(req.params.roomId);
         }
         res.json({
             success: true,
@@ -1508,6 +1712,7 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             res.status(404).json({ success: false, error: 'room_not_found' });
             return;
         }
+        avatarStore.clearRoomAvatars(req.params.roomId);
         broadcastRoomEvent(room.roomId, 'roomEnded', {
             roomId: room.roomId,
             active: room.active,

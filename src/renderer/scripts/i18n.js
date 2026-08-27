@@ -56,7 +56,11 @@ class I18nFrontend {
         elements.forEach(el => {
             const key = el.getAttribute('data-i18n');
             if (key) {
-                const translation = this.t(key);
+                let params = {};
+                try {
+                    params = JSON.parse(el.getAttribute('data-i18n-params') || '{}');
+                } catch (_error) {}
+                const translation = this.t(key, params);
                 if (translation && !translation.startsWith('[')) {
                     el.textContent = translation;
                 }

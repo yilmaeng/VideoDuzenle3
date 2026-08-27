@@ -188,6 +188,32 @@
             background: #000;
         }
 
+        .camera-framing-dialog {
+            width: min(720px, calc(100vw - 40px));
+            max-height: calc(100vh - 40px);
+            overflow: auto;
+            border: 1px solid #555;
+            border-radius: 14px;
+            padding: 22px;
+            background: #1d1d1d;
+            color: #ececec;
+        }
+
+        .camera-framing-dialog::backdrop {
+            background: rgba(0, 0, 0, 0.76);
+        }
+
+        .camera-framing-preview {
+            display: block;
+            width: min(100%, 640px);
+            max-height: 50vh;
+            margin-top: 8px;
+            border: 1px solid #555;
+            border-radius: 10px;
+            background: #000;
+            object-fit: contain;
+        }
+
         .live-effects-slot {
             text-align: left;
             background: #222;
@@ -456,6 +482,9 @@
             </fieldset>
 
             <h3 data-i18n="recording_wizard.step4.fine_tune">Ince Ayar (Kamera)</h3>
+            <div class="step-actions">
+                <button type="button" id="btn-test-recording-camera" data-i18n="broadcast_room.test_camera_button" data-i18n-aria="broadcast_room.test_camera_button">Kamerayı ve kadrajı test et</button>
+            </div>
             <div class="grid-2">
                 <div class="form-group">
                     <label for="cam-x">X</label>
@@ -599,8 +628,8 @@
             </div>
             <div class="form-group">
                 <label for="mic-volume" data-i18n="recording_wizard.step5.mic_volume">Mikrofon Seviyesi (%)</label>
-                <input type="range" id="mic-volume" min="0" max="400" value="300">
-                <span id="mic-volume-value">%300</span>
+                <input type="range" id="mic-volume" min="0" max="400" value="100">
+                <span id="mic-volume-value">%100</span>
             </div>
             <div class="form-group">
                 <label for="system-volume" data-i18n="recording_wizard.step5.system_volume">Sistem Ses Seviyesi (%)</label>
@@ -636,8 +665,26 @@
                 </div>
 
                 <div id="youtube-api-panel" style="display:none;">
+                <section id="youtube-oauth-setup" class="card" hidden aria-labelledby="youtube-oauth-setup-title">
+                    <h3 id="youtube-oauth-setup-title" data-i18n="youtube_oauth_setup.title">YouTube OAuth bilgileri gerekli</h3>
+                    <p data-i18n="youtube_oauth_setup.required_help">Bu pakette YouTube OAuth bilgisi bulunmuyor. YouTube hesabı bağlamak için Google Cloud masaüstü istemci bilgilerinizi kaydedin.</p>
+                    <div class="form-group">
+                        <label for="youtube-client-id" data-i18n="youtube_oauth_setup.client_id">YouTube OAuth Client ID</label>
+                        <input id="youtube-client-id" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="youtube_oauth_setup.client_id_placeholder" placeholder="...apps.googleusercontent.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="youtube-client-secret" data-i18n="youtube_oauth_setup.client_secret">YouTube OAuth Client Secret</label>
+                        <input id="youtube-client-secret" type="password" autocomplete="new-password" spellcheck="false">
+                        <label><input id="youtube-show-client-secret" type="checkbox"> <span data-i18n="youtube_oauth_setup.show_secret">Client Secret bilgisini göster</span></label>
+                    </div>
+                    <div class="step-actions"><button id="youtube-save-client" type="button" data-i18n="youtube_oauth_setup.save">OAuth bilgilerini kaydet</button></div>
+                    <details>
+                        <summary data-i18n="youtube_oauth_setup.instructions_toggle">YouTube OAuth nasıl alınır? Adım adım yönerge</summary>
+                        <div data-i18n-html="youtube_oauth_setup.instructions_html"></div>
+                    </details>
+                </section>
                     <div class="step-actions">
-                        <button type="button" id="btn-youtube-connect" data-i18n="recording_wizard.broadcast.youtube_connect">YouTube hesabini bagla</button>
+                        <button type="button" id="btn-youtube-connect" disabled data-i18n="recording_wizard.broadcast.youtube_connect">YouTube hesabini bagla</button>
                         <button type="button" id="btn-youtube-disconnect" data-i18n="recording_wizard.broadcast.youtube_disconnect">Baglantiyi kaldir</button>
                     </div>
                     <div class="status-line" id="youtube-auth-status" data-i18n="recording_wizard.broadcast.youtube_auth_waiting">YouTube hesabi bagli degil.</div>
@@ -859,7 +906,7 @@ Alt+Ctrl+I: Pencere Listesini Ac</textarea>
                         </div>
                         <div class="form-group">
                             <label for="live-mic-volume" data-i18n="recording_wizard.step6.live_mic_volume">Mikrofon Seviyesi</label>
-                            <input type="range" id="live-mic-volume" min="0" max="400" value="300"
+                            <input type="range" id="live-mic-volume" min="0" max="400" value="100"
                                 oninput="window.setLiveVolume('mic', this.value)">
                         </div>
                         <div class="form-group">
@@ -1049,6 +1096,18 @@ Alt+Ctrl+I: Pencere Listesini Ac</textarea>
              <div id="live-effects-media-host" aria-hidden="true" style="display:none;"></div>
           </section>
       </div>
+
+    <dialog id="recording-camera-test-dialog" class="camera-framing-dialog" aria-labelledby="recording-camera-test-title" aria-describedby="recording-camera-test-help">
+        <h2 id="recording-camera-test-title" tabindex="-1" data-i18n="broadcast_room.camera_test_dialog_title">Kamera ve kadraj testi</h2>
+        <p id="recording-camera-test-help" class="hint" data-i18n="recording_wizard.step4.camera_test_obs_help">Bu test, OBS üzerinden kayda girecek gerçek kamera görüntüsünü çevrimdışı olarak inceler. Görüntü hiçbir sunucuya gönderilmez.</p>
+        <label for="recording-camera-test-preview" data-i18n="broadcast_room.camera_test_preview_label">Kamera testi önizlemesi</label>
+        <img id="recording-camera-test-preview" class="camera-framing-preview" alt="Kamera testi önizlemesi" data-i18n-aria="broadcast_room.camera_test_preview_label">
+        <p id="recording-camera-test-status" class="status-line" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div class="step-actions">
+            <button id="btn-read-recording-camera-test-status" type="button" data-i18n="broadcast_room.camera_test_read_status_button" data-i18n-aria="broadcast_room.camera_test_read_status_button">Mevcut kadraj bilgisini oku</button>
+            <button id="btn-close-recording-camera-test" type="button" data-i18n="broadcast_room.stop_camera_test_button" data-i18n-aria="broadcast_room.stop_camera_test_button">Kamera testini kapat</button>
+        </div>
+    </dialog>
 
     <script src="../scripts/accessible-recording.js"></script>
     <script>

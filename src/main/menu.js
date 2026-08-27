@@ -7,6 +7,27 @@ const i18n = require('./i18n');
 // Son açılan dosyalar listesi
 let recentFiles = [];
 const MAX_RECENT_FILES = 10;
+const DESCRIPTION_SUBTITLE_GUIDE_FILES = Object.freeze({
+    tr: 'evd-betimleme-altyazi-editoru-hizli-baslangic-kilavuzu.html',
+    en: 'evd-description-subtitle-editor-quick-start-guide.html',
+    de: 'evd-beschreibungs-und-untertitel-editor-schnellstartanleitung.html',
+    es: 'guia-inicio-rapido-editor-audiodescripcion-subtitulos-evd.html',
+    fr: 'guide-demarrage-rapide-editeur-audiodescription-sous-titres-evd.html'
+});
+const REVIEW_PACKAGE_GUIDE_FILES = Object.freeze({
+    tr: 'evd-son-kontrol-paketi-kullanim-kilavuzu.html',
+    en: 'evd-review-package-user-guide.html',
+    de: 'evd-pruefpaket-benutzerhandbuch.html',
+    es: 'guia-uso-paquete-revision-evd.html',
+    fr: 'guide-utilisation-package-controle-evd.html'
+});
+const SUBTITLE_VOICEOVER_GUIDE_FILES = Object.freeze({
+    tr: 'evd-altyazi-seslendirme-ve-duzenleme-kilavuzu.html',
+    en: 'evd-subtitle-voiceover-editing-guide.html',
+    de: 'evd-untertitel-sprachausgabe-bearbeitung-anleitung.html',
+    es: 'guia-evd-locucion-edicion-subtitulos.html',
+    fr: 'guide-evd-voix-edition-sous-titres.html'
+});
 const RECENT_FILES_STORE_KEY = 'recent_files';
 
 function normalizeRecentFiles(files) {
@@ -375,6 +396,87 @@ function openAdditionalEvdWindow() {
     child.unref();
 }
 
+async function openDescriptionSubtitleEditorGuide(mainWindow) {
+    const language = i18n.getCurrentLanguage();
+    const fileName = DESCRIPTION_SUBTITLE_GUIDE_FILES[language] || DESCRIPTION_SUBTITLE_GUIDE_FILES.en;
+    const guideDirectory = app.isPackaged
+        ? path.join(process.resourcesPath, 'guides')
+        : path.join(app.getAppPath(), 'docs');
+    const guidePath = path.join(guideDirectory, fileName);
+
+    try {
+        if (!fs.existsSync(guidePath)) {
+            throw new Error('Guide file not found: ' + guidePath);
+        }
+        const openError = await shell.openPath(guidePath);
+        if (openError) {
+            throw new Error(openError);
+        }
+    } catch (error) {
+        const options = {
+            type: 'error',
+            title: t('menu.help.guide_open_error_title', 'Could Not Open Guide'),
+            message: t('menu.help.guide_open_error', 'The Description and Subtitle Editor guide could not be opened.'),
+            detail: error.message
+        };
+        await announceDialogForAccessibility(mainWindow, options);
+        await dialog.showMessageBox(mainWindow, options);
+    }
+}
+async function openReviewPackageGuide(mainWindow) {
+    const language = i18n.getCurrentLanguage();
+    const fileName = REVIEW_PACKAGE_GUIDE_FILES[language] || REVIEW_PACKAGE_GUIDE_FILES.en;
+    const guideDirectory = app.isPackaged
+        ? path.join(process.resourcesPath, 'guides')
+        : path.join(app.getAppPath(), 'docs');
+    const guidePath = path.join(guideDirectory, fileName);
+
+    try {
+        if (!fs.existsSync(guidePath)) {
+            throw new Error('Guide file not found: ' + guidePath);
+        }
+        const openError = await shell.openPath(guidePath);
+        if (openError) {
+            throw new Error(openError);
+        }
+    } catch (error) {
+        const options = {
+            type: 'error',
+            title: t('menu.help.review_guide_open_error_title', 'Could Not Open Review Guide'),
+            message: t('menu.help.review_guide_open_error', 'The Review Package user guide could not be opened.'),
+            detail: error.message
+        };
+        await announceDialogForAccessibility(mainWindow, options);
+        await dialog.showMessageBox(mainWindow, options);
+    }
+}
+async function openSubtitleVoiceoverGuide(mainWindow) {
+    const language = i18n.getCurrentLanguage();
+    const fileName = SUBTITLE_VOICEOVER_GUIDE_FILES[language] || SUBTITLE_VOICEOVER_GUIDE_FILES.en;
+    const guideDirectory = app.isPackaged
+        ? path.join(process.resourcesPath, 'guides')
+        : path.join(app.getAppPath(), 'docs');
+    const guidePath = path.join(guideDirectory, fileName);
+
+    try {
+        if (!fs.existsSync(guidePath)) {
+            throw new Error('Guide file not found: ' + guidePath);
+        }
+        const openError = await shell.openPath(guidePath);
+        if (openError) {
+            throw new Error(openError);
+        }
+    } catch (error) {
+        const options = {
+            type: 'error',
+            title: t('menu.help.subtitle_voiceover_guide_open_error_title', 'Could Not Open Subtitle Voiceover Guide'),
+            message: t('menu.help.subtitle_voiceover_guide_open_error', 'The Subtitle Voiceover and Editing guide could not be opened.'),
+            detail: error.message
+        };
+        await announceDialogForAccessibility(mainWindow, options);
+        await dialog.showMessageBox(mainWindow, options);
+    }
+}
 function createMenu(mainWindow) {
     const currentLanguage = i18n.getCurrentLanguage();
     const applyTransitionAccelerator = currentLanguage === 'tr' ? 'Ş' : 'T';
@@ -488,6 +590,8 @@ function createMenu(mainWindow) {
                             title: t('messages.save_video_as', 'Save Video As'),
                             filters: [
                                 { name: t('messages.file_filter_mp4_video', 'MP4 Video'), extensions: ['mp4'] },
+                                { name: t('messages.file_filter_mov_video', 'MOV Video'), extensions: ['mov'] },
+                                { name: t('messages.file_filter_mkv_video', 'Matroska Video'), extensions: ['mkv'] },
                                 { name: t('messages.file_filter_avi_video', 'AVI Video'), extensions: ['avi'] },
                                 { name: t('messages.file_filter_wmv_video', 'WMV Video'), extensions: ['wmv'] }
                             ]
@@ -498,45 +602,19 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
-                    label: t('menu.file.fast_export', 'Hızlı Dışa Aktar (Smart Cut)...'),
+                    label: t('menu.file.fast_export', 'Hibrit Akıllı Dışa Aktar...'),
                     click: async () => {
-                        const options = {
-                            type: 'warning',
-                            title: t('messages.export_warning_title', 'Fast Export Warning'),
-                            message: t('messages.export_warning_msg', 'Please note that fast export may sometimes leave audio artifacts at the points you cut and split. Do you want to continue?'),
-                            buttons: [
-                                t('messages.export_warning_yes', 'Yes, Continue'),
-                                t('messages.export_warning_no', 'No, Traditional Export'),
-                                t('messages.cancel', 'Cancel')
-                            ],
-                            defaultId: 0,
-                            cancelId: 2
-                        };
-                        await announceDialogForAccessibility(mainWindow, options);
-                        const { response } = await dialog.showMessageBox(mainWindow, options);
-
-                        if (response === 0) {
-                            // FAST MODE (Smart Cut)
-                            const result = await dialog.showSaveDialog(mainWindow, {
-                                title: t('menu.file.fast_export', 'Fast Export (Smart Cut)...'),
-                                filters: [{ name: t('messages.file_filter_mp4_video', 'MP4 Video'), extensions: ['mp4'] }]
-                            });
-                            if (!result.canceled) {
-                                mainWindow.webContents.send('file-save-fast', result.filePath);
-                            }
-                        } else if (response === 1) {
-                            // SLOW MODE (Traditional)
-                            const result = await dialog.showSaveDialog(mainWindow, {
-                            title: t('messages.save_video_as', 'Save Video As'),
+                        const result = await dialog.showSaveDialog(mainWindow, {
+                            title: t('menu.file.fast_export', 'Hibrit Akıllı Dışa Aktar...'),
                             filters: [
-                                    { name: t('messages.file_filter_mp4_video', 'MP4 Video'), extensions: ['mp4'] },
-                                    { name: t('messages.file_filter_avi_video', 'AVI Video'), extensions: ['avi'] },
-                                    { name: t('messages.file_filter_wmv_video', 'WMV Video'), extensions: ['wmv'] }
-                                ]
-                            });
-                            if (!result.canceled) {
-                                mainWindow.webContents.send('file-save-as', result.filePath);
-                            }
+                                { name: t('messages.file_filter_mp4_video', 'MP4 Video'), extensions: ['mp4'] },
+                                { name: t('messages.file_filter_mov_video', 'MOV Video'), extensions: ['mov'] },
+                                { name: t('messages.file_filter_mkv_video', 'Matroska Video'), extensions: ['mkv'] }
+                            ]
+                        });
+                        if (!result.canceled) {
+                            // Keep the existing IPC event name for compatibility with packaged renderers.
+                            mainWindow.webContents.send('file-save-fast', result.filePath);
                         }
                     }
                 },
@@ -1049,6 +1127,29 @@ function createMenu(mainWindow) {
                         }
                     }
                 },
+                {
+                    label: t('menu.insert.description_subtitle_editor', 'Betimleme / Altyazı Editörü...'),
+                    click: () => {
+                        mainWindow.webContents.send('open-description-subtitle-editor-request');
+                    }
+                },
+                // Proje açma düzenleyicide ve menüde erişilebilir; kısayol haritasını kalabalıklaştırmamak için global kısayol kullanılmaz.
+                {
+                    label: t('menu.insert.subtitle_tts_project', 'Altyazı Seslendirme Projesi Aç...'),
+                    click: async () => {
+                        const result = await dialog.showOpenDialog(mainWindow, {
+                            title: t('dialog.subtitle_tts_editor.open_project_title', 'Altyazı Seslendirme Projesi Aç'),
+                            filters: [{
+                                name: t('dialog.subtitle_tts_editor.project_filter', 'EVD Altyazı Seslendirme Projesi'),
+                                extensions: ['evdtts']
+                            }],
+                            properties: ['openFile']
+                        });
+                        if (!result.canceled && result.filePaths.length > 0) {
+                            mainWindow.webContents.send('insert-subtitle', result.filePaths[0]);
+                        }
+                    }
+                },
                 { type: 'separator' },
                 {
                     label: t('menu.insert.transition', 'Geçiş'),
@@ -1451,6 +1552,27 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    label: t('menu.help.description_subtitle_editor_guide', 'Betimleme ve Altyazı Editörü Kılavuzu'),
+                    // Support documentation is intentionally not exposed as a configurable global shortcut.
+                    click: () => {
+                        openDescriptionSubtitleEditorGuide(mainWindow);
+                    }
+                },
+                {
+                    label: t('menu.help.review_package_guide', 'Son Kontrol Paketi Kılavuzu'),
+                    // Support documentation is intentionally not exposed as a configurable global shortcut.
+                    click: () => {
+                        openReviewPackageGuide(mainWindow);
+                    }
+                },
+                {
+                    label: t('menu.help.subtitle_voiceover_guide', 'Altyazı Seslendirme ve Düzenleme Kılavuzu'),
+                    // Support documentation is intentionally not exposed as a configurable global shortcut.
+                    click: () => {
+                        openSubtitleVoiceoverGuide(mainWindow);
+                    }
+                },
+                {
                     label: t('menu.help.feedback', 'Geri Bildirim Gönder...'),
                     accelerator: 'F3',
                     click: () => {
@@ -1494,7 +1616,7 @@ function createMenu(mainWindow) {
                             type: 'info',
                             title: t('messages.about_title', 'About EVD'),
                             message: t('messages.app_display_name', 'EVD'),
-                            detail: t('messages.about_detail', 'Version 3.9991\n\nKeyboard-first video editor designed for blind and low-vision users.\n\nProgram Icon: Hands and ears editing video\n\n© 2025-2026 Engin Yılmaz\nAll rights reserved.')
+                            detail: t('messages.about_detail', 'Version 5.0.0\n\nKeyboard-first video editor designed for blind and low-vision users.\n\nProgram Icon: Hands and ears editing video\n\n© 2025-2026 Engin Yılmaz\nAll rights reserved.')
                         };
                         announceDialogForAccessibility(mainWindow, options).then(() => {
                             dialog.showMessageBox(mainWindow, options);

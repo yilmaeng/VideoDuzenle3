@@ -1,0 +1,474 @@
+﻿<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="description_subtitle_editor.window_title">Betimleme ve Altyazı Editörü</title>
+    <link rel="stylesheet" href="styles/description-subtitle-editor.css">
+</head>
+<body>
+    <a class="skip-link" href="#event-list" data-i18n="description_subtitle_editor.skip_to_events">Olay listesine geç</a>
+    <main class="workspace" aria-labelledby="editor-title">
+        <header class="hero">
+            <div>
+                <p class="eyebrow">EVD STUDIO</p>
+                <h1 id="editor-title" data-i18n="description_subtitle_editor.heading">Betimleme ve Altyazı Editörü</h1>
+                <p data-i18n="description_subtitle_editor.intro">Profesyonel betimleme ve altyazı projelerini ayrı, erişilebilir bir çalışma alanında hazırlayın.</p>
+            </div>
+            <div id="dirty-indicator" class="save-state" aria-live="off"></div>
+        </header>
+
+        <nav class="toolbar" aria-label="Proje işlemleri" data-i18n-aria="description_subtitle_editor.project_actions">
+            <button id="open-control-package" type="button" data-i18n="description_subtitle_editor.open_control_package">Kontrol paketi aç</button>
+            <button id="choose-video" type="button" data-i18n="description_subtitle_editor.choose_video">Video veya ses seç</button>
+            <button id="open-project" type="button" data-i18n="description_subtitle_editor.open_project">Proje aç</button>
+            <button id="save-project" type="button" disabled data-i18n="description_subtitle_editor.save_project">Projeyi kaydet, Alt+Shift+S</button>
+            <button id="save-project-as" type="button" disabled data-i18n="description_subtitle_editor.save_project_as">Farklı kaydet</button>
+            <button id="import-subtitles" type="button" disabled data-i18n="description_subtitle_editor.import_subtitles">SRT, VTT veya Word içe aktar</button>
+            <button id="export-events" type="button" disabled data-i18n="description_subtitle_editor.export_events">Dışa aktar, Ctrl+Shift+E</button>
+            <button id="find-replace" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.find_replace">Ara ve değiştir</button>
+            <button id="close-editor" type="button" class="secondary" data-i18n="description_subtitle_editor.close_editor">Editörü kapat</button>
+        </nav>
+
+        <section class="source-card" aria-labelledby="source-heading">
+            <div>
+                <h2 id="source-heading" data-i18n="description_subtitle_editor.source_heading">Kaynak medya</h2>
+                <p id="source-name" class="source-name" data-i18n="description_subtitle_editor.no_source">Henüz video seçilmedi.</p>
+                <p id="source-details" class="muted"></p>
+            </div>
+            <video id="video-preview" controls preload="metadata" tabindex="-1" aria-label="Video önizlemesi" data-i18n-aria="description_subtitle_editor.video_preview"></video>
+        </section>
+
+        <section class="timeline-card" aria-labelledby="timeline-heading">
+            <div class="section-heading">
+                <div>
+                    <h2 id="timeline-heading" data-i18n="description_subtitle_editor.timeline_heading">Uzman zaman çizelgesi</h2>
+                    <p data-i18n="description_subtitle_editor.timeline_foundation">Bu alan dalga biçimi, çekim değişimleri ve olay blokları için ayrılmıştır. Ana EVD zaman çizelgesinden bağımsız çalışır.</p>
+                </div>
+                <span id="current-time" aria-live="off">00:00:00.000</span>
+            </div>
+            <label for="timeline-position" data-i18n="description_subtitle_editor.position_label">Video konumu</label>
+            <input id="timeline-position" type="range" min="0" max="0" step="0.01" value="0" disabled>
+            <div class="timeline-toolbar" aria-label="Zaman çizelgesi görünümü" data-i18n-aria="description_subtitle_editor.timeline_actions">
+                <button id="zoom-out" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.zoom_out">Uzaklaştır</button>
+                <label for="timeline-zoom" data-i18n="description_subtitle_editor.zoom_label">Yakınlaştırma</label>
+                <select id="timeline-zoom" disabled>
+                    <option value="1">1x</option>
+                    <option value="2">2x</option>
+                    <option value="4">4x</option>
+                    <option value="8">8x</option>
+                    <option value="16">16x</option>
+                    <option value="32">32x</option>
+                </select>
+                <button id="zoom-in" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.zoom_in">Yakınlaştır</button>
+                <button id="analyze-scenes" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.analyze_scenes">Sahne değişimlerini analiz et</button>
+                <button id="cancel-analysis" type="button" class="secondary" hidden data-i18n="description_subtitle_editor.cancel_analysis">Analizi iptal et</button>
+            </div>
+            <div id="timeline-visual" class="timeline-visual" tabindex="0" role="application"
+                aria-label="Klavye ile düzenleme zaman çizelgesi"
+                data-i18n-aria="description_subtitle_editor.timeline_keyboard_surface_name"
+                aria-describedby="timeline-keyboard-help">
+                <canvas id="waveform-canvas"></canvas>
+            </div>
+            <p id="timeline-window" class="timeline-window"></p>
+            <div class="analysis-progress-row">
+                <label for="analysis-progress" data-i18n="description_subtitle_editor.analysis_progress">Analiz ilerlemesi</label>
+                <progress id="analysis-progress" max="100" value="0" hidden></progress>
+            </div>
+            <p id="waveform-summary" class="muted"></p>
+            <p id="timeline-keyboard-help" class="muted" data-i18n="description_subtitle_editor.timeline_keyboard_help">Ana EVD oynatma, sarma ve işaretçi kısayolları bu editörde de çalışır. Yukarı ve aşağı ok oynatıcı sesini değiştirir. X yavaşlatır, C hızlandırır, Z normal hıza getirir; B konumu ve kalan süreyi okur. M işaretçi ekler; Alt+oklar işaretçiler arasında gezer ve Shift+Boşluk iki işaretçi arasını oynatır.</p>
+        </section>
+
+        <section class="event-card" aria-labelledby="events-heading">
+            <div class="section-heading">
+                <div>
+                    <h2 id="events-heading" data-i18n="description_subtitle_editor.events_heading">Betimleme ve altyazı olayları</h2>
+                    <p id="event-summary"></p>
+                </div>
+            </div>
+            <details id="tts-defaults" class="advanced-event-fields">
+                <summary data-i18n="description_subtitle_editor.tts_defaults">Varsayılan TTS ve miks ayarları</summary>
+                <div class="form-grid">
+                    <div><label for="default-tts-service" data-i18n="description_subtitle_editor.tts_service">TTS servisi</label><select id="default-tts-service"><option value="system" data-i18n="description_subtitle_editor.tts_service_system">Bilgisayar sesleri</option><option value="openai">OpenAI</option><option value="elevenlabs">ElevenLabs</option><option value="human" data-i18n="description_subtitle_editor.human_narration_service">İnsan seslendirmesi</option></select></div>
+                    <div><label for="default-tts-voice" data-i18n="description_subtitle_editor.tts_voice">Ses</label><select id="default-tts-voice"><option value="" data-i18n="description_subtitle_editor.tts_default_voice">Varsayılan</option></select></div>
+                    <div><label for="default-tts-speed" data-i18n="description_subtitle_editor.tts_speed">TTS hızı</label><input id="default-tts-speed" type="range" min="50" max="200" value="100"><output id="default-tts-speed-value" for="default-tts-speed">%100</output></div>
+                    <div><label for="default-tts-volume" data-i18n="description_subtitle_editor.tts_volume">TTS ses düzeyi</label><input id="default-tts-volume" type="range" min="0" max="200" value="100"><output id="default-tts-volume-value" for="default-tts-volume">%100</output></div>
+                    <div><label for="default-original-volume" data-i18n="description_subtitle_editor.original_volume">Betimleme sırasında özgün video sesi</label><input id="default-original-volume" type="range" min="0" max="200" value="90"><output id="default-original-volume-value" for="default-original-volume">%90</output></div>
+                    <div><label for="default-max-auto-speed" data-i18n="description_subtitle_editor.max_auto_speed">En fazla otomatik hız</label><input id="default-max-auto-speed" type="range" min="100" max="200" value="135"><output id="default-max-auto-speed-value" for="default-max-auto-speed">%135</output></div>
+                </div>
+                <label><input id="default-auto-fit" type="checkbox" checked> <span data-i18n="description_subtitle_editor.auto_fit_tts">Uzun seslendirmeyi güvenli sınır içinde otomatik hızlandır</span></label>
+                <div class="dialog-actions"><button id="synthesize-selected" type="button" data-i18n="description_subtitle_editor.synthesize_selected">Seçili betimlemeleri seslendir</button><button id="synthesize-all" type="button" class="secondary" data-i18n="description_subtitle_editor.synthesize_all">Tüm betimlemeleri seslendir</button><button id="render-described-video" type="button" class="secondary" data-i18n="description_subtitle_editor.render_described_video">Betimlemeli video veya MP3 olu?tur</button></div>
+            </details>
+            <details id="human-narration-panel" class="advanced-event-fields">
+                <summary data-i18n="description_subtitle_editor.human_narration_panel">İnsan seslendirmesini eşleştir</summary>
+                <p class="muted" data-i18n="description_subtitle_editor.human_narration_help">Temiz MP3 veya WAV seslendirmesini yerel Whisper ile çözümleyin. Tekrar okumalar ayrı çekimler olarak korunur; siz seçmeden mevcut seslendirme değişmez.</p>
+                <div class="form-grid">
+                    <div><label for="human-narration-model" data-i18n="description_subtitle_editor.human_model">Yerel Whisper modeli</label><select id="human-narration-model"><option value="Xenova/whisper-tiny" data-i18n="description_subtitle_editor.human_model_tiny">Tiny, hızlı</option><option value="Xenova/whisper-base" selected data-i18n="description_subtitle_editor.human_model_base">Base, önerilen</option><option value="Xenova/whisper-small" data-i18n="description_subtitle_editor.human_model_small">Small, daha doğru ve yavaş</option></select></div>
+                </div>
+                <p id="human-narration-source" class="muted"></p>
+                <progress id="human-narration-progress" max="100" hidden aria-label="İnsan seslendirmesi analiz ilerlemesi" data-i18n-aria="description_subtitle_editor.human_progress_label"></progress>
+                <div class="dialog-actions"><button id="analyze-human-narration" type="button" data-i18n="description_subtitle_editor.human_choose_analyze">Temiz insan sesini seç ve eşleştir</button><button id="open-manual-human-matcher" type="button" class="secondary" data-i18n="description_subtitle_editor.human_manual_open">Elle eşleştir</button><button id="use-recommended-human-candidates" type="button" class="secondary" data-i18n="description_subtitle_editor.human_use_recommended">Önerilen çekimleri kullan</button><button id="clear-human-narration" type="button" class="secondary" data-i18n="description_subtitle_editor.human_clear_analysis">Eşleştirme sonuçlarını temizle</button></div>
+                <h3 id="human-candidates-heading" data-i18n="description_subtitle_editor.human_candidates_heading">Eşleşen betimleme çekimleri</h3>
+                <div id="human-narration-candidates" class="event-list" role="listbox" tabindex="0" aria-labelledby="human-candidates-heading" aria-describedby="human-candidates-help"></div>
+                <div id="human-candidate-action-menu" class="event-action-menu" role="menu" hidden aria-label="İnsan seslendirmesi çekim menüsü" data-i18n-aria="description_subtitle_editor.human_candidate_context_menu">
+                    <button type="button" role="menuitem" data-human-candidate-action="preview" data-i18n="description_subtitle_editor.human_preview_candidate">Yalnız çekimi dinle, Boşluk</button>
+                    <button type="button" role="menuitem" data-human-candidate-action="mix" data-i18n="description_subtitle_editor.human_preview_mix">Filmle miksli dinle, Ctrl+Boşluk</button>
+                    <button type="button" role="menuitem" data-human-candidate-action="edit" data-i18n="description_subtitle_editor.human_edit_candidate">Çekimi düzenle, Ctrl+Enter</button>
+                    <button type="button" role="menuitem" data-human-candidate-action="use" data-i18n="description_subtitle_editor.human_use_candidate">Çekimi uygula ve onayla, Alt+Enter</button>
+                </div>
+                <p id="human-candidates-help" class="muted" data-i18n="description_subtitle_editor.human_candidates_help">Aşağı ve yukarı oklarla tüm betimlemelerin çekimleri arasında dolaşın. Boşluk yalnız çekimi, Ctrl+Boşluk filmle miksli halini çalar; Ctrl+Enter düzenler, Alt+Enter uygular, sağ ok işlem menüsünü açar.</p>
+                <div class="dialog-actions"><button id="preview-human-candidate" type="button" class="secondary" data-i18n="description_subtitle_editor.human_preview_candidate">Yalnız çekimi dinle, Boşluk</button><button id="preview-human-candidate-mix" type="button" class="secondary" data-i18n="description_subtitle_editor.human_preview_mix">Filmle miksli dinle, Ctrl+Boşluk</button><button id="edit-human-candidate" type="button" class="secondary" data-i18n="description_subtitle_editor.human_edit_candidate">Çekimi düzenle, Ctrl+Enter</button><button id="use-human-candidate" type="button" data-i18n="description_subtitle_editor.human_use_candidate">Çekimi uygula ve onayla, Alt+Enter</button></div>
+                <h3 id="human-unmatched-heading" data-i18n="description_subtitle_editor.human_unmatched_heading">Eşleşmeyen kayıtlar ve seslendiren notları</h3>
+                <div id="human-narration-unmatched" role="list" aria-labelledby="human-unmatched-heading"></div>
+            </details>
+            <details id="contentstudio-panel" class="advanced-event-fields">
+                <summary data-i18n="description_subtitle_editor.contentstudio_panel">ContentStudio ile otomatik betimleme</summary>
+                <p class="muted" data-i18n="description_subtitle_editor.contentstudio_help">Videoyu ContentStudio API'ye yükleyin, zaman kodlu betimlemeleri taslak olarak alın veya hazır MP3/MP4 çıktısını indirin.</p>
+                <fieldset><legend data-i18n="description_subtitle_editor.contentstudio_api_settings">ContentStudio API bağlantısı</legend>
+                    <div id="contentstudio-key-entry"><label for="contentstudio-api-key" data-i18n="description_subtitle_editor.contentstudio_api_key">API anahtarı</label><input id="contentstudio-api-key" type="password" autocomplete="off">
+                    <label><input id="contentstudio-show-key" type="checkbox"> <span data-i18n="description_subtitle_editor.contentstudio_show_key">Yazılan anahtarı göster</span></label>
+                    <button id="contentstudio-save-key" type="button" data-i18n="description_subtitle_editor.contentstudio_save_key">Anahtarı güvenli kaydet</button></div>
+                    <p id="contentstudio-key-status" class="muted"></p>
+                    <div class="dialog-actions"><button id="contentstudio-change-key" type="button" class="secondary" hidden data-i18n="description_subtitle_editor.contentstudio_change_key">API anahtarını değiştir</button><button id="contentstudio-test-key" type="button" class="secondary" data-i18n="description_subtitle_editor.contentstudio_test_key">Bağlantıyı ve krediyi denetle</button></div>
+                    <label for="contentstudio-account" data-i18n="description_subtitle_editor.contentstudio_account">Hesap ve kredi bilgisi</label><textarea id="contentstudio-account" class="readonly-textarea-simulated" rows="5" aria-readonly="true" aria-multiline="true" wrap="soft" spellcheck="false"></textarea>
+                </fieldset>
+                <fieldset><legend data-i18n="description_subtitle_editor.contentstudio_generation_settings">Otomatik betimleme ayarları</legend>
+                    <div class="form-grid">
+                        <div><label for="contentstudio-language" data-i18n="description_subtitle_editor.contentstudio_language">Betimleme dili kodu</label><input id="contentstudio-language" type="text" value="tr" list="contentstudio-language-list"><datalist id="contentstudio-language-list"><option value="tr"><option value="en"><option value="de"><option value="es"><option value="fr"><option value="it"><option value="pt"><option value="ar"></datalist></div>
+                        <div><label for="contentstudio-template" data-i18n="description_subtitle_editor.contentstudio_template">Yazım şablonu</label><select id="contentstudio-template"><option value="accessibility" data-i18n="description_subtitle_editor.contentstudio_template_accessibility">Erişilebilirlik, önerilen</option><option value="general" data-i18n="description_subtitle_editor.contentstudio_template_general">Genel</option><option value="cinematic" data-i18n="description_subtitle_editor.contentstudio_template_cinematic">Sinematik</option><option value="educational" data-i18n="description_subtitle_editor.contentstudio_template_educational">Eğitsel</option><option value="advertisement" data-i18n="description_subtitle_editor.contentstudio_template_advertisement">Reklam</option><option value="detailed" data-i18n="description_subtitle_editor.contentstudio_template_detailed">Ayrıntılı</option></select></div>
+                        <div><label for="contentstudio-verbosity" data-i18n="description_subtitle_editor.contentstudio_verbosity">Ayrıntı düzeyi</label><select id="contentstudio-verbosity"><option value="concise" data-i18n="description_subtitle_editor.contentstudio_concise">Kısa</option><option value="detailed" selected data-i18n="description_subtitle_editor.contentstudio_detailed">Ayrıntılı</option><option value="comprehensive" data-i18n="description_subtitle_editor.contentstudio_comprehensive">Kapsamlı</option></select></div>
+                        <div><label for="contentstudio-processing-mode" data-i18n="description_subtitle_editor.contentstudio_processing_mode">İşleme modu</label><select id="contentstudio-processing-mode"><option value="standard" data-i18n="description_subtitle_editor.contentstudio_standard">Standart</option><option value="enhanced" data-i18n="description_subtitle_editor.contentstudio_enhanced">Gelişmiş, daha maliyetli</option></select></div>
+                        <div><label for="contentstudio-confidence" data-i18n="description_subtitle_editor.contentstudio_confidence">En düşük güven</label><input id="contentstudio-confidence" type="range" min="0" max="100" value="40"><output id="contentstudio-confidence-value" for="contentstudio-confidence">%40</output></div>
+                        <div><label for="contentstudio-temperature" data-i18n="description_subtitle_editor.contentstudio_temperature">Yaratıcılık</label><input id="contentstudio-temperature" type="range" min="0" max="100" value="20"><output id="contentstudio-temperature-value" for="contentstudio-temperature">%20</output></div>
+                    </div>
+                    <label><input id="contentstudio-captions" type="checkbox" checked> <span data-i18n="description_subtitle_editor.contentstudio_captions">Altyazıları da üret</span></label>
+                    <label><input id="contentstudio-recommended-instructions" type="checkbox" checked> <span data-i18n="description_subtitle_editor.contentstudio_use_recommended">EVD'nin profesyonel sesli betimleme kurallarını uygula</span></label>
+                    <label for="contentstudio-instructions" data-i18n="description_subtitle_editor.contentstudio_instructions">Ek özel talimatlar</label><textarea id="contentstudio-instructions" rows="4"></textarea>
+                    <button id="contentstudio-start" type="button" data-i18n="description_subtitle_editor.contentstudio_start">Videoyu yükle ve otomatik betimlemeyi başlat</button>
+                    <progress id="contentstudio-progress" max="100" hidden aria-label="ContentStudio ilerlemesi" data-i18n-aria="description_subtitle_editor.contentstudio_progress_label"></progress>
+                </fieldset>
+                <fieldset><legend data-i18n="description_subtitle_editor.contentstudio_result">Proje ve sonuç</legend>
+                    <label for="contentstudio-project-status" data-i18n="description_subtitle_editor.contentstudio_project_status">ContentStudio proje durumu</label><textarea id="contentstudio-project-status" class="readonly-textarea-simulated" rows="5" aria-readonly="true" aria-multiline="true" wrap="soft" spellcheck="false"></textarea>
+                    <div class="dialog-actions"><button id="contentstudio-recover" type="button" class="secondary" data-i18n="description_subtitle_editor.contentstudio_recover">Son eşleşen projeyi bul</button><button id="contentstudio-refresh" type="button" class="secondary" data-i18n="description_subtitle_editor.contentstudio_refresh">Durumu şimdi denetle</button><button id="contentstudio-import-cues" type="button" data-i18n="description_subtitle_editor.contentstudio_import_cues">Betimlemeleri taslak olarak içe aktar</button></div>
+                </fieldset>
+                <fieldset><legend data-i18n="description_subtitle_editor.contentstudio_outputs">ContentStudio çıktıları</legend>
+                    <div class="form-grid"><div><label for="contentstudio-export-format" data-i18n="description_subtitle_editor.contentstudio_export_format">Çıktı biçimi</label><select id="contentstudio-export-format"><option value="srt">SRT</option><option value="mp3">MP3</option><option value="mp4">MP4</option></select></div><div><label for="contentstudio-export-quality" data-i18n="description_subtitle_editor.contentstudio_export_quality">Kalite</label><select id="contentstudio-export-quality"><option value="high" data-i18n="description_subtitle_editor.contentstudio_quality_high">Yüksek</option><option value="medium" data-i18n="description_subtitle_editor.contentstudio_quality_medium">Orta</option><option value="low" data-i18n="description_subtitle_editor.contentstudio_quality_low">Düşük</option></select></div></div>
+                    <label><input id="contentstudio-export-captions" type="checkbox" checked> <span data-i18n="description_subtitle_editor.contentstudio_include_captions">MP4 çıktısına altyazıları işle</span></label>
+                    <button id="contentstudio-export" type="button" data-i18n="description_subtitle_editor.contentstudio_download_output">Seçili çıktıyı oluştur ve indir</button>
+                </fieldset>
+            </details>
+            <details id="quality-panel" class="advanced-event-fields">
+                <summary data-i18n="description_subtitle_editor.quality_panel">Kalite kontrolü ve sorun gezgini</summary>
+                <p class="muted" data-i18n="description_subtitle_editor.quality_help">Zamanlama, metin, seslendirme, çakışma ve onay durumlarını denetleyin. Sorun listesinde oklarla gezip Enter ile ilgili olaya gidebilirsiniz.</p>
+                <div class="event-toolbar">
+                    <button id="run-quality-check" type="button" data-i18n="description_subtitle_editor.quality_run">Kalite kontrolünü çalıştır</button>
+                    <label for="quality-filter" data-i18n="description_subtitle_editor.quality_filter">Gösterilecek sorunlar</label>
+                    <select id="quality-filter">
+                        <option value="all" data-i18n="description_subtitle_editor.quality_filter_all">Tüm düzeyler</option>
+                        <option value="blocker" data-i18n="description_subtitle_editor.quality_severity_blocker">Engel</option>
+                        <option value="warning" data-i18n="description_subtitle_editor.quality_severity_warning">Uyarı</option>
+                        <option value="suggestion" data-i18n="description_subtitle_editor.quality_severity_suggestion">Öneri</option>
+                    </select>
+                </div>
+                <label for="quality-summary" data-i18n="description_subtitle_editor.quality_summary_label">Kalite özeti</label>
+                <textarea id="quality-summary" class="readonly-textarea-simulated" rows="3" aria-readonly="true" aria-multiline="true" wrap="soft" spellcheck="false"></textarea>
+                <div id="quality-issue-list" class="event-list quality-list" role="listbox" tabindex="0" aria-labelledby="quality-list-heading" aria-describedby="quality-list-help"></div>
+                <h3 id="quality-list-heading" class="visually-hidden" data-i18n="description_subtitle_editor.quality_list_heading">Kalite sorunları</h3>
+                <p id="quality-list-help" class="muted" data-i18n="description_subtitle_editor.quality_list_help">Aşağı ve yukarı oklarla sorunlar arasında gezin. Enter seçili sorunun olayına gider; Page Up ve Page Down onar öğe ilerler.</p>
+                <div class="dialog-actions">
+                    <button id="quality-go-to-event" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.quality_go_to_event">Seçili olaya git</button>
+                    <button id="quality-export-txt" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.quality_export_txt">TXT raporu kaydet</button>
+                    <button id="quality-export-xlsx" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.quality_export_xlsx">Excel raporu kaydet</button>
+                </div>
+            </details>
+            <div class="event-toolbar" aria-label="Olay işlemleri" data-i18n-aria="description_subtitle_editor.event_actions">
+                <label for="event-filter" data-i18n="description_subtitle_editor.event_filter">Olay filtresi</label>
+                <select id="event-filter">
+                    <option value="all" data-i18n="description_subtitle_editor.event_filter_all">Tüm olaylar</option>
+                    <option value="with-notes" data-i18n="description_subtitle_editor.event_filter_with_notes">Yalnızca son kontrol notu olanlar</option>
+                    <option value="unresolved-notes" data-i18n="description_subtitle_editor.event_filter_unresolved">Yalnızca çözülmemiş notlar</option>
+                    <option value="without-notes" data-i18n="description_subtitle_editor.event_filter_without_notes">Yalnızca notu olmayanlar</option>
+                </select>
+                <button id="add-event-from-markers" type="button" disabled
+                    data-i18n="description_subtitle_editor.add_event_from_markers">İşaretçi aralığından olay ekle (Ctrl+Enter)</button>
+                <button id="add-review-note-from-markers" type="button" class="secondary" disabled
+                    data-i18n="description_subtitle_editor.add_standalone_review_note_from_markers">İşaretçi aralığına bağımsız son kontrol notu ekle (A)</button>
+                <button id="edit-selected-event" type="button" class="secondary" disabled
+                    data-i18n="description_subtitle_editor.edit_selected_event">Seçili olayı düzenle</button>
+                <button id="preview-selected-event" type="button" class="secondary" disabled
+                    data-i18n="description_subtitle_editor.preview_selected_event">Seçili aralığı dinle</button>
+                <button id="delete-selected-event" type="button" class="danger" disabled
+                    data-i18n="description_subtitle_editor.delete_selected_event">Seçili olayı sil</button>
+            </div>
+            <div id="event-list" class="event-list" role="listbox" aria-multiselectable="true" tabindex="0" aria-labelledby="events-heading" aria-describedby="event-list-help"></div>
+            <div id="event-action-menu" class="event-action-menu" role="menu" hidden
+                aria-label="Olay bağlam menüsü" data-i18n-aria="description_subtitle_editor.event_context_menu">
+                <button type="button" role="menuitem" data-event-action="edit"
+                    data-i18n="description_subtitle_editor.edit_selected_event">Seçili olayı düzenle</button>
+                <button type="button" role="menuitem" data-event-action="preview"
+                    data-i18n="description_subtitle_editor.preview_selected_event">Seçili aralığı dinle</button>
+                <button type="button" role="menuitem" data-event-action="shift-earlier"
+                    data-i18n="description_subtitle_editor.shift_selected_earlier">Seçili olayları 10 milisaniye erkene al, Alt+Sol</button>
+                <button type="button" role="menuitem" data-event-action="shift-later"
+                    data-i18n="description_subtitle_editor.shift_selected_later">Seçili olayları 10 milisaniye ileri al, Alt+Sağ</button>
+                <button type="button" role="menuitem" data-event-action="review-note" data-i18n="description_subtitle_editor.review_note_menu">Son kontrol notu ekle veya düzenle, Alt+N</button>
+                <button type="button" role="menuitem" data-event-action="split" data-i18n="description_subtitle_editor.split_event">Olayı oynatma konumunda böl</button>
+                <button type="button" role="menuitem" data-event-action="merge" data-i18n="description_subtitle_editor.merge_events">Seçili olayları birleştir</button>
+                <button type="button" role="menuitem" class="danger" data-event-action="delete"
+                    data-i18n="description_subtitle_editor.delete_selected_event">Seçili olayı sil</button>
+            </div>
+            <p id="event-list-help" class="muted" data-i18n="description_subtitle_editor.event_list_help">İki işaretçi ekleyip Ctrl+Enter ile olay oluşturun. Listede oklarla dolaşınca aralık dinletilir; Enter düzenler, Boşluk yeniden dinletir ve Delete silme onayı açar.</p>
+        </section>
+
+        <div id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></div>
+    </main>
+
+    <dialog id="control-package-dialog" aria-labelledby="control-package-dialog-title" aria-describedby="control-package-help">
+        <form id="control-package-form">
+            <h2 id="control-package-dialog-title" data-i18n="description_subtitle_editor.control_package_title">Kontrol paketi aç</h2>
+            <p id="control-package-help" class="muted" data-i18n="description_subtitle_editor.control_package_help">Klasörde bulunan proje, medya ve zaman kodlu metin dosyalarını seçin. Word önizlemesindeki uyarıları içe aktarmadan önce denetleyin.</p>
+            <label for="control-package-project" data-i18n="description_subtitle_editor.control_package_project">Mevcut EVD projesi, isteğe bağlı</label>
+            <select id="control-package-project"></select>
+            <label for="control-package-media" data-i18n="description_subtitle_editor.control_package_media">Video veya ses dosyası</label>
+            <select id="control-package-media"></select>
+            <label for="control-package-script" data-i18n="description_subtitle_editor.control_package_script">Betimleme metni, isteğe bağlı</label>
+            <select id="control-package-script"></select>
+            <label for="control-package-preview" data-i18n="description_subtitle_editor.control_package_preview">Algılama önizlemesi</label>
+            <textarea id="control-package-preview" class="readonly-textarea-simulated" rows="10" aria-readonly="true" aria-multiline="true" wrap="soft" spellcheck="false"></textarea>
+            <div class="dialog-actions"><button type="submit" data-i18n="description_subtitle_editor.control_package_open">Seçilen paketi aç</button><button id="control-package-cancel" type="button" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button></div>
+        </form>
+    </dialog>
+    <dialog id="review-note-dialog" aria-labelledby="review-note-title" aria-describedby="review-note-event">
+        <form id="review-note-form">
+            <h2 id="review-note-title" data-i18n="description_subtitle_editor.review_note_title">Betimleme son kontrol notu</h2>
+            <p id="review-note-event" tabindex="-1"></p>
+            <label for="review-note-text" data-i18n="description_subtitle_editor.review_note_label">Son kontrol notu</label>
+            <textarea id="review-note-text" rows="7"></textarea>
+            <label><input id="review-note-resolved" type="checkbox"> <span data-i18n="description_subtitle_editor.review_note_resolved">Not çözüldü</span></label>
+            <div class="dialog-actions"><button type="submit" data-i18n="description_subtitle_editor.review_note_save">Notu kaydet, Ctrl+Enter</button><button id="review-note-delete" type="button" class="danger" data-i18n="description_subtitle_editor.review_note_delete">Notu sil</button><button id="review-note-cancel" type="button" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button></div>
+        </form>
+    </dialog>
+    <dialog id="event-dialog" aria-labelledby="event-dialog-title" aria-describedby="event-dialog-help event-metrics">
+        <form id="event-form">
+            <h2 id="event-dialog-title" data-i18n="description_subtitle_editor.new_event_title">Yeni betimleme veya altyazı olayı</h2>
+            <p id="event-dialog-help" class="muted" data-i18n="description_subtitle_editor.event_dialog_help">Olay türünü, zaman aralığını ve metni girin. Ctrl+Enter kaydeder.</p>
+            <div class="form-grid">
+                <div>
+                    <label for="event-type" data-i18n="description_subtitle_editor.event_type">Olay türü</label>
+                    <select id="event-type">
+                        <option value="description" data-i18n="description_subtitle_editor.event_type_description">Sesli betimleme</option>
+                        <option value="subtitle" data-i18n="description_subtitle_editor.event_type_subtitle">Altyazı</option>
+                        <option value="note" data-i18n="description_subtitle_editor.event_type_note">Kontrol notu</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="event-status" data-i18n="description_subtitle_editor.event_status">Durum</label>
+                    <select id="event-status">
+                        <option value="draft" data-i18n="description_subtitle_editor.event_status_draft">Taslak</option>
+                        <option value="review" data-i18n="description_subtitle_editor.event_status_review">Kontrol edilecek</option>
+                        <option value="approved" data-i18n="description_subtitle_editor.event_status_approved">Onaylandı</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="event-start" data-i18n="description_subtitle_editor.event_start">Başlangıç zaman kodu</label>
+                    <input id="event-start" type="text" inputmode="decimal" placeholder="00:00:00.000">
+                </div>
+                <div>
+                    <label for="event-end" data-i18n="description_subtitle_editor.event_end">Bitiş zaman kodu</label>
+                    <input id="event-end" type="text" inputmode="decimal" placeholder="00:00:00.000">
+                </div>
+            </div>
+            <label for="event-text" data-i18n="description_subtitle_editor.event_text">Betimleme, altyazı veya not metni</label>
+            <textarea id="event-text" rows="6" required></textarea>
+            <label for="event-speaker" data-i18n="description_subtitle_editor.event_speaker">Konuşmacı veya karakter, isteğe bağlı</label>
+            <input id="event-speaker" type="text">
+            <div id="event-metrics" class="event-metrics" aria-live="off"></div>
+            <details class="advanced-event-fields">
+                <summary data-i18n="description_subtitle_editor.narration_fields">Seslendirme ve stüdyo notları</summary>
+                <div class="form-grid">
+                    <div><label for="event-tts-voice" data-i18n="description_subtitle_editor.tts_voice">Ses</label><select id="event-tts-voice"><option value="" data-i18n="description_subtitle_editor.tts_default_voice">Varsayılan</option></select></div>
+                    <div><label for="event-tts-speed" data-i18n="description_subtitle_editor.tts_speed">TTS hızı</label><input id="event-tts-speed" type="range" min="50" max="200" value="100"><output id="event-tts-speed-value" for="event-tts-speed">%100</output></div>
+                    <div><label for="event-tts-volume" data-i18n="description_subtitle_editor.tts_volume">TTS ses düzeyi</label><input id="event-tts-volume" type="range" min="0" max="200" value="100"><output id="event-tts-volume-value" for="event-tts-volume">%100</output></div>
+                    <div><label for="event-original-volume" data-i18n="description_subtitle_editor.original_volume">Betimleme sırasında özgün video sesi</label><input id="event-original-volume" type="range" min="0" max="200" value="90"><output id="event-original-volume-value" for="event-original-volume">%90</output></div>
+                </div>
+                <p id="event-tts-fit" class="muted"></p>
+                <label for="event-narration-notes" data-i18n="description_subtitle_editor.narration_notes">Seslendirme notları</label>
+                <textarea id="event-narration-notes" rows="3"></textarea>
+                <div class="form-grid">
+                    <div>
+                        <label for="event-narration-tone" data-i18n="description_subtitle_editor.narration_tone">Ton</label>
+                        <input id="event-narration-tone" type="text">
+                    </div>
+                    <div>
+                        <label for="event-narration-tempo" data-i18n="description_subtitle_editor.narration_tempo">Tempo</label>
+                        <input id="event-narration-tempo" type="text">
+                    </div>
+                </div>
+            </details>
+            <div class="dialog-actions">
+                <button id="save-event" type="submit" data-i18n="description_subtitle_editor.save_event">Olayı kaydet</button>
+                <button id="delete-event-in-dialog" type="button" class="danger" hidden
+                    data-i18n="description_subtitle_editor.delete_event">Olayı sil</button>
+                <button id="cancel-event" type="button" class="secondary"
+                    data-i18n="description_subtitle_editor.cancel">İptal</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="delete-event-dialog" aria-labelledby="delete-event-title" aria-describedby="delete-event-message">
+        <form method="dialog">
+            <h2 id="delete-event-title" data-i18n="description_subtitle_editor.delete_event_title">Olayı sil</h2>
+            <p id="delete-event-message" tabindex="-1"></p>
+            <div class="dialog-actions">
+                <button id="confirm-delete-event" type="submit" value="confirm" class="danger"
+                    data-i18n="description_subtitle_editor.confirm_delete_event">Evet, olayı sil</button>
+                <button id="cancel-delete-event" type="submit" value="cancel" class="secondary"
+                    data-i18n="description_subtitle_editor.cancel">İptal</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="goto-time-dialog" aria-labelledby="goto-time-title">
+        <form id="goto-time-form" method="dialog">
+            <h2 id="goto-time-title" data-i18n="description_subtitle_editor.goto_time_title">Zaman koduna git</h2>
+            <label for="goto-time-input" data-i18n="description_subtitle_editor.goto_time_label">Zaman kodu</label>
+            <input id="goto-time-input" type="text" inputmode="decimal" placeholder="00:00:00.000"
+                data-i18n-placeholder="description_subtitle_editor.goto_time_placeholder">
+            <p class="muted" data-i18n="description_subtitle_editor.goto_time_help">Saat:dakika:saniye veya saniye biçimini kullanın.</p>
+            <div class="dialog-actions">
+                <button type="submit" data-i18n="description_subtitle_editor.go">Git</button>
+                <button id="goto-time-cancel" type="button" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button>
+            </div>
+        </form>
+    </dialog>
+
+
+    <dialog id="import-dialog" aria-labelledby="import-title" aria-describedby="import-summary">
+        <form id="import-form"><h2 id="import-title" data-i18n="description_subtitle_editor.import_subtitles_title">SRT veya VTT içe aktar</h2><p id="import-summary" tabindex="-1"></p>
+            <fieldset><legend data-i18n="description_subtitle_editor.import_mode">İçe aktarma yöntemi</legend><label><input type="radio" name="import-mode" value="append" checked> <span data-i18n="description_subtitle_editor.import_append">Mevcut olaylara ekle</span></label><label><input type="radio" name="import-mode" value="replace"> <span data-i18n="description_subtitle_editor.import_replace">Mevcut olayları değiştir</span></label></fieldset>
+            <label for="import-event-type" data-i18n="description_subtitle_editor.import_event_type">İçe aktarılan metinlerin türü</label><select id="import-event-type"><option value="subtitle" data-i18n="description_subtitle_editor.event_type_subtitle">Altyazı</option><option value="description" data-i18n="description_subtitle_editor.event_type_description">Sesli betimleme</option></select>
+            <div class="dialog-actions"><button type="submit" data-i18n="description_subtitle_editor.import_confirm">İçe aktar</button><button id="import-cancel" type="button" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button></div></form>
+    </dialog>
+    <dialog id="export-dialog" aria-labelledby="export-dialog-title"><form id="export-form"><h2 id="export-dialog-title" data-i18n="description_subtitle_editor.export_title">Betimleme ve altyazıları dışa aktar</h2>
+            <label for="export-format" data-i18n="description_subtitle_editor.export_format">Dosya biçimi</label><select id="export-format"><option value="srt">SRT</option><option value="vtt">VTT</option><option value="xlsx" data-i18n="description_subtitle_editor.export_excel">Excel senaryo çalışma kitabı</option><option value="docx" data-i18n="description_subtitle_editor.export_word">Word son kontrol belgesi</option><option value="txt" data-i18n="description_subtitle_editor.export_txt">TXT son kontrol belgesi</option></select>
+            <fieldset><legend data-i18n="description_subtitle_editor.export_scope">Dışa aktarma kapsamı</legend><label><input type="radio" name="export-scope" value="all"> <span data-i18n="description_subtitle_editor.export_all">Tüm olaylar</span></label><label><input id="export-selected-scope" type="radio" name="export-scope" value="selected"> <span data-i18n="description_subtitle_editor.export_selected">Yalnızca seçili olaylar</span></label><label><input type="radio" name="export-scope" value="with-notes" checked> <span data-i18n="description_subtitle_editor.export_with_review_notes">Yalnızca son kontrol notu olan betimlemeler ve bağımsız notlar</span></label><label><input type="radio" name="export-scope" value="unresolved-notes"> <span data-i18n="description_subtitle_editor.export_unresolved_review_notes">Yalnızca çözülmemiş son kontrol notları</span></label></fieldset>
+            <fieldset><legend data-i18n="description_subtitle_editor.export_types">Dışa aktarılacak türler</legend><label><input id="export-descriptions" type="checkbox" checked> <span data-i18n="description_subtitle_editor.event_type_description">Sesli betimleme</span></label><label><input id="export-subtitles" type="checkbox" checked> <span data-i18n="description_subtitle_editor.event_type_subtitle">Altyazı</span></label><label><input id="export-notes" type="checkbox" checked> <span data-i18n="description_subtitle_editor.event_type_note">Kontrol notu</span></label></fieldset>
+            <p id="export-feedback" class="status-message" role="alert" aria-live="assertive" tabindex="-1" hidden></p>
+            <div class="dialog-actions"><button type="submit" data-i18n="description_subtitle_editor.export_confirm">Dışa aktar</button><button id="export-cancel" type="button" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button></div></form></dialog>
+    <dialog id="find-dialog" aria-labelledby="find-title"><form id="find-form"><h2 id="find-title" data-i18n="description_subtitle_editor.find_replace">Ara ve değiştir</h2><label for="find-text" data-i18n="description_subtitle_editor.find_text">Aranacak metin</label><input id="find-text" type="search"><label for="replace-text" data-i18n="description_subtitle_editor.replace_text">Yeni metin</label><input id="replace-text" type="text"><label><input id="find-case-sensitive" type="checkbox"> <span data-i18n="description_subtitle_editor.case_sensitive">Büyük küçük harf duyarlı</span></label><p id="find-result" class="muted" aria-live="polite"></p><div class="dialog-actions"><button id="find-next" type="button" data-i18n="description_subtitle_editor.find_next">Sonrakini bul</button><button id="replace-all" type="button" data-i18n="description_subtitle_editor.replace_all">Tümünü değiştir</button><button id="find-close" type="button" class="secondary" data-i18n="description_subtitle_editor.close">Kapat</button></div></form></dialog>
+    <dialog id="split-dialog" aria-labelledby="split-title" aria-describedby="split-summary"><form id="split-form"><h2 id="split-title" data-i18n="description_subtitle_editor.split_event">Olayı oynatma konumunda böl</h2><p id="split-summary" tabindex="-1"></p><label for="split-first-text" data-i18n="description_subtitle_editor.split_first_text">İlk olayın metni</label><textarea id="split-first-text" rows="4"></textarea><label for="split-second-text" data-i18n="description_subtitle_editor.split_second_text">İkinci olayın metni</label><textarea id="split-second-text" rows="4"></textarea><div class="dialog-actions"><button type="submit" data-i18n="description_subtitle_editor.split_confirm">Böl</button><button id="split-cancel" type="button" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button></div></form></dialog>
+    <dialog id="merge-dialog" aria-labelledby="merge-title" aria-describedby="merge-summary"><form method="dialog"><h2 id="merge-title" data-i18n="description_subtitle_editor.merge_events">Seçili olayları birleştir</h2><p id="merge-summary" tabindex="-1"></p><div class="dialog-actions"><button value="confirm" type="submit" data-i18n="description_subtitle_editor.merge_confirm">Birleştir</button><button value="cancel" type="submit" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button></div></form></dialog>
+
+    <dialog id="contentstudio-confirm-dialog" aria-labelledby="contentstudio-confirm-title" aria-describedby="contentstudio-confirm-message">
+        <form id="contentstudio-confirm-form"><h2 id="contentstudio-confirm-title" data-i18n="description_subtitle_editor.contentstudio_confirm_title">Ücretli ContentStudio işlemini başlat</h2><p id="contentstudio-confirm-message" tabindex="-1"></p><p class="muted" data-i18n="description_subtitle_editor.contentstudio_confirm_detail">Video hesabınıza yüklenecek ve proje oluşturulurken kredi harcanacaktır. İşlem başladıktan sonra bu kredi geri alınmayabilir.</p><div class="dialog-actions"><button id="contentstudio-confirm-submit" type="submit" data-i18n="description_subtitle_editor.contentstudio_confirm_start">Yüklemeyi ve üretimi başlat</button><button id="contentstudio-confirm-cancel" type="button" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button></div></form>
+    </dialog>
+    <dialog id="quality-blocker-dialog" aria-labelledby="quality-blocker-title" aria-describedby="quality-blocker-message">
+        <form method="dialog">
+            <h2 id="quality-blocker-title" data-i18n="description_subtitle_editor.quality_blocker_title">Nihai çıktıyı denetleyin</h2>
+            <p id="quality-blocker-message" tabindex="-1"></p>
+            <div class="dialog-actions">
+                <button type="submit" value="continue" class="danger" data-i18n="description_subtitle_editor.quality_continue_anyway">Yine de çıktıyı oluştur</button>
+                <button type="submit" value="cancel" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button>
+            </div>
+        </form>
+    </dialog>
+    <dialog id="close-dialog" aria-labelledby="close-title" aria-describedby="close-message">
+        <form method="dialog">
+            <h2 id="close-title" data-i18n="description_subtitle_editor.unsaved_title">Kaydedilmemiş değişiklikler</h2>
+            <p id="close-message" tabindex="-1" data-i18n="description_subtitle_editor.unsaved_message">Projede kaydedilmemiş değişiklikler var. Kapatmadan önce ne yapmak istersiniz?</p>
+            <div class="dialog-actions">
+                <button id="close-save" value="save" type="submit" data-i18n="description_subtitle_editor.save_and_close">Kaydet ve kapat</button>
+                <button id="close-discard" value="discard" type="submit" class="danger" data-i18n="description_subtitle_editor.discard_and_close">Kaydetmeden kapat</button>
+                <button id="close-cancel" value="cancel" type="submit" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="human-manual-match-dialog" aria-labelledby="human-manual-match-title" aria-describedby="human-manual-match-help">
+        <h2 id="human-manual-match-title" data-i18n="description_subtitle_editor.human_manual_title">İnsan sesini elle eşleştir</h2>
+        <p id="human-manual-match-help" class="muted" data-i18n="description_subtitle_editor.human_manual_help">Ses zaman çizelgesinde K oynatır, J ve L sarar. İlk M başlangıcı, ikinci M bitişi belirler; Enter seçimi betimlemeye uygular. D sıradaki betimlemeyi okur, Delete yanlış eşleşmeyi siler. Alt+L betimleme listesine, Alt+T ses zaman çizelgesine geçer.</p>
+        <p id="human-manual-source" class="source-name"></p>
+        <div class="dialog-actions"><button id="human-manual-change-source" type="button" class="secondary" data-i18n="description_subtitle_editor.human_manual_change_source">Temiz ses dosyasını seç veya değiştir</button></div>
+        <audio id="human-manual-audio" preload="metadata" controls data-i18n-aria="description_subtitle_editor.human_manual_audio_label" aria-label="Temiz insan sesi oynatıcısı"></audio>
+        <h3 id="human-manual-current-heading" data-i18n="description_subtitle_editor.human_manual_current_heading">Eşleştirilecek betimleme</h3>
+        <p id="human-manual-current-description" class="readonly-details-box" tabindex="0"></p>
+        <p id="human-manual-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></p>
+        <div class="human-manual-timeline-workspace">
+            <div id="human-manual-timeline" tabindex="0" role="application" data-i18n-aria="description_subtitle_editor.human_manual_timeline_label" aria-describedby="human-manual-match-help"></div>
+            <div class="readonly-details-box human-manual-timeline-status">
+                <span id="human-manual-position" aria-hidden="true"></span>
+                <span id="human-manual-markers"></span>
+            </div>
+        </div>
+        <div class="dialog-actions">
+            <button id="human-manual-play" type="button" data-i18n="description_subtitle_editor.human_manual_play">Oynat veya duraklat, K</button>
+            <button id="human-manual-previous-speech" type="button" class="secondary" data-i18n="description_subtitle_editor.human_manual_previous_speech">Önceki konuşmaya git, Ctrl+Sol Ok veya Ctrl+J</button>
+            <button id="human-manual-next-speech" type="button" class="secondary" data-i18n="description_subtitle_editor.human_manual_next_speech">Sonraki konuşmaya git, Ctrl+Sağ Ok veya Ctrl+L</button>
+            <button id="human-manual-marker" type="button" class="secondary" data-i18n="description_subtitle_editor.human_trim_set_marker">İşaret koy, M</button>
+            <button id="human-manual-clear-markers" type="button" class="secondary" data-i18n="description_subtitle_editor.human_manual_clear_markers">İşaretleri temizle, Shift+M</button>
+            <button id="human-manual-preview" type="button" class="secondary" data-i18n="description_subtitle_editor.human_manual_preview">Seçili aralığı dinle, Shift+Boşluk</button>
+            <button id="human-manual-assign" type="button" data-i18n="description_subtitle_editor.human_manual_assign">Seçimi uygula ve sonraki betimlemeye geç, Enter</button>
+            <button id="human-manual-next" type="button" class="secondary" data-i18n="description_subtitle_editor.human_manual_next">Sonraki betimlemeye geç</button>
+            <button id="human-manual-read" type="button" class="secondary" data-i18n="description_subtitle_editor.human_manual_read">Betimlemeyi oku, D</button>
+            <button id="human-manual-remove" type="button" class="danger" data-i18n="description_subtitle_editor.human_manual_remove">Eşleşmeyi sil, Delete</button>
+        </div>
+        <p class="muted" data-i18n="description_subtitle_editor.human_manual_silence_help">Ctrl+Sağ ve Sol Ok temiz sesteki sonraki veya önceki konuşma başlangıcına gider. İlk kullanımda sessizlik analizi birkaç saniye sürebilir.</p>
+        <h3 id="human-manual-list-heading" data-i18n="description_subtitle_editor.human_manual_list_heading">Betimleme listesi</h3>
+        <div id="human-manual-description-list" class="event-list" role="listbox" aria-multiselectable="true" tabindex="0" aria-labelledby="human-manual-list-heading" aria-describedby="human-manual-list-help"></div>
+        <p id="human-manual-list-help" class="muted" data-i18n="description_subtitle_editor.human_manual_list_help">Yukarı ve aşağı oklarla betimlemeler arasında dolaşın. Shift+oklar, Shift+Home ve Shift+End aralık seçer; Ctrl+A tüm betimlemeleri seçer. Hız ve ses ayarları seçili öğelerin tamamına uygulanır; önizleme etkin öğeyi çalar. Otomatik bulunan veya uygulanmış çekim filmle birlikte çalar. Doğru otomatik çekimi Alt+Enter ile uygulayıp sonraki onaylanmamış betimlemeye geçin. Boşluk yalnızca çekimi, Ctrl+Boşluk filmle miksli halini yeniden dinletir. Alt+T ses zaman çizelgesine döner.</p>
+        <div class="dialog-actions"><button id="human-manual-approve-candidate" type="button" data-i18n="description_subtitle_editor.human_manual_approve_candidate">Çalan otomatik çekimi uygula ve onayla, Alt+Enter</button></div>
+        <fieldset id="human-manual-mix-settings">
+            <legend data-i18n="description_subtitle_editor.human_manual_mix_settings">Seçili betimleme veya betimlemelerin miks ayarları</legend>
+            <div class="form-grid">
+                <div><label for="human-manual-speed" data-i18n="description_subtitle_editor.human_manual_playback_speed">Betimleme oynatma hızı</label><input id="human-manual-speed" type="range" min="50" max="200" value="100"><output id="human-manual-speed-value" for="human-manual-speed">%100</output></div>
+                <div><label for="human-manual-volume" data-i18n="description_subtitle_editor.human_manual_narration_volume">Betimleme ses düzeyi</label><input id="human-manual-volume" type="range" min="0" max="200" value="100"><output id="human-manual-volume-value" for="human-manual-volume">%100</output></div>
+                <div><label for="human-manual-original-volume" data-i18n="description_subtitle_editor.human_manual_original_volume">Betimleme sırasında özgün film sesi</label><input id="human-manual-original-volume" type="range" min="0" max="200" value="90"><output id="human-manual-original-volume-value" for="human-manual-original-volume">%90</output></div>
+            </div>
+            <p class="muted" data-i18n="description_subtitle_editor.human_manual_mix_shortcuts">F ve A betimleme hızını; Alt+Shift+L ve J betimleme sesini; Alt+Shift+Yukarı ve Aşağı ok özgün film sesini değiştirir. Her değişiklik miksli olarak yeniden oynatılır.</p>
+        </fieldset>
+        <div class="dialog-actions"><button id="human-manual-close" type="button" class="secondary" data-i18n="description_subtitle_editor.close">Kapat</button></div>
+    </dialog>
+    <dialog id="human-candidate-editor-dialog" aria-labelledby="human-candidate-editor-title" aria-describedby="human-candidate-editor-help">
+        <h2 id="human-candidate-editor-title" data-i18n="description_subtitle_editor.human_candidate_editor_title">Çekimi düzenle</h2>
+        <p id="human-candidate-editor-help" class="muted" data-i18n="description_subtitle_editor.human_candidate_editor_help">K oynatır veya duraklatır. J ve L sarar. İlk M başlangıcı, ikinci M bitişi belirler. Shift+Boşluk veya Ctrl+Boşluk seçimi dinletir; Enter seçimi kaydeder.</p>
+        <audio id="human-candidate-editor-audio" preload="metadata"></audio>
+        <div id="human-candidate-editor-timeline" class="readonly-details-box" tabindex="0" role="group" aria-labelledby="human-candidate-editor-title" aria-describedby="human-candidate-editor-help">
+            <p id="human-candidate-editor-position"></p>
+        </div>
+        <div class="form-grid">
+            <div><label for="human-candidate-trim-start" data-i18n="description_subtitle_editor.human_trim_start">Başlangıç, saniye</label><input id="human-candidate-trim-start" type="number" min="0" step="0.001"></div>
+            <div><label for="human-candidate-trim-end" data-i18n="description_subtitle_editor.human_trim_end">Bitiş, saniye</label><input id="human-candidate-trim-end" type="number" min="0.05" step="0.001"></div>
+        </div>
+        <div class="dialog-actions">
+            <button id="human-candidate-editor-play" type="button" data-i18n="description_subtitle_editor.human_trim_play">Oynat veya duraklat, K</button>
+            <button id="human-candidate-set-marker" type="button" class="secondary" data-i18n="description_subtitle_editor.human_trim_set_marker">İşaret koy, M</button>
+            <button id="human-candidate-preview-trim" type="button" class="secondary" data-i18n="description_subtitle_editor.human_trim_preview">Kırpılmış çekimi dinle</button>
+            <button id="human-candidate-save-trim" type="button" data-i18n="description_subtitle_editor.human_trim_save">Kırpmayı kaydet, Enter</button>
+            <button id="human-candidate-cancel-trim" type="button" class="secondary" data-i18n="description_subtitle_editor.cancel">İptal</button>
+        </div>
+    </dialog>
+    <script src="scripts/i18n.js"></script>
+    <script src="scripts/description-subtitle-editor.js"></script>
+    <script src="scripts/description-subtitle-timeline.js"></script>
+    <script src="scripts/description-subtitle-authoring.js"></script>
+    <script src="scripts/description-subtitle-review.js"></script>
+    <script src="scripts/description-subtitle-phase4.js"></script>
+    <script src="scripts/description-subtitle-phase5.js"></script>
+    <script src="scripts/description-human-narration.js"></script>
+    <script src="scripts/description-contentstudio.js"></script>
+    <script src="scripts/description-subtitle-phase7.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
