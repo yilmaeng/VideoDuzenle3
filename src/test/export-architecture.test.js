@@ -441,7 +441,10 @@ async function main() {
             '-metadata:s:v:0', 'rotate=-90', rotatedSourcePath
         ]);
         const rotatedSourceProfile = await analyzeSource(ffprobePath, rotatedSourcePath, { force: true });
-        assert.strictEqual(Math.round(rotatedSourceProfile.video.rotation), -90);
+        // FFprobe reports equivalent display-matrix rotations as either -90 or
+        // 90 on different platforms/builds. The swapped dimensions are the
+        // behavior this test needs to protect.
+        assert.strictEqual(Math.abs(Math.round(rotatedSourceProfile.video.rotation)), 90);
         assert.strictEqual(rotatedSourceProfile.video.storageWidth, 640);
         assert.strictEqual(rotatedSourceProfile.video.storageHeight, 360);
         assert.strictEqual(rotatedSourceProfile.video.width, 360);
@@ -459,7 +462,7 @@ async function main() {
         });
         assert.strictEqual(rotatedHybridResult.success, true);
         const rotatedHybridProfile = await analyzeSource(ffprobePath, rotatedHybridPath, { force: true });
-        assert.strictEqual(Math.round(rotatedHybridProfile.video.rotation), -90);
+        assert.strictEqual(Math.abs(Math.round(rotatedHybridProfile.video.rotation)), 90);
         assert.strictEqual(rotatedHybridProfile.video.width, 360);
         assert.strictEqual(rotatedHybridProfile.video.height, 640);
 
