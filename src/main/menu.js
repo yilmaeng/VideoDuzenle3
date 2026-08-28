@@ -479,7 +479,12 @@ async function openSubtitleVoiceoverGuide(mainWindow) {
 }
 function createMenu(mainWindow) {
     const currentLanguage = i18n.getCurrentLanguage();
-    const applyTransitionAccelerator = currentLanguage === 'tr' ? 'Ş' : 'T';
+    // Electron's native macOS menu accepts ASCII accelerator keys only.
+    // Preserve the established Turkish shortcut on Windows and use its ASCII
+    // counterpart on macOS so menu creation does not emit an invalid shortcut.
+    const applyTransitionAccelerator = process.platform === 'darwin'
+        ? 'T'
+        : (currentLanguage === 'tr' ? 'Ş' : 'T');
     const { hasActiveRecordingWizardSession } = require('./dialog-windows');
     const template = [
         // DOSYA MENÜSÜ
