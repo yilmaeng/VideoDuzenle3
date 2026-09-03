@@ -97,6 +97,130 @@
         if (announceChange) setStatus('runtime.keyboard.playback_volume', { percent: state.playbackVolumePercent });
     }
 
+    function installMacAccessibleSelectSupport() {
+        if (window.api?.platform !== 'darwin') return;
+
+        const help = document.createElement('p');
+        help.id = 'mac-select-accessibility-help';
+        help.className = 'visually-hidden';
+        help.textContent = t('description_subtitle_editor.mac_select_open_help');
+        document.body.appendChild(help);
+
+        const pickerDialog = document.createElement('dialog');
+        pickerDialog.id = 'mac-select-picker-dialog';
+        pickerDialog.innerHTML = `
+            <h2 id="mac-select-picker-title"></h2>
+            <p id="mac-select-picker-help" class="muted"></p>
+            <div id="mac-select-picker-options" class="mac-select-option-list" role="listbox"
+                aria-labelledby="mac-select-picker-title" aria-describedby="mac-select-picker-help"></div>
+            <div class="dialog-actions">
+                <button id="mac-select-picker-cancel" type="button" class="secondary"></button>
+            </div>`;
+        document.body.appendChild(pickerDialog);
+
+        const title = pickerDialog.querySelector('#mac-select-picker-title');
+        const pickerHelp = pickerDialog.querySelector('#mac-select-picker-help');
+        const optionList = pickerDialog.querySelector('#mac-select-picker-options');
+        const cancel = pickerDialog.querySelector('#mac-select-picker-cancel');
+        let activeSelect = null;
+
+        pickerHelp.textContent = t('description_subtitle_editor.mac_select_dialog_help');
+        cancel.textContent = t('description_subtitle_editor.cancel');
+
+        const closePicker = () => {
+            if (pickerDialog.open) pickerDialog.close();
+            const select = activeSelect;
+            activeSelect = null;
+            requestAnimationFrame(() => select?.focus());
+        };
+
+        const openFallbackPicker = select => {
+            if (select.disabled || pickerDialog.open) return;
+            activeSelect = select;
+            const label = document.querySelector(`label[for="${CSS.escape(select.id)}"]`);
+            const labelText = label?.textContent?.trim() || select.getAttribute('aria-label') || '';
+            title.textContent = t('description_subtitle_editor.mac_select_dialog_title', { label: labelText });
+            optionList.replaceChildren();
+
+            [...select.options].forEach((option, index) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'secondary';
+                button.setAttribute('role', 'option');
+                button.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+                button.dataset.optionIndex = String(index);
+                button.textContent = option.textContent;
+                button.addEventListener('click', () => {
+                    select.selectedIndex = index;
+                    select.dispatchEvent(new Event('input', { bubbles: true }));
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    closePicker();
+                });
+                optionList.appendChild(button);
+            });
+
+            if (!pickerDialog.open) pickerDialog.showModal();
+            requestAnimationFrame(() => {
+                (optionList.querySelector('[aria-selected="true"]') || optionList.firstElementChild)?.focus();
+            });
+        };
+
+        optionList.addEventListener('keydown', event => {
+            const options = [...optionList.querySelectorAll('[role="option"]')];
+            const index = options.indexOf(document.activeElement);
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            let next = index;
+            if (event.key === 'ArrowDown') next = Math.min(options.length - 1, index + 1);
+            if (event.key === 'ArrowUp') next = Math.max(0, index - 1);
+            if (event.key === 'Home') next = 0;
+            if (event.key === 'End') next = options.length - 1;
+            options[next]?.focus();
+        });
+        pickerDialog.addEventListener('cancel', event => {
+            event.preventDefault();
+            closePicker();
+        });
+        cancel.addEventListener('click', closePicker);
+
+        document.querySelectorAll('select').forEach(select => {
+            const describedBy = new Set(String(select.getAttribute('aria-describedby') || '')
+                .split(/\s+/).filter(Boolean));
+            describedBy.add(help.id);
+            select.setAttribute('aria-describedby', [...describedBy].join(' '));
+
+            select.addEventListener('keydown', event => {
+                const requestsPicker = event.key === 'Enter'
+                    || event.key === ' '
+                    || (event.altKey && event.key === 'ArrowDown');
+                if (!requestsPicker || event.isComposing) return;
+
+                if (typeof select.showPicker === 'function') {
+                    try {
+                        // Newer Chromium versions can keep the native select semantics and picker.
+                        select.showPicker();
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                        return;
+                    } catch (error) {
+                        console.debug('Native select picker was not available:', error);
+                    }
+                }
+
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                openFallbackPicker(select);
+            }, true);
+
+            select.addEventListener('click', event => {
+                // VoiceOver activation is exposed as a keyboard-generated click in Electron 28.
+                if (event.detail !== 0 || typeof select.showPicker === 'function') return;
+                event.preventDefault();
+                openFallbackPicker(select);
+            });
+        });
+    }
+
     function setDirty(dirty) {
         state.dirty = Boolean(dirty);
         el.dirtyIndicator.textContent = state.dirty
@@ -473,6 +597,7 @@
 
     async function init() {
         await window.i18nHelper?.init?.();
+        installMacAccessibleSelectSupport();
         const storedPlaybackVolumeValue = localStorage.getItem('evdPlaybackVolumePercent');
         const storedPlaybackVolume = Number(storedPlaybackVolumeValue);
         if (storedPlaybackVolumeValue !== null && Number.isFinite(storedPlaybackVolume)) {
@@ -510,7 +635,5 @@
     window.EvdDescriptionEditor = { state, adjustPlaybackVolume, applyPlaybackGain, formatTime, getPlaybackGainFactor, getVisibleEvents, loadProjectResult, loadVideoSource, renderEvents, requestProtectedAction, reviewNoteFor, setDirty, setStatus };
     document.addEventListener('DOMContentLoaded', init);
 })();
-
-
 
 

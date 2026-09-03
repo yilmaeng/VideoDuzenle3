@@ -3226,6 +3226,9 @@
       "hint": "Dieser Schluessel wird vorerst nur fuer Live-Dubbing- und Sprachuebersetzungs-Experimente im Sendungsraum gespeichert."
     },
     "instant_voice_translation": {
+      "mac_select_open_help": "Drücken Sie die Eingabetaste, Option+Abwärtspfeil oder VoiceOver+Leertaste, um die verfügbaren Optionen anzuzeigen.",
+      "mac_select_dialog_title": "Optionen für {label}",
+      "mac_select_dialog_help": "Navigieren Sie mit der Auf- und Abwärtspfeiltaste. Drücken Sie zum Auswählen die Eingabetaste oder Leertaste und zum Abbrechen Escape.",
       "title": "Sofortige Sprachuebersetzung",
       "description": "Uebersetzt Sprache vom Mikrofon, Computer-Audio oder einer ausgewaehlten App mit dem gewaehlten Dienst in die Zielsprache. Wenn die gesprochene Sprache bereits der Zielsprache entspricht, wird kein Uebersetzungston erzeugt.",
       "service_label": "Uebersetzungsdienst",
@@ -5855,6 +5858,9 @@
     "human_choose_title": "Saubere Sprecheraufnahme auswählen",
     "human_choose_announcement": "Wählen Sie die saubere MP3- oder WAV-Aufnahme des Sprechers.",
     "human_progress_label": "Fortschritt der Sprecheranalyse",
+    "mac_select_open_help": "Drücken Sie die Eingabetaste, Option+Abwärtspfeil oder VoiceOver+Leertaste, um die verfügbaren Optionen anzuzeigen.",
+    "mac_select_dialog_title": "Optionen für {label}",
+    "mac_select_dialog_help": "Navigieren Sie mit der Auf- und Abwärtspfeiltaste. Drücken Sie zum Auswählen die Eingabetaste oder Leertaste und zum Abbrechen Escape.",
     "contentstudio_panel": "Automatische Audiodeskription mit ContentStudio",
     "contentstudio_help": "Video über die ContentStudio-API hochladen, zeitcodierte Beschreibungen als Entwürfe importieren oder fertige MP3-/MP4-Ausgaben herunterladen.",
     "contentstudio_api_settings": "ContentStudio-API-Verbindung",

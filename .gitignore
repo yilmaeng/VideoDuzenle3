@@ -54,5 +54,10 @@ EngelsizVideoDuzenleyici_Mac_Test.zip
 # Generated local/build-time OAuth credentials
 src/main/youtube-oauth-bundled.generated.js
 
+# Local Apple signing credentials and encrypted backups
+mac-signing/*.p8
+mac-signing/*.p12
+mac-signing/*private*.key
+
 # Bundled OBS runtime is Windows-only and too large for GitHub.
 src/resources/obs-studio/

@@ -2569,6 +2569,9 @@
       "hint": "For now, this key is stored only for live dubbing and spoken translation experiments in the broadcast room."
     },
     "instant_voice_translation": {
+      "mac_select_open_help": "To show the available options, press Enter, Option+Down Arrow, or VoiceOver+Space.",
+      "mac_select_dialog_title": "{label} options",
+      "mac_select_dialog_help": "Move with the Up and Down Arrow keys. Press Enter or Space to select, or Escape to cancel.",
       "title": "Instant Spoken Translation",
       "description": "Translates speech heard from the microphone, computer audio, or a selected app into the target language with the selected service. If the spoken language already matches the target language, translated audio is not produced.",
       "service_label": "Translation service",
@@ -5518,6 +5521,9 @@
     "human_choose_title": "Choose clean human narration",
     "human_choose_announcement": "Choose the narrator’s clean MP3 or WAV recording.",
     "human_progress_label": "Human narration analysis progress",
+    "mac_select_open_help": "To show the available options, press Enter, Option+Down Arrow, or VoiceOver+Space.",
+    "mac_select_dialog_title": "{label} options",
+    "mac_select_dialog_help": "Move with the Up and Down Arrow keys. Press Enter or Space to select, or Escape to cancel.",
     "contentstudio_panel": "Automatic description with ContentStudio",
     "contentstudio_help": "Upload the video through the ContentStudio API, import time-coded descriptions as drafts, or download a ready MP3/MP4 output.",
     "contentstudio_api_settings": "ContentStudio API connection",

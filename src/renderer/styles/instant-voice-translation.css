@@ -82,6 +82,23 @@
   display: none !important;
 }
 
+.mac-select-option-list {
+  display: grid;
+  gap: 8px;
+  max-height: 55vh;
+  overflow: auto;
+}
+
+.mac-select-option-list [role="option"] {
+  width: 100%;
+  text-align: left;
+}
+
+.mac-select-option-list [role="option"][aria-selected="true"] {
+  outline: 3px solid var(--focus-color, #7bdff2);
+  outline-offset: 2px;
+}
+
 @media (max-width: 640px) {
   .instant-shell {
     width: min(100% - 20px, 980px);

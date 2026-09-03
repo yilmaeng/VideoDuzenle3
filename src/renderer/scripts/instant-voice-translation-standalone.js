@@ -124,6 +124,137 @@
         return document.getElementById(id);
     }
 
+    function installMacAccessibleSelectSupport() {
+        if (!IS_MAC) return;
+
+        const help = document.createElement('p');
+        help.id = 'instant-mac-select-accessibility-help';
+        help.className = 'visually-hidden';
+        help.textContent = t(
+            'dialog.instant_voice_translation.mac_select_open_help',
+            'Açılır seçenekleri göstermek için Enter, Option+Aşağı Ok veya VoiceOver+Boşluk tuşlarını kullanın.'
+        );
+        document.body.appendChild(help);
+
+        const dialog = document.createElement('dialog');
+        dialog.id = 'instant-mac-select-picker-dialog';
+        dialog.innerHTML = `
+            <h2 id="instant-mac-select-picker-title"></h2>
+            <p id="instant-mac-select-picker-help" class="hint"></p>
+            <div id="instant-mac-select-picker-options" class="mac-select-option-list" role="listbox"
+                aria-labelledby="instant-mac-select-picker-title"
+                aria-describedby="instant-mac-select-picker-help"></div>
+            <div class="button-row">
+                <button id="instant-mac-select-picker-cancel" type="button"></button>
+            </div>`;
+        document.body.appendChild(dialog);
+
+        const title = dialog.querySelector('#instant-mac-select-picker-title');
+        const dialogHelp = dialog.querySelector('#instant-mac-select-picker-help');
+        const optionsHost = dialog.querySelector('#instant-mac-select-picker-options');
+        const cancelButton = dialog.querySelector('#instant-mac-select-picker-cancel');
+        let activeSelect = null;
+
+        dialogHelp.textContent = t(
+            'dialog.instant_voice_translation.mac_select_dialog_help',
+            'Aşağı ve yukarı oklarla ilerleyin. Seçmek için Enter veya Boşluk tuşuna basın; vazgeçmek için Escape tuşunu kullanın.'
+        );
+        cancelButton.textContent = t('dialog.instant_voice_translation.cancel', 'İptal');
+
+        const closePicker = () => {
+            if (dialog.open) dialog.close();
+            const select = activeSelect;
+            activeSelect = null;
+            requestAnimationFrame(() => select?.focus());
+        };
+
+        const openPicker = select => {
+            if (!(select instanceof HTMLSelectElement) || select.disabled || dialog.open) return;
+            activeSelect = select;
+            const label = select.id ? document.querySelector(`label[for="${CSS.escape(select.id)}"]`) : null;
+            const labelText = label?.textContent?.trim() || select.getAttribute('aria-label') || '';
+            title.textContent = t(
+                'dialog.instant_voice_translation.mac_select_dialog_title',
+                '{label} seçenekleri',
+                { label: labelText }
+            );
+            optionsHost.replaceChildren();
+
+            [...select.options].forEach((option, index) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.setAttribute('role', 'option');
+                button.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+                button.textContent = option.textContent;
+                button.addEventListener('click', () => {
+                    select.selectedIndex = index;
+                    select.dispatchEvent(new Event('input', { bubbles: true }));
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    closePicker();
+                });
+                optionsHost.appendChild(button);
+            });
+
+            dialog.showModal();
+            requestAnimationFrame(() => {
+                (optionsHost.querySelector('[aria-selected="true"]') || optionsHost.firstElementChild)?.focus();
+            });
+        };
+
+        optionsHost.addEventListener('keydown', event => {
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+            const options = [...optionsHost.querySelectorAll('[role="option"]')];
+            const index = Math.max(0, options.indexOf(document.activeElement));
+            event.preventDefault();
+            let next = index;
+            if (event.key === 'ArrowDown') next = Math.min(options.length - 1, index + 1);
+            if (event.key === 'ArrowUp') next = Math.max(0, index - 1);
+            if (event.key === 'Home') next = 0;
+            if (event.key === 'End') next = options.length - 1;
+            options[next]?.focus();
+        });
+        dialog.addEventListener('cancel', event => {
+            event.preventDefault();
+            closePicker();
+        });
+        cancelButton.addEventListener('click', closePicker);
+
+        document.querySelectorAll('select').forEach(select => {
+            const describedBy = new Set(String(select.getAttribute('aria-describedby') || '')
+                .split(/\s+/).filter(Boolean));
+            describedBy.add(help.id);
+            select.setAttribute('aria-describedby', [...describedBy].join(' '));
+
+            select.addEventListener('keydown', event => {
+                const requestsPicker = event.key === 'Enter'
+                    || event.key === ' '
+                    || (event.altKey && event.key === 'ArrowDown');
+                if (!requestsPicker || event.isComposing) return;
+
+                if (typeof select.showPicker === 'function') {
+                    try {
+                        select.showPicker();
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                        return;
+                    } catch (error) {
+                        console.debug('Native select picker was not available:', error);
+                    }
+                }
+
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                openPicker(select);
+            }, true);
+
+            select.addEventListener('click', event => {
+                if (event.detail !== 0 || typeof select.showPicker === 'function') return;
+                event.preventDefault();
+                openPicker(select);
+            });
+        });
+    }
+
     function announce(message, assertive = false) {
         const region = el(assertive ? 'screen-reader-alert' : 'screen-reader-announcer');
         if (!region) return;
@@ -2203,6 +2334,7 @@
 
     async function init() {
         await window.i18nHelper?.init?.();
+        installMacAccessibleSelectSupport();
         await applyPlatformCapabilities();
         populateLanguages();
         restoreSelectedTranslationService();

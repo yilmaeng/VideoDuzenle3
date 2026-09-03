@@ -2571,6 +2571,9 @@
       "hint": "Bu anahtar şimdilik yalnızca yayın odasındaki canlı dublaj ve sesli çeviri deneyleri için saklanır."
     },
     "instant_voice_translation": {
+      "mac_select_open_help": "Açılır seçenekleri göstermek için Enter, Option+Aşağı Ok veya VoiceOver+Boşluk tuşlarını kullanın.",
+      "mac_select_dialog_title": "{label} seçenekleri",
+      "mac_select_dialog_help": "Aşağı ve yukarı oklarla ilerleyin. Seçmek için Enter veya Boşluk tuşuna basın; vazgeçmek için Escape tuşunu kullanın.",
       "title": "Anlık Sesli Çeviri",
       "description": "Mikrofondan, bilgisayar sesinden veya seçtiğiniz uygulamadan duyulan konuşmayı seçili servisle hedef dile çevirir. Konuşulan dil hedef dille aynıysa çeviri sesi üretilmez.",
       "service_label": "Çeviri servisi",
@@ -5520,6 +5523,9 @@
     "human_choose_title": "Temiz insan seslendirmesini seç",
     "human_choose_announcement": "Seslendiren kişinin temiz MP3 veya WAV kaydını seçin.",
     "human_progress_label": "İnsan seslendirmesi analiz ilerlemesi",
+    "mac_select_open_help": "Açılır seçenekleri göstermek için Enter, Option+Aşağı Ok veya VoiceOver+Boşluk tuşlarını kullanın.",
+    "mac_select_dialog_title": "{label} seçenekleri",
+    "mac_select_dialog_help": "Aşağı ve yukarı oklarla ilerleyin. Seçmek için Enter veya Boşluk tuşuna basın; vazgeçmek için Escape tuşunu kullanın.",
     "contentstudio_panel": "ContentStudio ile otomatik betimleme",
     "contentstudio_help": "Videoyu ContentStudio API'ye yükleyin, zaman kodlu betimlemeleri taslak olarak alın veya hazır MP3/MP4 çıktısını indirin.",
     "contentstudio_api_settings": "ContentStudio API bağlantısı",

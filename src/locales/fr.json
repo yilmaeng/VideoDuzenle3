@@ -3226,6 +3226,9 @@
       "hint": "Pour le moment, cette cle est stockee uniquement pour les experiences de doublage en direct et de traduction par la voix dans la salle de diffusion."
     },
     "instant_voice_translation": {
+      "mac_select_open_help": "Pour afficher les options disponibles, appuyez sur Entrée, Option+Flèche bas ou VoiceOver+Espace.",
+      "mac_select_dialog_title": "Options de {label}",
+      "mac_select_dialog_help": "Parcourez les options avec les flèches haut et bas. Appuyez sur Entrée ou Espace pour choisir, ou sur Échap pour annuler.",
       "title": "Traduction vocale instantanee",
       "description": "Traduit avec le service choisi la parole entendue depuis le microphone, le son de l'ordinateur ou une application selectionnee vers la langue cible. Si la langue parlee correspond deja a la langue cible, aucun son traduit n'est produit.",
       "service_label": "Service de traduction",
@@ -5855,6 +5858,9 @@
     "human_choose_title": "Choisir une narration humaine propre",
     "human_choose_announcement": "Choisissez l’enregistrement MP3 ou WAV propre du narrateur.",
     "human_progress_label": "Progression de l’analyse de la narration humaine",
+    "mac_select_open_help": "Pour afficher les options disponibles, appuyez sur Entrée, Option+Flèche bas ou VoiceOver+Espace.",
+    "mac_select_dialog_title": "Options de {label}",
+    "mac_select_dialog_help": "Parcourez les options avec les flèches haut et bas. Appuyez sur Entrée ou Espace pour choisir, ou sur Échap pour annuler.",
     "contentstudio_panel": "Audiodescription automatique avec ContentStudio",
     "contentstudio_help": "Téléversez la vidéo avec l’API ContentStudio, importez les descriptions minutées comme brouillons ou téléchargez une sortie MP3/MP4 prête.",
     "contentstudio_api_settings": "Connexion à l’API ContentStudio",

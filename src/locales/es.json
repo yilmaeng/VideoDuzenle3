@@ -3226,6 +3226,9 @@
       "hint": "Por ahora, esta clave se guarda solo para experimentos de doblaje en vivo y traduccion hablada en la sala de transmision."
     },
     "instant_voice_translation": {
+      "mac_select_open_help": "Para mostrar las opciones disponibles, pulse Intro, Opción+Flecha abajo o VoiceOver+Espacio.",
+      "mac_select_dialog_title": "Opciones de {label}",
+      "mac_select_dialog_help": "Desplácese con las flechas arriba y abajo. Pulse Intro o Espacio para seleccionar, o Escape para cancelar.",
       "title": "Traduccion hablada instantanea",
       "description": "Traduce con el servicio elegido lo que se oye por el microfono, el audio del equipo o una aplicacion seleccionada al idioma de destino. Si el idioma hablado ya coincide con el idioma de destino, no se produce audio traducido.",
       "service_label": "Servicio de traduccion",
@@ -5855,6 +5858,9 @@
     "human_choose_title": "Elegir narración humana limpia",
     "human_choose_announcement": "Elija la grabación limpia MP3 o WAV del narrador.",
     "human_progress_label": "Progreso del análisis de narración humana",
+    "mac_select_open_help": "Para mostrar las opciones disponibles, pulse Intro, Opción+Flecha abajo o VoiceOver+Espacio.",
+    "mac_select_dialog_title": "Opciones de {label}",
+    "mac_select_dialog_help": "Desplácese con las flechas arriba y abajo. Pulse Intro o Espacio para seleccionar, o Escape para cancelar.",
     "contentstudio_panel": "Audiodescripción automática con ContentStudio",
     "contentstudio_help": "Suba el vídeo mediante la API de ContentStudio, importe descripciones con tiempos como borradores o descargue una salida MP3/MP4 terminada.",
     "contentstudio_api_settings": "Conexión con la API de ContentStudio",
