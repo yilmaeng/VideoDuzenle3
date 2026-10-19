@@ -775,8 +775,41 @@ $windows | ConvertTo-Json -Compress
 }
 
 function setupIpcHandlers(mainWindow) {
+    require('./ai-services').register({ ipcMain, i18n });
     const { cancelExportJob, runWithExportJob } = require('./export/export-process-registry');
     const ffmpegPaths = ffmpegHandler.getFFmpegPaths();
+    require('./video-crop').register({ ipcMain, dialog, BrowserWindow, i18n,
+        ...ffmpegPaths, announce: announceDialogForAccessibility });
+    require('./vocal-separation').register({ ipcMain, dialog, BrowserWindow, i18n,
+        ...ffmpegPaths, announce: announceDialogForAccessibility });
+    const { createSpeechSearchService } = require('./speech-search-service');
+    require('./speech-search-ipc').registerSpeechSearchIpc({
+        ipcMain,
+        dialogs: {
+            announce: async (event, key) => announceDialogForAccessibility(BrowserWindow.fromWebContents(event.sender), {
+                message: i18n.t(`speech_search.archive.${key}`)
+            }),
+            choose: async (event, action, source) => {
+                const win = BrowserWindow.fromWebContents(event.sender);
+                const options = { title: i18n.t(`speech_search.archive.${action}`),
+                    filters: [{ name: i18n.t('speech_search.archive.file_type'), extensions: ['evdtranscript'] }] };
+                await announceDialogForAccessibility(win, options);
+                if (action === 'export') {
+                    options.defaultPath = path.join(path.dirname(source), `${path.parse(source).name}.evdtranscript`);
+                    const result = await dialog.showSaveDialog(win, options);
+                    return result.canceled ? null : result.filePath;
+                }
+                options.properties = ['openFile'];
+                const result = await dialog.showOpenDialog(win, options);
+                return result.canceled ? null : result.filePaths[0];
+            }
+        },
+        service: createSpeechSearchService({
+            cacheDir: path.join(app.getPath('userData'), 'description-subtitle-cache'),
+            ffmpegPath: ffmpegPaths.ffmpegPath,
+            ffprobePath: ffmpegPaths.ffprobePath
+        })
+    });
     const exportService = new ExportService({
         ffmpegPath: ffmpegPaths.ffmpegPath,
         ffprobePath: ffmpegPaths.ffprobePath,
@@ -906,6 +939,11 @@ function setupIpcHandlers(mainWindow) {
     // Dosya açma diyaloğu
     ipcMain.handle('open-file-dialog', async (event, options) => {
         const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        if (options?.announceForAccessibility) {
+            options = { ...options };
+            delete options.announceForAccessibility;
+            await announceDialogForAccessibility(win, options);
+        }
         const result = await dialog.showOpenDialog(win, options);
         return result;
     });
@@ -919,6 +957,12 @@ function setupIpcHandlers(mainWindow) {
     // --- END DIALOG HANDLERS ---
 
     // Video metadata al (ve Probe)
+    ipcMain.handle('timeline-preview-audio', async (_event, options) => {
+        const { renderPreviewAudio } = require('./export/timeline-preview-audio');
+        const { ffmpegPath, ffprobePath } = ffmpegHandler.getFFmpegPaths();
+        return renderPreviewAudio(ffmpegPath, options, ffprobePath);
+    });
+
     ipcMain.handle('get-video-metadata', async (event, filePath) => {
         try {
             const metadata = await ffmpegHandler.getVideoMetadata(filePath);

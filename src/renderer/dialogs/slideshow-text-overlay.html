@@ -391,31 +391,12 @@
         <div class="ai-section">
             <h3 data-i18n="dialog.text_overlay_window.ai_section">AI Feedback</h3>
 
-            <!-- Model Seçimi -->
-            <div class="form-group">
-                <label for="gemini-model" data-i18n="dialog.text_overlay_window.gemini_model">Gemini Model:</label>
-                <select id="gemini-model">
-                    <option value="gemini-2.5-flash" selected data-i18n="dialog.text_overlay_window.model_flash">Gemini 2.5 Flash (Recommended)</option>
-                    <option value="gemini-2.5-pro" data-i18n="dialog.text_overlay_window.model_pro">Gemini 2.5 Pro</option>
-                    <option value="gemini-1.5-flash" data-i18n="dialog.text_overlay_window.model_flash_legacy">Gemini 1.5 Flash (Budget Friendly)</option>
-                </select>
-            </div>
-
-            <!-- API Anahtarı (ilk kullanımda gösterilir) -->
-            <div id="api-key-section" class="form-group" style="display: none;">
-                <label for="gemini-api-key" data-i18n="dialog.text_overlay_window.api_key">Gemini API Key:</label>
-                <input type="password" id="gemini-api-key" placeholder="API anahtarınızı girin" data-i18n-placeholder="dialog.text_overlay_window.api_key_placeholder">
-                <div class="checkbox-group" style="margin-top: 5px;">
-                    <input type="checkbox" id="save-api-key" checked>
-                    <label for="save-api-key" data-i18n="dialog.text_overlay_window.save_api_key">Save this key</label>
-                </div>
-            </div>
-
+            <p data-i18n="ai_services.automatic"></p>
             <!-- AI Butonları -->
             <div class="ai-buttons">
                 <button type="button" id="ai-feedback-btn" class="secondary" data-i18n="dialog.text_overlay_window.ai_feedback">Comment on Current State</button>
                 <button type="button" id="ai-suggest-btn" class="secondary" style="background-color: #2b5d2b;" data-i18n="dialog.text_overlay_window.ai_suggest">Suggest Style and Position</button>
-                <button type="button" id="change-api-key-btn" class="secondary" style="font-size: 12px;" data-i18n="dialog.text_overlay_window.api_key_button">API Key</button>
+                <button type="button" id="change-api-key-btn" class="secondary" data-i18n="ai_services.settings"></button>
             </div>
 
             <!-- AI Yanıt Alanı -->
@@ -813,17 +794,6 @@
         // === YAPAY ZEKA GERİ BİLDİRİMİ ===
         let conversationHistory = [];
 
-        // API anahtarını kontrol et
-        async function checkApiKey() {
-            const savedKey = await ipcRenderer.invoke('get-gemini-api-key');
-            if (savedKey) {
-                return savedKey;
-            }
-            // API anahtarı yok, kullanıcıdan iste
-            document.getElementById('api-key-section').style.display = 'block';
-            document.getElementById('gemini-api-key').focus();
-            return null;
-        }
 
         // Form verilerini topla
         function collectFormData() {
@@ -866,22 +836,6 @@
             }
 
             // API anahtarını kontrol et
-            let apiKey = await checkApiKey();
-            if (!apiKey) {
-                const keyInput = document.getElementById('gemini-api-key');
-                if (!keyInput.value.trim()) {
-                    alert(t('dialog.text_overlay_window.enter_api_key', 'Please enter your Gemini API key.'));
-                    keyInput.focus();
-                    return;
-                }
-                apiKey = keyInput.value.trim();
-
-                // Kaydetme seçeneği
-                if (document.getElementById('save-api-key').checked) {
-                    await ipcRenderer.invoke('save-gemini-api-key', apiKey);
-                }
-                document.getElementById('api-key-section').style.display = 'none';
-            }
 
             // Yükleniyor göster
             document.getElementById('ai-loading').style.display = 'block';
@@ -958,12 +912,10 @@ Write the full answer only in ${aiLang}.`)
                 conversationHistory.push({ role: 'user', content: finalPrompt });
 
                 // Seçilen modeli al
-                const selectedModel = document.getElementById('gemini-model').value;
+
 
                 // Gemini'ye gönder
-                const result = await ipcRenderer.invoke('gemini-vision-request', {
-                    apiKey,
-                    model: selectedModel,
+                const result = await window.AiServices.request({
                     imageBase64: imageBase64,
                     prompt: finalPrompt,
                     history: conversationHistory.slice(0, -1),
@@ -1020,20 +972,6 @@ Write the full answer only in ${aiLang}.`)
             }
 
             // API anahtarını kontrol et
-            let apiKey = await checkApiKey();
-            if (!apiKey) {
-                const keyInput = document.getElementById('gemini-api-key');
-                if (!keyInput.value.trim()) {
-                    alert(t('dialog.text_overlay_window.enter_api_key', 'Please enter your Gemini API key.'));
-                    keyInput.focus();
-                    return;
-                }
-                apiKey = keyInput.value.trim();
-                if (document.getElementById('save-api-key').checked) {
-                    await ipcRenderer.invoke('save-gemini-api-key', apiKey);
-                }
-                document.getElementById('api-key-section').style.display = 'none';
-            }
 
             // Yükleniyor
             document.getElementById('ai-loading').style.display = 'block';
@@ -1076,11 +1014,9 @@ Return ONLY this JSON format:
   "reason": "short explanation in ${aiLang}"
 }`;
 
-                const selectedModel = document.getElementById('gemini-model').value;
 
-                const result = await ipcRenderer.invoke('gemini-vision-request', {
-                    apiKey,
-                    model: selectedModel,
+
+                const result = await window.AiServices.request({
                     imageBase64: imageBase64,
                     prompt: prompt,
                     history: [],
@@ -1156,11 +1092,7 @@ Return ONLY this JSON format:
         });
 
         // API anahtarını değiştir butonu
-        document.getElementById('change-api-key-btn').addEventListener('click', () => {
-            document.getElementById('api-key-section').style.display = 'block';
-            document.getElementById('gemini-api-key').value = '';
-            document.getElementById('gemini-api-key').focus();
-        });
+        document.getElementById('change-api-key-btn').addEventListener('click', () => window.AiServices.open());
 
         // Takip sorusu sor
         document.getElementById('ask-followup-btn').addEventListener('click', () => {
@@ -1179,6 +1111,8 @@ Return ONLY this JSON format:
             }
         });
     </script>
+  <script src="../scripts/api-key-guide.js"></script>
+  <script src="../scripts/ai-services.js"></script>
 </body>
 
 </html>E

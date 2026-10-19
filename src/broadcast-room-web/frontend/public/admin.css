@@ -1,0 +1,27 @@
+:root { color-scheme: light; --ink:#183d3a; --accent:#08695c; --paper:#fffdf7; }
+* { box-sizing:border-box; }
+body { margin:0; background:linear-gradient(145deg,#e6f1ec,#f6eedd); color:var(--ink); font-family:"Segoe UI",sans-serif; min-height:100vh; padding:clamp(16px,5vw,64px); }
+main { max-width:640px; margin:auto; padding:clamp(20px,5vw,48px); background:var(--paper); border-top:7px solid var(--accent); border-radius:4px 4px 22px 22px; box-shadow:0 18px 65px #183d3a15; }
+.brand { font-size:1rem; font-weight:800; letter-spacing:.22em; }
+h1 { font-family:Georgia,serif; font-size:clamp(1.8rem,5vw,2.5rem); line-height:1.15; }
+p { line-height:1.6; overflow-wrap:anywhere; }
+label { display:block; font-weight:600; margin:16px 0 8px; }
+input:not([type=checkbox]), select { max-width:100%; width:100%; padding:12px; font:inherit; border:1px solid #7b9992; border-radius:6px; background:white; color:var(--ink); }
+#language { width:auto; }
+.remember { display:flex; align-items:center; gap:10px; font-weight:400; }
+input[type=checkbox] { width:22px; height:22px; flex-shrink:0; }
+button { background:var(--accent); color:white; border:0; border-radius:6px; padding:13px 20px; font:inherit; font-weight:600; cursor:pointer; margin:18px 8px 0 0; }
+button:disabled { opacity:.55; cursor:wait; }
+:focus-visible { outline:3px solid #b44b12; outline-offset:4px; }
+#status:not(:empty) { border-left:4px solid var(--accent); padding:12px; background:#e6f1ec; }
+.privacy { font-size:.9rem; border-top:1px solid #d0dcd5; padding-top:22px; margin-top:30px; }
+[hidden] { display:none !important; }
+#room-list { padding:0; list-style:none; }
+#room-list li { border:1px solid #d0dcd5; border-radius:8px; padding:18px; margin:18px 0; }
+#room-list h3 { margin-top:0; }
+#room-list a { color:var(--accent); overflow-wrap:anywhere; display:inline-block; margin:8px 16px 8px 0; }
+dialog { max-width:min(640px,calc(100vw - 32px)); width:100%; max-height:90vh; overflow-y:auto; border:2px solid var(--accent); border-radius:12px; padding:24px; color:var(--ink); background:var(--paper); }
+dialog::backdrop { background:#183d3a99; }
+details { margin-top:20px; }
+summary { cursor:pointer; padding:10px 0; }
+[role=alert]:not(:empty) { border-left:4px solid #a1321b; padding:12px; }

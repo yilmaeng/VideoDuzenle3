@@ -47,6 +47,7 @@ internal static class Program
         var microphoneDeviceId = string.Empty;
         var outputLoopbackMode = false;
         var sessionVolumeGet = false;
+        var endpointStatus = args.Contains("--endpoint-status");
         double? sessionVolumeSet = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -98,7 +99,7 @@ internal static class Program
             return 2;
         }
 
-        if (!sessionVolumeGet && !sessionVolumeSet.HasValue && !microphoneMode && !outputLoopbackMode && pid <= 0)
+        if (!endpointStatus && !sessionVolumeGet && !sessionVolumeSet.HasValue && !microphoneMode && !outputLoopbackMode && pid <= 0)
         {
             Console.Error.WriteLine("{\"success\":false,\"error\":\"pid_required\"}");
             return 2;
@@ -107,6 +108,26 @@ internal static class Program
         try
         {
             CoInitializeEx(IntPtr.Zero, 0);
+            if (endpointStatus)
+            {
+                var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                foreach (var flow in new[] { EDataFlowRender, EDataFlowCapture })
+                foreach (var role in new[] { ERoleMultimedia, ERoleCommunications })
+                {
+                    enumerator.GetDefaultAudioEndpoint(flow, role, out var device).ThrowIfFailed("GetDefaultAudioEndpoint");
+                    device.GetId(out var id).ThrowIfFailed("GetId");
+                    var iid = new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");
+                    device.Activate(ref iid, CLSCTX_ALL, IntPtr.Zero, out var raw).ThrowIfFailed("Activate endpoint volume");
+                    var volume = (IAudioEndpointVolume)raw;
+                    volume.GetMasterVolumeLevelScalar(out var level).ThrowIfFailed("GetMasterVolumeLevelScalar");
+                    volume.GetMute(out var muted).ThrowIfFailed("GetMute");
+                    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { flow, role, id, level, muted }));
+                    Marshal.ReleaseComObject(raw);
+                    Marshal.ReleaseComObject(device);
+                }
+                Marshal.ReleaseComObject(enumerator);
+                return 0;
+            }
             if (sessionVolumeGet || sessionVolumeSet.HasValue)
             {
                 var result = AudioSessionVolumeController.ApplyForProcessTree((uint)pid, sessionVolumeSet);
@@ -549,6 +570,7 @@ internal static class Program
         public bool Success { get; init; }
         public int TargetProcessId { get; init; }
         public int MatchedSessions { get; init; }
+        public int MutedSessions { get; init; }
         public int ChangedSessions { get; init; }
         public double? PreviousVolume { get; init; }
         public double? AppliedVolume { get; init; }
@@ -562,6 +584,7 @@ internal static class Program
             return "{\"success\":" + (Success ? "true" : "false") +
                 ",\"targetProcessId\":" + TargetProcessId +
                 ",\"matchedSessions\":" + MatchedSessions +
+                ",\"mutedSessions\":" + MutedSessions +
                 ",\"changedSessions\":" + ChangedSessions +
                 ",\"previousVolume\":" + Number(PreviousVolume) +
                 ",\"appliedVolume\":" + Number(AppliedVolume) +
@@ -575,6 +598,7 @@ internal static class Program
         {
             var targetPids = GetProcessTree(rootPid);
             var matched = 0;
+            var muted = 0;
             var changed = 0;
             var previousVolumes = new List<double>();
             try
@@ -609,6 +633,8 @@ internal static class Program
                             continue;
                         }
                         matched++;
+                        simpleVolume.GetMute(out var isMuted).ThrowIfFailed("GetMute");
+                        if (isMuted) muted++;
                         simpleVolume.GetMasterVolume(out var currentVolume).ThrowIfFailed("GetMasterVolume");
                         previousVolumes.Add(Math.Clamp(currentVolume, 0f, 1f));
                         if (targetVolume.HasValue)
@@ -631,6 +657,7 @@ internal static class Program
                     Success = matched > 0,
                     TargetProcessId = (int)rootPid,
                     MatchedSessions = matched,
+                    MutedSessions = muted,
                     ChangedSessions = changed,
                     PreviousVolume = previousVolumes.Count > 0 ? previousVolumes.Average() : null,
                     AppliedVolume = targetVolume,
@@ -986,6 +1013,24 @@ internal static class Program
         int SetMute(bool isMuted, Guid eventContext);
         [PreserveSig]
         int GetMute(out bool isMuted);
+    }
+
+    [ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioEndpointVolume
+    {
+        [PreserveSig] int RegisterControlChangeNotify(IntPtr notify);
+        [PreserveSig] int UnregisterControlChangeNotify(IntPtr notify);
+        [PreserveSig] int GetChannelCount(out uint count);
+        [PreserveSig] int SetMasterVolumeLevel(float level, Guid context);
+        [PreserveSig] int SetMasterVolumeLevelScalar(float level, Guid context);
+        [PreserveSig] int GetMasterVolumeLevel(out float level);
+        [PreserveSig] int GetMasterVolumeLevelScalar(out float level);
+        [PreserveSig] int SetChannelVolumeLevel(uint channel, float level, Guid context);
+        [PreserveSig] int SetChannelVolumeLevelScalar(uint channel, float level, Guid context);
+        [PreserveSig] int GetChannelVolumeLevel(uint channel, out float level);
+        [PreserveSig] int GetChannelVolumeLevelScalar(uint channel, out float level);
+        [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool muted, Guid context);
+        [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool muted);
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

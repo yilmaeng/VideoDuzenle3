@@ -1,0 +1,23 @@
+const fs = require('fs'), path = require('path'), Module = require('module'), assert = require('assert');
+const root = path.resolve(__dirname, '..');
+const asar = require(path.join(require('os').homedir(), 'Projects/VideoDuzenle3/node_modules/@electron/asar'));
+const appRoot = fs.readFileSync(path.join(root, 'temp/mac-app-root.txt'), 'utf8').trim();
+const old = new Module(path.join(__dirname, 'base-patch-manager.cjs'), module);
+old.filename = path.join(__dirname, 'base-patch-manager.cjs');
+old._compile(asar.extractFile(appRoot, 'src/main/update/patch-manager.js').toString(), old.filename);
+const { PatchManager } = old.exports;
+(async () => {
+ const folder = fs.mkdtempSync(path.join(root, 'temp/install-check-'));
+ const app = { getVersion: () => '5.0.0', getPath: () => folder, getAppPath: () => appRoot };
+ const publicKey = asar.extractFile(appRoot, 'src/main/update/patch-public-key.pem').toString();
+ const manager = new PatchManager({ app, publicKey });
+ await manager.initialize();
+ const manifest = JSON.parse(fs.readFileSync(path.join(root, 'dist/patch-5.0.0-r3/stable.json')));
+ manager.verifyManifest(manifest);
+ assert(manager.stagePackage(manifest, fs.readFileSync(path.join(root, 'dist/patch-5.0.0-r3/evd-5.0.0-patch-3.evdpatch'))).success);
+ const restart = new PatchManager({ app, publicKey });
+ await restart.initialize();
+ assert.equal(restart.getStatus().revision, 3);
+ assert.equal(Object.keys(restart.getLocaleOverrides()).length, 5);
+ console.log('Released Mac updater: signature, installation, activation and locales passed.');
+})().catch(e => { console.error(e); process.exitCode=1; });

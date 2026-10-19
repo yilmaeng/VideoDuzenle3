@@ -30,9 +30,64 @@ ipcRenderer.on('accessibility-dialog-announce', (_event, payload) => {
 // Güvenli API'yi renderer'a aç
 contextBridge.exposeInMainWorld('api', {
     platform: process.platform,
+    aiServices: (action, input) => {
+        if (!['status', 'save-service', 'save-settings', 'refresh', 'pricing', 'open-pricing', 'request', 'cancel'].includes(action)) return Promise.reject(new Error('Invalid action'));
+        return ipcRenderer.invoke(`ai-services-${action}`, input);
+    },
+    onAiServicesOpen: callback => ipcRenderer.on('ai-services-open', (_event, provider) => callback(provider)),
+    onAiServicesNotice: callback => ipcRenderer.on('ai-services-notice', (_event, message) => callback(message)),
+    videoCropAnalyze: source => ipcRenderer.invoke('video-crop-analyze', source),
+    videoCropExport: crop => ipcRenderer.invoke('video-crop-export', crop),
+    videoCropClose: () => ipcRenderer.invoke('video-crop-close'),
+    cropOpenAiVision: params => ipcRenderer.invoke('openai-vision-request', params),
+    onVideoCropOpen: callback => ipcRenderer.on('video-crop-open', () => callback()),
+    onVideoCropProgress: callback => {
+        const listener = (_event, payload) => callback(payload);
+        ipcRenderer.on('video-crop-progress', listener);
+        return () => ipcRenderer.removeListener('video-crop-progress', listener);
+    },
+    vocalSeparationInspect: () => ipcRenderer.invoke('vocal-separation-inspect'),
+    vocalSeparationSource: () => ipcRenderer.invoke('vocal-separation-source'),
+    vocalSeparationRun: (params) => ipcRenderer.invoke('vocal-separation-run', params),
+    vocalSeparationCancel: () => ipcRenderer.invoke('vocal-separation-cancel'),
+    onVocalSeparationOpen: (callback) => {
+        const listener = () => callback();
+        ipcRenderer.on('vocal-separation-open', listener);
+        return () => ipcRenderer.removeListener('vocal-separation-open', listener);
+    },
+    onVocalSeparationProgress: (callback) => {
+        const listener = (_event, payload) => callback(payload);
+        ipcRenderer.on('vocal-separation-progress', listener);
+        return () => ipcRenderer.removeListener('vocal-separation-progress', listener);
+    },
+    speechSearchInspect: (params) => ipcRenderer.invoke('speech-search-inspect', params),
+    speechSearchAnalyze: (params) => ipcRenderer.invoke('speech-search-analyze', params),
+    speechSearchCancel: (jobId) => ipcRenderer.invoke('speech-search-cancel', jobId),
+    speechSearchCached: (params) => ipcRenderer.invoke('speech-search-cached', params),
+    speechSearchProject: (params) => ipcRenderer.invoke('speech-search-project', params),
+    speechSearchTransfer: (action, params) => {
+        if (!['export', 'import'].includes(action)) return Promise.reject(new Error('Invalid speech analysis action'));
+        return ipcRenderer.invoke(`speech-search-${action}`, params);
+    },
+    onSpeechSearchTransfer: (callback) => {
+        const listener = (_event, action) => callback(action);
+        ipcRenderer.on('speech-search-transfer', listener);
+        return () => ipcRenderer.removeListener('speech-search-transfer', listener);
+    },
+    onSpeechSearchOpen: (callback) => {
+        const listener = () => callback();
+        ipcRenderer.on('speech-search-open', listener);
+        return () => ipcRenderer.removeListener('speech-search-open', listener);
+    },
+    onSpeechSearchProgress: (callback) => {
+        const listener = (_event, payload) => callback(payload);
+        ipcRenderer.on('speech-search-progress', listener);
+        return () => ipcRenderer.removeListener('speech-search-progress', listener);
+    },
 
     // Video işlemleri
     getVideoMetadata: (filePath) => ipcRenderer.invoke('get-video-metadata', filePath),
+    getTimelinePreviewAudio: (options) => ipcRenderer.invoke('timeline-preview-audio', options),
     cutVideo: (params) => ipcRenderer.invoke('cut-video', params),
     cutVideoFast: (params) => ipcRenderer.invoke('cut-video-fast', params),
     getCutVideoFastBounds: (params) => ipcRenderer.invoke('get-cut-video-fast-bounds', params),
@@ -340,6 +395,10 @@ contextBridge.exposeInMainWorld('api', {
     onEditGeminiApiKey: (callback) => ipcRenderer.on('edit-gemini-api-key', () => callback()),
     onShowInstantVoiceTranslation: (callback) => ipcRenderer.on('show-instant-voice-translation', () => callback()),
     saveOpenAiApiKey: (params) => ipcRenderer.invoke('save-openai-api-key', params),
+    refreshAiModels: (provider, apiKey) => {
+        if (!['gemini', 'openai'].includes(provider)) return Promise.reject(new Error('Invalid provider'));
+        return ipcRenderer.invoke(`refresh-${provider}-models`, { apiKey });
+    },
     getOpenAiApiKey: () => ipcRenderer.invoke('get-openai-api-key'),
     getOpenAiApiData: () => ipcRenderer.invoke('get-openai-api-data'),
     openAiLiveTranslateStart: (params) => ipcRenderer.invoke('openai-live-translate-start', params),

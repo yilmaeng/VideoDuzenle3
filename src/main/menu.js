@@ -3,6 +3,64 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const i18n = require('./i18n');
+const editorMenuState = require('../shared/editor-menu-state');
+const editorMenuBindings = new WeakMap();
+
+function bindEditorMenu(mainWindow, menu) {
+    const contents = mainWindow.webContents;
+    let binding = editorMenuBindings.get(contents);
+    if (!binding) {
+        binding = { menu, state: {} };
+        editorMenuBindings.set(contents, binding);
+        const refresh = () => {
+            if (!applyEditorMenuState(binding)) return;
+            // MenuItem.label assignment does not update the native menu text.
+            const refreshed = createMenu(mainWindow);
+            if (process.platform !== 'darwin' && mainWindow.setMenu) mainWindow.setMenu(refreshed);
+            else Menu.setApplicationMenu(refreshed);
+        };
+        contents.on('ipc-message', (event, channel, state) => {
+            if (channel !== 'editor-menu-availability' || !state || typeof state !== 'object') return;
+            if (event.senderFrame && event.senderFrame !== contents.mainFrame) return;
+            binding.state = state;
+            refresh();
+        });
+        contents.on('did-start-loading', () => {
+            binding.state = {};
+            refresh();
+        });
+    }
+    binding.menu = menu;
+    applyEditorMenuState(binding);
+}
+
+function applyEditorMenuState(binding) {
+    const state = editorMenuState(binding.state);
+    let labelsChanged = false;
+    function visit(menu, depth = 0) {
+        for (const item of menu.items) {
+            const command = item.id?.startsWith('editor-') ? item.id.slice(7) : null;
+            if (command && Object.hasOwn(state, command) && item.enabled !== state[command]) item.enabled = state[command];
+            if (command === 'menu.edit.undo' || command === 'menu.edit.redo') {
+                const operation = command.split('.').pop();
+                const action = binding.state.text || !binding.state.loaded ? '' : binding.state[`${operation}Action`];
+                const label = action ? i18n.t(`edit_history.menu_${operation}`, {action}) : i18n.t(command);
+                if (item.label !== label) { item.label = label; labelsChanged = true; }
+            }
+            if (item.submenu) {
+                visit(item.submenu, depth + 1);
+                // Keep the top-level menu bar navigable. A nested managed
+                // submenu is unavailable when none of its commands can run.
+                const children = item.submenu.items.filter(child => child.type !== 'separator');
+                if (depth > 0 && children.length && children.every(child => child.id?.startsWith('editor-'))) {
+                    item.enabled = children.some(child => child.enabled);
+                }
+            }
+        }
+    }
+    visit(binding.menu);
+    return labelsChanged;
+}
 
 // Son açılan dosyalar listesi
 let recentFiles = [];
@@ -290,6 +348,8 @@ function buildRecentFilesSubmenu(mainWindow) {
 
     if (existingFiles.length === 0) {
         return [{
+            availabilityKey: 'menu.file.no_recent_files',
+
             label: t('menu.file.no_recent_files', 'Son açılan dosya yok'),
             enabled: false
         }];
@@ -489,9 +549,13 @@ function createMenu(mainWindow) {
     const template = [
         // DOSYA MENÜSÜ
         {
+            availabilityKey: 'menu.file.label',
+
             label: t('menu.file.label', '&Dosya'),
             submenu: [
                 {
+                    availabilityKey: 'menu.file.new_slideshow',
+
                     label: t('menu.file.new_slideshow', 'Yeni Slayt Projesi...'),
                     accelerator: 'CmdOrCtrl+Shift+N',
                     click: () => {
@@ -500,6 +564,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.file.open_project',
+
                     label: t('menu.file.open_project', 'Proje Aç...'),
                     accelerator: 'CmdOrCtrl+Shift+O',
                     click: async () => {
@@ -531,6 +597,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.file.save_project',
+
                     label: t('menu.file.save_project', 'Projeyi Kaydet (.kve)...'),
                     accelerator: 'CmdOrCtrl+Shift+P',
                     click: () => {
@@ -540,6 +608,8 @@ function createMenu(mainWindow) {
                 {
                     // Intentionally not added to the keyboard shortcut manager.
                     // This is a niche helper for multi-window recording/tutorial workflows.
+                    availabilityKey: 'menu.file.new_window',
+
                     label: t('menu.file.new_window', 'Yeni EVD Penceresi Aç'),
                     click: () => {
                         try {
@@ -554,6 +624,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.file.new',
+
                     label: t('menu.file.new', 'Yeni'),
                     accelerator: 'CmdOrCtrl+N',
                     click: () => {
@@ -561,6 +633,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.file.open',
+
                     label: t('menu.file.open', 'Aç...'),
                     accelerator: 'CmdOrCtrl+O',
                     click: async () => {
@@ -581,6 +655,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.file.save',
+
                     label: t('menu.file.save', 'Kaydet'),
                     accelerator: 'CmdOrCtrl+S',
                     click: () => {
@@ -588,6 +664,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.file.save_as',
+
                     label: t('menu.file.save_as', 'Videoyu Farklı Kaydet...'),
                     accelerator: 'CmdOrCtrl+Shift+S',
                     click: async () => {
@@ -607,6 +685,7 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.file.fast_export',
                     label: t('menu.file.fast_export', 'Hibrit Akıllı Dışa Aktar...'),
                     click: async () => {
                         const result = await dialog.showSaveDialog(mainWindow, {
@@ -624,6 +703,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.file.save_selection',
+
                     label: t('menu.file.save_selection', 'Seçimi Kaydet...'),
                     accelerator: 'CmdOrCtrl+Alt+S',
                     click: () => {
@@ -632,6 +713,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.file.export_video_only',
+
                     label: t('menu.file.export_video_only', 'Sadece Video Dışa Aktar...'),
                     click: async () => {
                         const result = await dialog.showSaveDialog(mainWindow, {
@@ -646,6 +729,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.file.export_audio_only',
+
                     label: t('menu.file.export_audio_only', 'Sadece Ses Dışa Aktar...'),
                     click: async () => {
                         const result = await dialog.showSaveDialog(mainWindow, {
@@ -663,6 +748,8 @@ function createMenu(mainWindow) {
                 },
                 {
                     // No default accelerator: this can process long media and is safer as an explicit menu action.
+                    availabilityKey: 'menu.file.elevenlabs_dubbing_import',
+
                     label: t('menu.file.elevenlabs_dubbing_import', 'ElevenLabs ile Dublaj İçin Dosya İçe Aktar...'),
                     click: async () => {
                         const result = await dialog.showOpenDialog(mainWindow, {
@@ -699,6 +786,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.file.sync_external_audio',
+
                     label: t('menu.file.sync_external_audio', 'Harici Sesi Videoyla Senkronla...'),
                     click: () => {
                         const { openSyncWizard } = require('./dialog-windows');
@@ -706,6 +795,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.file.sync_reference_audio',
+
                     label: t('menu.file.sync_reference_audio', 'Referans Sesle Video Kaydet...'),
                     click: () => {
                         const { openSyncWizard } = require('./dialog-windows');
@@ -714,11 +805,15 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.file.recent_files',
+
                     label: t('menu.file.recent_files', 'Son Açılan Dosyalar'),
                     submenu: buildRecentFilesSubmenu(mainWindow)
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.file.close',
+
                     label: t('menu.file.close', 'Dosyayı Kapat'),
                     accelerator: 'CmdOrCtrl+W',
                     click: async () => {
@@ -730,6 +825,8 @@ function createMenu(mainWindow) {
                 // Gemini API Anahtarı taşındı
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.file.language',
+
                     label: t('menu.file.language', 'Dil'),
                     submenu: [
                         { label: t('messages.system_language', 'Sistem dili (Otomatik)'), type: 'radio', checked: (i18n.store ? i18n.store.get('app_language') : 'system') === 'system' || !i18n.store?.get('app_language'), click: () => i18n.changeLanguage('system', mainWindow) },
@@ -742,6 +839,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.file.quit',
+
                     label: t('menu.file.quit', 'Çıkış'),
                     accelerator: process.platform === 'darwin' ? 'Command+Q' : 'Alt+F4',
                     click: () => {
@@ -753,45 +852,94 @@ function createMenu(mainWindow) {
 
         // DÜZENLE MENÜSÜ
         {
+            availabilityKey: 'menu.edit.label',
+
             label: t('menu.edit.label', 'Düzenle'),
             submenu: [
                 {
+                    availabilityKey: 'menu.edit.undo',
+
                     label: t('menu.edit.undo', 'Geri Al'),
+
                     accelerator: 'CmdOrCtrl+Z',
                     click: () => {
-                        mainWindow.webContents.send('edit-undo');
+                        createTextAwareEditClick(mainWindow, 'edit-undo', 'undo')();
                     }
                 },
                 {
+                    availabilityKey: 'menu.edit.redo',
+
                     label: t('menu.edit.redo', 'Yinele'),
+
                     accelerator: 'CmdOrCtrl+Y',
                     click: () => {
-                        mainWindow.webContents.send('edit-redo');
+                        createTextAwareEditClick(mainWindow, 'edit-redo', 'redo')();
                     }
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.edit.speech_search',
+                    label: t('speech_search.title'),
+                    click: () => mainWindow.webContents.send('speech-search-open')
+                },
+                {
+                    availabilityKey: 'menu.edit.vocal_separation',
+                    label: t('vocal_separation.title'),
+                    click: () => mainWindow.webContents.send('vocal-separation-open')
+                },
+                {
+                    availabilityKey: 'menu.edit.video_crop',
+                    label: t('video_crop.title'),
+                    click: () => mainWindow.webContents.send('video-crop-open')
+                },
+                {
+                    availabilityKey: 'menu.edit.speech_search_export',
+                    label: t('speech_search.archive.export'),
+                    click: () => mainWindow.webContents.send('speech-search-transfer', 'export')
+                },
+                {
+                    availabilityKey: 'menu.edit.speech_search_import',
+                    label: t('speech_search.archive.import'),
+                    click: () => mainWindow.webContents.send('speech-search-transfer', 'import')
+                },
+                { type: 'separator' },
+                {
+                    availabilityKey: 'menu.edit.cut',
+
                     label: t('menu.edit.cut', 'Kes'),
+
                     accelerator: 'CmdOrCtrl+X',
                     click: createTextAwareEditClick(mainWindow, 'edit-cut', 'cut')
                 },
                 {
+                    availabilityKey: 'menu.edit.copy',
+
                     label: t('menu.edit.copy', 'Kopyala'),
+
                     accelerator: 'CmdOrCtrl+C',
                     click: createTextAwareEditClick(mainWindow, 'edit-copy', 'copy')
                 },
                 {
+                    availabilityKey: 'menu.edit.paste',
+
                     label: t('menu.edit.paste', 'Yapıştır'),
+
                     accelerator: 'CmdOrCtrl+V',
                     click: createTextAwareEditClick(mainWindow, 'edit-paste', 'paste')
                 },
                 {
+                    availabilityKey: 'menu.edit.delete',
+
                     label: t('menu.edit.delete', 'Sil'),
+
                     accelerator: 'Delete',
                     click: createTextAwareEditClick(mainWindow, 'edit-delete', 'delete')
                 },
                 {
+                    availabilityKey: 'menu.edit.split',
+
                     label: t('menu.edit.split', 'Böl'),
+
                     accelerator: 'C',
                     click: () => {
                         mainWindow.webContents.send('edit-split');
@@ -799,15 +947,23 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.edit.selection',
+
                     label: t('menu.edit.selection', 'Seçim'),
                     submenu: [
                         {
+                            availabilityKey: 'menu.edit.select_all',
+
                             label: t('menu.edit.select_all', 'Tümünü Seç'),
+
                             accelerator: 'CmdOrCtrl+A',
                             click: createTextAwareEditClick(mainWindow, 'select-all', 'selectAll')
                         },
                         {
+                            availabilityKey: 'menu.edit.clear_selection',
+
                             label: t('menu.edit.clear_selection', 'Seçimi Temizle'),
+
                             accelerator: 'Escape',
                             click: () => {
                                 mainWindow.webContents.send('select-clear');
@@ -815,25 +971,33 @@ function createMenu(mainWindow) {
                         },
                         { type: 'separator' },
                         {
+                            availabilityKey: 'menu.edit.select_range',
+
                             label: t('menu.edit.select_range', 'Aralık Seç...'),
+
                             accelerator: 'CmdOrCtrl+R',
                             click: () => {
                                 mainWindow.webContents.send('select-range-dialog');
                             }
                         },
                         {
+                            availabilityKey: 'menu.edit.select_between_markers',
                             label: withShortcutHint(
                                 t('menu.edit.select_between_markers', 'İşaretçiler Arası Seç'),
                                 'CmdOrCtrl+Shift+Right / CmdOrCtrl+Shift+Left',
                                 currentLanguage
                             ),
+
                             click: () => {
                                 mainWindow.webContents.send('select-between-markers');
                             }
                         },
                         { type: 'separator' },
                         {
+                            availabilityKey: 'menu.edit.change_speed',
+
                             label: t('menu.edit.change_speed', 'Seçili Alanın Hızını Değiştir...'),
+
                             accelerator: 'CmdOrCtrl+Shift+H',
                             click: () => {
                                 mainWindow.webContents.send('show-speed-dialog');
@@ -844,13 +1008,19 @@ function createMenu(mainWindow) {
                 // Akıllı Seçim taşındı
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.edit.video_properties',
+
                     label: t('menu.edit.video_properties', 'Video Özellikleri...'),
+
                     click: () => {
                         mainWindow.webContents.send('edit-video-properties');
                     }
                 },
                 {
+                    availabilityKey: 'menu.edit.audio_settings',
+
                     label: t('menu.edit.audio_settings', 'Ses Ayarları...'),
+
                     accelerator: 'Alt+Shift+S',
                     click: () => {
                         mainWindow.webContents.send('show-audio-settings-dialog');
@@ -858,7 +1028,10 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.edit.list_silences',
+
                     label: t('menu.edit.list_silences', 'Boşlukları Listele...'),
+
                     accelerator: 'CmdOrCtrl+Shift+B',
                     click: () => {
                         mainWindow.webContents.send('edit-list-silences');
@@ -870,9 +1043,13 @@ function createMenu(mainWindow) {
 
         // OYNAT MENÜSÜ
         {
+            availabilityKey: 'menu.play.label',
+
             label: t('menu.play.label', 'Oynat'),
             submenu: [
                 {
+                    availabilityKey: 'menu.play.toggle',
+
                     label: t('menu.play.toggle', 'Oynat / Duraklat'),
                     accelerator: 'Space',
                     click: () => {
@@ -880,6 +1057,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.pause_at_position',
+
                     label: t('menu.play.pause_at_position', 'Pozisyonda Duraklat'),
                     accelerator: 'Enter',
                     click: () => {
@@ -887,6 +1066,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.play_selection',
+
                     label: t('menu.play.play_selection', 'Seçili Alanı Oynat'),
                     accelerator: 'Shift+Space',
                     click: () => {
@@ -894,6 +1075,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.preview_cut',
+
                     label: t('menu.play.preview_cut', 'Kesim Önizleme (Seçimsiz)'),
                     accelerator: 'CmdOrCtrl+Shift+Space',
                     click: () => {
@@ -901,6 +1084,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.skip_silence',
+
                     label: t('menu.play.skip_silence', 'Sessizliği Atla'),
                     accelerator: 'CmdOrCtrl+Shift+J',
                     click: () => {
@@ -908,6 +1093,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.forward_1s',
+
                     label: t('menu.play.forward_1s', '1 Saniye İleri'),
                     accelerator: 'Right',
                     click: () => {
@@ -915,6 +1102,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.backward_1s',
+
                     label: t('menu.play.backward_1s', '1 Saniye Geri'),
                     accelerator: 'Left',
                     click: () => {
@@ -923,6 +1112,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.play.forward_30s',
+
                     label: t('menu.play.forward_30s', '30 Saniye İleri'),
                     accelerator: 'CmdOrCtrl+Right',
                     click: () => {
@@ -930,6 +1121,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.backward_30s',
+
                     label: t('menu.play.backward_30s', '30 Saniye Geri'),
                     accelerator: 'CmdOrCtrl+Left',
                     click: () => {
@@ -938,6 +1131,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.play.forward_5m',
+
                     label: t('menu.play.forward_5m', '5 Dakika İleri'),
                     accelerator: 'CmdOrCtrl+Alt+Right',
                     click: () => {
@@ -945,6 +1140,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.backward_5m',
+
                     label: t('menu.play.backward_5m', '5 Dakika Geri'),
                     accelerator: 'CmdOrCtrl+Alt+Left',
                     click: () => {
@@ -953,24 +1150,32 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.play.goto_start',
+
                     label: t('menu.play.goto_start', 'Başa Git'),
                     click: () => {
                         mainWindow.webContents.send('goto-start');
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.goto_end',
+
                     label: t('menu.play.goto_end', 'Sona Git'),
                     click: () => {
                         mainWindow.webContents.send('goto-end');
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.goto_middle',
+
                     label: t('menu.play.goto_middle', 'Ortaya Git'),
                     click: () => {
                         mainWindow.webContents.send('goto-middle');
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.goto_before_end',
+
                     label: t('menu.play.goto_before_end', 'Sondan 30 Saniye Önce'),
                     accelerator: 'Shift+Backspace',
                     click: () => {
@@ -979,6 +1184,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.play.goto_timecode',
+
                     label: t('menu.play.goto_timecode', 'Zaman Koduna Git...'),
                     // Cmd/Ctrl+G is registered once in the Go menu below. Electron can
                     // handle duplicate accelerators inconsistently on macOS.
@@ -988,6 +1195,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.play.fine_tune',
+
                     label: t('menu.play.fine_tune', 'İnce Ayar...'),
                     accelerator: 'CmdOrCtrl+Shift+F',
                     click: () => {
@@ -999,9 +1208,13 @@ function createMenu(mainWindow) {
 
         // EKLE MENÜSÜ
         {
+            availabilityKey: 'menu.insert.label',
+
             label: t('menu.insert.label', 'Ekle'),
             submenu: [
                 {
+                    availabilityKey: 'menu.insert.audio',
+
                     label: t('menu.insert.audio', 'Ses Ekle...'),
                     click: async () => {
                         // Eski: Doğrudan dosya seçimi açılıyordu
@@ -1010,6 +1223,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.insert.video',
+
                     label: t('menu.insert.video', 'Video Ekle...'),
                     click: async () => {
                         const result = await dialog.showOpenDialog(mainWindow, {
@@ -1026,6 +1241,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.insert.vertical_video',
+
                     label: t('menu.insert.vertical_video', 'Dikey Video (Shorts/Reels) Oluştur...'),
                     click: () => {
                         const { openVerticalWizard } = require('./dialog-windows');
@@ -1033,18 +1250,24 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.insert.vertical_video_from_selection',
+
                     label: t('menu.insert.vertical_video_from_selection', 'Seçili Alanı Dikey Videoya Dönüştür...'),
                     click: () => {
                         mainWindow.webContents.send('vertical-video-from-selection');
                     }
                 },
                 {
+                    availabilityKey: 'menu.insert.vertical_video_add_selection_to_queue',
+
                     label: t('menu.insert.vertical_video_add_selection_to_queue', 'Seçili Alanı Kısa Video Listesine Ekle'),
                     click: () => {
                         mainWindow.webContents.send('vertical-video-queue-add-selection');
                     }
                 },
                 {
+                    availabilityKey: 'menu.insert.vertical_video_add_marker_pairs_to_queue',
+
                     label: t('menu.insert.vertical_video_add_marker_pairs_to_queue', 'İşaretçileri Seçim Listesine Ekle'),
                     click: () => {
                         mainWindow.webContents.send('vertical-video-queue-add-marker-pairs');
@@ -1054,18 +1277,24 @@ function createMenu(mainWindow) {
                     // Intentionally menu-only for now.
                     // This dialog manages a persistent multi-step selection workflow and should not
                     // be triggered accidentally with a global shortcut until the UX settles.
+                    availabilityKey: 'menu.insert.selection_queue',
+
                     label: t('menu.insert.selection_queue', 'Seçim Listesi...'),
                     click: () => {
                         mainWindow.webContents.send('selection-queue-open');
                     }
                 },
                 {
+                    availabilityKey: 'menu.insert.vertical_video_queue_open',
+
                     label: t('menu.insert.vertical_video_queue_open', 'Kısa Video Listesini Dikey Videoya Dönüştür...'),
                     click: () => {
                         mainWindow.webContents.send('vertical-video-queue-open');
                     }
                 },
                 {
+                    availabilityKey: 'menu.insert.vertical_video_queue_clear',
+
                     label: t('menu.insert.vertical_video_queue_clear', 'Kısa Video Listesini Temizle'),
                     click: () => {
                         mainWindow.webContents.send('vertical-video-queue-clear');
@@ -1073,6 +1302,8 @@ function createMenu(mainWindow) {
                 },
 
                 {
+                    availabilityKey: 'menu.insert.video_layer',
+
                     label: t('menu.insert.video_layer', 'Video Katmanı Ekle...'),
                     accelerator: 'CmdOrCtrl+Shift+V',
                     click: async () => {
@@ -1091,6 +1322,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.insert.cta_library',
+
                     label: t('menu.insert.cta_library', 'CTA / Overlay Kütüphanesi...'),
                     accelerator: 'CmdOrCtrl+Shift+K',
                     click: () => {
@@ -1098,6 +1331,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.insert.text',
+
                     label: t('menu.insert.text', 'Metin Ekle...'),
                     click: () => {
                         mainWindow.webContents.send('insert-text-dialog');
@@ -1105,12 +1340,16 @@ function createMenu(mainWindow) {
                 },
                 {
                     // Intentionally menu-only: this opens a detailed timing and styling workflow.
+                    availabilityKey: 'menu.insert.ticker',
+
                     label: t('menu.insert.ticker', 'Akan Yaz? Ekle...'),
                     click: () => {
                         mainWindow.webContents.send('insert-ticker-dialog');
                     }
                 },
                 {
+                    availabilityKey: 'menu.insert.images',
+
                     label: t('menu.insert.images', 'Görsel(ler) Ekle...'),
                     click: () => {
                         mainWindow.webContents.send('open-image-wizard');
@@ -1118,6 +1357,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.insert.subtitle',
+
                     label: t('menu.insert.subtitle', 'Altyazı Dosyası Ekle...'),
                     click: async () => {
                         const result = await dialog.showOpenDialog(mainWindow, {
@@ -1133,6 +1374,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.insert.description_subtitle_editor',
+
                     label: t('menu.insert.description_subtitle_editor', 'Betimleme / Altyazı Editörü...'),
                     click: () => {
                         mainWindow.webContents.send('open-description-subtitle-editor-request');
@@ -1140,6 +1383,7 @@ function createMenu(mainWindow) {
                 },
                 // Proje açma düzenleyicide ve menüde erişilebilir; kısayol haritasını kalabalıklaştırmamak için global kısayol kullanılmaz.
                 {
+                    availabilityKey: 'menu.insert.subtitle_tts_project',
                     label: t('menu.insert.subtitle_tts_project', 'Altyazı Seslendirme Projesi Aç...'),
                     click: async () => {
                         const result = await dialog.showOpenDialog(mainWindow, {
@@ -1157,9 +1401,13 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.insert.transition',
+
                     label: t('menu.insert.transition', 'Geçiş'),
                     submenu: [
                         {
+                            availabilityKey: 'menu.insert.transition_library',
+
                             label: t('menu.insert.transition_library', 'Geçiş Kütüphanesi...'),
                             accelerator: 'CmdOrCtrl+Shift+T',
                             click: () => {
@@ -1167,6 +1415,8 @@ function createMenu(mainWindow) {
                             }
                         },
                         {
+                            availabilityKey: 'menu.insert.apply_active_transition',
+
                             label: t('menu.insert.apply_active_transition', 'Aktif Geçişi Uygula'),
                             accelerator: applyTransitionAccelerator,
                             click: () => {
@@ -1175,6 +1425,8 @@ function createMenu(mainWindow) {
                         },
                         { type: 'separator' },
                         {
+                            availabilityKey: 'menu.insert.apply_transition_to_markers',
+
                             label: t('menu.insert.apply_transition_to_markers', 'Aktif Geçişi Tüm İşaretçilere Uygula'),
                             click: () => {
                                 mainWindow.webContents.send('apply-transition-to-markers');
@@ -1182,6 +1434,8 @@ function createMenu(mainWindow) {
                         },
                         { type: 'separator' },
                         {
+                            availabilityKey: 'menu.insert.transition_list',
+
                             label: t('menu.insert.transition_list', 'Geçiş Listesi...'),
                             click: () => {
                                 mainWindow.webContents.send('show-transition-list');
@@ -1189,6 +1443,8 @@ function createMenu(mainWindow) {
                         },
                         { type: 'separator' },
                         {
+                            availabilityKey: 'menu.insert.apply_all_transitions',
+
                             label: t('menu.insert.apply_all_transitions', 'Tüm Geçişleri Videoya Uygula'),
                             accelerator: 'CmdOrCtrl+T',
                             click: () => {
@@ -1199,6 +1455,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.insert.apply_to_object',
+
                     label: t('menu.insert.apply_to_object', 'Nesneye Uygula (Analiz)...'),
                     accelerator: 'CmdOrCtrl+Shift+A',
                     click: () => {
@@ -1207,6 +1465,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.insert.insertion_queue',
+
                     label: t('menu.insert.insertion_queue', 'Ekleme Listesi...'),
                     accelerator: 'CmdOrCtrl+Shift+L',
                     click: () => {
@@ -1218,21 +1478,29 @@ function createMenu(mainWindow) {
 
         // GÖRÜNÜM MENÜSÜ
         {
+            availabilityKey: 'menu.view.label',
+
             label: t('menu.view.label', 'Görünüm'),
             submenu: [
                 {
+                    availabilityKey: 'menu.view.rotate_90_cw',
+
                     label: t('menu.view.rotate_90_cw', '90° Döndür (Saat Yönünde)'),
                     click: () => {
                         mainWindow.webContents.send('rotate-video', 90);
                     }
                 },
                 {
+                    availabilityKey: 'menu.view.rotate_90_ccw',
+
                     label: t('menu.view.rotate_90_ccw', '90° Döndür (Saat Yönü Tersine)'),
                     click: () => {
                         mainWindow.webContents.send('rotate-video', -90);
                     }
                 },
                 {
+                    availabilityKey: 'menu.view.rotate_180',
+
                     label: t('menu.view.rotate_180', '180° Döndür'),
                     click: () => {
                         mainWindow.webContents.send('rotate-video', 180);
@@ -1240,6 +1508,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.view.fullscreen',
+
                     label: t('menu.view.fullscreen', 'Tam Ekran'),
                     accelerator: 'F11',
                     click: () => {
@@ -1248,6 +1518,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.view.devtools',
+
                     label: t('menu.view.devtools', 'Geliştirici Araçları'),
                     accelerator: 'F12',
                     click: () => {
@@ -1259,9 +1531,13 @@ function createMenu(mainWindow) {
 
         // ERİŞİLEBİLİR KAYIT MENÜSÜ
         {
+            availabilityKey: 'menu.record.label',
+
             label: t('menu.record.label', 'Erişilebilir Video Kaydı'),
             submenu: [
                 {
+                    availabilityKey: 'menu.record.wizard',
+
                     label: t('menu.record.wizard', 'Kayıt Sihirbazı...'),
                     accelerator: 'CmdOrCtrl+Shift+R',
                     click: () => {
@@ -1270,9 +1546,13 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.record.offline_presets',
+
                     label: t('menu.record.offline_presets', 'Çevrim Dışı Önayarlar'),
                     submenu: [
                         {
+                            availabilityKey: 'menu.record.offline_fullscreen',
+
                             label: t('menu.record.offline_fullscreen', 'Tam Ekran Çevrim Dışı Önayar...'),
                             click: () => {
                                 const { openRecordingWizard } = require('./dialog-windows');
@@ -1280,6 +1560,8 @@ function createMenu(mainWindow) {
                             }
                         },
                         {
+                            availabilityKey: 'menu.record.offline_zoom',
+
                             label: t('menu.record.offline_zoom', 'Zoom Çevrim Dışı Önayar...'),
                             click: () => {
                                 const { openRecordingWizard } = require('./dialog-windows');
@@ -1287,6 +1569,8 @@ function createMenu(mainWindow) {
                             }
                         },
                         {
+                            availabilityKey: 'menu.record.offline_meet',
+
                             label: t('menu.record.offline_meet', 'Google Meet Çevrim Dışı Önayar...'),
                             click: () => {
                                 const { openRecordingWizard } = require('./dialog-windows');
@@ -1294,6 +1578,8 @@ function createMenu(mainWindow) {
                             }
                         },
                         {
+                            availabilityKey: 'menu.record.offline_teams',
+
                             label: t('menu.record.offline_teams', 'Microsoft Teams Çevrim Dışı Önayar...'),
                             click: () => {
                                 const { openRecordingWizard } = require('./dialog-windows');
@@ -1303,9 +1589,13 @@ function createMenu(mainWindow) {
                     ]
                 },
                 {
+                    availabilityKey: 'menu.record.live_broadcast_presets',
+
                     label: t('menu.record.live_broadcast_presets', 'Canlı Yayın'),
                     submenu: [
                         {
+                            availabilityKey: 'menu.record.live_broadcast_fullscreen',
+
                             label: t('menu.record.live_broadcast_fullscreen', 'Tam Ekran Canlı Yayın Preseti...'),
                             click: () => {
                                 const { openRecordingWizard } = require('./dialog-windows');
@@ -1313,6 +1603,8 @@ function createMenu(mainWindow) {
                             }
                         },
                         {
+                            availabilityKey: 'menu.record.live_broadcast_zoom',
+
                             label: t('menu.record.live_broadcast_zoom', 'Zoom Canlı Yayın Preseti...'),
                             click: () => {
                                 const { openRecordingWizard } = require('./dialog-windows');
@@ -1320,6 +1612,8 @@ function createMenu(mainWindow) {
                             }
                         },
                         {
+                            availabilityKey: 'menu.record.live_broadcast_meet',
+
                             label: t('menu.record.live_broadcast_meet', 'Google Meet Canlı Yayın Preseti...'),
                             click: () => {
                                 const { openRecordingWizard } = require('./dialog-windows');
@@ -1327,6 +1621,8 @@ function createMenu(mainWindow) {
                             }
                         },
                         {
+                            availabilityKey: 'menu.record.live_broadcast_teams',
+
                             label: t('menu.record.live_broadcast_teams', 'Microsoft Teams Canlı Yayın Preseti...'),
                             click: () => {
                                 const { openRecordingWizard } = require('./dialog-windows');
@@ -1334,6 +1630,8 @@ function createMenu(mainWindow) {
                             }
                         },
                         {
+                            availabilityKey: 'menu.record.youtube_chat_watch',
+
                             label: t('menu.record.youtube_chat_watch', 'YouTube Sohbetini İzle...'),
                             click: () => {
                                 const { openRecordingWizard } = require('./dialog-windows');
@@ -1344,6 +1642,8 @@ function createMenu(mainWindow) {
                     ]
                 },
                 {
+                    availabilityKey: 'menu.record.live_effects',
+
                     label: t('menu.record.live_effects', 'Canlı Efekt Paneli...'),
                     click: () => {
                         const { openLiveEffectsPanel } = require('./dialog-windows');
@@ -1351,6 +1651,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.record.broadcast_room',
+
                     label: t('menu.record.broadcast_room', 'Yayın Odası...'),
                     click: () => {
                         const { openBroadcastRoom } = require('./dialog-windows');
@@ -1358,6 +1660,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.record.resume_active_broadcast',
+
                     label: t('menu.record.resume_active_broadcast', 'Etkin Canlı Yayına Geri Dön'),
                     enabled: hasActiveRecordingWizardSession(),
                     click: () => {
@@ -1367,6 +1671,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.record.emergency_stop_live_broadcast',
+
                     label: t('menu.record.emergency_stop_live_broadcast', 'Acil Canlı Yayını Durdur'),
                     click: () => {
                         // Intentionally menu-only: this command can terminate an active live stream, so it should not have a default shortcut.
@@ -1380,9 +1686,13 @@ function createMenu(mainWindow) {
 
         // GİT MENÜSÜ
         {
+            availabilityKey: 'menu.goto.label',
+
             label: t('menu.goto.label', 'Git'),
             submenu: [
                 {
+                    availabilityKey: 'menu.play.goto_timecode',
+
                     label: t('menu.play.goto_timecode', 'Zaman Koduna Git...'),
                     accelerator: 'CmdOrCtrl+G',
                     click: () => {
@@ -1391,6 +1701,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.play.goto_start',
+
                     label: t('menu.play.goto_start', 'Başa Git'),
                     accelerator: 'CmdOrCtrl+Home',
                     click: () => {
@@ -1398,6 +1710,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.goto_end',
+
                     label: t('menu.play.goto_end', 'Sona Git'),
                     accelerator: 'CmdOrCtrl+End',
                     click: () => {
@@ -1405,6 +1719,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.play.goto_middle',
+
                     label: t('menu.play.goto_middle', 'Ortaya Git'),
                     accelerator: 'CmdOrCtrl+Shift+Backspace',
                     click: () => {
@@ -1413,6 +1729,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.goto.next_marker',
+
                     label: t('menu.goto.next_marker', 'Sonraki İşaretçi'),
                     accelerator: 'Alt+Right',
                     click: () => {
@@ -1420,6 +1738,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.goto.previous_marker',
+
                     label: t('menu.goto.previous_marker', 'Önceki İşaretçi'),
                     accelerator: 'Alt+Left',
                     click: () => {
@@ -1428,6 +1748,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.goto.selection_start',
+
                     label: t('menu.goto.selection_start', 'Seçimin Başına Git'),
                     accelerator: 'CmdOrCtrl+J',
                     click: () => {
@@ -1435,6 +1757,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.goto.selection_end',
+
                     label: t('menu.goto.selection_end', 'Seçimin Sonuna Git'),
                     accelerator: 'CmdOrCtrl+L',
                     click: () => {
@@ -1446,9 +1770,13 @@ function createMenu(mainWindow) {
 
         // İŞARETÇİLER MENÜSÜ
         {
+            availabilityKey: 'menu.markers.label',
+
             label: t('menu.markers.label', 'İşaretçiler'),
             submenu: [
                 {
+                    availabilityKey: 'menu.markers.add',
+
                     label: t('menu.markers.add', 'İşaretçi Ekle'),
                     accelerator: 'M',
                     click: () => {
@@ -1456,12 +1784,16 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.markers.delete',
+
                     label: t('menu.markers.delete', 'İşaretçi Sil'),
                     click: () => {
                         mainWindow.webContents.send('marker-delete');
                     }
                 },
                 {
+                    availabilityKey: 'menu.markers.clear_all',
+
                     label: t('menu.markers.clear_all', 'Tüm İşaretçileri Temizle'),
                     click: () => {
                         mainWindow.webContents.send('marker-clear-all');
@@ -1469,6 +1801,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.markers.list',
+
                     label: t('menu.markers.list', 'İşaretçi Listesi...'),
                     click: () => {
                         mainWindow.webContents.send('marker-list-dialog');
@@ -1479,9 +1813,13 @@ function createMenu(mainWindow) {
 
         // YAPAY ZEKA MENÜSÜ
         {
+            availabilityKey: 'menu.ai.label',
+
             label: t('menu.ai.label', 'Yapay Zeka'),
             submenu: [
                 {
+                    availabilityKey: 'menu.ai.describe_current_position',
+
                     label: t('menu.ai.describe_current_position', 'Bulunduğun Konumu Betimle'),
                     accelerator: 'CmdOrCtrl+Alt+V',
                     click: () => {
@@ -1489,6 +1827,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.ai.describe_selection',
+
                     label: t('menu.ai.describe_selection', 'Seçimi Betimle...'),
                     accelerator: 'CmdOrCtrl+Alt+D',
                     click: () => {
@@ -1497,6 +1837,8 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'menu.ai.intelligent_selection',
+
                     label: t('menu.ai.intelligent_selection', 'Akıllı Seçim...'),
                     accelerator: 'CmdOrCtrl+I',
                     click: () => {
@@ -1504,6 +1846,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.ai.instant_voice_translation',
+
                     label: t('menu.ai.instant_voice_translation', 'Anlık Sesli Çeviri...'),
                     click: () => {
                         mainWindow.webContents.send('show-instant-voice-translation');
@@ -1511,31 +1855,36 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
-                    label: t('menu.ai.api_key', 'Gemini API Anahtarı...'),
-                    click: () => {
-                        mainWindow.webContents.send('edit-gemini-api-key');
-                    }
+                    availabilityKey: 'menu.ai.settings',
+                    label: t('ai_services.settings'),
+                    click: () => mainWindow.webContents.send('ai-services-open')
                 },
                 {
-                    label: t('menu.ai.openai_api_key', 'OpenAI API Anahtarı...'),
-                    click: () => {
-                        mainWindow.webContents.send('edit-openai-api-key');
-                    }
-                },
-                {
-                    label: t('menu.ai.elevenlabs_api_key', 'ElevenLabs API Anahtarı...'),
-                    click: () => {
-                        mainWindow.webContents.send('edit-elevenlabs-api-key');
-                    }
+                    availabilityKey: 'menu.ai.services',
+                    label: t('ai_services.title'),
+                    submenu: [
+                        ...['gemini', 'openai', 'claude', 'deepseek', 'groq'].map(provider => ({
+                            availabilityKey: provider === 'gemini' ? 'menu.ai.api_key' : provider === 'openai' ? 'menu.ai.openai_api_key' : `menu.ai.service_${provider}`,
+                            label: t(`ai_services.providers.${provider}`),
+                            click: () => mainWindow.webContents.send('ai-services-open', provider)
+                        })),
+                        { availabilityKey: 'menu.ai.elevenlabs_api_key', label: t('menu.ai.elevenlabs_api_key'),
+                            click: () => mainWindow.webContents.send('edit-elevenlabs-api-key') }
+                    ]
                 }
+
             ]
         },
 
         // YARDIM MENÜSÜ
         {
+            availabilityKey: 'menu.help.label',
+
             label: t('menu.help.label', 'Yardım'),
             submenu: [
                 {
+                    availabilityKey: 'menu.help.shortcuts',
+
                     label: t('menu.help.shortcuts', 'Klavye Kısayolları'),
                     accelerator: 'F1',
                     click: () => {
@@ -1543,6 +1892,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.help.keyboard_manager',
+
                     label: t('menu.help.keyboard_manager', 'Klavye Kısayol Yöneticisi...'),
                     accelerator: 'CmdOrCtrl+K',
                     click: () => {
@@ -1550,6 +1901,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.help.help_menu',
+
                     label: t('menu.help.help_menu', 'Yardım...'),
                     accelerator: 'F2',
                     click: () => {
@@ -1557,6 +1910,7 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.help.description_subtitle_editor_guide',
                     label: t('menu.help.description_subtitle_editor_guide', 'Betimleme ve Altyazı Editörü Kılavuzu'),
                     // Support documentation is intentionally not exposed as a configurable global shortcut.
                     click: () => {
@@ -1564,6 +1918,7 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.help.review_package_guide',
                     label: t('menu.help.review_package_guide', 'Son Kontrol Paketi Kılavuzu'),
                     // Support documentation is intentionally not exposed as a configurable global shortcut.
                     click: () => {
@@ -1571,6 +1926,7 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.help.subtitle_voiceover_guide',
                     label: t('menu.help.subtitle_voiceover_guide', 'Altyazı Seslendirme ve Düzenleme Kılavuzu'),
                     // Support documentation is intentionally not exposed as a configurable global shortcut.
                     click: () => {
@@ -1578,6 +1934,8 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.help.feedback',
+
                     label: t('menu.help.feedback', 'Geri Bildirim Gönder...'),
                     accelerator: 'F3',
                     click: () => {
@@ -1585,12 +1943,16 @@ function createMenu(mainWindow) {
                     }
                 },
                 {
+                    availabilityKey: 'menu.help.startup_welcome',
+
                     label: t('menu.help.startup_welcome', 'Başlangıç Ekranı'),
                     click: () => {
                         mainWindow.webContents.send('show-startup-welcome');
                     }
                 },
                 {
+                    availabilityKey: 'menu.help.open_log_folder',
+
                     label: t('menu.help.open_log_folder', 'Log klasörünü aç'),
                     // Support utility; intentionally omitted from the shortcut manager.
                     click: async () => {
@@ -1615,13 +1977,15 @@ function createMenu(mainWindow) {
                 },
                 { type: 'separator' },
                 {
+                    availabilityKey: 'messages.about_label',
+
                     label: t('messages.about_label', 'About'),
                     click: () => {
                         const options = {
                             type: 'info',
                             title: t('messages.about_title', 'About EVD'),
                             message: t('messages.app_display_name', 'EVD'),
-                            detail: t('messages.about_detail', 'Version 5.0.0\n\nKeyboard-first video editor designed for blind and low-vision users.\n\nProgram Icon: Hands and ears editing video\n\n© 2025-2026 Engin Yılmaz\nAll rights reserved.')
+                            detail: t('messages.about_detail', 'Version 5.5.0\n\nKeyboard-first video editor designed for blind and low-vision users.\n\nProgram Icon: Hands and ears editing video\n\n© 2025-2026 Engin Yılmaz\nAll rights reserved.')
                         };
                         announceDialogForAccessibility(mainWindow, options).then(() => {
                             dialog.showMessageBox(mainWindow, options);
@@ -1632,6 +1996,42 @@ function createMenu(mainWindow) {
         }
     ];
 
+    // Attach policy IDs before shortcut hints alter visible labels. Duplicate
+    // commands in Play/Go are intentionally updated together.
+    function tagAvailability(items, exempt = false) {
+        for (const item of items) {
+            const key = item.availabilityKey;
+            // Strip metadata on every branch. Electron reserves commandId for
+            // its numeric native command ID; never pass policy keys as that field.
+            delete item.availabilityKey;
+            // Recording/broadcast owns its session-specific availability.
+            const skipPolicy = exempt || key?.startsWith('menu.record.');
+            if (Array.isArray(item.submenu)) {
+                tagAvailability(item.submenu, skipPolicy);
+            } else if (!skipPolicy && item.click && key) {
+                if (!Object.hasOwn(editorMenuState.requirements, key)) {
+                    throw new Error(`Missing menu availability policy: ${key}`);
+                }
+                item.id = `editor-${key}`;
+                item.enabled = false;
+            }
+        }
+    }
+    tagAvailability(template);
+    // Supply history labels at native menu construction, not just after it.
+    const historyState = editorMenuBindings.get(mainWindow.webContents)?.state || {};
+    function labelHistory(items) {
+        for (const item of items) {
+            if (item.id === 'editor-menu.edit.undo' || item.id === 'editor-menu.edit.redo') {
+                const operation = item.id.split('.').pop();
+                const action = historyState.text || !historyState.loaded ? '' : historyState[`${operation}Action`];
+                item.label = action ? i18n.t(`edit_history.menu_${operation}`, {action}) : i18n.t(`menu.edit.${operation}`);
+            }
+            if (Array.isArray(item.submenu)) labelHistory(item.submenu);
+        }
+    }
+    labelHistory(template);
+
     // Windows ekran okuyucularında native menu semantics daha güvenilir çalışıyor.
     // Alt menü öğelerinin label/accelerator yapısını değiştirmek, ilk öğede
     // odakla eylem arasında "hayalet" bir adım oluşmasına neden olabiliyor.
@@ -1639,7 +2039,9 @@ function createMenu(mainWindow) {
         ? template
         : addShortcutHints(template, currentLanguage);
 
-    return Menu.buildFromTemplate(finalTemplate);
+    const menu = Menu.buildFromTemplate(finalTemplate);
+    bindEditorMenu(mainWindow, menu);
+    return menu;
 }
 
 module.exports = { createMenu, addToRecentFiles };

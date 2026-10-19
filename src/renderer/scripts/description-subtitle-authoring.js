@@ -2,7 +2,8 @@
     const authoringState = {
         editingEventId: '',
         pendingDeleteIds: [],
-        selectionAnchorId: ''
+        selectionAnchorId: '',
+        lastCreateType: 'description'
     };
     const el = {};
 
@@ -166,13 +167,14 @@
         updateMetrics();
     }
 
-    function openCreateDialog(type = 'description') {
+    function openCreateDialog(type = authoringState.lastCreateType) {
         const pair = timeline()?.getActiveMarkerPair?.();
         if (!pair) {
             editor().setStatus('description_subtitle_editor.marker_pair_required');
             return;
         }
         const eventType = ['description', 'subtitle', 'note'].includes(type) ? type : 'description';
+        authoringState.lastCreateType = eventType;
         fillForm({ start: pair.start, end: pair.end, type: eventType, status: 'draft' }, true);
         authoringState.editingEventId = '';
         el.deleteInDialog.hidden = true;
@@ -260,6 +262,7 @@
             createdAt: previous?.createdAt || now,
             updatedAt: now
         };
+        authoringState.lastCreateType = item.type;
         const synthesisSettingsChanged = Boolean(previous) && (
             previous.text !== item.text
             || previous.voice !== item.voice
@@ -580,6 +583,11 @@
             requestAnimationFrame(() => requestDelete(item));
         });
         [el.start, el.end, el.text].forEach(control => control.addEventListener('input', updateMetrics));
+        el.type.addEventListener('change', () => {
+            if (['description', 'subtitle', 'note'].includes(el.type.value)) {
+                authoringState.lastCreateType = el.type.value;
+            }
+        });
         [el.ttsVoice, el.ttsSpeed, el.ttsVolume, el.originalVolume].forEach(control => control.addEventListener('input', () => window.dispatchEvent(new CustomEvent('evd-description-tts-form-updated'))));
         el.form.addEventListener('keydown', event => {
             const modifier = window.api.platform === 'darwin' ? event.metaKey : event.ctrlKey;
@@ -630,13 +638,16 @@
             if (!selectedEvent() && events().length) selectEvent(events()[0], false);
         });
         window.addEventListener('evd-description-create-event-requested', event => {
-            openCreateDialog(event.detail?.type || 'description');
+            openCreateDialog(event.detail?.type);
         });
         window.addEventListener('evd-description-focus-requested', event => {
             focusNavigationTarget(event.detail?.target || 'list');
         });
         window.addEventListener('evd-description-markers-changed', updateControls);
-        window.addEventListener('evd-description-source-loaded', updateControls);
+        window.addEventListener('evd-description-source-loaded', () => {
+            authoringState.lastCreateType = 'description';
+            updateControls();
+        });
     }
 
     async function init() {
@@ -697,4 +708,3 @@
     };
     document.addEventListener('DOMContentLoaded', init);
 })();
-

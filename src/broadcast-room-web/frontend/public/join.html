@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="broadcast_room_join.window_title">EVD Yayın Odası Katılımı</title>
-    <link rel="stylesheet" href="/yayinodasi/join.css?v=20260820a">
+    <link rel="stylesheet" href="/yayinodasi/join.css?v=20261012-recording-focus">
 </head>
 <body>
     <main class="page">
+        <p id="server-recording-notice" role="status" aria-live="polite" aria-atomic="true"></p>
+        <span id="server-recording-indicator" aria-live="off" hidden></span>
         <section id="screen-share-section" class="card">
             <div id="join-intro">
                 <h1 data-i18n="broadcast_room_join.title">Yayın Odasına Katıl</h1>
@@ -30,12 +32,17 @@
             </div>
         </section>
 
-        <section class="card">
+        <section id="participant-info-card" class="card">
             <h2 data-i18n="broadcast_room_join.identity_section">Katılımcı Bilgisi</h2>
             <form id="join-form" action="javascript:void(0)" autocomplete="on">
                 <div id="display-name-group" class="field-group">
-                    <label for="display-name" aria-hidden="true" data-i18n="broadcast_room_join.display_name_label">Görünen ad</label>
-                    <input id="display-name" name="displayName" type="text" class="value-box" enterkeyhint="go" inputmode="text" autocomplete="name" autocapitalize="words" data-i18n-aria="broadcast_room_join.display_name_label" data-i18n-placeholder="broadcast_room_join.display_name_placeholder" placeholder="Adınızı yazın">
+                    <label for="display-name" data-i18n="broadcast_room_join.display_name_label">Görünen ad</label>
+                    <input id="display-name" name="displayName" type="text" class="value-box" enterkeyhint="go" inputmode="text" autocomplete="name" autocapitalize="words" data-i18n-placeholder="broadcast_room_join.display_name_placeholder" placeholder="Adınızı yazın">
+                    <div id="remember-guest-name-group">
+                        <input id="remember-guest-name" type="checkbox" aria-describedby="remember-guest-name-hint">
+                        <label for="remember-guest-name" data-i18n="broadcast_room_join.remember_guest_name"></label>
+                        <p id="remember-guest-name-hint" class="hint" data-i18n="broadcast_room_join.remember_guest_name_hint"></p>
+                    </div>
                 </div>
                 <div id="room-password-group" class="field-group" hidden>
                     <label for="room-password" aria-hidden="true" data-i18n="broadcast_room_join.room_password_label">Oda parolası</label>
@@ -61,7 +68,7 @@
             </div>
         </section>
 
-        <section class="card">
+        <section id="meeting-room-card" class="card">
             <div id="post-join-section" hidden>
             <div class="grid" style="margin-top: 16px;">
                 <div class="field-group">
@@ -69,8 +76,12 @@
                     <div id="room-summary-status" class="value-box"></div>
                 </div>
                 <div class="field-group">
-                    <label for="joined-display-name" aria-hidden="true" data-i18n="broadcast_room_join.joined_display_name_label">Görünen adınız</label>
-                    <input id="joined-display-name" name="joinedDisplayName" type="text" class="value-box" enterkeyhint="done" inputmode="text" autocomplete="name" autocapitalize="words" data-i18n-aria="broadcast_room_join.joined_display_name_label">
+                    <label for="joined-display-name" data-i18n="broadcast_room_join.joined_display_name_label">Görünen adınız</label>
+                    <input id="joined-display-name" name="joinedDisplayName" type="text" class="value-box" enterkeyhint="done" inputmode="text" autocomplete="name" autocapitalize="words">
+                    <div id="joined-remember-guest-name-group">
+                        <input id="joined-remember-guest-name" type="checkbox">
+                        <label for="joined-remember-guest-name" data-i18n="broadcast_room_join.remember_guest_name"></label>
+                    </div>
                     <button id="btn-update-display-name" type="button" class="secondary" style="margin-top: 8px;" data-i18n="broadcast_room_join.update_display_name" data-i18n-aria="broadcast_room_join.update_display_name">Adımı değiştir</button>
                 </div>
                 <div id="local-backup-recording-group" class="field-group" hidden>
@@ -79,18 +90,8 @@
                 </div>
             </div>
 
-            <div class="field-group" style="margin-top: 16px;">
-                <button id="btn-toggle-participants-panel" type="button" class="secondary" aria-expanded="false" aria-controls="participants-panel" data-i18n="broadcast_room_join.participants_panel_button">Katılımcılar</button>
-                <div id="participants-panel" hidden style="margin-top: 12px;">
-                    <label class="meeting-control-toggle" for="participant-presence-auto-announce" style="min-height:auto; text-align:left; margin-bottom: 12px;">
-                        <input id="participant-presence-auto-announce" type="checkbox" checked>
-                        <span data-i18n="broadcast_room_join.participant_presence_auto_announce">Katılımcıların odaya giriş ve çıkış bilgilerini otomatik duyur</span>
-                    </label>
-                    <label for="remote-media-list" data-i18n="broadcast_room_join.remote_participants_label">Diğer katılımcılar</label>
-                    <div id="remote-media-list" class="value-box"></div>
-                </div>
-            </div>
-            <div id="remote-audio-host" aria-hidden="true" style="display:none;"></div>
+            <div id="remote-audio-host" class="remote-audio-host" aria-hidden="true"></div>
+            <div id="live-caption-visual-banner" class="live-caption-visual-banner" data-caption-size="large" aria-hidden="true" hidden></div>
             <div id="remote-visual-stage" class="remote-visual-stage" aria-hidden="true" hidden></div>
 
             <div class="field-group" style="margin-top: 16px;">
@@ -138,6 +139,13 @@
                         </label>
                         <p class="hint" data-i18n="broadcast_room_join.low_bandwidth_mode_hint">Bağlantı zayıfsa konuk tarafında gelen/giden video kalitesini düşürerek donmayı azaltır.</p>
                     </div>
+                    <div class="field-group" style="margin-top: 16px;">
+                        <label class="meeting-control-toggle" for="mirror-participant-videos" style="min-height:auto; text-align:left;">
+                            <input id="mirror-participant-videos" type="checkbox" checked>
+                            <span data-i18n="broadcast_room_join.mirror_participant_videos">Katılımcı görüntülerini aynala</span>
+                        </label>
+                        <p class="hint" data-i18n="broadcast_room_join.mirror_participant_videos_hint">İşaretleri ve yönleri ayna görünümünde izlemek isterseniz açın. Bu ayar yalnızca sizin ekranınızı etkiler.</p>
+                    </div>
                     <div id="audio-channel-group" class="field-group" style="margin-top: 16px;" hidden>
                         <label for="audio-channel-select" data-i18n="broadcast_room_join.audio_channel_label">Ses kanalı</label>
                         <select id="audio-channel-select" class="value-box" data-i18n-aria="broadcast_room_join.audio_channel_label">
@@ -182,19 +190,35 @@
                         <p class="hint" data-i18n="broadcast_room_join.live_caption_preferred_language_hint">Konuşma bu dildeyse özgün metin, farklıysa mümkün olan çeviri gösterilir.</p>
                     </div>
                     <div id="live-caption-audio-mode-status" class="hint" hidden></div>
+                    <div class="field-group" style="margin-top: 12px;">
+                        <label for="live-caption-font-size" data-i18n="broadcast_room_join.live_caption_font_size_label">Altyazı yazı boyutu</label>
+                        <select id="live-caption-font-size" class="value-box" data-i18n-aria="broadcast_room_join.live_caption_font_size_label">
+                            <option value="small" data-i18n="broadcast_room_join.live_caption_font_size_small">Küçük</option>
+                            <option value="medium" data-i18n="broadcast_room_join.live_caption_font_size_medium">Orta</option>
+                            <option value="large" data-i18n="broadcast_room_join.live_caption_font_size_large" selected>Büyük</option>
+                            <option value="extra-large" data-i18n="broadcast_room_join.live_caption_font_size_extra_large">Çok büyük</option>
+                        </select>
+                    </div>
                     <label class="meeting-control-toggle" for="live-caption-auto-announce" style="min-height:auto; text-align:left; margin-top: 12px;">
                         <input id="live-caption-auto-announce" type="checkbox">
                         <span id="live-caption-auto-announce-label" data-i18n="broadcast_room_join.live_caption_auto_announce_caption">Yeni altyazıları otomatik seslendir</span>
                     </label>
+                    <p class="hint" data-i18n="broadcast_room_join.live_caption_visual_auto_hint">Görsel altyazı otomatik gösterilir. Ekran okuyucuyla otomatik seslendirme yalnızca yukarıdaki seçimi açarsanız çalışır.</p>
                     <div class="field-group" style="margin-top: 12px;">
                         <label for="live-caption-text" data-i18n="broadcast_room_join.live_caption_text_label">Canlı altyazı/çeviri metni</label>
                         <textarea id="live-caption-text" class="value-box" rows="6" readonly data-i18n-aria="broadcast_room_join.live_caption_text_label"></textarea>
                     </div>
                 </div>
             </div>
-            <div class="field-group" style="margin-top: 16px;">
-                <button id="btn-toggle-chat-panel" type="button" class="secondary" aria-expanded="false" aria-controls="chat-panel" data-i18n="broadcast_room_join.chat_panel_button">Sohbet</button>
-                <div id="chat-panel" hidden style="margin-top: 12px;">
+            </div>
+        </section>
+
+        <section class="meeting-controls-card" aria-label="Katılım kontrolleri" data-i18n-aria="broadcast_room_join.meeting_controls_label">
+            <div class="meeting-controls-dock">
+                <button id="microphone-enabled" type="button" class="meeting-control-button" data-control-icon="microphone" data-media-state="off" data-i18n="broadcast_room_join.microphone_turn_on">Mikrofonu aç (Ctrl+D)</button>
+                <button id="camera-enabled" type="button" class="meeting-control-button" data-control-icon="camera" data-media-state="off" data-i18n="broadcast_room_join.camera_start">Videomu başlat (Ctrl+E)</button>
+                <button id="btn-toggle-chat-panel" type="button" class="meeting-control-button" data-control-icon="chat" hidden aria-expanded="false" aria-controls="chat-panel" data-i18n="broadcast_room_join.chat_panel_button">Sohbet</button>
+                <div id="chat-panel" class="meeting-control-device-panel-body" hidden style="margin-top: 12px;">
                     <div class="field-group">
                         <label for="chat-message-list" data-i18n="broadcast_room_join.chat_list_label">Mesaj listesi</label>
                         <select id="chat-message-list" class="value-box" size="8" data-i18n-aria="broadcast_room_join.chat_list_label"></select>
@@ -213,7 +237,6 @@
                         <div class="toolbar" style="margin-top: 12px;">
                             <button id="btn-chat-send-all" type="button" data-i18n="broadcast_room_join.chat_send_selected">Seçili alıcıya gönder</button>
                             <button id="btn-chat-send-host" type="button" class="secondary" data-i18n="broadcast_room_join.chat_send_host">Yöneticiye Gönder</button>
-                            <button id="btn-hand-raise" type="button" class="secondary" data-i18n="broadcast_room_join.hand_raise_request">Söz İste</button>
                         </div>
                         <div class="toolbar" style="margin-top: 12px;">
                             <label class="meeting-control-toggle" for="chat-auto-announce" style="min-height:auto; text-align:left;">
@@ -223,16 +246,61 @@
                         </div>
                     </div>
                 </div>
-            </div>
-            </div>
-        </section>
-
-        <section class="meeting-controls-card" aria-label="Katılım kontrolleri" data-i18n-aria="broadcast_room_join.meeting_controls_label">
-            <div class="meeting-controls-dock">
-                <button id="microphone-enabled" type="button" class="meeting-control-button" aria-pressed="false" data-i18n="broadcast_room_join.microphone_toggle">Mikrofon (Ctrl+D)</button>
-                <button id="camera-enabled" type="button" class="meeting-control-button" aria-pressed="false" data-i18n="broadcast_room_join.camera_toggle">Video (Ctrl+E)</button>
+                <button id="btn-hand-raise" type="button" class="meeting-control-button" data-control-icon="hand" hidden data-i18n="broadcast_room_join.hand_raise_request">Söz İste</button>
+                <button id="btn-toggle-meeting-options" type="button" class="meeting-control-button" data-control-icon="settings" aria-expanded="false" data-i18n="broadcast_room_join.meeting_options_show" hidden>Toplantı seçeneklerini göster</button>
+                <button id="btn-toggle-participants-panel" type="button" class="meeting-control-button" data-control-icon="participants" aria-expanded="false" aria-controls="participants-panel" data-i18n="broadcast_room_join.participants_panel_button">Katılımcılar</button>
+                <div id="participants-panel" class="meeting-control-device-panel-body" hidden>
+                    <button id="participant-check-self-camera" type="button" data-i18n="broadcast_room.camera_check_self"></button>
+                    <label class="meeting-control-toggle" for="participant-presence-auto-announce" style="min-height:auto; text-align:left; margin-bottom: 12px;">
+                        <input id="participant-presence-auto-announce" type="checkbox" checked>
+                        <span data-i18n="broadcast_room_join.participant_presence_auto_announce">Katılımcıların odaya giriş ve çıkış bilgilerini otomatik duyur</span>
+                    </label>
+                    <label for="remote-media-list" data-i18n="broadcast_room_join.participants_panel_button">Katılımcılar</label>
+                    <div id="remote-media-list" class="value-box"></div>
+                </div>
+                    <button id="web-host-toggle" type="button" class="meeting-control-button" hidden aria-expanded="false" aria-controls="web-host-panel" data-i18n="admin_auth.meeting_controls"></button>
+                    <div id="web-host-panel" class="meeting-control-device-panel-body" hidden>
+                        <section id="temporary-recording-panel" hidden>
+                            <h3 data-i18n="admin_auth.recordings_title"></h3>
+                            <label><input id="temporary-recording-consent" type="checkbox"><span data-i18n="admin_auth.recording_consent"></span></label>
+                            <p data-i18n="admin_auth.recording_consent_meeting_hint"></p>
+                            <button id="temporary-recording-start" type="button" aria-keyshortcuts="Control+Alt+R" data-i18n="admin_auth.recording_start"></button>
+                            <button id="temporary-recording-pause" type="button" data-i18n="admin_auth.recording_pause"></button>
+                            <button id="temporary-recording-list" type="button" data-i18n="admin_auth.recording_refresh"></button>
+                            <button id="temporary-recording-link" type="button" data-i18n="admin_auth.recording_share"></button>
+                            <p id="temporary-recording-message" role="status"></p>
+                            <div id="meeting-recording-links" hidden>
+                                <p id="meeting-recording-link-hint" data-i18n="admin_auth.recording_share_hint"></p>
+                                <a id="meeting-recording-link" target="_blank" rel="noopener noreferrer" data-i18n="admin_auth.recording_share_mp4"></a>
+                                <button id="meeting-recording-copy-mp4" type="button" data-i18n="admin_auth.recording_copy_mp4"></button>
+                                <a id="meeting-recording-audio-link" target="_blank" rel="noopener noreferrer" data-i18n="admin_auth.recording_share_m4a"></a>
+                                <button id="meeting-recording-copy-m4a" type="button" data-i18n="admin_auth.recording_copy_m4a"></button>
+                            </div>
+                        </section>
+                        <label for="host-participant" data-i18n="admin_auth.meeting_participant"></label>
+                        <select id="host-participant"></select>
+                        <fieldset id="host-person-actions">
+                            <legend data-i18n="admin_auth.meeting_person_actions"></legend>
+                            <button id="host-check-camera" type="button" data-i18n="broadcast_room.camera_check_participant"></button>
+                            <button id="host-mute" type="button" data-host-person="mute" data-i18n="admin_auth.meeting_mute"></button>
+                            <button type="button" data-host-person="camera-off" data-i18n="admin_auth.meeting_camera_off"></button>
+                            <button id="host-spotlight" type="button" data-host-person="spotlight" data-i18n="admin_auth.meeting_spotlight"></button>
+                            <label for="host-volume" data-i18n="admin_auth.meeting_volume"></label>
+                            <input id="host-volume" type="range" min="0" max="200" step="5" value="100" aria-describedby="host-volume-hint">
+                            <output id="host-volume-value" for="host-volume">100%</output>
+                            <p id="host-volume-hint" data-i18n="admin_auth.meeting_volume_hint"></p>
+                            <button id="host-remove" type="button" data-i18n="admin_auth.meeting_remove"></button>
+                        </fieldset>
+                        <button type="button" data-host-all="mute" data-i18n="admin_auth.meeting_mute_all"></button>
+                        <button type="button" data-host-all="camera-off" data-i18n="admin_auth.meeting_camera_all"></button>
+                        <label for="host-permit-mic"><input id="host-permit-mic" type="checkbox" data-host-permission="allowGuestMicrophone"><span data-i18n="admin_auth.room_microphone"></span></label>
+                        <label for="host-permit-camera"><input id="host-permit-camera" type="checkbox" data-host-permission="allowGuestCamera"><span data-i18n="admin_auth.room_camera"></span></label>
+                        <label for="host-permit-share"><input id="host-permit-share" type="checkbox" data-host-permission="allowGuestScreenShare"><span data-i18n="admin_auth.room_share"></span></label>
+                        <button id="host-end" type="button" data-i18n="admin_auth.meeting_end"></button>
+                        <p id="host-message" role="status" aria-live="polite" aria-atomic="true"></p>
+                    </div>
                 <div id="join-device-panel-group" class="meeting-control-device-panel">
-                    <button id="btn-toggle-join-device-panel" type="button" class="meeting-control-button" aria-expanded="false" aria-controls="join-device-panel" data-i18n="broadcast_room_join.join_device_panel_button">Ses ve görüntü ayarları</button>
+                    <button id="btn-toggle-join-device-panel" type="button" class="meeting-control-button" data-control-icon="devices" aria-expanded="false" aria-controls="join-device-panel" data-i18n="broadcast_room_join.join_device_panel_button">Ses ve görüntü ayarları</button>
                     <div id="join-device-panel" class="meeting-control-device-panel-body" hidden>
                         <div class="grid">
                             <div class="field-group">
@@ -246,6 +314,9 @@
                             </div>
                             <fieldset class="field-group">
                                 <legend data-i18n="broadcast_room_join.microphone_processing_label">Mikrofon sinyal işleme</legend>
+                                <label for="microphone-music-mode" data-i18n="broadcast_room.microphone_music_mode"></label>
+                                <input id="microphone-music-mode" type="checkbox" aria-describedby="microphone-music-hint">
+                                <p id="microphone-music-hint" class="hint" data-i18n="broadcast_room.microphone_music_hint"></p>
                                 <p class="hint" data-i18n="broadcast_room_join.microphone_processing_hint">Varsayılan olarak EVD ek ses filtresi uygulamaz; mikrofonunuzun ve işletim sisteminizin hazırladığı ses korunur.</p>
                                 <label class="meeting-control-toggle">
                                     <input id="microphone-echo-cancellation" type="checkbox">
@@ -293,8 +364,8 @@
                     </div>
                 </div>
                 <button id="btn-join-room" type="submit" form="join-form" class="meeting-control-button" data-i18n="broadcast_room_join.join_button">Odaya Katıl</button>
-                <button id="btn-leave-room" type="button" class="meeting-control-button meeting-control-button-danger" data-i18n="broadcast_room_join.leave_button">Odadan Ayrıl</button>
-                <button id="btn-return-focused-share" type="button" class="meeting-control-button" hidden data-i18n="broadcast_room_join.focused_share_return">Paylaşım büyük görünümüne dön</button>
+                <button id="btn-leave-room" type="button" class="meeting-control-button meeting-control-button-danger" data-control-icon="leave" data-i18n="broadcast_room_join.leave_button">Odadan Ayrıl</button>
+                <button id="btn-return-focused-share" type="button" class="meeting-control-button" data-control-icon="expand" hidden data-i18n="broadcast_room_join.focused_share_return">Paylaşım büyük görünümüne dön</button>
             </div>
         </section>
     </main>
@@ -336,8 +407,16 @@
     </div>
 
     <div id="live-region" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+    <dialog id="host-confirm" aria-labelledby="host-confirm-title" aria-describedby="host-confirm-message">
+        <h2 id="host-confirm-title" data-i18n="admin_auth.meeting_confirm"></h2>
+        <p id="host-confirm-message"></p>
+        <button id="host-confirm-cancel" type="button" data-i18n="admin_auth.cancel"></button>
+        <button id="host-confirm-ok" type="button" data-i18n="admin_auth.meeting_continue"></button>
+    </dialog>
     <div id="chat-live-region" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
-    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
-    <script src="/yayinodasi/join.js?v=20260820a"></script>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.21.0/dist/livekit-client.umd.min.js"></script>
+    <script src="/yayinodasi/web-host.js?v=20261012-row-focus"></script>
+    <script src="/yayinodasi/waiting-room.js?v=20261012-recording-feedback"></script>
+    <script src="/yayinodasi/join.js?v=20261013-microphone-activation-r4"></script>
 </body>
 </html>

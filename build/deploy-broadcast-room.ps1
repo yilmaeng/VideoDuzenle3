@@ -7,6 +7,7 @@ param(
     [string]$IdentityFile = $env:EVD_DEPLOY_IDENTITY_FILE,
     [switch]$ForceFullUpload,
     [switch]$RestartOnly,
+    [switch]$InstallMediaTools,
     [switch]$SkipRestart
 )
 
@@ -106,8 +107,42 @@ if [ -f '__REMOTE_FILE_PATH__' ]; then sha256sum '__REMOTE_FILE_PATH__' | awk '{
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
 $fileMappings = @(
+    @{ Source = 'src\broadcast-room-web\backend\src\services\recording-media.js'; Remote = 'src/services/recording-media.js' },
+    @{ Source = 'src\broadcast-room-web\backend\deploy\storage\recording-retention.py'; Remote = 'deploy/storage/recording-retention.py' },
+    @{ Source = 'src\broadcast-room-web\backend\deploy\storage\update-api-read-timeout.py'; Remote = 'deploy/storage/update-api-read-timeout.py' },
+    @{ Source = 'src\broadcast-room-web\backend\src\services\participant-presence.js'; Remote = 'src/services/participant-presence.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\routes\system-admin-accounts.js'; Remote = 'src/routes/system-admin-accounts.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\routes\meeting-recording-access.js'; Remote = 'src/routes/meeting-recording-access.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\recordings.html'; Remote = 'public/recordings.html' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\recordings.js'; Remote = 'public/recordings.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\admin-recordings.js'; Remote = 'public/admin-recordings.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\admin-managers.js'; Remote = 'public/admin-managers.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\routes\admin-managers.js'; Remote = 'src/routes/admin-managers.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\web-host.js'; Remote = 'public/web-host.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\routes\admin-meeting.js'; Remote = 'src/routes/admin-meeting.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\routes\admin-recordings.js'; Remote = 'src/routes/admin-recordings.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\services\server-recordings.js'; Remote = 'src/services/server-recordings.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\admin-rooms.js'; Remote = 'public/admin-rooms.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\routes\admin-rooms.js'; Remote = 'src/routes/admin-rooms.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\admin.html'; Remote = 'public/admin.html' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\admin.js'; Remote = 'public/admin.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\admin.css'; Remote = 'public/admin.css' },
+    @{ Source = 'src\broadcast-room-web\backend\package-lock.json'; Remote = 'package-lock.json' },
+    @{ Source = 'src\broadcast-room-web\backend\src\routes\admin-auth.js'; Remote = 'src/routes/admin-auth.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\routes\desktop-room-account.js'; Remote = 'src/routes/desktop-room-account.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\services\admin-account-store.js'; Remote = 'src/services/admin-account-store.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\services\admin-mailer.js'; Remote = 'src/services/admin-mailer.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\icons\LICENSE.txt'; Remote = 'public/icons/LICENSE.txt' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\sounds\microphone-on.wav'; Remote = 'public/sounds/microphone-on.wav' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\sounds\microphone-off.wav'; Remote = 'public/sounds/microphone-off.wav' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\sounds\camera-on.mp3'; Remote = 'public/sounds/camera-on.mp3' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\sounds\camera-off.wav'; Remote = 'public/sounds/camera-off.wav' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\sounds\room-join.mp3'; Remote = 'public/sounds/room-join.mp3' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\sounds\room-leave.mp3'; Remote = 'public/sounds/room-leave.mp3' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\sounds\LICENSES.txt'; Remote = 'public/sounds/LICENSES.txt' },
     @{ Source = 'src\broadcast-room-web\frontend\public\join.html'; Remote = 'public/join.html' },
     @{ Source = 'src\broadcast-room-web\frontend\public\join.js'; Remote = 'public/join.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\waiting-room.js'; Remote = 'public/waiting-room.js' },
     @{ Source = 'src\broadcast-room-web\frontend\public\join.css'; Remote = 'public/join.css' },
     @{ Source = 'src\broadcast-room-web\frontend\public\camera-framing\blaze_face_short_range.tflite'; Remote = 'public/camera-framing/blaze_face_short_range.tflite' },
     @{ Source = 'src\broadcast-room-web\frontend\public\camera-framing\vision_bundle.mjs'; Remote = 'public/camera-framing/vision_bundle.mjs' },
@@ -121,6 +156,8 @@ $fileMappings = @(
     @{ Source = 'src\broadcast-room-web\backend\src\monitor-audio-hub.js'; Remote = 'src/monitor-audio-hub.js' },
     @{ Source = 'src\broadcast-room-web\backend\src\routes\broadcast-room.js'; Remote = 'src/routes/broadcast-room.js' },
     @{ Source = 'src\broadcast-room-web\backend\src\services\participant-avatar-store.js'; Remote = 'src/services/participant-avatar-store.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\services\room-authorization.js'; Remote = 'src/services/room-authorization.js' },
+    @{ Source = 'src\broadcast-room-web\backend\src\services\waiting-room.js'; Remote = 'src/services/waiting-room.js' },
     @{ Source = 'src\broadcast-room-web\backend\src\services\token-service.js'; Remote = 'src/services/token-service.js' },
     @{ Source = 'src\broadcast-room-web\backend\src\store\room-store.js'; Remote = 'src/store/room-store.js' },
     @{ Source = 'src\locales\tr.json'; Remote = 'locales/tr.json' },
@@ -195,35 +232,85 @@ if (-not $SkipRestart) {
 set -e
 APP_DIR='__REMOTE_APP_DIR__'
 TMP_DIR='__REMOTE_TMP_DIR__'
+# Verify media processing tools before stopping the running service.
+if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+  if [ '__INSTALL_MEDIA_TOOLS__' != 'yes' ]; then
+    echo 'FFmpeg/FFprobe missing. Re-run with -InstallMediaTools after approval.'
+    exit 1
+  fi
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg
+fi
+BACKUP_DIR="/var/backups/evd-yayinodasi/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+tar -C "$APP_DIR" -czf "$BACKUP_DIR/app.tar.gz" src public locales package.json package-lock.json .env data
+chmod 600 "$BACKUP_DIR/app.tar.gz"
+echo "Backup: $BACKUP_DIR/app.tar.gz"
+if [ '__INSTALL_MEDIA_TOOLS__' = 'yes' ]; then
+  NGINX_SITE=/etc/nginx/sites-enabled/evd.drenginyilmaz.net
+  NGINX_TARGET=$(readlink -f "$NGINX_SITE")
+  [ -f "$NGINX_TARGET" ] || { echo 'Nginx site config missing'; exit 1; }
+  cp -p "$NGINX_TARGET" "$BACKUP_DIR/nginx-site.conf"
+  TIMEOUT_HELPER="$TMP_DIR/deploy/storage/update-api-read-timeout.py"
+  [ -f "$TIMEOUT_HELPER" ] || TIMEOUT_HELPER="$APP_DIR/deploy/storage/update-api-read-timeout.py"
+  python3 "$TIMEOUT_HELPER" "$NGINX_SITE"
+  if ! nginx -t || ! systemctl reload nginx; then
+    cp -p "$BACKUP_DIR/nginx-site.conf" "$NGINX_TARGET"
+    nginx -t && systemctl reload nginx
+    exit 1
+  fi
+fi
+MANAGED_SERVICE=''
+if systemctl cat evd-yayinodasi.service >/dev/null 2>&1; then
+  SERVICE_DIR=$(systemctl show evd-yayinodasi.service -p WorkingDirectory --value)
+  [ "$SERVICE_DIR" = "$APP_DIR" ] || { echo 'Service directory mismatch'; exit 1; }
+  MANAGED_SERVICE=evd-yayinodasi.service
+  systemctl stop "$MANAGED_SERVICE"
+fi
+# Retire only orphaned processes belonging to this app, never other Node apps.
+for PID in $(pgrep -f '^(/usr/bin/)?node src/server\.js$' || true); do
+  [ "$(readlink /proc/$PID/cwd 2>/dev/null)" = "$APP_DIR" ] || continue
+  kill "$PID" 2>/dev/null || true
+  for WAIT in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 "$PID" 2>/dev/null || break
+    sleep 1
+  done
+  if kill -0 "$PID" 2>/dev/null && [ "$(readlink /proc/$PID/cwd 2>/dev/null)" = "$APP_DIR" ]; then
+    kill -9 "$PID"
+  fi
+done
 if [ -d "$TMP_DIR" ]; then
   cp -R "$TMP_DIR/." "$APP_DIR/"
 fi
 cd "$APP_DIR"
-npm list ws >/dev/null 2>&1 || npm install ws --omit=dev
-APP_PIDS=$(pgrep -f '^(/usr/bin/)?node src/server\.js$' || true)
-if [ -n "$APP_PIDS" ]; then
-  printf '%s\n' "$APP_PIDS" | xargs -r kill 2>/dev/null || true
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
-    REMAINING_PIDS=$(pgrep -f '^(/usr/bin/)?node src/server\.js$' || true)
-    if [ -z "$REMAINING_PIDS" ]; then
-      break
-    fi
-    sleep 1
-  done
+npm ci --omit=dev --ignore-scripts
+if [ -f "$APP_DIR/deploy/storage/recording-retention.py" ] && [ -d /usr/local/lib/evd ]; then
+  if [ -f /usr/local/lib/evd/recording-retention.py ]; then
+    cp /usr/local/lib/evd/recording-retention.py "$BACKUP_DIR/recording-retention.py"
+  fi
+  install -m 644 -o root -g root "$APP_DIR/deploy/storage/recording-retention.py" /usr/local/lib/evd/recording-retention.py
 fi
-REMAINING_PIDS=$(pgrep -f '^(/usr/bin/)?node src/server\.js$' || true)
-if [ -n "$REMAINING_PIDS" ]; then
-  printf '%s\n' "$REMAINING_PIDS" | xargs -r kill -9 2>/dev/null || true
-  sleep 1
+if [ -n "$MANAGED_SERVICE" ]; then
+  SERVICE_USER=$(systemctl show "$MANAGED_SERVICE" -p User --value)
+  SERVICE_GROUP=$(systemctl show "$MANAGED_SERVICE" -p Group --value)
+  if [ -n "$SERVICE_USER" ]; then
+    chown -R "$SERVICE_USER:${SERVICE_GROUP:-$SERVICE_USER}" "$APP_DIR/data"
+  fi
+  systemctl reset-failed "$MANAGED_SERVICE"
+  systemctl start "$MANAGED_SERVICE"
+else
+  set -a
+  . ./.env
+  set +a
+  nohup /usr/bin/node src/server.js > server.log 2>&1 &
 fi
-set -a
-. ./.env
-set +a
-nohup /usr/bin/node src/server.js > server.log 2>&1 &
 sleep 4
 curl -fsS http://127.0.0.1:4100/api/health
+if [ -n "$MANAGED_SERVICE" ]; then systemctl is-active "$MANAGED_SERVICE"; fi
 '@
     $restartScript = $restartScriptTemplate.Replace('__REMOTE_APP_DIR__', $RemoteAppDir).Replace('__REMOTE_TMP_DIR__', $RemoteTmpDir)
+    $restartScript = $restartScript.Replace('__INSTALL_MEDIA_TOOLS__', $(if ($InstallMediaTools) { 'yes' } else { 'no' }))
     Invoke-SshCommand $restartScript
 } else {
     Write-Step 'SkipRestart seçildi, sunucuda restart yapılmadı'

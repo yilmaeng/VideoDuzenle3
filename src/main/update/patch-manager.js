@@ -78,8 +78,10 @@ async function fetchBuffer(url, { maxBytes = MAX_PACKAGE_BYTES, onProgress = nul
 }
 
 class PatchManager {
-    constructor({ app, publicKeyPath = path.join(__dirname, 'patch-public-key.pem'), publicKey = '' } = {}) {
+    constructor({ app, publicKeyPath = path.join(__dirname, 'patch-public-key.pem'), publicKey = '', enableDevelopmentPatches = process.env.EVD_ENABLE_DEV_PATCHES === '1' } = {}) {
         this.app = app;
+        this.developmentMode = app?.isPackaged === false;
+        this.patchesEnabled = !this.developmentMode || enableDevelopmentPatches;
         this.publicKeyPath = publicKeyPath;
         this.publicKey = publicKey;
         this.rootPath = '';
@@ -94,8 +96,11 @@ class PatchManager {
     }
 
     async initialize() {
-        this.rootPath = path.join(this.app.getPath('userData'), 'updates', 'patches');
+        // Source runs must not overlay newer working-tree modules with a release
+        // patch. Explicit development patch tests also use a separate state root.
+        this.rootPath = path.join(this.app.getPath('userData'), 'updates', this.developmentMode ? 'development-patches' : 'patches');
         this.statePath = path.join(this.rootPath, 'state.json');
+        if (!this.patchesEnabled) return this.getStatus();
         fs.mkdirSync(this.rootPath, { recursive: true });
         this.state = readJson(this.statePath, this.state) || this.state;
 
@@ -156,6 +161,7 @@ class PatchManager {
     }
 
     async checkForUpdate(manifestUrl = DEFAULT_MANIFEST_URL) {
+        if (!this.patchesEnabled) return { available: false, activeRevision: 0, pendingRevision: 0 };
         const buffer = await fetchBuffer(manifestUrl, { maxBytes: 2 * 1024 * 1024 });
         const manifest = JSON.parse(buffer.toString('utf8'));
         this.verifyManifest(manifest);
@@ -240,6 +246,7 @@ class PatchManager {
     }
 
     async loadActivePatch() {
+        if (!this.patchesEnabled) return;
         this.activeManifest = null;
         this.activeDirectory = '';
         const active = this.state.active;
@@ -268,6 +275,7 @@ class PatchManager {
     }
 
     applyMainPatch(context = {}) {
+        if (!this.patchesEnabled) return false;
         const entrypoint = this.activeManifest?.mainEntrypoint;
         if (!entrypoint) return false;
         const modulePath = path.join(this.activeDirectory, ...normalizePatchPath(entrypoint).split('/'));
@@ -285,6 +293,7 @@ class PatchManager {
     }
 
     async injectRendererPatch(webContents) {
+        if (!this.patchesEnabled) return false;
         const entrypoint = this.activeManifest?.rendererEntrypoint;
         if (!entrypoint || !webContents || webContents.isDestroyed()) return false;
         this.rendererInjectionPending += 1;
@@ -309,6 +318,7 @@ class PatchManager {
     }
 
     getLocaleOverrides() {
+        if (!this.patchesEnabled) return {};
         const result = {};
         for (const [locale, relativePath] of Object.entries(this.activeManifest?.localeFiles || {})) {
             const filePath = path.join(this.activeDirectory, ...normalizePatchPath(relativePath).split('/'));
@@ -379,8 +389,15 @@ class PatchManager {
         ipcMain.handle('patch-update-mark-healthy', () => ({ success: true, ...this.markHealthy() }));
         ipcMain.handle('patch-update-rollback', () => this.rollback());
         ipcMain.handle('patch-update-relaunch', () => {
-            this.app.relaunch();
-            this.app.exit(0);
+            if (this.relaunchScheduled) return { success: true };
+            this.relaunchScheduled = true;
+            // Finish the IPC reply before closing its renderer. Normal quit runs
+            // window/before-quit cleanup; exit() would terminate immediately.
+            setImmediate(() => {
+                this.relaunchScheduled = false;
+                this.app.relaunch();
+                this.app.quit();
+            });
             return { success: true };
         });
     }

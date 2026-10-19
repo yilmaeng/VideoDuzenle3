@@ -61,6 +61,14 @@ const Selection = {
         }
     },
 
+    setSelectionSilent(start, end) {
+        this.start = start;
+        this.end = end;
+        this.isSelecting = false;
+        this.updateUI();
+        if (this.onSelectionChanged) this.onSelectionChanged(this.getSelection());
+    },
+
     /**
      * Seçimi temizle
      * @param {boolean} silent - true ise duyuru yapma (dosya açarken kullanılır)
@@ -311,6 +319,7 @@ const Selection = {
      * UI güncelle
      */
     updateUI() {
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         const statusEl = document.getElementById('selection-status');
         const selectionVisual = document.getElementById('timeline-selection');
 

@@ -323,10 +323,10 @@
         scrubLeft5m: 'Mod+Alt+ArrowLeft',
         seekF5: 'PageDown',
         seekB5: 'PageUp',
-        goToStart: ['Mod+ArrowUp', 'Ctrl+Home'],
-        goToEnd: ['Mod+ArrowDown', 'Ctrl+End'],
+        goToStart: 'Mod+Home',
+        goToEnd: 'Mod+End',
         goToMiddle: ['Mod+Shift+Delete', 'Ctrl+Shift+Backspace'],
-        goToBeforeEnd: 'Shift+Delete',
+        goToBeforeEnd: 'Mod+Backspace',
         goToTime: 'Mod+G',
         markerNext: 'Alt+ArrowRight',
         markerPrev: 'Alt+ArrowLeft',
@@ -357,7 +357,7 @@
         moveDescriptionLaterFine: 'H',
         moveDescriptionEarlierSecond: 'Ctrl+J',
         moveDescriptionLaterSecond: 'Ctrl+L',
-        deleteMarker: null,
+        deleteMarker: 'Shift+M',
         clearAllMarkers: null,
         announceCurrentTime: 'Mod+B',
         announcePositionAndRemaining: 'B',
@@ -534,6 +534,18 @@
         window.dispatchEvent(new CustomEvent('evd-description-markers-changed'));
     }
 
+    function clearAllMarkers() {
+        if (!markers().length) {
+            editor().setStatus('description_subtitle_editor.no_markers_to_clear');
+            return;
+        }
+        markers().splice(0);
+        editor().setDirty(true);
+        editor().setStatus('description_subtitle_editor.markers_cleared');
+        scheduleDraw(true);
+        window.dispatchEvent(new CustomEvent('evd-description-markers-changed'));
+    }
+
     function goToMarker(direction) {
         const current = Number(el.video.currentTime) || 0;
         const list = markers();
@@ -687,13 +699,8 @@
             window.dispatchEvent(new CustomEvent('evd-description-create-event-requested', { detail: { type: 'note' } }));
         }
         else if (shortcutMatches('deleteMarker', event)) removeCurrentMarker();
-        else if (shortcutMatches('clearAllMarkers', event)) {
-            markers().splice(0);
-            editor().setDirty(true);
-            editor().setStatus('description_subtitle_editor.markers_cleared');
-            scheduleDraw(true);
-            window.dispatchEvent(new CustomEvent('evd-description-markers-changed'));
-        } else handled = false;
+        else if (shortcutMatches('clearAllMarkers', event)) clearAllMarkers();
+        else handled = false;
 
         if (handled) {
             // The surface is announced on focus; suppress its name during repeated editing keys.
@@ -719,6 +726,8 @@
             timeline.navigationStep = Math.max(0.01,
                 Number(editor().state.preferences?.navigationStep) || timeline.navigationStep);
             timeline.sourcePath = event.detail?.source?.path || '';
+            [el.gotoButton, el.gotoStart, el.gotoEnd, el.gotoBeforeEnd, el.deleteMarker, el.clearMarkers]
+                .forEach(control => { control.disabled = !timeline.sourcePath; });
             setPlaybackRate(1, { announce: false });
             timeline.waveform = null;
             timeline.scenes = Array.isArray(editor().state.project?.analysis?.sceneTimes)
@@ -762,6 +771,27 @@
         el.zoomIn.addEventListener('click', () => changeZoom(Math.min(32, timeline.zoom * 2)));
         el.zoomOut.addEventListener('click', () => changeZoom(Math.max(1, timeline.zoom / 2)));
         el.analyzeScenes.addEventListener('click', analyzeScenes);
+        el.gotoButton.addEventListener('click', showGotoDialog);
+        el.gotoStart.addEventListener('click', () => {
+            seekTo(0, true);
+            el.visual.focus();
+        });
+        el.gotoEnd.addEventListener('click', () => {
+            seekTo(duration(), true);
+            el.visual.focus();
+        });
+        el.gotoBeforeEnd.addEventListener('click', () => {
+            seekTo(Math.max(0, duration() - 30), true);
+            el.visual.focus();
+        });
+        el.deleteMarker.addEventListener('click', () => {
+            removeCurrentMarker();
+            el.visual.focus();
+        });
+        el.clearMarkers.addEventListener('click', () => {
+            clearAllMarkers();
+            el.visual.focus();
+        });
         el.gotoForm.addEventListener('submit', event => {
             event.preventDefault();
             const target = parseTimecode(el.gotoInput.value);
@@ -804,6 +834,12 @@
             zoomOut: document.getElementById('zoom-out'),
             analyzeScenes: document.getElementById('analyze-scenes'),
             cancel: document.getElementById('cancel-analysis'),
+            gotoButton: document.getElementById('goto-time'),
+            gotoStart: document.getElementById('goto-start'),
+            gotoEnd: document.getElementById('goto-end'),
+            gotoBeforeEnd: document.getElementById('goto-before-end'),
+            deleteMarker: document.getElementById('delete-current-marker'),
+            clearMarkers: document.getElementById('clear-markers'),
             progress: document.getElementById('analysis-progress'),
             summary: document.getElementById('waveform-summary'),
             window: document.getElementById('timeline-window'),
@@ -812,6 +848,8 @@
             gotoInput: document.getElementById('goto-time-input'),
             gotoCancel: document.getElementById('goto-time-cancel')
         });
+        [el.gotoButton, el.gotoStart, el.gotoEnd, el.gotoBeforeEnd, el.deleteMarker, el.clearMarkers]
+            .forEach(control => { control.disabled = !timeline.sourcePath; });
         bind();
         setAnalysisActive('');
         scheduleDraw(true);
@@ -831,8 +869,6 @@
     };
     document.addEventListener('DOMContentLoaded', init);
 })();
-
-
 
 
 

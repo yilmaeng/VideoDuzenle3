@@ -207,17 +207,7 @@ function calculateIoU(boxA, boxB) {
     return interArea / (boxAArea + boxBArea - interArea);
 }
 
-// Gemini entegrasyonu
-const geminiHandler = require('./gemini-handler');
-// Worker referansları kaldırıldı
-
 async function analyzeScene(videoPath, startTime, duration, customLabels) {
-    // 1. Check API Key
-    const apiKey = geminiHandler.getApiKey();
-    if (!apiKey) {
-        throw new Error(i18n.t('runtime.object_analysis.gemini_key_missing') || "Gemini API key is required for AI analysis.");
-    }
-
     // 2. Extract Keyframes (e.g. 3 frames: start, middle, end)
     const frames = [];
     const timestamps = [startTime, startTime + (duration / 2), startTime + duration - 0.1];
@@ -251,65 +241,18 @@ async function analyzeScene(videoPath, startTime, duration, customLabels) {
         // Tutarlılık için sıcaklık 0.0, bounding box koordinatları iste
         const prompt = buildObjectAnalysisPrompt(getCurrentAiLocale());
 
-        // Use vision request
-        // geminiHandler fonksiyonları export edilmeli veya ipc üzerinden çağrılmalı. 
-        // gemini-handler module.exports içinde 'saveApiKey', 'getApiKey' var ama 'sendGeminiRequest' yok (internal).
-        // Ancak setupGeminiHandlers içinde ipcMain.handle var.
-        // Biz burada internal fonksiyon yazmalıyız veya gemini-handler'ı açmalıyız. 
-        // gemini-handler.js'ye bakarsak sendGeminiRequest internal.
-        // Çözüm: gemini-handler.js'den sendGeminiRequest'i export etmeye gerek yok, 
-        // buraya kopyalayabiliriz veya gemini-handler'ı güncelleyebiliriz.
-        // En temizi: gemini-handler dosyasını güncellemek ama şu an buradayız.
-        // IPC üzerinden kendi kendimize çağıramayız (Main->Main IPC yoktur).
-        // En iyisi: gemini anahtarını aldık, basit bir https request wrapper yazalım (zaten detection-worker'da denedik).
-        // VEYA: detection-worker.js yerine 'gemini-handler.js' exportlarını kullanabiliriz.
-
-        // Hızlı çözüm için HTTP isteğini burada yapıyoruz (Gemini Handler'dan kopyalama mantığı ile)
-        // Ancak kod tekrarından kaçınmak için gemini-handler.js'deki sendGeminiRequestBatch benzeri bir mantık kuralım.
-
-        // Basit request (Vision)
-        const contents = [{
-            role: 'user',
-            parts: [
-                ...frameBase64s.map(b64 => ({ inline_data: { mime_type: 'image/jpeg', data: b64 } })),
-                { text: prompt }
-            ]
-        }];
-
-        // URL construct
-        const model = geminiHandler.getAiModel ? geminiHandler.getAiModel() : 'gemini-2.5-flash';
-        const https = require('https');
-
-        const responseText = await new Promise((resolve, reject) => {
-            const reqData = JSON.stringify({
-                contents,
-                systemInstruction: {
-                    parts: [{
-                        text: i18n.t('runtime.dialogs.ai_system_instruction_json', { lang: getCurrentAiLanguageName() })
-                            || `Respond only in ${getCurrentAiLanguageName()}. If JSON output is requested, keep all JSON keys and schema exactly as requested while writing any free text values in ${getCurrentAiLanguageName()}.`
-                    }]
-                },
-                generationConfig: { temperature: 0.0, response_mime_type: "application/json" } // Tutarlılık için 0.0
-            });
-
-            const req = https.request(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            }, res => {
-                let data = '';
-                res.on('data', c => data += c);
-                res.on('end', () => resolve(data));
-            });
-
-            req.on('error', reject);
-            req.write(reqData);
-            req.end();
-        });
-
-        const jsonResp = JSON.parse(responseText);
-        if (jsonResp.error) throw new Error(jsonResp.error.message);
-
-        const text = jsonResp.candidates[0].content.parts[0].text;
+        const { getService, providers } = require('./ai-services');
+        let result;
+        try {
+            result = await getService().request({
+                imageBase64: frameBase64s, prompt,
+                systemInstruction: i18n.t('runtime.dialogs.ai_system_instruction_json', { lang: getCurrentAiLanguageName() })
+            }, { notify: provider => {
+                if (mainWindowRef && !mainWindowRef.isDestroyed()) mainWindowRef.webContents.send('ai-services-notice',
+                    i18n.t('ai_services.fallback_notice', { provider: providers[provider].name }));
+            } });
+        } catch (error) { throw new Error(i18n.t(`ai_services.errors.${error.code || 'request'}`)); }
+        const text = result.text;
         // Clean markdown code blocks if any
         const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
         const objects = JSON.parse(cleanText);

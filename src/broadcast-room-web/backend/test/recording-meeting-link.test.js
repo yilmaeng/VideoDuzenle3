@@ -1,0 +1,72 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const express = require('express');
+const { AdminAccountStore } = require('../src/services/admin-account-store');
+const { RoomStore } = require('../src/store/room-store');
+const { ServerRecordings } = require('../src/services/server-recordings');
+const { createAdminAuthRouter } = require('../src/routes/admin-auth');
+
+test('meeting link enforces live account permissions and existing meeting scope', async t => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'evd-meeting-link-'));
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const accounts = new AdminAccountStore(path.join(dir, 'accounts.json'));
+    const users = ['owner', 'manager', 'other'].map(name => accounts.verify({ ...accounts.request(`${name}@example.com`, name), ip: name, remember: true }));
+    const rooms = new RoomStore({ persistentRoomsFilePath: path.join(dir, 'rooms.json') });
+    const created = rooms.createRoom({ title: 'Meeting', ownerKey: 'owner-secret', persistentRoom: true, inviteBaseUrl: 'https://example.com' });
+    const room = rooms.getRoom(created.roomId);
+    accounts.bindRoom(users[0].user.id, room);
+    const config = { dataDir: dir, appBaseUrl: 'https://example.com', localeDir: path.resolve(__dirname, '../../../locales') };
+    const recordings = new ServerRecordings({ config, roomStore: rooms, client: {}, roomClient: {} });
+    recordings.meetingId = () => { throw new Error('Must not create a meeting ID'); };
+    const app = express();
+    app.use('/api/admin-auth', createAdminAuthRouter({ config, store: accounts, roomStore: rooms, recordings, mailer: { ready: false } }));
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise(resolve => server.once('listening', resolve));
+    t.after(() => { server.closeAllConnections(); server.close(); });
+    const call = async (who = 0, body = { roomId: room.roomId }, origin = config.appBaseUrl) => {
+        const response = await fetch(`http://127.0.0.1:${server.address().port}/api/admin-auth/recordings/meeting-link`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin,
+                ...(who === null ? {} : { Cookie: `__Host-evd-admin=${users[who].session}` }) }, body: JSON.stringify(body)
+        });
+        return { status: response.status, value: await response.json() };
+    };
+    assert.equal((await call(null)).status, 401);
+    assert.equal((await call(0, undefined, 'https://evil.example')).status, 403);
+    assert.equal((await call(2)).status, 404);
+    assert.equal((await call()).value.error, 'recording_not_ready');
+    assert.equal(room.recordingMeetingId, undefined);
+    assert.equal(recordings.state.downloadGrants.length, 0);
+    room.recordingMeetingId = 'current-meeting';
+    recordings.state.recordings.push({ id: 'current', roomId: room.roomId, meetingId: 'current-meeting' }, { id: 'old', roomId: room.roomId, meetingId: 'old-meeting' });
+    const owner = await call(0, { roomId: room.roomId, meetingId: 'old-meeting', issuedTo: 'forged' });
+    assert.equal(owner.status, 200);
+    const url = new URL(owner.value.link.url), token = url.hash.slice(1);
+    assert.equal(url.search, '');
+    assert.equal(recordings.shared(token).grant.issuedTo, users[0].user.id);
+    assert.deepEqual(recordings.shared(token).rows.map(row => row.id), ['current']);
+    assert.ok(accounts.state.audit.some(row => row.action === 'recording_link_created' && row.target === owner.value.link.id));
+    assert.equal(fs.readFileSync(recordings.file, 'utf8').includes(token), false);
+    const grant = accounts.inviteManager(users[0].user.id, room, 'manager@example.com', true);
+    assert.equal((await call(1)).status, 404);
+    accounts.acceptManager(users[1].user.id, grant.id, room);
+    assert.equal((await call(1)).status, 200);
+    assert.equal(recordings.state.downloadGrants.at(-1).issuedTo, users[1].user.id);
+    grant.recordings = false;
+    assert.equal((await call(1)).status, 404);
+    grant.recordings = true;
+    accounts.revokeManager(users[0].user.id, room, grant.id);
+    const count = recordings.state.downloadGrants.length;
+    assert.equal((await call(1)).status, 404);
+    assert.equal((await call(0, { roomId: 'missing' })).status, 404);
+    assert.equal(recordings.state.downloadGrants.length, count);
+    recordings.state.downloadGrants.find(row => row.id === owner.value.link.id).revoked = true;
+    assert.throws(() => recordings.shared(token), /recording_link_invalid/);
+    room.recordingMeetingId = 'next-meeting';
+    assert.equal((await call()).status, 200);
+    assert.equal(recordings.state.downloadGrants.at(-1).meetingId, 'next-meeting');
+    accounts.logout(users[0].session);
+    assert.equal((await call()).status, 401);
+});

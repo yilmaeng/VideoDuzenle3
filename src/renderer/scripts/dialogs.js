@@ -3736,7 +3736,7 @@ const Dialogs = {
             let deletedCount = 0;
             let skippedCount = 0;
 
-            ranges.forEach(r => {
+            Timeline.transaction('silences', null, () => ranges.forEach(r => {
                 // Aralığı daralt
                 let safeStart = r.start + halfPadding;
                 let safeEnd = r.end - halfPadding;
@@ -3754,7 +3754,7 @@ const Dialogs = {
                     Timeline.deleteRange(tStart, tEnd);
                     deletedCount++;
                 }
-            });
+            }));
 
             this.detectedSilences = [];
             this.updateSilenceList();
@@ -4001,6 +4001,7 @@ const Dialogs = {
      */
     setupGeminiApiKeyEventListeners() {
         document.getElementById('gemini-api-key-confirm')?.addEventListener('click', async (e) => {
+            e.preventDefault();
             const input = document.getElementById('gemini-api-key-input');
             const modelSelect = document.getElementById('gemini-model-select');
             const apiKey = input.value.trim();
@@ -4038,7 +4039,8 @@ const Dialogs = {
      * OpenAI API anahtarı olay dinleyicilerini kur
      */
     setupOpenAiApiKeyEventListeners() {
-        document.getElementById('openai-api-key-confirm')?.addEventListener('click', async () => {
+        document.getElementById('openai-api-key-confirm')?.addEventListener('click', async (event) => {
+            event.preventDefault();
             const input = document.getElementById('openai-api-key-input');
             const apiKey = input.value.trim();
 
@@ -4047,9 +4049,10 @@ const Dialogs = {
                 return;
             }
 
-            const result = await window.api.saveOpenAiApiKey({ apiKey });
+            const model = document.getElementById('openai-model-select')?.value;
+            const result = await window.api.saveOpenAiApiKey({ apiKey, model });
             if (result.success) {
-                Accessibility.announce(this.t('runtime.dialogs.openai_api_key_saved', 'OpenAI API anahtarı çeviri için kaydedildi.'));
+                Accessibility.announce(window.i18nHelper.t('ai_models.saved'));
                 this.openAiApiKeyDialog.close();
             } else {
                 Accessibility.alert(this.t('runtime.dialogs.openai_api_key_save_failed', 'OpenAI API anahtarı kaydedilirken bir hata oluştu: {error}', {
@@ -5568,7 +5571,6 @@ const Dialogs = {
     async showGeminiApiKeyDialog() {
         const input = document.getElementById('gemini-api-key-input');
         const showCheckbox = document.getElementById('gemini-api-key-show');
-        const modelSelect = document.getElementById('gemini-model-select');
         const apiData = await window.api.getGeminiApiData();
 
         // Diyaloğu her açışta gizli modda başla
@@ -5583,9 +5585,7 @@ const Dialogs = {
             Accessibility.announce(this.t('runtime.dialogs.api_key_dialog_opened_empty', 'API key dialog opened. Please paste your key.'));
         }
 
-        if (modelSelect && apiData.model) {
-            modelSelect.value = apiData.model;
-        }
+        window.AiModelPicker.prepare('gemini', apiData);
 
         this.geminiApiKeyDialog.showModal();
 
@@ -5603,6 +5603,7 @@ const Dialogs = {
         const input = document.getElementById('openai-api-key-input');
         const showCheckbox = document.getElementById('openai-api-key-show');
         const apiData = await window.api.getOpenAiApiData();
+        window.AiModelPicker.prepare('openai', apiData);
 
         input.type = 'password';
         if (showCheckbox) showCheckbox.checked = false;
@@ -7109,14 +7110,6 @@ const Dialogs = {
         feedbackBox.innerHTML = `<p>${this.t('runtime.dialogs.ai_overlay_review_loading', 'AI is analyzing the visual placement, please wait...')}</p>`;
         Accessibility.announce(this.t('runtime.dialogs.ai_overlay_review_announce', 'AI is analyzing the visual placement.'));
 
-        // API Key Check
-        const apiData = await window.api.getGeminiApiData();
-        if (!apiData.apiKey) {
-            feedbackBox.innerHTML = `<p style="color:red">${this.t('runtime.dialogs.api_key_missing_short', 'API key is missing.')}</p>`;
-            Accessibility.alert(this.t('runtime.dialogs.gemini_key_required', 'You must enter the Gemini API key in settings first.'));
-            return;
-        }
-
         try {
             // Get current frame
             const time = VideoPlayer.getCurrentTime();
@@ -7198,9 +7191,7 @@ const Dialogs = {
                 extraInfo
             });
 
-            const response = await window.api.geminiVisionRequest({
-                apiKey: apiData.apiKey,
-                model: apiData.model || 'gemini-2.5-flash',
+            const response = await window.AiServices.request({
                 imageBase64: imagesToSend,
                 prompt: prompt,
                 systemInstruction: this.getAiSystemInstruction('json')
@@ -7276,14 +7267,6 @@ const Dialogs = {
             Accessibility.announce(this.t('runtime.dialogs.ai_searching_areas_announce', 'AI is searching for suitable empty areas in the video.'));
         }, 250);
 
-        // Get API Key from Main Process (Source of Truth)
-        const apiData = await window.api.getGeminiApiData();
-        if (!apiData || !apiData.apiKey) {
-            feedbackBox.innerHTML = `<p style="color:red">${this.t('runtime.dialogs.api_key_missing_short', 'API key is missing.')}</p>`;
-            Accessibility.alert(this.t('runtime.dialogs.gemini_key_required', 'You must enter the Gemini API key in settings first.'));
-            return;
-        }
-
         try {
             // Get current frame directly from video element (Faster & Reliable)
             const videoEl = VideoPlayer.videoElement;
@@ -7335,11 +7318,7 @@ const Dialogs = {
                 overlayBase64
             });
 
-            console.log('Sending AI Suggestion Request:', { model: apiData.model, promptLength: prompt.length, imagesCount: imagesToSend.length });
-
-            const response = await window.api.geminiVisionRequest({
-                apiKey: apiData.apiKey,
-                model: apiData.model || 'gemini-2.5-flash',
+            const response = await window.AiServices.request({
                 imageBase64: imagesToSend,
                 prompt: prompt,
                 systemInstruction: this.getAiSystemInstruction('json')
@@ -8239,15 +8218,6 @@ const Dialogs = {
                     styleAiFeedback.value = this.t('dialog.subtitle_style.ai_review_loading', 'Yapay zeka altyazı ayarlarını inceliyor...');
                 }
                 try {
-                    const apiData = await window.api.getGeminiApiData();
-                    if (!apiData?.apiKey) {
-                        if (styleAiFeedback) {
-                            styleAiFeedback.value = this.t('dialog.subtitle_style.ai_review_missing_key', 'Gemini API anahtarı ayarlı değil.');
-                            styleAiFeedback.focus();
-                        }
-                        Accessibility.alert(this.t('dialog.subtitle_style.ai_review_missing_key', 'Gemini API anahtarı ayarlı değil.'));
-                        return;
-                    }
                     const currentStyleOptions = getSubtitleStyleOptions();
                     const layoutModeLabel = currentStyleOptions.layoutMode === 'classic'
                         ? this.t('dialog.subtitle_style.layout_mode_classic', 'Klasik ve Kararlı (1.0.3 benzeri)')
@@ -8296,9 +8266,7 @@ const Dialogs = {
                     for (let i = 0; i < requestVariants.length; i++) {
                         const variant = requestVariants[i];
                         imageBase64 = variant.imageBase64;
-                        response = await window.api.geminiVisionRequest({
-                            apiKey: apiData.apiKey,
-                            model: apiData.model,
+                        response = await window.AiServices.request({
                             imageBase64,
                             prompt: variant.prompt
                         });
@@ -10705,7 +10673,8 @@ const Dialogs = {
         }
 
         // UI'ı sıfırla
-        document.querySelector('input[name="vl-mode"][value="sign-language"]').checked = true;
+        document.getElementById('vl-mode').value = 'sign-language';
+        this.updateVideoLayerModeDescription('sign-language');
         document.getElementById('vl-position-preset').value = 'bottom-right';
         document.getElementById('vl-size-percent').value = 12.5;
         document.getElementById('vl-size-percent-value').textContent = '%12.5';
@@ -10725,6 +10694,7 @@ const Dialogs = {
         // Bu sayede konum hesaplanırken doğru overlay boyutu kullanılır
         this.updateVideoLayerSize(12.5);
         this.applyVideoLayerPositionPreset('bottom-right');
+        this.updateVideoLayerLayoutControls();
 
         // Adımı güncelle
         this.updateVideoLayerWizardStep(1);
@@ -10736,7 +10706,7 @@ const Dialogs = {
         Accessibility.announce(this.t('runtime.video_layer.wizard_opened', 'Video Layer Wizard opened. Step 1: Select a layout mode.'));
 
         // İlk seçeneğe odaklan
-        document.querySelector('input[name="vl-mode"]:checked')?.focus();
+        document.getElementById('vl-mode')?.focus();
     },
 
     /**
@@ -10798,7 +10768,7 @@ const Dialogs = {
             let focusElement = null;
             switch (step) {
                 case 1:
-                    focusElement = document.querySelector('input[name="vl-mode"]:checked');
+                    focusElement = document.getElementById('vl-mode');
                     break;
                 case 2:
                     focusElement = document.getElementById('vl-position-preset');
@@ -10827,11 +10797,10 @@ const Dialogs = {
         const dialog = document.getElementById('video-layer-wizard-dialog');
 
         // Mod seçimi değiştiğinde
-        dialog.querySelectorAll('input[name="vl-mode"]').forEach(radio => {
-            radio.addEventListener('change', () => {
-                this.videoLayerState.mode = radio.value;
-                this.applyVideoLayerModePreset(radio.value);
-            });
+        document.getElementById('vl-mode').addEventListener('change', (event) => {
+            this.videoLayerState.mode = event.target.value;
+            this.applyVideoLayerModePreset(event.target.value);
+            this.updateVideoLayerModeDescription(event.target.value);
         });
 
         // Konum preset değiştiğinde
@@ -11057,6 +11026,18 @@ const Dialogs = {
     /**
      * Mod preset'ini uygula
      */
+    updateVideoLayerModeDescription(mode) {
+        const keys = {
+            'sign-language': 'mode_sign_language_desc',
+            'split-screen': 'mode_split_screen_desc',
+            'camera-corner': 'mode_camera_corner_desc',
+            'custom': 'mode_custom_desc'
+        };
+        // Explanations remain readable without interrupting native option announcements.
+        document.getElementById('vl-mode-description').textContent =
+            window.i18nHelper.t(`dialog.video_layer_wizard.${keys[mode]}`);
+    },
+
     applyVideoLayerModePreset(mode) {
         const { width: mainW, height: mainH } = this.videoLayerState.mainResolution;
 
@@ -11069,7 +11050,6 @@ const Dialogs = {
                 document.getElementById('vl-size-percent').value = 12.5;
                 document.getElementById('vl-size-percent-value').textContent = '%12.5';
                 document.getElementById('vl-layer-mute').value = 'mute';
-                Accessibility.announce(this.t('runtime.video_layer.mode_sign_language', 'Sign language mode selected. Bottom right, twelve and a half percent, audio muted.'));
                 break;
 
             case 'split-screen':
@@ -11080,7 +11060,6 @@ const Dialogs = {
                 document.getElementById('vl-size-percent').value = 50;
                 document.getElementById('vl-size-percent-value').textContent = '%50';
                 document.getElementById('vl-layer-mute').value = 'unmute';
-                Accessibility.announce(this.t('runtime.video_layer.mode_split_screen', 'Split screen mode selected. Left half, fifty percent.'));
                 break;
 
             case 'camera-corner':
@@ -11091,21 +11070,34 @@ const Dialogs = {
                 document.getElementById('vl-size-percent').value = 15;
                 document.getElementById('vl-size-percent-value').textContent = '%15';
                 document.getElementById('vl-layer-mute').value = 'unmute';
-                Accessibility.announce(this.t('runtime.video_layer.mode_camera_corner', 'Camera in corner mode selected. Top right, fifteen percent.'));
                 break;
 
             case 'custom':
-                Accessibility.announce(this.t('runtime.video_layer.mode_custom', 'Custom layout mode selected. Set the position and size yourself.'));
                 break;
         }
 
-        this.updateVideoLayerSize(this.videoLayerState.sizePercent);
+        this.updateVideoLayerSize(this.videoLayerState.sizePercent, false);
+        this.updateVideoLayerLayoutControls();
+    },
+
+    updateVideoLayerLayoutControls() {
+        const split = this.videoLayerState.mode === 'split-screen';
+        for (const id of ['vl-position-preset', 'vl-size-percent', 'vl-width', 'vl-height', 'vl-pos-x', 'vl-pos-y', 'vl-keep-aspect']) {
+            const control = document.getElementById(id);
+            if (control) control.disabled = split;
+        }
     },
 
     /**
      * Konum preset'ini uygula
      */
-    applyVideoLayerPositionPreset(preset) {
+    applyVideoLayerPositionPreset(preset, announce = true) {
+        if (this.videoLayerState.mode === 'split-screen') {
+            this.videoLayerState.position = { x: 0, y: 0 };
+            document.getElementById('vl-pos-x').value = 0;
+            document.getElementById('vl-pos-y').value = 0;
+            return;
+        }
         const { width: mainW, height: mainH } = this.videoLayerState.mainResolution;
         const { width: overlayW, height: overlayH } = this.videoLayerState.size;
         const margin = 20;
@@ -11162,7 +11154,7 @@ const Dialogs = {
             'bottom-right': this.t('runtime.video_layer.position_bottom_right', 'Bottom Right')
         };
 
-        Accessibility.announce(this.t('runtime.video_layer.position_updated', 'Video layer position updated to {position}.', {
+        if (announce) Accessibility.announce(this.t('runtime.video_layer.position_updated', 'Video layer position updated to {position}.', {
             position: positionNames[preset]
         }));
     },
@@ -11170,14 +11162,17 @@ const Dialogs = {
     /**
      * Boyutu yüzdeye göre güncelle
      */
-    updateVideoLayerSize(percent) {
+    updateVideoLayerSize(percent, announce = true) {
         const { width: mainW, height: mainH } = this.videoLayerState.mainResolution;
         const layerMeta = this.videoLayerState.layerMetadata;
 
         let overlayW = Math.round(mainW * percent / 100);
         let overlayH;
 
-        if (layerMeta && layerMeta.width && layerMeta.height) {
+        if (this.videoLayerState.mode === 'split-screen') {
+            overlayW = Math.round(mainW / 2);
+            overlayH = mainH;
+        } else if (layerMeta && layerMeta.width && layerMeta.height) {
             const aspect = layerMeta.width / layerMeta.height;
             overlayH = Math.round(overlayW / aspect);
         } else {
@@ -11191,7 +11186,7 @@ const Dialogs = {
         // Konum preset'ini de güncelle
         const preset = document.getElementById('vl-position-preset').value;
         if (preset !== 'custom') {
-            this.applyVideoLayerPositionPreset(preset);
+            this.applyVideoLayerPositionPreset(preset, announce);
         }
     },
 
@@ -11336,6 +11331,10 @@ const Dialogs = {
     previewVideoLayer() {
         // Basit önizleme: Sadece duyuru yap (gerçek önizleme video birleştirme gerektirir)
         const state = this.videoLayerState;
+        if (state.mode === 'split-screen') {
+            Accessibility.announce(window.i18nHelper.t('runtime.video_layer.split_preview'));
+            return;
+        }
         const { width, height } = state.size;
         const { x, y } = state.position;
 
@@ -12268,6 +12267,12 @@ const Dialogs = {
     async applyVideoLayer() {
         const dialog = document.getElementById('video-layer-wizard-dialog');
         const state = this.videoLayerState;
+        if (state.mode !== 'split-screen' && document.getElementById('vl-position-preset').value === 'custom') {
+            state.position = {
+                x: Number(document.getElementById('vl-pos-x').value) || 0,
+                y: Number(document.getElementById('vl-pos-y').value) || 0
+            };
+        }
 
         // Zamanlama değerlerini al
         let startTime = 0;
@@ -12332,6 +12337,7 @@ const Dialogs = {
 
         try {
             const result = await window.api.addVideoLayer({
+                mode: state.mode,
                 mainVideoPath: App.currentFilePath,
                 layerVideoPath: state.layerVideoPath,
                 outputPath: outputPath,
@@ -12448,11 +12454,3 @@ const Dialogs = {
 
 // Global olarak erişilebilir yap
 window.Dialogs = Dialogs;
-
-
-
-
-
-
-
-

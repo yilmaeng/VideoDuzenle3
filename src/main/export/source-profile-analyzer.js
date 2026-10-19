@@ -193,6 +193,7 @@ async function getKeyframes(ffprobePath, filePath, { duration = 0, onProgress = 
         let stdoutBuffer = '';
         let stderr = '';
         const values = [];
+        const decodeTimes = new Map();
         let lastPercent = -1;
         const parseLines = (text, flush = false) => {
             stdoutBuffer += text;
@@ -208,7 +209,11 @@ async function getKeyframes(ffprobePath, filePath, { duration = 0, onProgress = 
                     .find((value) => Number.isFinite(value) && value >= 0);
                 if (!Number.isFinite(timestamp)) continue;
                 const flags = fields.find((value) => /^[A-Z_]+$/.test(value)) || '';
-                if (flags.includes('K')) values.push(timestamp);
+                if (flags.includes('K')) {
+                    values.push(timestamp);
+                    const dts = Number(fields[1]);
+                    if (Number.isFinite(dts)) decodeTimes.set(timestamp, dts);
+                }
                 if (duration > 0 && onProgress) {
                     const percent = Math.min(99.9, timestamp / duration * 100);
                     if (percent >= lastPercent + 0.1) {
@@ -239,7 +244,10 @@ async function getKeyframes(ffprobePath, filePath, { duration = 0, onProgress = 
                 return;
             }
             onProgress?.(100);
-            resolve(values.sort((a, b) => a - b));
+            values.sort((a, b) => a - b);
+            // Keep the public array API; packet-copy boundaries also need DTS.
+            Object.defineProperty(values, 'decodeTimes', { value: decodeTimes });
+            resolve(values);
         });
     });
     keyframeCache.set(key, frames);

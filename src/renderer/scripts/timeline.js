@@ -43,6 +43,9 @@ const Timeline = {
         this.undoStack = [];
         this.redoStack = [];
         this.hasChanges = false;
+        this._historyDepth = 0;
+        this.pendingHistoryView = null;
+        this.lastHistoryAction = null;
         this.renderVisuals();
     },
 
@@ -73,13 +76,94 @@ const Timeline = {
     /**
      * Mevcut durumu kaydet (undo için)
      */
-    saveState() {
-        this.undoStack.push(JSON.stringify(this.segments));
+    captureHistoryState() {
+        return {
+            segments: JSON.parse(JSON.stringify(this.segments)),
+            position: typeof VideoPlayer !== 'undefined' ? VideoPlayer.getTimelineTime() : 0,
+            selection: typeof Selection !== 'undefined' ? {start:Selection.start,end:Selection.end} : null,
+            markers: typeof Markers !== 'undefined' ? JSON.parse(JSON.stringify(Markers.getAll())) : [],
+            hasChanges: this.hasChanges
+        };
+    },
+
+    saveState(action = 'edit', range = null) {
+        if (this._historyDepth) return;
+        this.undoStack.push({state:this.captureHistoryState(), action, range});
         if (this.undoStack.length > this.maxUndoSteps) {
             this.undoStack.shift();
         }
         this.redoStack = []; // Yeni işlem yapıldığında redo temizlenir
         this.hasChanges = true;
+    },
+
+    transaction(action, range, callback) {
+        if (this._historyDepth) return callback();
+        const before = this.captureHistoryState();
+        this._historyDepth = 1;
+        try { return callback(); }
+        finally {
+            this._historyDepth = 0;
+            if (JSON.stringify(before.segments) !== JSON.stringify(this.segments)) {
+                const oldDuration = before.segments.reduce((sum,s)=>sum+(s.end-s.start)/(s.speed||1),0);
+                const duration = range ? Math.abs(range.end-range.start) : Math.abs(this.getTotalDuration()-oldDuration);
+                this.undoStack.push({state:before,action,range,duration});
+                if (this.undoStack.length > this.maxUndoSteps) this.undoStack.shift();
+                this.redoStack = [];
+                this.hasChanges = true;
+                document.dispatchEvent(new Event('editor-menu-state-changed'));
+            }
+        }
+    },
+
+    restoreHistoryEntry(entry) {
+        // Accept old in-memory snapshots during development reloads too.
+        const state = typeof entry === 'string' ? {segments:JSON.parse(entry)} : entry.state;
+        this.segments = JSON.parse(JSON.stringify(state.segments));
+        this.hasChanges = true;
+        this.pendingHistoryView = state;
+        this.lastHistoryAction = typeof entry === 'string' ? {action:'edit'} : entry;
+        this.renderVisuals();
+    },
+
+    restoreHistoryView() {
+        const state = this.pendingHistoryView;
+        this.pendingHistoryView = null;
+        if (!state) return;
+        if (typeof Markers !== 'undefined' && state.markers) {
+            Markers.markers = JSON.parse(JSON.stringify(state.markers));
+            Markers.updateMarkerList();
+            Markers.updateMarkerCount();
+        }
+        if (typeof Selection !== 'undefined') {
+            if (state.selection) {
+                Selection.start = state.selection.start;
+                Selection.end = state.selection.end;
+                Selection.isSelecting = false;
+                Selection.updateUI();
+                Selection.onSelectionChanged?.(Selection.getSelection());
+            } else Selection.clear(true);
+        }
+        if (typeof VideoPlayer !== 'undefined' && Number.isFinite(state.position)) {
+            VideoPlayer.cursorPosition = Math.max(0,Math.min(this.getTotalDuration(),state.position));
+            VideoPlayer.seekToTimelineTime(VideoPlayer.cursorPosition);
+            VideoPlayer.updateCursorDisplay();
+        }
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
+    },
+
+    historyLabel(entry, compact = false) {
+        const action = entry?.action || 'edit';
+        const label = window.i18nHelper.t(`edit_history.actions.${action}`);
+        const range = entry?.range;
+        if (compact) {
+            const seconds = Number((range ? Math.abs(range.end-range.start) : entry?.duration || 0).toFixed(3));
+            if (!(seconds > 0)) return label;
+            const formatted = new Intl.NumberFormat(document.documentElement?.lang || 'tr', {maximumFractionDigits:3}).format(seconds);
+            return window.i18nHelper.t(seconds === 1 ? 'edit_history.duration_one' : 'edit_history.duration_other', {action:label,seconds:formatted});
+        }
+        return range && Number.isFinite(range.start) && Number.isFinite(range.end)
+            ? window.i18nHelper.t('edit_history.range', {action:label,start:Utils.formatTime(range.start),end:Utils.formatTime(range.end)})
+            : label;
     },
     /**
      * Durumu geri yükle (Proje yükleme)
@@ -104,9 +188,9 @@ const Timeline = {
     undo() {
         if (this.undoStack.length === 0) return false;
 
-        this.redoStack.push(JSON.stringify(this.segments));
-        this.segments = JSON.parse(this.undoStack.pop());
-        this.renderVisuals();
+        const entry = this.undoStack.pop();
+        this.redoStack.push({state:this.captureHistoryState(),action:entry.action || 'edit',range:entry.range,duration:entry.duration});
+        this.restoreHistoryEntry(entry);
         return true;
     },
 
@@ -117,9 +201,9 @@ const Timeline = {
     redo() {
         if (this.redoStack.length === 0) return false;
 
-        this.undoStack.push(JSON.stringify(this.segments));
-        this.segments = JSON.parse(this.redoStack.pop());
-        this.renderVisuals();
+        const entry = this.redoStack.pop();
+        this.undoStack.push({state:this.captureHistoryState(),action:entry.action || 'edit',range:entry.range,duration:entry.duration});
+        this.restoreHistoryEntry(entry);
         return true;
     },
 
@@ -158,6 +242,7 @@ const Timeline = {
      * Timeline segment katmanini yeniden ciz
      */
     renderVisuals() {
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         const layer = document.getElementById('timeline-segment-layer');
         if (!layer) return;
 
@@ -777,5 +862,16 @@ const Timeline = {
 };
 
 // Global olarak erişilebilir yap
+// Internal sub-operations (splitRange -> splitAt, cut -> deleteRange) belong to
+// one user command. Existing keyboard-manager actions remain the public API.
+for (const [method, action] of Object.entries({deleteRange:'delete',cut:'cut',paste:'paste',
+    splitAt:'split',splitRange:'split',applySpeedToRange:'speed',insertSegmentAtPosition:'insert'})) {
+    const original = Timeline[method];
+    Timeline[method] = function (...args) {
+        const range = ['deleteRange','cut','splitRange','applySpeedToRange'].includes(method)
+            ? {start:args[0],end:args[1]} : null;
+        return this.transaction(action,range,()=>original.apply(this,args));
+    };
+}
 window.Timeline = Timeline;
 

@@ -70,6 +70,8 @@ function t(key, fallback, params = {}) {
 }
 
 const BROADCAST_ROOM_GLOBAL_SHORTCUT_ACTIONS = {
+    broadcastRoomGlobalAdmitAll: 'Alt+Ctrl+A',
+    broadcastRoomCloudPanel: '',
     broadcastRoomGlobalToggleYouTubeLive: 'Alt+Ctrl+L',
     broadcastRoomGlobalToggleBotRecording: 'Alt+Ctrl+B',
     broadcastRoomGlobalToggleLiveTranslation: 'Alt+Ctrl+T',
@@ -951,6 +953,7 @@ function createEmptySnapshot() {
             roomSlug: state.roomSettings.roomSlug || '',
             password: state.roomSettings.password || '',
             allowJoinWhenHostAbsent: state.roomSettings.allowJoinWhenHostAbsent === true,
+            waitingRoomEnabled: state.roomSettings.waitingRoomEnabled === true,
             requirePasswordWhenHostPresent: state.roomSettings.requirePasswordWhenHostPresent === true,
             requirePasswordWhenHostAbsent: state.roomSettings.requirePasswordWhenHostAbsent === true,
             webinarMode: state.roomSettings.webinarMode === true,
@@ -960,6 +963,7 @@ function createEmptySnapshot() {
             hostShareActive: state.roomSettings.hostShareActive === true,
             hostShareLabel: state.roomSettings.hostShareLabel || '',
             hostShareMonitorAudioEnabled: state.roomSettings.hostShareMonitorAudioEnabled === true,
+            participantVolumes: normalizeParticipantVolumeMap(state.liveRoom.participantVolumeByIdentity),
             youtubeWatchUrl: state.roomSettings.youtubeWatchUrl || '',
             youtubeLiveActive: state.roomSettings.youtubeLiveActive === true
         },
@@ -1002,6 +1006,7 @@ const state = {
         roomSlug: '',
         password: '',
         allowJoinWhenHostAbsent: false,
+        waitingRoomEnabled: false,
         requirePasswordWhenHostPresent: false,
         requirePasswordWhenHostAbsent: false,
         webinarMode: false,
@@ -1011,6 +1016,7 @@ const state = {
         hostShareActive: false,
         hostShareLabel: '',
         hostShareMonitorAudioEnabled: false,
+        participantVolumes: {},
         youtubeWatchUrl: '',
         youtubeLiveActive: false
     },
@@ -1105,6 +1111,7 @@ const state = {
         obsAudioBridgeRecoveryInProgress: false,
         remoteAudioMonitorContext: null,
         remoteAudioMonitorNodes: new Map(),
+        participantVolumeByIdentity: {},
         effectVideoTrack: null,
         effectAudioTrack: null,
         effectSlotId: '',
@@ -1184,7 +1191,7 @@ const state = {
         selectedSpeakerId: '',
         microphoneVolume: 1,
         speakerVolume: 1,
-        microphoneEchoCancellation: loadStoredBoolean(MICROPHONE_ECHO_CANCELLATION_STORAGE_KEY, false),
+        microphoneEchoCancellation: loadStoredBoolean(MICROPHONE_ECHO_CANCELLATION_STORAGE_KEY, true),
         microphoneNoiseSuppression: loadStoredBoolean(MICROPHONE_NOISE_SUPPRESSION_STORAGE_KEY, false),
         microphoneAutoGainControl: loadStoredBoolean(MICROPHONE_AUTO_GAIN_CONTROL_STORAGE_KEY, false)
     },
@@ -1436,6 +1443,8 @@ const state = {
         pendingPrimaryTimer: null
     },
     participantContextMenuRestoreTarget: 'participant',
+    participantVolumeEditingIdentity: '',
+    participantVolumeSyncTimer: null,
     participantListRenderSignature: '',
     roomChatRenderSignature: '',
     audioTest: {
@@ -1760,6 +1769,14 @@ const els = {
     btnParticipantTogglePanelist: document.getElementById('btn-participant-toggle-panelist'),
     btnParticipantToggleSignInterpreter: document.getElementById('btn-participant-toggle-sign-interpreter'),
     btnParticipantToggleLiveInterpreter: document.getElementById('btn-participant-toggle-live-interpreter'),
+    btnParticipantVolume: document.getElementById('btn-participant-volume'),
+    btnParticipantCheckCamera: document.getElementById('btn-participant-check-camera'),
+    btnParticipantSpotlight: document.getElementById('btn-participant-spotlight'),
+    participantVolumeGroup: document.getElementById('participant-volume-group'),
+    participantVolumeLabel: document.getElementById('participant-volume-label'),
+    participantVolume: document.getElementById('participant-volume'),
+    participantVolumeValue: document.getElementById('participant-volume-value'),
+    btnParticipantVolumeConfirm: document.getElementById('btn-participant-volume-confirm'),
     participantMessageComposerGroup: document.getElementById('participant-message-composer-group'),
     participantMessageCompose: document.getElementById('participant-message-compose'),
     btnParticipantSendMessageConfirm: document.getElementById('btn-participant-send-message-confirm'),
@@ -2684,7 +2701,9 @@ function getRemoteParticipantRecordingTrackEntries() {
             if (trackState?.track?.mediaStreamTrack) {
                 entries.push({
                     id: `${participantState.identity || 'remote'}:${trackState.sid || trackState.track.mediaStreamTrack.id}`,
-                    track: trackState.track.mediaStreamTrack
+                    participantIdentity: participantState.identity || '',
+                    track: trackState.track.mediaStreamTrack,
+                    gain: getParticipantVolumeGain(participantState.identity || '')
                 });
             }
         });
@@ -2715,13 +2734,14 @@ function refreshRemoteAudioRecordingGraph() {
     });
     entries.forEach((entry) => {
         if (nodes.has(entry.id)) {
+            nodes.get(entry.id).gainNode.gain.value = entry.gain;
             return;
         }
         try {
             const stream = new MediaStream([entry.track]);
             const sourceNode = audioContext.createMediaStreamSource(stream);
             const gainNode = audioContext.createGain();
-            gainNode.gain.value = 1;
+            gainNode.gain.value = entry.gain;
             sourceNode.connect(gainNode);
             gainNode.connect(destination);
             nodes.set(entry.id, { sourceNode, gainNode });
@@ -3746,6 +3766,19 @@ function clampAudioLevelPercent(value, fallback = 100) {
     return Math.max(0, Math.min(200, numeric));
 }
 
+function normalizeParticipantVolumeMap(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return {};
+    }
+    return Object.fromEntries(Object.entries(value)
+        .slice(0, 100)
+        .map(([identity, percent]) => [
+            String(identity || '').trim().slice(0, 160),
+            Math.round(clampAudioLevelPercent(percent, 100))
+        ])
+        .filter(([identity]) => identity));
+}
+
 function getHostMicrophoneVolume() {
     return clampAudioLevelPercent(els.hostMicrophoneVolume?.value || state.audioDevices.microphoneVolume * 100) / 100;
 }
@@ -3803,16 +3836,53 @@ function getHostRemoteAudioOutputVolume(participantIdentity) {
     const originalVolume = getTranslationOriginalMonitorVolume();
     const channel = String(state.translation.liveInterpreterOutputChannel || 'original');
     if (!hasLiveInterpreterParticipant() || channel === 'original') {
-        return originalVolume * getHostSpeakerVolume();
+        return originalVolume * getHostSpeakerVolume() * getParticipantVolumeGain(participantIdentity);
     }
     const isInterpreter = getParticipantRoleByIdentity(participantIdentity) === 'live_interpreter';
     if (channel === 'interpreter_only') {
-        return (isInterpreter ? 1 : 0) * getHostSpeakerVolume();
+        return (isInterpreter ? 1 : 0) * getHostSpeakerVolume() * getParticipantVolumeGain(participantIdentity);
     }
     if (channel === 'interpreter_overlay') {
-        return (isInterpreter ? 1 : Math.min(originalVolume, 0.2)) * getHostSpeakerVolume();
+        return (isInterpreter ? 1 : Math.min(originalVolume, 0.2)) * getHostSpeakerVolume() * getParticipantVolumeGain(participantIdentity);
     }
-    return originalVolume * getHostSpeakerVolume();
+    return originalVolume * getHostSpeakerVolume() * getParticipantVolumeGain(participantIdentity);
+}
+
+function getParticipantVolumePercent(participantIdentity) {
+    const identity = String(participantIdentity || '').trim();
+    const stored = identity ? state.liveRoom.participantVolumeByIdentity?.[identity] : undefined;
+    return clampAudioLevelPercent(stored, 100);
+}
+
+function getParticipantVolumeGain(participantIdentity) {
+    return getParticipantVolumePercent(participantIdentity) / 100;
+}
+
+function applyParticipantVolume(participantIdentity, percent) {
+    const identity = String(participantIdentity || '').trim();
+    if (!identity) {
+        return;
+    }
+    const normalized = Math.round(clampAudioLevelPercent(percent, 100));
+    state.liveRoom.participantVolumeByIdentity[identity] = normalized;
+    state.roomSettings.participantVolumes = normalizeParticipantVolumeMap(state.liveRoom.participantVolumeByIdentity);
+    applyTranslationMonitorMix();
+    refreshRemoteAudioRecordingGraph();
+    refreshObsAudioBridgeGraph();
+    scheduleParticipantVolumeSync();
+}
+
+function scheduleParticipantVolumeSync() {
+    if (!isLocalRoomHost() || state.roomState.mode !== 'live') {
+        return;
+    }
+    if (state.participantVolumeSyncTimer) {
+        clearTimeout(state.participantVolumeSyncTimer);
+    }
+    state.participantVolumeSyncTimer = setTimeout(() => {
+        state.participantVolumeSyncTimer = null;
+        syncLiveRoomSettings().catch(() => {});
+    }, 120);
 }
 
 function isHostShareAudioActive() {
@@ -3828,9 +3898,10 @@ function applyTranslationMonitorMix() {
             return;
         }
         audioHost.querySelectorAll('audio').forEach((audioEl) => {
-            audioEl.volume = useMonitorMute && state.liveRoom.remoteAudioMonitorContext
+            const volume = useMonitorMute && state.liveRoom.remoteAudioMonitorContext
                 ? 0
                 : getHostRemoteAudioOutputVolume(audioEl.dataset.participantIdentity || '');
+            audioEl.volume = Math.max(0, Math.min(1, volume));
         });
     };
     applyToHost(els.remoteParticipantAudioHost, true);
@@ -3846,9 +3917,10 @@ async function reapplyHostSpeakerSelectionToRemoteAudio() {
     const audioElements = Array.from(els.remoteParticipantAudioHost?.querySelectorAll('audio') || []);
     for (const audioEl of audioElements) {
         await applyHostSpeakerSelectionToElement(audioEl);
-        audioEl.volume = state.liveRoom.remoteAudioMonitorContext
+        const volume = state.liveRoom.remoteAudioMonitorContext
             ? 0
             : getHostRemoteAudioOutputVolume(audioEl.dataset.participantIdentity || '');
+        audioEl.volume = Math.max(0, Math.min(1, volume));
     }
 }
 
@@ -3961,9 +4033,10 @@ function syncHostRemoteAudioElementMonitorVolumes() {
         && state.liveRoom.remoteAudioMonitorNodes.size > 0;
     const audioElements = Array.from(els.remoteParticipantAudioHost?.querySelectorAll('audio') || []);
     audioElements.forEach((audioEl) => {
-        audioEl.volume = monitorActive
+        const volume = monitorActive
             ? 0
             : getHostRemoteAudioOutputVolume(audioEl.dataset.participantIdentity || '');
+        audioEl.volume = Math.max(0, Math.min(1, volume));
     });
 }
 
@@ -6176,8 +6249,137 @@ async function stopLiveTranslationPrototypeInternal({ quiet = false, preservePre
     }
 }
 
+const roomParticipantApiKeys = new Map();
+
+const roomAccount = { user: null, rooms: [], activeRoomId: '', ready: false, busy: false };
+let desktopCloudControls = null;
+let desktopWaitingControls = null;
+let desktopRecordingNotice = null;
+
+async function roomAccountRequest(endpoint, body) {
+    const result = await ipcRenderer.invoke('room-account-request', endpoint, body);
+    if (result?.error) {
+        const key = result.error === 'room_owner_required' ? 'room_not_found' : result.error;
+        const known = ['credentials_invalid', 'session_required', 'password_change_required', 'password_policy',
+            'password_mismatch', 'room_not_found', 'meeting_host_present', 'rate_limited', 'secure_storage_unavailable'];
+        if (result.error === 'session_required') {
+            roomAccount.user = null;
+            roomAccount.rooms = [];
+            renderRoomAccount();
+        }
+        throw new Error(t(`admin_auth.${known.includes(key) ? key : 'request_failed'}`));
+    }
+    return result;
+}
+
+function renderRoomAccount() {
+    desktopCloudControls?.update();
+    const user = roomAccount.user;
+    document.getElementById('desktop-account-login').hidden = !!user;
+    document.getElementById('desktop-account-change').hidden = !user?.passwordChangeRequired;
+    document.getElementById('desktop-account-signed-in').hidden = !user;
+    document.getElementById('desktop-account-remember').disabled = !!user && !user.passwordChangeRequired;
+    document.getElementById('desktop-account-refresh').disabled = !user || !!user.passwordChangeRequired;
+    document.getElementById('desktop-account-user').textContent = user?.email || '';
+}
+
+async function loadRoomAccountRooms() {
+    if (!roomAccount.ready) {
+        const result = await roomAccountRequest('session');
+        roomAccount.user = result.user;
+        roomAccount.ready = true;
+        if (result.remembered) document.getElementById('desktop-account-remember').checked = true;
+        renderRoomAccount();
+    }
+    if (!roomAccount.user || roomAccount.user.passwordChangeRequired) { roomAccount.rooms = []; return; }
+    const result = await roomAccountRequest('desktop/rooms');
+    const origin = new URL(LIVE_BROADCAST_ROOM_API_BASE_URL).origin;
+    roomAccount.rooms = (result.rooms || []).map(room => ({ ...room, accountManaged: true,
+        inviteUrl: `${origin}/yayinodasi/join/${encodeURIComponent(room.inviteId)}` }));
+}
+
+async function roomAccountAction(action) {
+    if (roomAccount.busy) return;
+    roomAccount.busy = true;
+    const status = document.getElementById('desktop-account-status');
+    status.textContent = t('admin_auth.working');
+    try {
+        if (action === 'login' || action === 'change') {
+            if (state.roomState.mode === 'live' && state.roomState.roomId) throw new Error(t('admin_auth.desktop_leave_first'));
+            let result;
+            if (action === 'login') {
+                const input = document.getElementById('desktop-account-password');
+                const password = input.value; input.value = '';
+                result = await roomAccountRequest('password-login', {
+                    email: document.getElementById('desktop-account-email').value.trim(), password });
+            } else {
+                const input = document.getElementById('desktop-account-new-password');
+                const repeat = document.getElementById('desktop-account-repeat');
+                if (input.value !== repeat.value) throw new Error(t('admin_auth.password_mismatch'));
+                const password = input.value; input.value = ''; repeat.value = '';
+                result = await roomAccountRequest('password-change', { password });
+            }
+            roomAccount.user = result.user; roomAccount.ready = true;
+            renderRoomAccount();
+            if (result.user?.passwordChangeRequired) {
+                status.textContent = t('admin_auth.password_change_required');
+                document.getElementById('desktop-account-new-password').focus();
+                return;
+            }
+            if (document.getElementById('desktop-account-remember').checked) {
+                try { await roomAccountRequest('desktop/remember', { confirm: true }); }
+                catch (error) {
+                    document.getElementById('desktop-account-remember').checked = false;
+                    await refreshPersistentRooms();
+                    throw error;
+                }
+            }
+        } else if (action === 'logout') {
+            if (roomAccount.activeRoomId && state.roomState.roomId === roomAccount.activeRoomId) {
+                throw new Error(t('admin_auth.desktop_leave_first'));
+            }
+            const result = await roomAccountRequest('logout');
+            roomAccount.user = null; roomAccount.rooms = []; roomAccount.activeRoomId = '';
+            renderRoomAccount();
+            if (result.remoteLogoutFailed) {
+                await refreshPersistentRooms();
+                status.textContent = t('admin_auth.desktop_logout_offline');
+                document.getElementById('desktop-account-email').focus();
+                return;
+            }
+        } else if (action === 'refresh') {
+            roomAccount.ready = false;
+        }
+        await refreshPersistentRooms();
+        status.textContent = t(action === 'logout' ? 'admin_auth.signed_out'
+            : roomAccount.rooms.length ? 'admin_auth.desktop_ready' : 'admin_auth.rooms_empty');
+        if (action === 'logout') document.getElementById('desktop-account-email').focus();
+        else if (action !== 'refresh') document.getElementById('persistent-rooms-listbox')?.focus();
+    } catch (error) { status.textContent = error.message || t('admin_auth.request_failed'); }
+    finally { roomAccount.busy = false; }
+}
+
 async function requestLiveBroadcastRoomApi(pathname, options = {}) {
+    let data = {};
+    if (typeof options.body === 'string') { try { data = JSON.parse(options.body); } catch (_) {} }
+    const parts = pathname.split('/').filter(Boolean);
+    const method = options.method || 'GET';
+    const roomId = data.roomId || (parts.length >= 2 ? decodeURIComponent(parts[1]) : '');
+    const accountRoom = roomId && (roomAccount.rooms.some(room => room.roomId === roomId)
+        || roomAccount.activeRoomId === roomId);
+    // Guest participation must continue to use its own scoped participant session.
+    if (accountRoom && !(getLocalRoomRole() === 'guest' && state.roomState.roomId === roomId)) {
+        const payload = await roomAccountRequest('desktop/room', { roomId, method, data,
+            action: method === 'GET' ? 'snapshot' : parts[parts.length - 1] });
+        if (payload?.participantApiKey && payload?.roomId) roomParticipantApiKeys.set(String(payload.roomId), payload.participantApiKey);
+        return payload;
+    }
     const headers = new Headers(options.headers || {});
+    const participantApiKey = roomParticipantApiKeys.get(String(state.roomState.roomId || ''));
+    if (participantApiKey) headers.set('X-EVD-Participant-Key', participantApiKey);
+    if (['waiting-list', 'waiting-decision'].includes(parts[parts.length - 1]) && getLocalRoomRole() === 'co_host') {
+        headers.set('X-EVD-Participant-Identity', String(state.roomState.hostIdentity || ''));
+    }
     const ownerKey = getBroadcastRoomOwnerKey();
     if (ownerKey && !headers.has('X-EVD-Room-Owner-Key')) {
         headers.set('X-EVD-Room-Owner-Key', ownerKey);
@@ -6187,7 +6389,16 @@ async function requestLiveBroadcastRoomApi(pathname, options = {}) {
         headers
     });
     const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload?.participantApiKey && payload?.roomId) {
+        roomParticipantApiKeys.set(String(payload.roomId), payload.participantApiKey);
+    }
     if (!response.ok || payload?.success === false) {
+        if (payload?.error === 'participant_session_required') {
+            throw new Error(t('broadcast_room.security_session_required'));
+        }
+        if (payload?.error === 'room_owner_required') {
+            throw new Error(t('broadcast_room.security_owner_required'));
+        }
         throw new Error(payload?.error || `http_${response.status}`);
     }
     return payload;
@@ -6262,6 +6473,41 @@ function renderAdminState() {
         els.webinarAdminPanel.hidden = state.admin.authenticated !== true;
     }
     renderWebinarRequests();
+}
+
+async function systemAccountAction(action) {
+    const element = id => document.getElementById(id);
+    const status = element('system-accounts-status');
+    if (!state.admin.authenticated) return;
+    const buttons = ['system-account-save', 'system-owner-refresh', 'system-owner-assign', 'system-owner-create'].map(element);
+    if (buttons.some(button => button.disabled)) return;
+    buttons.forEach(button => { button.disabled = true; });
+    status.textContent = t('admin_auth.working');
+    try {
+        const email = element('system-account-email').value.trim();
+        const data = { adminToken: state.admin.token, email };
+        if (action === 'account') Object.assign(data, { password: element('system-account-password').value, reset: element('system-account-reset').checked });
+        if (action === 'assign') Object.assign(data, { roomId: element('system-owner-room').value, transfer: element('system-owner-transfer').checked });
+        if (action === 'create') data.title = element('system-new-room-title').value;
+        const result = await requestLiveBroadcastRoomApi(`/broadcast-room/admin/accounts/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (result?.success === false || result?.error) throw new Error(result.error || 'request_failed');
+        if (action === 'list') {
+            const select = element('system-owner-room'), previous = select.value;
+            select.replaceChildren(...result.rooms.map(room => {
+                const option = document.createElement('option'); option.value = room.roomId;
+                option.textContent = t('admin_auth.owner_room_item', '', { title: room.title, email: room.ownerEmail || t('admin_auth.owner_unassigned') });
+                return option;
+            }));
+            if (result.rooms.some(room => room.roomId === previous)) select.value = previous;
+        }
+        element('system-account-password').value = '';
+        element('system-account-reset').checked = false;
+        element('system-owner-transfer').checked = false;
+        status.textContent = t('admin_auth.provision_done');
+    } catch (error) {
+        const known = ['email_invalid', 'password_policy', 'account_exists', 'account_missing', 'owner_transfer_confirmation', 'room_busy', 'room_title_invalid', 'rate_limited'];
+        status.textContent = t(`admin_auth.${known.includes(error.message) ? error.message : 'request_failed'}`);
+    } finally { buttons.forEach(button => { button.disabled = false; }); }
 }
 
 function getWebinarRequestById(requestId) {
@@ -6537,6 +6783,7 @@ async function createWebinarFromSelectedRequest() {
             persistent: els.webinarCreatePersistent?.checked === true,
             password: String(els.webinarCreatePassword?.value || '').trim(),
             allowJoinWhenHostAbsent: els.webinarCreateAllowJoinWhenHostAbsent?.checked === true,
+            waitingRoomEnabled: document.getElementById('desktop-webinar-waiting-enabled')?.checked === true,
             restrictBeforeStart: els.webinarCreateRestrictBeforeStart?.checked === true,
             restrictAfterEnd: els.webinarCreateRestrictAfterEnd?.checked === true
         })
@@ -6809,14 +7056,16 @@ function buildHostVideoCaptureOptions(deviceId) {
 }
 
 function buildHostAudioCaptureOptions(deviceId) {
+    const music = document.getElementById('host-microphone-music-mode')?.checked === true;
     return {
         deviceId: deviceId || undefined,
         channelCount: { ideal: 2 },
         sampleRate: 48000,
         volume: getHostMicrophoneVolume(),
-        echoCancellation: state.audioDevices.microphoneEchoCancellation,
-        noiseSuppression: state.audioDevices.microphoneNoiseSuppression,
-        autoGainControl: state.audioDevices.microphoneAutoGainControl
+        voiceIsolation: false,
+        echoCancellation: !music && state.audioDevices.microphoneEchoCancellation,
+        noiseSuppression: !music && state.audioDevices.microphoneNoiseSuppression,
+        autoGainControl: !music && state.audioDevices.microphoneAutoGainControl
     };
 }
 
@@ -6868,6 +7117,7 @@ async function syncSelectedMicrophoneToObs() {
 
 function getHostMicrophoneProcessingSignature() {
     return [
+        document.getElementById('host-microphone-music-mode')?.checked === true,
         state.audioDevices.microphoneEchoCancellation,
         state.audioDevices.microphoneNoiseSuppression,
         state.audioDevices.microphoneAutoGainControl
@@ -6875,6 +7125,10 @@ function getHostMicrophoneProcessingSignature() {
 }
 
 async function handleHostMicrophoneProcessingChange() {
+    const music = document.getElementById('host-microphone-music-mode')?.checked === true;
+    for (const control of [els.hostMicrophoneEchoCancellation, els.hostMicrophoneNoiseSuppression, els.hostMicrophoneAutoGainControl]) {
+        if (control) control.disabled = music;
+    }
     state.audioDevices.microphoneEchoCancellation = Boolean(els.hostMicrophoneEchoCancellation?.checked);
     state.audioDevices.microphoneNoiseSuppression = Boolean(els.hostMicrophoneNoiseSuppression?.checked);
     state.audioDevices.microphoneAutoGainControl = Boolean(els.hostMicrophoneAutoGainControl?.checked);
@@ -7383,7 +7637,7 @@ function getObsAudioBridgeTrackEntries() {
         ? []
         : getRemoteParticipantRecordingTrackEntries().map((entry) => ({
             ...entry,
-            gain: 1.25
+            gain: 1.25 * getParticipantVolumeGain(entry.participantIdentity || '')
         }));
     if (state.liveRoom.localShareAudioTrack) {
         if (state.youtube.liveActive === true) {
@@ -8702,8 +8956,9 @@ function applyAutomaticDirectorStageLayout({ doc, grid, participants, autoGaller
     ].filter((entry) => entry.identity && entry.element);
 
     entries.forEach((entry) => resetAutoDirectorStageElement(entry.element));
+    const spotlightIdentity = String(state.participants.find((participant) => participant.spotlighted)?.id || '');
     const directorActive = !!autoGalleryActive
-        && entries.length >= AUTO_DIRECTOR_MINIMUM_PARTICIPANT_COUNT;
+        && (entries.length >= AUTO_DIRECTOR_MINIMUM_PARTICIPANT_COUNT || (spotlightIdentity && entries.length > 1));
     grid.classList.toggle('auto-director-active', directorActive);
     if (!directorActive) {
         startAutoDirectorRotationIfNeeded(false);
@@ -8711,7 +8966,7 @@ function applyAutomaticDirectorStageLayout({ doc, grid, participants, autoGaller
     }
 
     const availableIdentities = new Set(entries.map((entry) => entry.identity));
-    let primaryIdentity = String(state.autoDirector.primaryIdentity || '').trim();
+    let primaryIdentity = spotlightIdentity || String(state.autoDirector.primaryIdentity || '').trim();
     if (!availableIdentities.has(primaryIdentity)) {
         primaryIdentity = String(state.liveRoom.activeSpeakerIdentity || '').trim();
     }
@@ -9811,7 +10066,9 @@ async function renderHostRemoteParticipantMedia() {
                 audio.dataset.participantIdentity = participantState.identity || '';
                 safelyAttachTrackToElement(trackState.track, audio);
                 await applyHostSpeakerSelectionToElement(audio);
-                audio.volume = state.liveRoom.remoteAudioMonitorContext ? 0 : getHostRemoteAudioOutputVolume(participantState.identity || '');
+                audio.volume = state.liveRoom.remoteAudioMonitorContext
+                    ? 0
+                    : Math.max(0, Math.min(1, getHostRemoteAudioOutputVolume(participantState.identity || '')));
                 if (audioCreated) {
                     audio.play?.()
                         .then(() => {
@@ -9978,6 +10235,7 @@ async function disconnectHostLiveRoom({ quiet = false } = {}) {
         obsAudioBridgeRecoveryInProgress: false,
         remoteAudioMonitorContext: null,
         remoteAudioMonitorNodes: new Map(),
+        participantVolumeByIdentity: {},
         effectVideoTrack: null,
         effectAudioTrack: null,
         effectSlotId: '',
@@ -12449,19 +12707,21 @@ function updateHostShareButtonState() {
 
 function renderParticipantListPanelState() {
     if (els.participantList) {
-        els.participantList.hidden = !state.panels.participantListExpanded;
+        if (els.participantList.hidden !== !state.panels.participantListExpanded) els.participantList.hidden = !state.panels.participantListExpanded;
     }
     if (els.btnToggleParticipantList) {
-        els.btnToggleParticipantList.setAttribute('aria-expanded', state.panels.participantListExpanded ? 'true' : 'false');
+        const expanded = state.panels.participantListExpanded ? 'true' : 'false';
+        if (els.btnToggleParticipantList.getAttribute('aria-expanded') !== expanded) els.btnToggleParticipantList.setAttribute('aria-expanded', expanded);
     }
 }
 
 function renderRoomChatPanelState() {
     if (els.roomChatPanel) {
-        els.roomChatPanel.hidden = !state.roomChat.panelOpen;
+        if (els.roomChatPanel.hidden !== !state.roomChat.panelOpen) els.roomChatPanel.hidden = !state.roomChat.panelOpen;
     }
     if (els.btnToggleRoomChatPanel) {
-        els.btnToggleRoomChatPanel.setAttribute('aria-expanded', state.roomChat.panelOpen ? 'true' : 'false');
+        const expanded = state.roomChat.panelOpen ? 'true' : 'false';
+        if (els.btnToggleRoomChatPanel.getAttribute('aria-expanded') !== expanded) els.btnToggleRoomChatPanel.setAttribute('aria-expanded', expanded);
     }
     if (els.roomChatBackgroundNotificationToggle) {
         els.roomChatBackgroundNotificationToggle.checked = state.roomChat.backgroundNotification === true;
@@ -12566,16 +12826,36 @@ function getRoomChatTargetOptions() {
     return options;
 }
 
+// Keep native select/option nodes and focus stable during background snapshots.
+function reconcileRoomListOptions(select, items, selectedValue) {
+    const scrollTop = select.scrollTop;
+    const previous = new Map(Array.from(select.options).map((option) => [option.value, option]));
+    const wanted = new Set(items.map((item) => String(item.value)));
+    for (const option of Array.from(select.options)) {
+        if (!wanted.has(option.value)) option.remove();
+    }
+    items.forEach((item, index) => {
+        const value = String(item.value);
+        let option = previous.get(value);
+        if (!option) {
+            option = document.createElement('option');
+            option.value = value;
+        }
+        if (option.textContent !== item.label) option.textContent = item.label;
+        if (select.options[index] !== option) select.insertBefore(option, select.options[index] || null);
+    });
+    if (select.value !== selectedValue) select.value = selectedValue;
+    if (select.scrollTop !== scrollTop) select.scrollTop = scrollTop;
+}
+
 function renderRoomChatTargetSelector() {
     if (!els.roomChatTarget) {
         return;
     }
     const previousValue = String(els.roomChatTarget.value || 'all');
     const options = getRoomChatTargetOptions();
-    els.roomChatTarget.innerHTML = options.map((option) => (
-        `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`
-    )).join('');
-    els.roomChatTarget.value = options.some((option) => option.value === previousValue) ? previousValue : 'all';
+    reconcileRoomListOptions(els.roomChatTarget, options,
+        options.some((option) => option.value === previousValue) ? previousValue : 'all');
 }
 
 function getSelectedRoomChatTarget() {
@@ -12607,6 +12887,7 @@ function isOwnRoomChatMessage(message) {
 }
 
 function renderRoomChatList() {
+    rememberRoomChatForExport();
     if (!els.roomChatList) {
         return;
     }
@@ -12633,19 +12914,25 @@ function renderRoomChatList() {
             recipient: String(message?.recipientIdentity || ''),
             text: normalizeChatMessageText(message)
         })),
-        selectedIndex: boundedIndex
+        labels: messages.map(describeRoomChatMessage)
     });
     if (signature === state.roomChatRenderSignature) {
+        if (els.roomChatList.selectedIndex !== boundedIndex) els.roomChatList.selectedIndex = boundedIndex;
+        state.roomChat.selectedIndex = boundedIndex;
+        renderSelectedRoomChatDetail();
         return;
     }
     state.roomChatRenderSignature = signature;
     els.roomChatList.disabled = false;
-    els.roomChatList.innerHTML = messages.map((message, index) => (
-        `<option value="${escapeHtml(String(message.id || `room-chat-${index}`))}">${escapeHtml(describeRoomChatMessage(message))}</option>`
-    )).join('');
+    const options = messages.map((message, index) => ({
+        value: String(message.id || `room-chat-${index}`), label: describeRoomChatMessage(message)
+    }));
+    const previousId = els.roomChatList.value;
+    const preservedIndex = options.findIndex((option) => option.value === previousId);
+    const nextIndex = preservedIndex >= 0 ? preservedIndex : boundedIndex;
+    reconcileRoomListOptions(els.roomChatList, options, options[nextIndex].value);
 
-    state.roomChat.selectedIndex = boundedIndex;
-    els.roomChatList.selectedIndex = boundedIndex;
+    state.roomChat.selectedIndex = nextIndex;
     renderSelectedRoomChatDetail();
 }
 
@@ -12655,6 +12942,10 @@ function renderSelectedRoomChatDetail() {
     }
     const messages = getVisibleRoomChatMessages();
     const message = state.roomChat.selectedIndex >= 0 ? messages[state.roomChat.selectedIndex] : null;
+    const signature = message ? JSON.stringify([describeRoomChatMessage(message), normalizeChatMessageText(message)])
+        : t('broadcast_room.room_chat_selected_detail_empty', 'Seçili mesaj yok.');
+    if (els.roomChatSelectedDetail._renderSignature === signature) return;
+    els.roomChatSelectedDetail._renderSignature = signature;
     if (!message) {
         els.roomChatSelectedDetail.innerHTML = escapeHtml(t('broadcast_room.room_chat_selected_detail_empty', 'Seçili mesaj yok.'));
         return;
@@ -12988,6 +13279,13 @@ function applySpeakersMainSceneSuggestion() {
 }
 
 function renderRoomState() {
+    desktopCloudControls?.update();
+    desktopWaitingControls?.update();
+    const waitingCheckbox = document.getElementById('desktop-waiting-enabled');
+    if (waitingCheckbox) {
+        waitingCheckbox.checked = state.roomSettings.waitingRoomEnabled === true;
+        waitingCheckbox.disabled = state.roomState.mode === 'live' && !isLocalRoomHost();
+    }
     updateHostMediaActionButtons();
     applyDeviceControlLabels();
     renderRoomSectionList();
@@ -13158,20 +13456,24 @@ function buildLiveBackendSnapshot(roomPayload = {}) {
             roomSlug: String(roomPayload.settings?.roomSlug || state.roomSettings.roomSlug || ''),
             password: String(state.roomSettings.password || ''),
             allowJoinWhenHostAbsent: roomPayload.settings?.allowJoinWhenHostAbsent === true,
+            waitingRoomEnabled: roomPayload.settings?.waitingRoomEnabled === true,
             requirePasswordWhenHostPresent: roomPayload.settings?.requirePasswordWhenHostPresent === true,
             requirePasswordWhenHostAbsent: roomPayload.settings?.requirePasswordWhenHostAbsent === true,
             webinarMode: roomPayload.settings?.webinarMode === true,
             allowGuestCamera: roomPayload.settings?.allowGuestCamera !== false,
             allowGuestMicrophone: roomPayload.settings?.allowGuestMicrophone !== false,
             hostRecordingActive: roomPayload.settings?.hostRecordingActive === true,
+            serverRecordingStatus: String(roomPayload.settings?.serverRecordingStatus || 'idle'),
             hostShareActive: roomPayload.settings?.hostShareActive === true,
             hostShareLabel: String(roomPayload.settings?.hostShareLabel || ''),
             hostShareMonitorAudioEnabled: roomPayload.settings?.hostShareMonitorAudioEnabled === true,
+            participantVolumes: normalizeParticipantVolumeMap(roomPayload.settings?.participantVolumes),
             youtubeWatchUrl: String(roomPayload.settings?.youtubeWatchUrl || ''),
             youtubeLiveActive: roomPayload.settings?.youtubeLiveActive === true
         },
         participants: participants.map((participant) => ({
             id: String(participant.identity || ''),
+            spotlighted: participant.spotlighted === true,
             name: String(participant.displayName || '').trim() || String(participant.identity || ''),
             role: String(participant.role || 'guest').trim() || 'guest',
             cameraEnabled: participant.cameraEnabled !== false,
@@ -13428,7 +13730,8 @@ async function openExistingRoomAsGuest(option = null) {
     rememberJoinedExistingRoom(resolved);
 }
 
-async function joinExistingRoomNatively({ inviteId, inviteUrl = '', label = '', displayName = '', password = '' } = {}) {
+async function joinExistingRoomNatively({ inviteId, inviteUrl = '', label = '', displayName = '', password = '', waiting } = {}) {
+    desktopWaitingControls?.cancel();
     stopLiveRoomSync();
     await resetCurrentLiveRoomForSwitch();
     const payload = await requestLiveBroadcastRoomApi('/broadcast-room/join-token', {
@@ -13440,10 +13743,17 @@ async function joinExistingRoomNatively({ inviteId, inviteUrl = '', label = '', 
             inviteId,
             displayName,
             password,
+            waiting,
             cameraEnabled: false,
             microphoneEnabled: false
         })
     });
+    if (payload.waiting) {
+        const approved = await desktopWaitingControls.waitForAdmission(inviteId, payload.waiting);
+        if (!approved) return;
+        return joinExistingRoomNatively({ inviteId, inviteUrl, label, displayName, password, waiting: approved });
+    }
+    if (!payload.token || !payload.participantIdentity || !payload.livekitUrl) throw new Error(t('desktop_cloud.error', ''));
     const roomTitle = String(payload.settings?.roomTitle || payload.title || label || inviteId || '').trim()
         || t('broadcast_room.default_room_title', 'EVD Yayın Odası');
     persistJoinDisplayName(displayName);
@@ -13454,6 +13764,8 @@ async function joinExistingRoomNatively({ inviteId, inviteUrl = '', label = '', 
     state.roomSettings.allowGuestCamera = payload.settings?.allowGuestCamera !== false;
     state.roomSettings.allowGuestMicrophone = payload.settings?.allowGuestMicrophone !== false;
     state.roomSettings.hostShareMonitorAudioEnabled = payload.settings?.hostShareMonitorAudioEnabled === true;
+    state.roomSettings.participantVolumes = normalizeParticipantVolumeMap(payload.settings?.participantVolumes);
+    state.liveRoom.participantVolumeByIdentity = normalizeParticipantVolumeMap(payload.settings?.participantVolumes);
     state.roomState = {
         roomId: String(payload.roomId || ''),
         inviteUrl: String(payload.inviteUrl || inviteUrl || buildJoinUrlFromSlug(inviteId)),
@@ -13568,7 +13880,11 @@ function localizePersistentRoomUi(room = null) {
 async function refreshPersistentRooms({ announce = false } = {}) {
     try {
         const payload = await requestLiveBroadcastRoomApi('/broadcast-room/persistent-rooms');
-        state.persistentRooms = Array.isArray(payload?.rooms) ? payload.rooms : [];
+        let accountError = '';
+        try { await loadRoomAccountRooms(); } catch (error) { roomAccount.rooms = []; accountError = error.message; }
+        const ownedIds = new Set(roomAccount.rooms.map(room => room.roomId));
+        state.persistentRooms = [...(Array.isArray(payload?.rooms) ? payload.rooms : []).filter(room => !ownedIds.has(room.roomId)), ...roomAccount.rooms];
+        if (accountError) document.getElementById('desktop-account-status').textContent = accountError;
         if (!getPersistentRoomById(state.selectedPersistentRoomId)) {
             state.selectedPersistentRoomId = String(state.persistentRooms[0]?.roomId || '');
         }
@@ -13737,6 +14053,7 @@ async function sendOwnParticipantHeartbeat() {
 }
 
 async function leaveCurrentLiveRoom({ refreshRooms = true, notifyBackend = true } = {}) {
+    desktopWaitingControls?.cancel();
     stopLiveRoomSync();
     if (notifyBackend) {
         try {
@@ -13746,9 +14063,12 @@ async function leaveCurrentLiveRoom({ refreshRooms = true, notifyBackend = true 
         }
     }
     await disconnectHostLiveRoom({ quiet: true });
+    roomChatExportArchive.clear();
+    roomChatExportRoomId = '';
     stopLiveTranslationPrototype({ quiet: true }).catch(() => {});
     state.selectedParticipantControlId = '';
     applyRoomSnapshot(createEmptySnapshot());
+    roomAccount.activeRoomId = '';
     closeParticipantContextMenu();
     closePersistentRoomContextMenu();
     if (refreshRooms) {
@@ -13757,6 +14077,7 @@ async function leaveCurrentLiveRoom({ refreshRooms = true, notifyBackend = true 
 }
 
 async function resetCurrentLiveRoomForSwitch() {
+    desktopWaitingControls?.cancel();
     if (state.roomState.mode !== 'live' || !state.roomState.roomId) {
         return;
     }
@@ -13778,12 +14099,43 @@ async function openPersistentRoomById(roomId) {
         setStatus(t('broadcast_room.persistent_room_missing', 'Seçili kalıcı oda bulunamadı.'));
         return;
     }
+    if (room.accountManaged) {
+        if (state.roomState.mode === 'live' && state.roomState.roomId) {
+            setStatus(t('admin_auth.desktop_leave_first'));
+            return;
+        }
+        const hostName = getDefaultHostDisplayName();
+        const token = await requestLiveBroadcastRoomApi('/broadcast-room/host-token', { method: 'POST',
+            body: JSON.stringify({ roomId, hostDisplayName: hostName }) });
+        roomAccount.activeRoomId = roomId;
+        state.roomState = { roomId, inviteUrl: room.inviteUrl, hostConnected: true, mode: 'live',
+            hostIdentity: token.participantIdentity, hostToken: token.token, livekitUrl: token.livekitUrl,
+            persistentRoom: room.settings?.persistentRoom === true, localRole: 'host', localDisplayName: hostName };
+        try {
+            // Load server settings before any media callback can publish local settings.
+            const snapshot = await requestLiveBroadcastRoomApi(`/broadcast-room/${encodeURIComponent(roomId)}`);
+            state.roomSettings.password = '';
+            applyRoomSnapshot(buildLiveBackendSnapshot(snapshot));
+            await connectHostToLiveKit();
+            await updateOwnMediaState({ cameraEnabled: !!state.liveRoom.localVideoTrack,
+                microphoneEnabled: !!state.liveRoom.localAudioTrack });
+            await syncLiveRoomSnapshot();
+            startLiveRoomSync();
+            closePersistentRoomContextMenu();
+            announceInitialRoomConnection({ roomName: room.title, inviteUrl: room.inviteUrl });
+        } catch (error) {
+            await leaveCurrentLiveRoom({ refreshRooms: false });
+            throw error;
+        }
+        return;
+    }
     await resetCurrentLiveRoomForSwitch();
     state.roomSettings.title = String(room.settings?.roomTitle || room.title || '').trim() || t('broadcast_room.default_room_title', 'EVD Yayın Odası');
     state.roomSettings.hostDisplayName = String(room.settings?.hostDisplayName || room.hostDisplayName || '').trim() || getDefaultHostDisplayName();
     state.roomSettings.persistentRoom = room.settings?.persistentRoom === true;
     state.roomSettings.roomSlug = String(room.settings?.roomSlug || room.inviteId || '').trim();
     state.roomSettings.allowJoinWhenHostAbsent = room.settings?.allowJoinWhenHostAbsent === true;
+    state.roomSettings.waitingRoomEnabled = room.settings?.waitingRoomEnabled === true;
     state.roomSettings.requirePasswordWhenHostPresent = room.settings?.requirePasswordWhenHostPresent === true;
     state.roomSettings.requirePasswordWhenHostAbsent = room.settings?.requirePasswordWhenHostAbsent === true;
     state.roomSettings.webinarMode = room.settings?.webinarMode === true;
@@ -13853,7 +14205,9 @@ async function updatePersistentRoomRules(roomId, updates = {}) {
             roomId: room.roomId,
             requirePasswordWhenHostPresent: updates.requirePasswordWhenHostPresent,
             requirePasswordWhenHostAbsent: updates.requirePasswordWhenHostAbsent,
-            allowJoinWhenHostAbsent: updates.allowJoinWhenHostAbsent
+            allowJoinWhenHostAbsent: updates.allowJoinWhenHostAbsent,
+            waitingRoomEnabled: updates.waitingRoomEnabled,
+            waitingRoomDecision: updates.waitingRoomDecision
         })
     });
     await refreshPersistentRooms();
@@ -13871,6 +14225,7 @@ function loadPersistentRoomIntoManagement(roomId) {
     state.roomSettings.roomSlug = String(room.settings?.roomSlug || room.inviteId || '').trim();
     state.roomSettings.password = '';
     state.roomSettings.allowJoinWhenHostAbsent = room.settings?.allowJoinWhenHostAbsent === true;
+    state.roomSettings.waitingRoomEnabled = room.settings?.waitingRoomEnabled === true;
     state.roomSettings.requirePasswordWhenHostPresent = room.settings?.requirePasswordWhenHostPresent === true;
     state.roomSettings.requirePasswordWhenHostAbsent = room.settings?.requirePasswordWhenHostAbsent === true;
     state.roomSettings.webinarMode = room.settings?.webinarMode === true;
@@ -14031,6 +14386,8 @@ async function syncLiveRoomSettings() {
                 persistentRoom: state.roomSettings.persistentRoom === true,
                 roomSlug: String(state.roomSettings.roomSlug || '').trim(),
                 password: String(state.roomSettings.password || ''),
+                waitingRoomEnabled: state.roomSettings.waitingRoomEnabled === true,
+                waitingRoomDecision: state.roomSettings.waitingRoomDecision,
                 allowJoinWhenHostAbsent: state.roomSettings.allowJoinWhenHostAbsent === true,
                 requirePasswordWhenHostPresent: state.roomSettings.requirePasswordWhenHostPresent === true,
                 requirePasswordWhenHostAbsent: state.roomSettings.requirePasswordWhenHostAbsent === true,
@@ -14042,6 +14399,7 @@ async function syncLiveRoomSettings() {
                 hostShareActive: !!activeHostShare,
                 hostShareLabel: activeHostShare?.name || '',
                 hostShareMonitorAudioEnabled: state.hostShareMonitorAudioEnabled !== false,
+                participantVolumes: normalizeParticipantVolumeMap(state.liveRoom.participantVolumeByIdentity),
                 youtubeWatchUrl: String(state.youtube.preparedWatchUrl || ''),
                 youtubeLiveActive: state.youtube.liveActive === true
             })
@@ -14136,10 +14494,14 @@ function closeParticipantContextMenu({ restoreFocus = false } = {}) {
     if (els.participantRenameGroup) {
         els.participantRenameGroup.hidden = true;
     }
+    if (els.participantVolumeGroup) {
+        els.participantVolumeGroup.hidden = true;
+    }
     if (els.participantMessageCompose) {
         els.participantMessageCompose.value = '';
     }
     state.selectedParticipantControlId = '';
+    state.participantVolumeEditingIdentity = '';
     if (restoreFocus) {
         if (state.participantContextMenuRestoreTarget === 'handRaise') {
             els.handRaiseList?.querySelector?.('[data-hand-raise-listbox]')?.focus?.();
@@ -14168,6 +14530,9 @@ function openParticipantMessageComposer() {
     if (els.participantRenameGroup) {
         els.participantRenameGroup.hidden = true;
     }
+    if (els.participantVolumeGroup) {
+        els.participantVolumeGroup.hidden = true;
+    }
     els.participantMessageCompose?.focus?.();
 }
 
@@ -14188,6 +14553,9 @@ function openParticipantRenameComposer() {
     if (els.participantMessageComposerGroup) {
         els.participantMessageComposerGroup.hidden = true;
     }
+    if (els.participantVolumeGroup) {
+        els.participantVolumeGroup.hidden = true;
+    }
     if (els.participantRenameGroup) {
         els.participantRenameGroup.hidden = false;
     }
@@ -14207,14 +14575,68 @@ function closeParticipantRenameComposer({ restoreFocus = false } = {}) {
     }
 }
 
+function openParticipantVolumeEditor() {
+    const participant = getParticipantById(state.selectedParticipantControlId);
+    if (!participant || !isLocalRoomHost()) {
+        return;
+    }
+    closeParticipantMessageComposer();
+    closeParticipantRenameComposer();
+    const identity = String(participant.id || '').trim();
+    state.participantVolumeEditingIdentity = identity;
+    const percent = getParticipantVolumePercent(identity);
+    if (els.participantVolumeLabel) {
+        els.participantVolumeLabel.textContent = t('broadcast_room.participant_volume_label_with_name', '{name} konuşma ses düzeyi', {
+            name: String(participant.name || participant.id || '').trim()
+        });
+    }
+    if (els.participantVolume) {
+        els.participantVolume.value = String(percent);
+        els.participantVolume.setAttribute('aria-valuetext', t('broadcast_room.participant_volume_value', 'Yüzde {value}', { value: percent }));
+    }
+    if (els.participantVolumeValue) {
+        els.participantVolumeValue.textContent = `${percent}%`;
+    }
+    if (els.participantVolumeGroup) {
+        els.participantVolumeGroup.hidden = false;
+    }
+    els.participantVolume?.focus?.();
+}
+
+function updateParticipantVolumeFromControl() {
+    const identity = String(state.participantVolumeEditingIdentity || state.selectedParticipantControlId || '').trim();
+    if (!identity || !els.participantVolume) {
+        return;
+    }
+    const percent = Math.round(clampAudioLevelPercent(els.participantVolume.value, 100));
+    els.participantVolume.value = String(percent);
+    els.participantVolume.setAttribute('aria-valuetext', t('broadcast_room.participant_volume_value', 'Yüzde {value}', { value: percent }));
+    if (els.participantVolumeValue) {
+        els.participantVolumeValue.textContent = `${percent}%`;
+    }
+    applyParticipantVolume(identity, percent);
+}
+
+function confirmParticipantVolume() {
+    const identity = String(state.participantVolumeEditingIdentity || state.selectedParticipantControlId || '').trim();
+    const participant = getParticipantById(identity);
+    const percent = getParticipantVolumePercent(identity);
+    const participantName = String(participant?.name || participant?.id || '').trim();
+    closeParticipantContextMenu({ restoreFocus: true });
+    setStatus(t('broadcast_room.status_participant_volume_applied', '{name} konuşma ses düzeyi yüzde {value} olarak ayarlandı.', {
+        name: participantName,
+        value: percent
+    }));
+}
+
 function applyDynamicButtonLabel(button, key, fallback) {
     if (!button) {
         return;
     }
     const text = t(key, fallback);
-    button.textContent = text;
-    button.setAttribute('aria-label', text);
-    button.setAttribute('title', text);
+    if (button.textContent !== text) button.textContent = text;
+    if (button.getAttribute('aria-label') !== text) button.setAttribute('aria-label', text);
+    if (button.getAttribute('title') !== text) button.setAttribute('title', text);
 }
 
 function updateParticipantContextMenuUi() {
@@ -14233,6 +14655,12 @@ function updateParticipantContextMenuUi() {
         : participant.microphoneEnabled !== false;
     const participantCanPublish = !['audience', 'viewer'].includes(String(participant.role || '').trim());
     const localIsHost = isLocalRoomHost();
+    if (els.btnParticipantSpotlight) {
+        els.btnParticipantSpotlight.hidden = !localIsHost;
+        els.btnParticipantSpotlight.disabled = state.roomState.mode !== 'live';
+        applyDynamicButtonLabel(els.btnParticipantSpotlight, participant.spotlighted
+            ? 'broadcast_room.participant_unspotlight' : 'broadcast_room.participant_spotlight');
+    }
     if (els.participantContextMenuName) {
         els.participantContextMenuName.textContent = t('broadcast_room.participant_menu_name_with_role', '{name}. Rol: {role}', {
             name: participantName,
@@ -14253,6 +14681,15 @@ function updateParticipantContextMenuUi() {
     }
     if (els.btnParticipantRename) {
         els.btnParticipantRename.hidden = !localIsHost;
+    }
+    if (els.btnParticipantVolume) {
+        els.btnParticipantVolume.hidden = !localIsHost;
+    }
+    if (els.btnParticipantCheckCamera) {
+        const self = participant.id === state.roomState.hostIdentity || participant.id === 'host';
+        els.btnParticipantCheckCamera.hidden = !self && !localIsHost;
+        applyDynamicButtonLabel(els.btnParticipantCheckCamera, self
+            ? 'broadcast_room.camera_check_self' : 'broadcast_room.camera_check_participant');
     }
     applyDynamicButtonLabel(
         els.btnParticipantTogglePanelist,
@@ -14375,6 +14812,9 @@ function openParticipantContextMenu(participantId, { restoreTarget = 'participan
     state.selectedParticipantControlId = participantId;
     updateParticipantContextMenuUi();
     closeParticipantMessageComposer();
+    if (els.participantVolumeGroup) {
+        els.participantVolumeGroup.hidden = true;
+    }
     if (els.participantContextMenu) {
         els.participantContextMenu.style.display = 'flex';
         els.participantContextMenu.classList.add('open');
@@ -15285,15 +15725,9 @@ async function readYouTubeLiveStatsFromShortcut() {
 
 function renderYouTubeChatList({ preserveSelection = true, announceSelection = false } = {}) {
     if (!els.youtubeChatList) return;
-    const previousMessageId = preserveSelection ? getSelectedChatMessage()?.id || '' : '';
-    els.youtubeChatList.innerHTML = '';
-    state.youtube.chatMessages.forEach((message, index) => {
-        const option = document.createElement('option');
-        option.value = message.id || `chat-${index}`;
-        option.textContent = buildChatListLabel(message);
-        els.youtubeChatList.appendChild(option);
-    });
+    const previousMessageId = preserveSelection ? els.youtubeChatList.value || getSelectedChatMessage()?.id || '' : '';
     if (state.youtube.chatMessages.length === 0) {
+        reconcileRoomListOptions(els.youtubeChatList, [], '');
         state.youtube.chatSelectedIndex = -1;
         return;
     }
@@ -15306,7 +15740,10 @@ function renderYouTubeChatList({ preserveSelection = true, announceSelection = f
     }
     nextIndex = Math.max(0, Math.min(nextIndex, state.youtube.chatMessages.length - 1));
     state.youtube.chatSelectedIndex = nextIndex;
-    els.youtubeChatList.selectedIndex = nextIndex;
+    const options = state.youtube.chatMessages.map((message, index) => ({
+        value: String(message.id || `chat-${index}`), label: buildChatListLabel(message)
+    }));
+    reconcileRoomListOptions(els.youtubeChatList, options, options[nextIndex].value);
     if (announceSelection) {
         const selected = getSelectedChatMessage();
         if (selected) {
@@ -16488,9 +16925,20 @@ function renderParticipants() {
         return;
     }
     state.participantListRenderSignature = signature;
+    if (previousListbox) {
+        reconcileRoomListOptions(previousListbox, participants.map((participant) => ({
+            value: String(participant.id || ''), label: participant.label
+        })), selectedId);
+        const size = Math.min(Math.max(participants.length, 6), 12);
+        if (previousListbox.size !== size) previousListbox.size = size;
+        if (previousMenuButton && previousMenuButton.disabled !== !canOpenMenu) previousMenuButton.disabled = !canOpenMenu;
+        const globalButton = els.participantList.querySelector('[data-open-participant-global-menu]');
+        if (globalButton && globalButton.hidden !== !isLocalRoomHost()) globalButton.hidden = !isLocalRoomHost();
+        return;
+    }
     els.participantList.innerHTML = `
         <div class="toolbar" style="margin-bottom: 12px;">
-            ${isLocalRoomHost() ? `<button type="button" class="secondary" data-open-participant-global-menu>${escapeHtml(t('broadcast_room.open_participant_global_menu', 'Genel katılımcı seçenekleri'))}</button>` : ''}
+            <button type="button" class="secondary" data-open-participant-global-menu ${isLocalRoomHost() ? '' : 'hidden'}>${escapeHtml(t('broadcast_room.open_participant_global_menu', 'Genel katılımcı seçenekleri'))}</button>
             <button type="button" class="secondary" data-open-selected-participant-menu ${canOpenMenu ? '' : 'disabled'}>${escapeHtml(t('broadcast_room.open_participant_menu', 'Katılımcı menüsünü aç'))}</button>
         </div>
         <select id="participant-listbox" size="${Math.min(Math.max(participants.length, 6), 12)}" class="value-box" data-participant-listbox aria-labelledby="participant-list-label" aria-label="${escapeHtml(t('broadcast_room.participant_list_label', 'Katılımcı listesi'))}" aria-describedby="participant-list-hint" title="${escapeHtml(t('broadcast_room.participant_list_label', 'Katılımcı listesi'))}">
@@ -17303,8 +17751,7 @@ async function requestLivePreviewAiReview() {
         resp = await ipcRenderer.invoke('openai-vision-request', {
             imageBase64: base64,
             prompt,
-            systemInstruction,
-            model: 'gpt-4.1-mini'
+            systemInstruction
         });
     }
 
@@ -20650,18 +21097,25 @@ function applyRoomSnapshot(snapshot) {
         roomSlug: String(snapshot.roomSettings?.roomSlug || state.roomSettings.roomSlug || ''),
         password: String(snapshot.roomSettings?.password || state.roomSettings.password || ''),
         allowJoinWhenHostAbsent: snapshot.roomSettings?.allowJoinWhenHostAbsent === true,
+        waitingRoomEnabled: snapshot.roomSettings?.waitingRoomEnabled === true,
         requirePasswordWhenHostPresent: snapshot.roomSettings?.requirePasswordWhenHostPresent === true,
         requirePasswordWhenHostAbsent: snapshot.roomSettings?.requirePasswordWhenHostAbsent === true,
         webinarMode: snapshot.roomSettings?.webinarMode === true,
         allowGuestCamera: snapshot.roomSettings?.allowGuestCamera !== false,
         allowGuestMicrophone: snapshot.roomSettings?.allowGuestMicrophone !== false,
         hostRecordingActive: snapshot.roomSettings?.hostRecordingActive === true,
+        serverRecordingStatus: String(snapshot.roomSettings?.serverRecordingStatus || 'idle'),
         hostShareActive: snapshot.roomSettings?.hostShareActive === true,
         hostShareLabel: String(snapshot.roomSettings?.hostShareLabel || ''),
         hostShareMonitorAudioEnabled: snapshot.roomSettings?.hostShareMonitorAudioEnabled === true,
+        participantVolumes: normalizeParticipantVolumeMap(snapshot.roomSettings?.participantVolumes),
         youtubeWatchUrl: String(snapshot.roomSettings?.youtubeWatchUrl || ''),
         youtubeLiveActive: snapshot.roomSettings?.youtubeLiveActive === true
     };
+    state.liveRoom.participantVolumeByIdentity = normalizeParticipantVolumeMap(state.roomSettings.participantVolumes);
+    applyTranslationMonitorMix();
+    refreshRemoteAudioRecordingGraph();
+    refreshObsAudioBridgeGraph();
     if (getLocalRoomRole() === 'guest') {
         const nextWatchUrl = state.roomSettings.youtubeWatchUrl;
         if (nextWatchUrl !== state.youtube.preparedWatchUrl) {
@@ -20679,6 +21133,7 @@ function applyRoomSnapshot(snapshot) {
         state.youtube.liveActive = state.roomSettings.youtubeLiveActive;
     }
     announceGuestHostActivityChange(previousRoomSettings, state.roomSettings);
+    desktopRecordingNotice?.update(state.roomState.roomId, state.roomSettings.serverRecordingStatus);
     ensureGuestShareMonitorAudioSocket();
     const nextParticipants = Array.isArray(snapshot.participants) ? snapshot.participants : [];
     const nextLocalIdentity = String(state.roomState.hostIdentity || '').trim();
@@ -21451,6 +21906,11 @@ function scheduleHostCameraTestAnalysis(delay = 500) {
 
 async function runHostCameraTestAnalysis() {
     if (!state.cameraTest.active || !state.cameraTest.detector || !els.hostCameraTestPreview) return;
+    if (state.cameraTest.participantId && getParticipantCameraTestTrack(state.cameraTest.participantId) !== state.cameraTest.stream?.getVideoTracks()[0]) {
+        await cleanupHostCameraTestResources();
+        setHostCameraTestStatus(t('broadcast_room.camera_check_unavailable'));
+        return;
+    }
     try {
         const result = state.cameraTest.detector.detectForVideo(els.hostCameraTestPreview, performance.now());
         const analysis = buildCameraTestAnalysis(result, els.hostCameraTestPreview);
@@ -21480,6 +21940,7 @@ async function runHostCameraTestAnalysis() {
 }
 
 async function cleanupHostCameraTestResources() {
+    state.cameraTest.session = null;
     state.cameraTest.active = false;
     clearTimeout(state.cameraTest.analysisTimer);
     state.cameraTest.analysisTimer = null;
@@ -21513,28 +21974,55 @@ async function stopHostCameraTest({ restoreFocus = true, announceStatus = true }
         setStatus(t('broadcast_room.camera_test_stopped', 'Kamera ve kadraj testi kapatıldı.'));
     }
     if (restoreFocus) {
-        els.btnTestHostCamera?.focus();
+        const origin = state.cameraTest.origin;
+        (origin?.isConnected ? origin : els.btnTestHostCamera)?.focus();
     }
 }
 
-async function startHostCameraTest() {
+function getParticipantCameraTestTrack(id) {
+    const participant = getParticipantById(id);
+    const self = id === state.roomState.hostIdentity || id === 'host';
+    if (!participant || (!self && !isLocalRoomHost()) || participant.cameraEnabled === false) return null;
+    const entry = self ? null : state.liveRoom.remoteParticipants[id]?.videoTracks?.find(item => !isLiveShareSource(item));
+    const track = self ? state.liveRoom.localVideoTrack : entry?.track;
+    const native = track?.mediaStreamTrack || track?._mediaStreamTrack;
+    return native?.kind === 'video' && native.readyState === 'live' && native.enabled && !native.muted
+        && !track.isMuted && !entry?.publication?.isMuted ? native : null;
+}
+
+async function startHostCameraTest(participantId = null) {
     if (!els.hostCameraTestDialog || !els.hostCameraTestPreview) return;
+    const origin = document.activeElement;
+    const borrowedTrack = participantId ? getParticipantCameraTestTrack(participantId) : null;
+    if (participantId && !borrowedTrack) {
+        setStatus(t('broadcast_room.camera_check_unavailable'));
+        return;
+    }
+    await cleanupHostCameraTestResources();
+    const session = {};
+    state.cameraTest.session = session;
+    state.cameraTest.origin = origin;
+    state.cameraTest.participantId = participantId;
+    els.hostCameraTestTitle.textContent = participantId
+        ? t('broadcast_room.camera_check_title', '', { name: getParticipantById(participantId).name })
+        : t('broadcast_room.camera_test_dialog_title');
+    document.getElementById('host-camera-test-help').textContent = t(participantId
+        ? 'broadcast_room.camera_check_help' : 'broadcast_room.camera_test_help');
     if (!els.hostCameraTestDialog.open) {
         els.hostCameraTestDialog.showModal();
     }
     els.hostCameraTestTitle?.focus();
     setHostCameraTestStatus(t('broadcast_room.camera_test_starting', 'Kamera ve çevrimdışı kadraj yardımı hazırlanıyor...'));
-    await cleanupHostCameraTestResources();
     state.cameraTest.lastMessage = '';
     state.cameraTest.lastDetailedMessage = '';
     try {
-        const existingTrack = getCameraTestNativeVideoTrack();
+        const existingTrack = borrowedTrack || getCameraTestNativeVideoTrack();
         if (existingTrack) {
             state.cameraTest.stream = new MediaStream([existingTrack]);
             state.cameraTest.ownsStream = false;
         } else {
             const deviceId = String(state.audioDevices.selectedCameraId || els.hostCameraDevice?.value || '').trim();
-            state.cameraTest.stream = await navigator.mediaDevices.getUserMedia({
+            const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     deviceId: deviceId ? { exact: deviceId } : undefined,
                     width: { ideal: 640, max: 1280 },
@@ -21543,16 +22031,19 @@ async function startHostCameraTest() {
                 },
                 audio: false
             });
+            if (state.cameraTest.session !== session) { stream.getTracks().forEach(track => track.stop()); return; }
+            state.cameraTest.stream = stream;
             state.cameraTest.ownsStream = true;
         }
         els.hostCameraTestPreview.srcObject = state.cameraTest.stream;
         await els.hostCameraTestPreview.play();
         await waitForCameraTestPreview();
+        if (state.cameraTest.session !== session) return;
 
         const visionTasks = require('@mediapipe/tasks-vision');
         const assetPaths = await getPersonalVirtualBackgroundAssetPaths();
         const vision = await visionTasks.FilesetResolver.forVisionTasks(assetPaths.tasksVisionFileSet);
-        state.cameraTest.detector = await visionTasks.FaceDetector.createFromOptions(vision, {
+        const detector = await visionTasks.FaceDetector.createFromOptions(vision, {
             baseOptions: {
                 modelAssetPath: `${assetPaths.tasksVisionFileSet}/blaze_face_short_range.tflite`,
                 delegate: 'CPU'
@@ -21561,12 +22052,15 @@ async function startHostCameraTest() {
             minDetectionConfidence: 0.55,
             minSuppressionThreshold: 0.3
         });
+        if (state.cameraTest.session !== session) { detector.close(); return; }
+        state.cameraTest.detector = detector;
         state.cameraTest.active = true;
         state.cameraTest.lastAnnouncedSignature = '';
         state.cameraTest.lastAnnouncementAt = 0;
         setHostCameraTestStatus(t('broadcast_room.camera_test_active', 'Kamera açık. Kadraj yardımı yüzünüzü inceliyor.'));
         scheduleHostCameraTestAnalysis(0);
     } catch (error) {
+        if (state.cameraTest.session !== session) return;
         await cleanupHostCameraTestResources();
         const message = t('broadcast_room.camera_test_failed', 'Kamera testi başlatılamadı: {error}', {
             error: error?.message || error || 'unknown_error'
@@ -21653,6 +22147,7 @@ async function createRoom() {
                 persistentRoom: state.roomSettings.persistentRoom === true,
                 roomSlug: state.roomSettings.roomSlug,
                 password: state.roomSettings.password,
+                waitingRoomEnabled: state.roomSettings.waitingRoomEnabled === true,
                 allowJoinWhenHostAbsent: state.roomSettings.allowJoinWhenHostAbsent === true,
                 requirePasswordWhenHostPresent: state.roomSettings.requirePasswordWhenHostPresent === true,
                 requirePasswordWhenHostAbsent: state.roomSettings.requirePasswordWhenHostAbsent === true,
@@ -21871,7 +22366,73 @@ async function updateOwnMediaState(options = {}) {
     applyRoomSnapshot(result.snapshot);
 }
 
+const roomChatExportArchive = new Map();
+let roomChatExportRoomId = '';
+let roomExitInProgress = false;
+
+function rememberRoomChatForExport() {
+    const roomId = String(state.roomState.roomId || '');
+    if (roomChatExportRoomId !== roomId) {
+        roomChatExportArchive.clear();
+        roomChatExportRoomId = roomId;
+    }
+    if (!roomId || !isLocalRoomHost()) return;
+    const identity = String(state.roomState.hostIdentity || '');
+    for (const message of state.roomChat.messages || []) {
+        const audience = String(message.audience || 'all');
+        if (audience !== 'all' && audience !== 'host'
+            && message.senderIdentity !== identity && message.recipientIdentity !== identity) continue;
+        if (message.id) roomChatExportArchive.set(message.id, { ...message });
+    }
+}
+
+function buildRoomChatExportText(messages, title) {
+    const lines = [t('broadcast_room.chat_export_heading', undefined, { room: title }), ''];
+    for (const message of [...messages].sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0))) {
+        const date = new Date(Number(message.createdAt || 0));
+        const time = Number.isFinite(date.getTime()) && message.createdAt ? date.toLocaleString(i18nState.currentLang) : '';
+        lines.push(`${time ? `[${time}] ` : ''}${describeRoomChatMessage(message)}`, '');
+    }
+    return '\uFEFF' + lines.join('\r\n');
+}
+
+async function offerRoomChatExport() {
+    rememberRoomChatForExport();
+    if (!roomChatExportArchive.size) return true;
+    // This is part of the existing end-meeting command, not a separate global shortcut.
+    const choice = await promptRoomExitChoice({ exportChat: true });
+    if (choice === 'cancel') return false;
+    if (choice === 'end_for_everyone') return true;
+    const roomId = state.roomState.roomId;
+    try {
+        const title = String(state.roomSettings.title || '').trim();
+        const fileName = t('broadcast_room.chat_export_filename', undefined, { room: title })
+            .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+        announce(t('broadcast_room.chat_export_save_title'));
+        const result = await ipcRenderer.invoke('show-save-dialog', {
+            title: t('broadcast_room.chat_export_save_title'),
+            defaultPath: fileName,
+            filters: [{ name: t('broadcast_room.chat_export_text_filter'), extensions: ['txt'] }]
+        });
+        if (result?.canceled || !result?.filePath) return false;
+        if (state.roomState.roomId !== roomId) return false;
+        rememberRoomChatForExport();
+        await fs.promises.writeFile(result.filePath, buildRoomChatExportText([...roomChatExportArchive.values()], title), 'utf8');
+        return true;
+    } catch (error) {
+        setStatus(t('broadcast_room.chat_export_failed', undefined, { error: error?.message || String(error) }));
+        return false;
+    }
+}
+
 async function closeCurrentRoomOrWindow() {
+    if (roomExitInProgress) return;
+    roomExitInProgress = true;
+    try { await performRoomExit(); }
+    finally { roomExitInProgress = false; }
+}
+
+async function performRoomExit() {
     if (state.roomState.mode === 'live' && state.roomState.roomId) {
         if (!isLocalRoomHost()) {
             try {
@@ -21891,6 +22452,7 @@ async function closeCurrentRoomOrWindow() {
             return;
         }
         if (choice === 'end_for_everyone') {
+            if (!await offerRoomChatExport()) return;
             try {
                 await requestLiveBroadcastRoomApi(`/broadcast-room/${encodeURIComponent(state.roomState.roomId)}/end-session`, {
                     method: 'POST',
@@ -21928,19 +22490,21 @@ async function closeCurrentRoomOrWindow() {
     window.close();
 }
 
-function promptRoomExitChoice() {
+function promptRoomExitChoice({ exportChat = false } = {}) {
     return new Promise((resolve) => {
+        const title = exportChat ? t('broadcast_room.chat_export_title') : t('broadcast_room.room_exit_title', 'Odadan ayrıl');
+        const description = exportChat ? t('broadcast_room.chat_export_question') : t('broadcast_room.room_exit_description', 'Yalnızca siz odadan ayrılabilir ya da toplantıyı herkes için sonlandırıp katılımcıları çıkarabilir ve bu oturumun sohbet geçmişini temizleyebilirsiniz.');
         const previousActiveElement = document.activeElement;
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
         overlay.setAttribute('role', 'presentation');
         overlay.innerHTML = `
             <div class="dialog-content" role="dialog" aria-modal="true" aria-labelledby="persistent-room-exit-title" aria-describedby="persistent-room-exit-description" tabindex="-1">
-                <h2 id="persistent-room-exit-title">${escapeHtml(t('broadcast_room.room_exit_title', 'Odadan ayrıl'))}</h2>
-                <p id="persistent-room-exit-description">${escapeHtml(t('broadcast_room.room_exit_description', 'Yalnızca siz odadan ayrılabilir ya da toplantıyı herkes için sonlandırıp katılımcıları çıkarabilir ve bu oturumun sohbet geçmişini temizleyebilirsiniz.'))}</p>
+                <h2 id="persistent-room-exit-title">${escapeHtml(title)}</h2>
+                <p id="persistent-room-exit-description">${escapeHtml(description)}</p>
                 <div class="dialog-buttons">
-                    <button type="button" data-exit-choice="leave">${escapeHtml(t('broadcast_room.room_leave_only', 'Yalnızca odadan ayrıl'))}</button>
-                    <button type="button" class="danger" data-exit-choice="end_for_everyone">${escapeHtml(t('broadcast_room.room_end_for_everyone', 'Toplantıyı herkes için sonlandır'))}</button>
+                    <button type="button" data-exit-choice="leave">${escapeHtml(exportChat ? t('broadcast_room.chat_export_yes') : t('broadcast_room.room_leave_only', 'Yalnızca odadan ayrıl'))}</button>
+                    <button type="button" class="danger" data-exit-choice="end_for_everyone">${escapeHtml(exportChat ? t('broadcast_room.chat_export_no') : t('broadcast_room.room_end_for_everyone', 'Toplantıyı herkes için sonlandır'))}</button>
                     <button type="button" class="secondary" data-exit-choice="cancel">${escapeHtml(t('dialog.cancel', 'İptal'))}</button>
                 </div>
             </div>
@@ -21959,12 +22523,21 @@ function promptRoomExitChoice() {
             button.addEventListener('click', () => finish(button.getAttribute('data-exit-choice') || 'cancel'));
         });
         overlay.addEventListener('keydown', (event) => {
+            if (event.key === 'Tab') {
+                const buttons = Array.from(overlay.querySelectorAll('button'));
+                const first = buttons[0], last = buttons[buttons.length - 1];
+                if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+                    event.preventDefault(); last?.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault(); first?.focus();
+                }
+            }
             if (event.key === 'Escape') {
                 event.preventDefault();
                 finish('cancel');
             }
         });
-        announce(t('broadcast_room.room_exit_description', 'Yalnızca siz odadan ayrılabilir ya da toplantıyı herkes için sonlandırıp katılımcıları çıkarabilir ve bu oturumun sohbet geçmişini temizleyebilirsiniz.'));
+        announce(`${title}. ${description}`);
         setTimeout(() => {
             (leaveButton || dialog)?.focus?.();
         }, 0);
@@ -22482,6 +23055,21 @@ function bindEvents() {
         persistHostDisplayName(state.roomSettings.hostDisplayName);
         renderRoomState();
     });
+    // Sensitive account administration deliberately uses labelled controls, not global shortcuts.
+    // Account credentials deliberately have no global shortcut. Enter submits the focused form.
+    for (const [id, action] of Object.entries({ 'desktop-account-sign-in': 'login',
+        'desktop-account-change-password': 'change', 'desktop-account-refresh': 'refresh', 'desktop-account-sign-out': 'logout' })) {
+        document.getElementById(id).addEventListener('click', () => roomAccountAction(action));
+    }
+    for (const [id, action] of Object.entries({ 'desktop-account-email': 'login', 'desktop-account-password': 'login',
+        'desktop-account-new-password': 'change', 'desktop-account-repeat': 'change' })) {
+        document.getElementById(id).addEventListener('keydown', event => {
+            if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); roomAccountAction(action); }
+        });
+    }
+    for (const [id, action] of Object.entries({ 'system-account-save': 'account', 'system-owner-refresh': 'list', 'system-owner-assign': 'assign', 'system-owner-create': 'create' })) {
+        document.getElementById(id)?.addEventListener('click', () => systemAccountAction(action));
+    }
     els.btnAdminLogin?.addEventListener('click', () => {
         loginBroadcastRoomAdmin().catch((error) => {
             const message = getAdminErrorMessage(error?.message);
@@ -22715,10 +23303,7 @@ function bindEvents() {
     els.roomChatList?.addEventListener('change', () => {
         state.roomChat.selectedIndex = Number(els.roomChatList.selectedIndex || 0);
         renderSelectedRoomChatDetail();
-        const messages = Array.isArray(state.roomChat.messages) ? state.roomChat.messages : [];
-        if (messages[state.roomChat.selectedIndex]) {
-            announceChatMessage(describeRoomChatMessage(messages[state.roomChat.selectedIndex]));
-        }
+        // Native select announces its selected option. Do not repeat it via live region.
     });
     els.roomChatSelectedDetail?.addEventListener('click', (event) => {
         const link = event.target?.closest?.('a[href]');
@@ -22971,6 +23556,33 @@ function bindEvents() {
     els.btnParticipantRename?.addEventListener('click', () => {
         openParticipantRenameComposer();
     });
+    els.btnParticipantVolume?.addEventListener('click', openParticipantVolumeEditor);
+    // Context-specific inspection uses the participant menu, not a global shortcut.
+    els.btnParticipantCheckCamera?.addEventListener('click', () => startHostCameraTest(state.selectedParticipantControlId));
+    // Contextual action uses the existing keyboard-accessible participant menu.
+    els.btnParticipantSpotlight?.addEventListener('click', () => {
+        if (!isLocalRoomHost()) return;
+        const participant = getParticipantById(state.selectedParticipantControlId);
+        if (!participant) return;
+        updateParticipantControls(participant.id, { spotlighted: !participant.spotlighted },
+            participant.spotlighted ? 'broadcast_room.participant_unspotlight_done' : 'broadcast_room.participant_spotlight_done')
+            .catch((error) => setStatus(String(error?.message || error)));
+    });
+    els.participantVolume?.addEventListener('input', updateParticipantVolumeFromControl);
+    els.participantVolume?.addEventListener('keydown', (event) => {
+        if (event.key === 'PageUp' || event.key === 'PageDown') {
+            event.preventDefault();
+            const delta = event.key === 'PageUp' ? 10 : -10;
+            els.participantVolume.value = String(clampAudioLevelPercent(Number(els.participantVolume.value) + delta, 100));
+            updateParticipantVolumeFromControl();
+            return;
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            confirmParticipantVolume();
+        }
+    });
+    els.btnParticipantVolumeConfirm?.addEventListener('click', confirmParticipantVolume);
     els.btnParticipantToggleCoHost?.addEventListener('click', () => toggleParticipantCoHostRole(state.selectedParticipantControlId).catch((error) => {
         setStatus(t('broadcast_room.status_participant_control_failed', 'Katılımcı komutu uygulanamadı: {error}', { error: error.message }));
     }));
@@ -23029,6 +23641,14 @@ function bindEvents() {
             if (event.key === 'ArrowLeft') {
                 event.preventDefault();
                 closeParticipantRenameComposer({ restoreFocus: true });
+            }
+            return;
+        }
+        if (event.target === els.participantVolume) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                els.participantVolumeGroup.hidden = true;
+                els.btnParticipantVolume?.focus?.();
             }
             return;
         }
@@ -24036,6 +24656,9 @@ function bindEvents() {
     });
 
     window.addEventListener('beforeunload', () => {
+        desktopCloudControls?.dispose();
+        desktopWaitingControls?.dispose();
+        desktopRecordingNotice?.dispose();
         if (state.recording.pollTimer) {
             clearInterval(state.recording.pollTimer);
             state.recording.pollTimer = null;
@@ -24050,12 +24673,56 @@ function bindEvents() {
 
 async function init() {
     await i18nState.init();
+    desktopRecordingNotice = require('../scripts/desktop-recording-notice').createRecordingNoticeController(
+        document.getElementById('server-recording-notice'), key => t(key, ''));
+    desktopWaitingControls = require('../scripts/desktop-waiting-controls').createDesktopWaitingControls({ document, t, announce,
+        request: requestLiveBroadcastRoomApi,
+        context: () => ({ roomId: state.roomState.roomId,
+            allowed: state.roomState.mode === 'live' && ['host', 'co_host'].includes(getLocalRoomRole()) }) });
+    document.getElementById('desktop-waiting-enabled').addEventListener('change', async event => {
+        const checkbox = event.currentTarget;
+        const enabled = checkbox.checked;
+        const previousEnabled = state.roomSettings.waitingRoomEnabled === true;
+        const targetRoomId = state.roomState.roomId;
+        checkbox.disabled = true;
+        try {
+            const decision = enabled ? undefined : await desktopWaitingControls.disableDecision(checkbox);
+            if (targetRoomId !== state.roomState.roomId) return;
+            if (!enabled && !['admit', 'reject'].includes(decision)) { checkbox.checked = true; return; }
+            state.roomSettings.waitingRoomEnabled = enabled;
+            state.roomSettings.waitingRoomDecision = decision;
+            if (state.roomState.mode === 'live' && isLocalRoomHost()) {
+                await requestLiveBroadcastRoomApi('/broadcast-room/room-settings', { method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ roomId: state.roomState.roomId, waitingRoomEnabled: enabled, waitingRoomDecision: decision }) });
+                await syncLiveRoomSnapshot();
+            }
+        } catch (_) {
+            state.roomSettings.waitingRoomEnabled = previousEnabled;
+            checkbox.checked = previousEnabled;
+            announce(t('desktop_cloud.error', ''));
+        }
+        finally { checkbox.disabled = false; checkbox.focus(); }
+    });
+    desktopCloudControls = require('../scripts/desktop-cloud-controls').createDesktopCloudControls({
+        document, t, announce, language: () => i18nState.currentLang,
+        request: roomAccountRequest,
+        download: options => ipcRenderer.invoke('room-account-download', options),
+        context: () => ({ roomId: state.roomState.roomId, accountKey: roomAccount.user?.id || roomAccount.user?.email,
+            allowed: !!roomAccount.user && !roomAccount.user.passwordChangeRequired
+                && getLocalRoomRole() !== 'guest' })
+    });
+    desktopCloudControls.update();
     if (els.hostMicrophoneEchoCancellation) {
         els.hostMicrophoneEchoCancellation.checked = state.audioDevices.microphoneEchoCancellation;
     }
     if (els.hostMicrophoneNoiseSuppression) {
         els.hostMicrophoneNoiseSuppression.checked = state.audioDevices.microphoneNoiseSuppression;
     }
+    // A per-session preference, reachable by Tab; no global keyboard-manager command is needed.
+    document.getElementById('host-microphone-music-mode')?.addEventListener('change', () => {
+        handleHostMicrophoneProcessingChange().catch(error => setStatus(String(error.message || error)));
+    });
     if (els.hostMicrophoneAutoGainControl) {
         els.hostMicrophoneAutoGainControl.checked = state.audioDevices.microphoneAutoGainControl;
     }
@@ -24160,10 +24827,18 @@ ipcRenderer.on('live-broadcast-emergency-stopped', () => {
     renderAll();
 });
 
+ipcRenderer.on('accessibility-dialog-announce', (_event, payload = {}) => {
+    announce([payload.title, payload.message, payload.detail].filter(Boolean).join('. '));
+});
+
 ipcRenderer.on('global-shortcut-triggered', (_event, accelerator) => {
     const actionMap = getBroadcastRoomGlobalShortcutActionMap();
     const actionId = actionMap[accelerator] || actionMap[normalizeGlobalShortcutAccelerator(accelerator)];
-    if (actionId === 'broadcastRoomGlobalToggleYouTubeLive') {
+    if (actionId === 'broadcastRoomGlobalAdmitAll') {
+        desktopWaitingControls?.admitAll();
+    } else if (actionId === 'broadcastRoomCloudPanel') {
+        desktopCloudControls?.focus();
+    } else if (actionId === 'broadcastRoomGlobalToggleYouTubeLive') {
         toggleYouTubeLiveFromShortcut().catch((error) => {
             syncYouTubeStatusText(t('broadcast_room.youtube_toggle_shortcut_failed', 'YouTube canlı yayın kısayolu tamamlanamadı: {error}', {
                 error: error?.message || error || 'unknown_error'

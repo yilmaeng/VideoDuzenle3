@@ -35,18 +35,22 @@ function isDiscontinuous(previous, current, inputPath) {
     return Math.abs(Number(previous.end || 0) - Number(current.start || 0)) > 0.001;
 }
 
-function runFfmpeg(ffmpegPath, args, { duration = 0, onProgress = null } = {}) {
+function runFfmpeg(ffmpegPath, args, { duration = 0, onProgress = null, signal = null } = {}) {
     return new Promise((resolve, reject) => {
-        if (isCurrentExportCancelled()) {
+        if (signal?.aborted || isCurrentExportCancelled()) {
             reject(createCancelledError());
             return;
         }
         const progressArgs = ['-progress', 'pipe:2', '-nostats', ...args];
         const child = spawn(ffmpegPath, progressArgs, { windowsHide: true });
+        const abort = () => child.kill();
+        signal?.addEventListener('abort', abort, { once: true });
         let unregister = () => {};
         try {
             unregister = registerExportProcess(child);
         } catch (error) {
+            signal?.removeEventListener('abort', abort);
+            child.kill();
             reject(error);
             return;
         }
@@ -92,12 +96,14 @@ function runFfmpeg(ffmpegPath, args, { duration = 0, onProgress = null } = {}) {
             if (match) emitProgressSeconds(Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]));
         });
         child.on('error', (error) => {
+            signal?.removeEventListener('abort', abort);
             unregister();
-            reject(isCurrentExportCancelled() ? createCancelledError() : error);
+            reject(signal?.aborted || isCurrentExportCancelled() ? createCancelledError() : error);
         });
         child.on('close', (code) => {
+            signal?.removeEventListener('abort', abort);
             unregister();
-            if (isCurrentExportCancelled()) {
+            if (signal?.aborted || isCurrentExportCancelled()) {
                 reject(createCancelledError());
                 return;
             }
@@ -115,14 +121,10 @@ function runFfmpeg(ffmpegPath, args, { duration = 0, onProgress = null } = {}) {
 
 function chooseAudioFormat(sourceProfiles = []) {
     const audioTracks = sourceProfiles.flatMap((profile) => profile.audio || []);
-    const sampleRate = audioTracks.length
-        ? Math.max(...audioTracks.map((track) => Number(track.sampleRate || 0)).filter(Boolean), 44100)
-        : 48000;
-    const layouts = [...new Set(audioTracks.map((track) => track.channelLayout).filter(Boolean))];
-    const channelLayout = layouts.length === 1 ? layouts[0] : 'stereo';
+    const shared = require('../slideshow-audio-policy').sourceAudioProfile(audioTracks);
     return {
-        sampleRate: Math.min(192000, Math.max(32000, sampleRate)),
-        channelLayout: /^[a-z0-9.()+-]+$/i.test(channelLayout) ? channelLayout : 'stereo'
+        sampleRate: shared.sampleRate,
+        channelLayout: shared.layout
     };
 }
 
@@ -136,6 +138,7 @@ async function renderContinuousAudioPass({
     previousSegment = null,
     nextSegment = null,
     inputSeekOffsets = null,
+    signal = null,
     onProgress = null
 }) {
     if (!segments.length) throw new Error('empty_audio_timeline');
@@ -167,6 +170,8 @@ async function renderContinuousAudioPass({
         let prefix;
         if (sourceHasAudio) {
             prefix = `[${inputIndex}:a:0]`;
+            // Reconstruct source timestamp gaps before trimming, not at a join's tail.
+            chain.push(require('./seamless-timeline').sourceAudioTimelineFilter(sampleRate));
             chain.push(`atrim=start=${start.toFixed(6)}:end=${end.toFixed(6)}`, 'asetpts=PTS-STARTPTS');
             chain.push(...buildAtempo(speed));
         } else {
@@ -210,7 +215,7 @@ async function renderContinuousAudioPass({
         outputPath
     );
     try {
-        await runFfmpeg(ffmpegPath, args, { duration, onProgress });
+        await runFfmpeg(ffmpegPath, args, { duration, onProgress, signal });
         return { outputPath, duration, sampleRate, channelLayout, protectiveFadeMs };
     } finally {
         try { fs.unlinkSync(scriptPath); } catch (_error) {}
@@ -241,13 +246,20 @@ function writeAudioConcatList(filePath, files) {
 
 async function renderContinuousAudio({
     ffmpegPath,
+    ffprobePath,
     inputPath,
     segments = [],
     sourceProfiles = [],
     outputPath,
     protectiveFadeMs = 3,
+    signal = null,
     onProgress = null
 }) {
+    const copied = await require('./selection-audio-copy').tryCopySelectionAudio({
+        ffmpegPath, ffprobePath, inputPath, segments, sourceProfiles, outputPath,
+        runFfmpeg: (exe, args, options) => runFfmpeg(exe, args, { ...options, signal }), onProgress
+    });
+    if (copied) return copied;
     if (segments.length <= CONTINUOUS_AUDIO_BATCH_THRESHOLD) {
         return renderContinuousAudioPass({
             ffmpegPath,
@@ -256,6 +268,7 @@ async function renderContinuousAudio({
             sourceProfiles,
             outputPath,
             protectiveFadeMs,
+            signal,
             onProgress
         });
     }
@@ -285,6 +298,7 @@ async function renderContinuousAudio({
                 sourceProfiles,
                 outputPath: batchPath,
                 protectiveFadeMs,
+                signal,
                 previousSegment: index > 0 ? segments[index - 1] : null,
                 nextSegment: index + batch.length < segments.length ? segments[index + batch.length] : null,
                 inputSeekOffsets: buildAudioBatchInputOffsets(batch, inputPath),
@@ -302,6 +316,7 @@ async function renderContinuousAudio({
             outputPath
         ], {
             duration,
+            signal,
             onProgress: (percent) => onProgress?.(92 + Number(percent || 0) * 0.08)
         });
         return { outputPath, duration, sampleRate, channelLayout, protectiveFadeMs, batched: true };

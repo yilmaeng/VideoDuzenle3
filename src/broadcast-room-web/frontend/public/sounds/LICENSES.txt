@@ -1,0 +1,11 @@
+Third-party recordings: CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/).
+camera-on.mp3: Camera Shutter by roachpowder
+https://freesound.org/people/roachpowder/sounds/170229/
+room-join.mp3: door - open 01.wav by Anthousai
+https://freesound.org/people/Anthousai/sounds/398750/
+room-leave.mp3: Door close.wav by soundmary
+https://freesound.org/people/soundmary/sounds/117614/
+MP3 files are the HQ previews provided by Freesound, used without modification.
+
+microphone-on.wav, microphone-off.wav, camera-off.wav:
+Synthesized for EVD by temp/preview-room-tones.cjs and approved in listening previews.

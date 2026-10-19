@@ -34,6 +34,12 @@ function createOpenAiRealtimeSocket(url, apiKey) {
 
 const CONFIG_DIR = path.join(require('os').homedir(), '.korcul-video-editor');
 const API_KEY_FILE = path.join(CONFIG_DIR, 'openai-api-key.enc');
+const MODEL_FILE = path.join(CONFIG_DIR, 'openai-vision-model.txt');
+const modelCatalog = require('./ai-model-catalog').createModelCatalog('openai', CONFIG_DIR);
+function getVisionModel() {
+    try { return fs.readFileSync(MODEL_FILE, 'utf8').trim() || 'gpt-4.1-mini'; }
+    catch { return 'gpt-4.1-mini'; }
+}
 const realtimeTranslationSessions = new Map();
 const nativeRealtimeTranslateSessions = new Map();
 
@@ -912,9 +918,14 @@ async function createRealtimeTranslationSession({ webContents, apiKey, sourceLan
 }
 
 function setupOpenAiHandlers() {
-    ipcMain.handle('save-openai-api-key', async (_event, { apiKey }) => {
+    ipcMain.handle('refresh-openai-models', (event, payload = {}) => {
+        if (event.senderFrame && event.senderFrame !== event.sender.mainFrame) return { success: false, error: 'failed' };
+        return modelCatalog.refresh(payload.apiKey === undefined ? getApiKey() : payload.apiKey);
+    });
+    ipcMain.handle('save-openai-api-key', async (_event, { apiKey, model }) => {
         try {
             saveApiKey(apiKey);
+            if (typeof model === 'string' && /^[a-zA-Z0-9._:/-]{1,200}$/.test(model)) fs.writeFileSync(MODEL_FILE, model, 'utf8');
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };
@@ -927,7 +938,9 @@ function setupOpenAiHandlers() {
 
     ipcMain.handle('get-openai-api-data', async () => {
         return {
-            apiKey: getApiKey()
+            apiKey: getApiKey(),
+            model: getVisionModel(),
+            models: modelCatalog.cached(getApiKey())
         };
     });
 
@@ -939,7 +952,7 @@ function setupOpenAiHandlers() {
                 imageBase64: payload.imageBase64,
                 prompt: payload.prompt,
                 systemInstruction: payload.systemInstruction,
-                model: payload.model || 'gpt-4.1-mini'
+                model: payload.model || getVisionModel()
             });
             return {
                 success: true,
@@ -1150,5 +1163,6 @@ function setupOpenAiHandlers() {
 }
 
 module.exports = {
-    setupOpenAiHandlers
+    setupOpenAiHandlers, getApiKey, saveApiKey, getVisionModel,
+    saveAiModel: model => { fs.mkdirSync(CONFIG_DIR, { recursive: true }); fs.writeFileSync(MODEL_FILE, model, 'utf8'); }
 };

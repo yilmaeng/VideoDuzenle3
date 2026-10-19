@@ -438,7 +438,6 @@ const AudioSettings = {
             phone: this.effectPhone.checked
         };
 
-        Timeline.saveState(); // Değişiklik öncesi durum kaydet
         let appliedCount = 0;
 
         const shouldWarnNoChannelChange = (segmentsToCheck = []) => {
@@ -481,14 +480,16 @@ const AudioSettings = {
                 return;
             }
 
-            for (const seg of selectedSegments) {
-                seg.audioVolume = vol;
-                seg.isMuted = muted;
-                seg.noiseReduction = { ...noiseData };
-                seg.audioEffects = { ...effectsData };
-                seg.audioChannelMode = selectedChannelMode;
-                appliedCount++;
-            }
+            Timeline.transaction('audio', selection, () => {
+                for (const seg of selectedSegments) {
+                    seg.audioVolume = vol;
+                    seg.isMuted = muted;
+                    seg.noiseReduction = { ...noiseData };
+                    seg.audioEffects = { ...effectsData };
+                    seg.audioChannelMode = selectedChannelMode;
+                    appliedCount++;
+                }
+            });
 
             if (appliedCount > 0) {
                 console.log(`Ses ayarları ${appliedCount} segmente uygulandı (Seçim Aralığı)`);
@@ -505,11 +506,13 @@ const AudioSettings = {
             if (shouldWarnNoChannelChange([seg])) {
                 return;
             }
-            seg.audioVolume = vol;
-            seg.isMuted = muted;
-            seg.noiseReduction = { ...noiseData };
-            seg.audioEffects = { ...effectsData };
-            seg.audioChannelMode = selectedChannelMode;
+            Timeline.transaction('audio', null, () => {
+                seg.audioVolume = vol;
+                seg.isMuted = muted;
+                seg.noiseReduction = { ...noiseData };
+                seg.audioEffects = { ...effectsData };
+                seg.audioChannelMode = selectedChannelMode;
+            });
 
             Timeline.hasChanges = true;
             console.log('Ses ayarları uygulandı:', seg);

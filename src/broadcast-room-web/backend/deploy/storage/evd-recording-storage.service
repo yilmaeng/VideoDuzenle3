@@ -1,0 +1,20 @@
+[Unit]
+Description=EVD private recording S3 gateway
+After=network-online.target
+
+[Service]
+User=nodeapp
+Group=nodeapp
+EnvironmentFile=/etc/evd-recording-storage.env
+ExecStart=/usr/local/bin/evd-rclone serve s3 /var/lib/evd-recordings --addr 127.0.0.1:9198 --config /dev/null --log-level ERROR
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/evd-recordings
+
+[Install]
+WantedBy=multi-user.target

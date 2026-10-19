@@ -406,6 +406,7 @@ const App = {
         }
 
         this.verticalClipQueue.push(built.clip);
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         Accessibility.announce(this.t('runtime.vertical.queue_add_success', '{label} seçim listesine eklendi. Listede toplam {count} öğe var.', {
             label: built.clip.label,
             count: String(this.verticalClipQueue.length)
@@ -462,6 +463,7 @@ const App = {
             }
 
             this.verticalClipQueue.push(built.clip);
+            document.dispatchEvent(new Event('editor-menu-state-changed'));
             addedCount++;
         }
 
@@ -601,6 +603,7 @@ const App = {
         }
 
         const [removedClip] = this.verticalClipQueue.splice(currentIndex, 1);
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         this.syncSelectionAfterQueueMutation([removedClip]);
         Accessibility.announce(this.t('runtime.selection_queue.item_removed', 'Seçim listeden kaldırıldı.'));
 
@@ -651,7 +654,8 @@ const App = {
             return;
         }
 
-        const parsedSource = this.parseFilePath(this.verticalClipQueue[0]?.sourcePath || this.currentFilePath || '');
+        const clips = this.getVerticalClipQueueSnapshot();
+        const parsedSource = this.parseFilePath(clips[0]?.sourcePath || this.currentFilePath || '');
         const saveResult = await window.api.showSaveDialog({
             title: this.t('messages.merge_selection_queue', 'Seçim Listesini Tek Klipte Birleştir'),
             defaultPath: `${parsedSource.name || 'video'}-selection-merge.mp4`,
@@ -662,37 +666,20 @@ const App = {
             return;
         }
 
-        const tempFiles = [];
         try {
             this.showProgress(this.t('runtime.selection_queue.merging', 'Seçimler yeni bir klipte birleştiriliyor...'));
             Accessibility.announce(this.t('runtime.selection_queue.merging', 'Seçimler yeni bir klipte birleştiriliyor...'));
 
-            for (let i = 0; i < this.verticalClipQueue.length; i++) {
-                const clip = this.verticalClipQueue[i];
-                this.showProgress(this.t('runtime.selection_queue.preparing_item', 'Kuyruktaki {index}. seçim hazırlanıyor. Toplam {count} seçim var.', {
-                    index: String(i + 1),
-                    count: String(this.verticalClipQueue.length)
-                }));
-
-                const tempPath = await window.api.getTempPath(`evd_selection_merge_${Date.now()}_${i + 1}.mp4`);
-                tempFiles.push(tempPath);
-
-                const cutResult = await window.api.cutVideo({
-                    inputPath: clip.sourcePath,
-                    outputPath: tempPath,
-                    startTime: clip.startTime,
-                    endTime: clip.endTime
-                });
-
-                if (!cutResult.success) {
-                    throw new Error(cutResult.error || this.t('runtime.common.error', 'Hata: {error}', { error: 'Unknown' }));
-                }
-            }
-
-            this.showProgress(this.t('runtime.selection_queue.concatenating', 'Hazırlanan seçimler birleştiriliyor...'));
-            const concatResult = await window.api.concatVideosFast({
-                inputPaths: tempFiles,
-                outputPath: saveResult.filePath
+            // One audio encode avoids per-clip AAC padding and shares timeline cut smoothing.
+            const concatResult = await window.api.renderTimeline({
+                inputPath: clips[0].sourcePath,
+                segments: clips.map(clip => ({
+                    sourceFile: clip.sourcePath,
+                    start: clip.startTime,
+                    end: clip.endTime
+                })),
+                outputPath: saveResult.filePath,
+                options: { exportMode: 'legacy' }
             });
 
             if (!concatResult.success) {
@@ -705,20 +692,13 @@ const App = {
         } catch (error) {
             this.hideProgress();
             Accessibility.announceError(error.message);
-        } finally {
-            if (tempFiles.length > 0) {
-                try {
-                    await window.api.deleteFiles(tempFiles);
-                } catch (cleanupError) {
-                    console.warn('Selection merge temp cleanup failed:', cleanupError);
-                }
-            }
         }
     },
 
     clearVerticalClipQueue(shouldAnnounce = true) {
         const removedClips = this.getVerticalClipQueueSnapshot();
         this.verticalClipQueue.length = 0;
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         this.syncSelectionAfterQueueMutation(removedClips);
         if (shouldAnnounce) {
             Accessibility.announce(this.t('runtime.vertical.queue_cleared', 'Seçim listesi temizlendi.'));
@@ -1255,6 +1235,18 @@ const App = {
         // Helper: Video kontrolü yapılabilir mi? (Diyalog açık değilse VE input/liste odaklı değilse)
         const isDialogOpen = () => document.querySelectorAll('dialog[open]').length > 0;
         const canControlVideo = () => !isDialogOpen() && !Keyboard.isInputFocused();
+        window.api.onSpeechSearchOpen(() => {
+            if (!isDialogOpen()) window.SpeechSearch.open();
+        });
+        window.api.onVocalSeparationOpen(() => {
+            if (!isDialogOpen()) window.VocalSeparation.open();
+        });
+        window.api.onVideoCropOpen(() => {
+            if (!isDialogOpen()) window.VideoCrop.open();
+        });
+        window.api.onSpeechSearchTransfer(action => {
+            if (!isDialogOpen()) window.SpeechSearch.transfer(action);
+        });
 
         // Navigasyon işlemleri
 
@@ -1553,6 +1545,8 @@ const App = {
      * @param {string} errorMessage - Hata mesajı
      */
     async handleVideoConversionNeeded(filePath, errorMessage) {
+        // A delayed media error from a closed/replaced file must not open a repair dialog.
+        if (!filePath || !this.currentFilePath || VideoPlayer.currentFilePath !== filePath) return;
         console.log('Video oynatma hatası (conversion needed):', errorMessage);
 
         // Dosya açma işlemi sürüyorsa müdahale etme
@@ -3537,9 +3531,13 @@ const App = {
      * Geri al (ANI İŞLEM)
      */
     undo() {
+        if (Timeline.undoStack.length) VideoPlayer.pause({announce:false});
         if (Timeline.undo()) {
             this.updateAfterEdit();
-            Accessibility.announce(this.t('runtime.app.undo_done', 'İşlem geri alındı'));
+            Timeline.restoreHistoryView();
+            this.hasChanges = true;
+            TabManager.markAsChanged();
+            Accessibility.announce(window.i18nHelper.t('edit_history.undone', {action:Timeline.historyLabel(Timeline.lastHistoryAction)}));
         } else {
             Accessibility.announce(this.t('runtime.app.nothing_to_undo', 'Geri alınacak işlem yok'));
         }
@@ -3549,9 +3547,13 @@ const App = {
      * Yinele (ANI İŞLEM)
      */
     redo() {
+        if (Timeline.redoStack.length) VideoPlayer.pause({announce:false});
         if (Timeline.redo()) {
             this.updateAfterEdit();
-            Accessibility.announce(this.t('runtime.app.redo_done', 'İşlem yinelendi'));
+            Timeline.restoreHistoryView();
+            this.hasChanges = true;
+            TabManager.markAsChanged();
+            Accessibility.announce(window.i18nHelper.t('edit_history.redone', {action:Timeline.historyLabel(Timeline.lastHistoryAction)}));
         } else {
             Accessibility.announce(this.t('runtime.app.nothing_to_redo', 'Yinelenecek işlem yok'));
         }
@@ -5609,7 +5611,7 @@ const App = {
             const projectData = {
                 videoPath: this.currentFilePath,
                 timeline: {
-                    segments: Timeline.getSegments(),
+                    segments: Timeline.getSegments().map(segment => ({ ...segment })),
                     sourceFile: Timeline.sourceFile,
                     sourceDuration: Timeline.sourceDuration
                 },
@@ -5623,7 +5625,7 @@ const App = {
                 transitions: Transitions.getAll(),
                 markers: Markers.getAll ? Markers.getAll() : [],
                 ctaOverlays: ctaOverlays,
-                version: '1.3'
+                version: '1.4'
             };
 
             const result = await window.api.showSaveDialog({
@@ -5633,6 +5635,13 @@ const App = {
             });
 
             if (!result.canceled && result.filePath) {
+                const sources = [...new Set([projectData.timeline.sourceFile || projectData.videoPath,
+                    ...projectData.timeline.segments.map(segment => segment.sourceFile
+                    || projectData.timeline.sourceFile || projectData.videoPath)])];
+                Accessibility.announce(window.i18nHelper.t('speech_search.project.saving'));
+                const analysis = await window.api.speechSearchProject({ action: 'save', sources });
+                if (analysis.error) throw new Error(window.i18nHelper.t(`speech_search.archive.errors.${analysis.error}`));
+                if (analysis.data) projectData.speechAnalysis = analysis.data;
                 const jsonContent = JSON.stringify(projectData, null, 2);
                 const saveResult = await window.api.saveFileContent({
                     filePath: result.filePath,
@@ -5640,7 +5649,9 @@ const App = {
                 });
 
                 if (saveResult.success) {
-                    Accessibility.announce(this.t('runtime.app.project_saved', 'Proje başarıyla kaydedildi.'));
+                    Accessibility.announce(projectData.speechAnalysis
+                        ? window.i18nHelper.t('speech_search.project.saved')
+                        : this.t('runtime.app.project_saved', 'Proje başarıyla kaydedildi.'));
                 } else {
                     Accessibility.announce(this.t('runtime.app.save_error', 'Kaydetme hatası: {error}', {
                         error: saveResult.error
@@ -5694,6 +5705,8 @@ const App = {
             }
 
             const projectData = JSON.parse(contentResult.content);
+            const sourceMappings = new Map();
+            let speechAnalysisWarning = '';
             window.api.addRecentFile?.(projectPath).catch(() => {});
 
             if (projectData.videoPath) {
@@ -5748,6 +5761,7 @@ const App = {
                 }
 
                 try {
+                    sourceMappings.set(projectData.videoPath, videoToLoad);
                     await this.openFile(videoToLoad, false);
                 } catch (e) {
                     Accessibility.announce(this.t('runtime.app.video_file_open_failed', 'Video dosyası açılamadı.'));
@@ -5757,11 +5771,49 @@ const App = {
             }
 
             if (projectData.timeline) {
+                const originalSource = projectData.timeline.sourceFile || projectData.videoPath;
+                const sources = [...new Set([originalSource, ...projectData.timeline.segments.map(segment => segment.sourceFile || originalSource)])];
+                for (const source of sources) {
+                    if (sourceMappings.has(source)) continue;
+                    let resolved = source;
+                    if (!await window.api.checkFileExists(resolved)) {
+                        const dir = projectPath.replace(/[/\\][^/\\]+$/, '');
+                        const name = source.split(/[/\\]/).pop();
+                        const nearby = dir + (dir.includes('/') ? '/' : '\\') + name;
+                        if (await window.api.checkFileExists(nearby)) resolved = nearby;
+                        else {
+                            const chosen = await window.api.openFileDialog({
+                                title: window.i18nHelper.t('speech_search.project.locate_source', { name }),
+                                announceForAccessibility: true,
+                                properties: ['openFile']
+                            });
+                            if (chosen.canceled || !chosen.filePaths?.length) {
+                                Accessibility.announce(this.t('runtime.app.project_load_cancelled_no_video', 'Video seçilmedi. Proje yükleme iptal edildi.'));
+                                return;
+                            }
+                            resolved = chosen.filePaths[0];
+                        }
+                    }
+                    sourceMappings.set(source, resolved);
+                }
                 Timeline.restoreState(
-                    projectData.timeline.segments,
-                    projectData.timeline.sourceFile || projectData.videoPath,
+                    projectData.timeline.segments.map(segment => ({ ...segment,
+                        ...(segment.sourceFile ? { sourceFile: sourceMappings.get(segment.sourceFile) } : {}) })),
+                    sourceMappings.get(originalSource),
                     projectData.timeline.sourceDuration || VideoPlayer.getDuration()
                 );
+            }
+
+            if (projectData.speechAnalysis) {
+                Accessibility.announce(window.i18nHelper.t('speech_search.project.restoring'));
+                try {
+                    const analysis = await window.api.speechSearchProject({ action: 'restore', data: projectData.speechAnalysis,
+                        mappings: [...sourceMappings].map(([from, to]) => ({ from, to })) });
+                    if (analysis.error) speechAnalysisWarning = window.i18nHelper.t(`speech_search.archive.errors.${analysis.error}`);
+                } catch (error) {
+                    console.error('Project speech analysis restore:', error);
+                    speechAnalysisWarning = window.i18nHelper.t('speech_search.archive.errors.failed');
+                }
             }
 
             if (typeof Selection !== 'undefined' && typeof Selection.clear === 'function') {
@@ -5777,6 +5829,7 @@ const App = {
             }
 
             this.verticalClipQueue.length = 0;
+            document.dispatchEvent(new Event('editor-menu-state-changed'));
             if (Array.isArray(projectData.verticalClipQueue) && projectData.verticalClipQueue.length > 0) {
                 this.verticalClipQueue.push(...projectData.verticalClipQueue
                     .filter((clip) => clip && clip.sourcePath && Number.isFinite(clip.startTime) && Number.isFinite(clip.endTime))
@@ -5818,7 +5871,10 @@ const App = {
                 VideoPlayer.seekToTimelineTime(projectData.playbackPosition);
             }
 
-            Accessibility.announce(this.t('runtime.app.project_loaded', 'Proje başarıyla yüklendi.'));
+            Accessibility.announce(speechAnalysisWarning
+                ? window.i18nHelper.t('speech_search.project.restore_warning', { reason: speechAnalysisWarning })
+                : projectData.speechAnalysis ? window.i18nHelper.t('speech_search.project.loaded')
+                    : this.t('runtime.app.project_loaded', 'Proje başarıyla yüklendi.'));
         } catch (error) {
             console.error('Project load error:', error);
             Accessibility.announce(this.t('runtime.app.project_load_failed', 'Proje yüklenemedi: {error}', {

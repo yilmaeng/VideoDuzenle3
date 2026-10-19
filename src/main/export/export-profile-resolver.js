@@ -1,3 +1,5 @@
+const { sourceAudioProfile } = require('../slideshow-audio-policy');
+
 function cleanColorValue(value) {
     const text = String(value || '').trim().toLowerCase();
     return text && !['unknown', 'unspecified', 'reserved'].includes(text) ? text : '';
@@ -5,8 +7,9 @@ function cleanColorValue(value) {
 
 function resolveAudioProfile(sourceProfile = {}, mode = 'source_quality', outputExtension = '.mp4') {
     const source = sourceProfile.audio?.[0] || {};
-    const sampleRate = Math.max(32000, Number(source.sampleRate || 48000));
-    const channelLayout = source.channelLayout || (Number(source.channels) === 1 ? 'mono' : 'stereo');
+    const shared = sourceAudioProfile([source]);
+    const sampleRate = shared.sampleRate;
+    const channelLayout = shared.layout;
     const extension = String(outputExtension).toLowerCase();
     const losslessContainer = ['.mov', '.mkv'].includes(extension);
     if ((mode === 'lossless_master' || source.lossless) && losslessContainer) {
@@ -21,7 +24,8 @@ function resolveAudioProfile(sourceProfile = {}, mode = 'source_quality', output
     }
     return {
         codec: 'aac',
-        bitrate: Math.min(512000, Math.max(320000, Number(source.bitrate || 0))),
+        bitrate: Math.max(Number(shared.encoding.match(/-b:a (\d+)/)[1]), Math.min(512000, Number(source.bitrate || 0))),
+        channels: shared.channels,
         sampleRate,
         channelLayout,
         lossless: false

@@ -10,7 +10,7 @@ function buildIdentity(prefix, displayName) {
     return `${prefix}-${normalized}-${Date.now().toString(36)}`;
 }
 
-async function createJoinToken(config, { roomName, identity, displayName, role }) {
+async function createJoinToken(config, { roomName, identity, displayName, role, allowAdministration = true }) {
     const normalizedRole = String(role || 'guest').trim() || 'guest';
     const canPublish = !['audience', 'viewer'].includes(normalizedRole);
     const accessToken = new AccessToken(config.livekitApiKey, config.livekitApiSecret, {
@@ -30,7 +30,7 @@ async function createJoinToken(config, { roomName, identity, displayName, role }
         canPublishData: true
     });
 
-    if (normalizedRole === 'host') {
+    if (normalizedRole === 'host' && allowAdministration) {
         accessToken.addGrant({
             roomAdmin: true,
             roomRecord: true

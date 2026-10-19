@@ -14,6 +14,7 @@ async function main() {
     const privateKeyPath = path.join(root, 'private.pem');
     const publicKeyPath = path.join(root, 'public.pem');
     const fakeApp = {
+        isPackaged: true,
         getVersion: () => '5.0.0',
         getPath: (name) => name === 'userData' ? userData : root,
         getAppPath: () => path.resolve(__dirname, '..', '..')
@@ -72,6 +73,18 @@ async function main() {
         const tamperedPackage = Buffer.from(packageBuffer);
         tamperedPackage[tamperedPackage.length - 1] ^= 1;
         assert.notStrictEqual(sha256(tamperedPackage), manifest.packageSha256);
+
+        const restartCalls = [];
+        fakeApp.relaunch = () => restartCalls.push('relaunch');
+        fakeApp.quit = () => restartCalls.push('quit');
+        fakeApp.exit = () => { throw new Error('Patch restart must not force app.exit'); };
+        const handlers = new Map();
+        healthyManager.setupIpc({ handle: (name, handler) => handlers.set(name, handler) }, { getAllWindows: () => [] });
+        assert.deepStrictEqual(handlers.get('patch-update-relaunch')(), { success: true });
+        handlers.get('patch-update-relaunch')();
+        assert.deepStrictEqual(restartCalls, [], 'Restart must wait until the IPC reply can complete');
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepStrictEqual(restartCalls, ['relaunch', 'quit'], 'Use one graceful restart for duplicate requests');
 
         console.log('Patch update architecture tests passed.');
     } finally {

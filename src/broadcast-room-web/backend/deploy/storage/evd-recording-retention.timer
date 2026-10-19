@@ -1,0 +1,10 @@
+[Unit]
+Description=Enforce EVD recording retention even when the web application is stopped
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=60
+AccuracySec=1
+
+[Install]
+WantedBy=timers.target

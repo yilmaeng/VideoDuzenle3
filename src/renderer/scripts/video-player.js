@@ -9,6 +9,7 @@ const VideoPlayer = {
     get videoElement() { return this.video; },
     isPlaying: false,
     currentFilePath: null,
+    _mediaLoadGeneration: 0,
     metadata: null,
     cursorPosition: 0, // İmleç pozisyonu (Enter ile belirlenen)
     playbackStartPosition: null, // Oynatma başladığındaki pozisyon (boşluk tuşu için)
@@ -68,6 +69,7 @@ const VideoPlayer = {
         }
 
         this.setupEventListeners();
+        this.seamlessPreview = window.SeamlessPreview ? new window.SeamlessPreview(this) : null;
         this.updateUI();
     },
 
@@ -107,7 +109,7 @@ const VideoPlayer = {
         const gain = Math.max(0, Math.min(4, this.currentContentGain * playerGain));
         if (this.audioGainNode) {
             this.video.volume = 1;
-            this.audioGainNode.gain.value = gain;
+            this.audioGainNode.gain.value = this.seamlessPreview?.active ? 0 : gain;
         } else {
             this.video.volume = Math.min(1, gain);
         }
@@ -249,6 +251,11 @@ const VideoPlayer = {
         });
 
         this.video.addEventListener('pause', () => {
+            if (this.seamlessPreview?.active && this.seamlessPreview.switchingVideo) return;
+            if (this.seamlessPreview?.active) {
+                if (this.video.ended) return;
+                this.pause({ announce: false });
+            }
             this.isPlaying = false;
             this.stopTimelineBoundaryMonitor();
             this.allowPlaybackWithOpenDialog = false;
@@ -259,6 +266,7 @@ const VideoPlayer = {
         });
 
         this.video.addEventListener('ended', () => {
+            if (this.seamlessPreview?.active) return;
             const segments = Timeline.segments || [];
             const currentIndex = this._currentTimelineSegmentIndex;
 
@@ -293,6 +301,7 @@ const VideoPlayer = {
 
         // Video yüklendiğinde
         this.video.addEventListener('loadedmetadata', () => {
+            if (!this.currentFilePath || !this.video.getAttribute('src')) return;
             this.updateUI();
             this.hideVideoPlaceholder();
 
@@ -304,7 +313,7 @@ const VideoPlayer = {
         // Hata durumu
         this.video.addEventListener('error', (e) => {
             // Eğer video kapatılmışsa (src boşsa) hata verme
-            if (!this.video.src || this.video.src === window.location.href) {
+            if (!this.currentFilePath || !this.video.getAttribute('src') || this.video.src === window.location.href) {
                 return;
             }
 
@@ -429,9 +438,13 @@ const VideoPlayer = {
      * @param {string} filePath - Dosya yolu
      */
     async loadVideo(filePath) {
+        this._previewPlayGeneration = (this._previewPlayGeneration || 0) + 1;
+        this.seamlessPreview?.stop();
+        const generation = ++this._mediaLoadGeneration;
         try {
             // Metadata al
             const result = await window.api.getVideoMetadata(filePath);
+            if (generation !== this._mediaLoadGeneration) return;
 
             if (!result.success) {
                 throw new Error(result.error);
@@ -473,6 +486,7 @@ const VideoPlayer = {
             this.cursorPosition = 0;
 
         } catch (error) {
+            if (generation !== this._mediaLoadGeneration) return;
             console.error('Video yükleme hatası:', error);
             Accessibility.announceError(`Video yüklenemedi: ${error.message}`);
             if (this.onError) {
@@ -487,6 +501,10 @@ const VideoPlayer = {
      * Durduğunda başlangıç pozisyonuna döner
      */
     togglePlay() {
+        if (this.seamlessPreview?.pending) {
+            this.pause({ announce: false });
+            return;
+        }
         if (this.isPlaying) {
             // Oynatılıyorken boşluk: Başlangıç pozisyonuna dön ve duraklat
             this.pause();
@@ -510,7 +528,7 @@ const VideoPlayer = {
      * İmleç o anki pozisyonda kalır, başlangıç pozisyonuna dönmez
      */
     pauseAtCurrentPosition() {
-        if (this.isPlaying) {
+        if (this.isPlaying || this.seamlessPreview?.pending) {
             this.pause();
         }
         // Oynatılıyor olsun veya olmasın, imleci mevcut konuma ayarla
@@ -558,8 +576,10 @@ const VideoPlayer = {
      * Oynat
      * Farklı kaynaklı segmentleri destekler
      */
-    play() {
+    async play() {
         if (!this.hasVideo()) return;
+        if (this.seamlessPreview?.pending) return;
+        const playGeneration = this._previewPlayGeneration = (this._previewPlayGeneration || 0) + 1;
 
         const segments = Timeline.segments;
 
@@ -605,6 +625,10 @@ const VideoPlayer = {
 
         this.ensureAudioGain();
         this.audioContext?.resume?.().catch?.(() => {});
+        if (this.audioGainNode && this.seamlessPreview?.eligible(segments || [])) {
+            await this.seamlessPreview.start(this.getTimelineTime(), segments);
+            if (playGeneration !== this._previewPlayGeneration) return;
+        }
         this.syncSegmentProperties();
         this.video.play();
 
@@ -619,11 +643,19 @@ const VideoPlayer = {
     /**
      * Duraklat
      */
-    pause() {
+    pause({ announce = true } = {}) {
+        this._previewPlayGeneration = (this._previewPlayGeneration || 0) + 1;
+        if (this.seamlessPreview?.active) {
+            const target = this.seamlessPreview.locate(this.seamlessPreview.position());
+            this._currentTimelineSegmentIndex = target.index;
+            this.video.currentTime = target.source;
+        }
+        this.seamlessPreview?.stop();
+        this.applyEffectivePlaybackVolume();
         this.video.pause();
         this.isRangePlaying = false; // Her duraklatmada aralık oynatmayı sıfırla
         this.isPreviewingCut = false; // Kesim önizlemeyi sıfırla
-        Accessibility.announcePlayState(false);
+        if (announce) Accessibility.announcePlayState(false);
     },
 
     /**
@@ -632,6 +664,7 @@ const VideoPlayer = {
      */
     playSelection() {
         if (!this.hasVideo()) return;
+        if (this.seamlessPreview?.active || this.seamlessPreview?.pending) this.pause({ announce: false });
 
         const selection = Selection.getSelection();
         if (!selection) {
@@ -665,6 +698,7 @@ const VideoPlayer = {
      */
     playCutPreview(customStart = null, customEnd = null) {
         if (!this.hasVideo()) return;
+        if (this.seamlessPreview?.active || this.seamlessPreview?.pending) this.pause({ announce: false });
 
         let selStart, selEnd;
 
@@ -734,9 +768,12 @@ const VideoPlayer = {
      */
     seekTo(time, announce = true) {
         if (!this.hasVideo()) return;
+        const resumeContinuous = this.seamlessPreview?.active || this.seamlessPreview?.pending;
+        if (resumeContinuous) this.pause({ announce: false });
 
         const clampedTime = Utils.clamp(time, 0, this.video.duration || 0);
         this.video.currentTime = clampedTime;
+        if (resumeContinuous) this.play();
 
         if (announce) {
             this.updateTimeDisplay();
@@ -748,6 +785,13 @@ const VideoPlayer = {
      * @param {number} timelineTime - Timeline üzerindeki hedef zaman
      */
     seekToTimelineTime(timelineTime) {
+        if (this.seamlessPreview?.active || this.seamlessPreview?.pending) {
+            const resume = this.seamlessPreview.active || this.seamlessPreview.pending;
+            this.pause({ announce: false });
+            this.seekToTimelineTime(timelineTime);
+            if (resume) this.play();
+            return;
+        }
         const segments = Timeline.segments;
         if (!segments || segments.length === 0) {
             this.seekTo(timelineTime);
@@ -1123,6 +1167,7 @@ const VideoPlayer = {
      */
     getTimelineTime() {
         if (!this.video) return 0;
+        if (this.seamlessPreview?.active) return this.seamlessPreview.position();
 
         const segments = Timeline.segments;
         if (!segments || segments.length === 0) {
@@ -1346,9 +1391,25 @@ const VideoPlayer = {
      * Videoyu kaldır (dosya kapatıldığında)
      */
     unloadVideo() {
+        this._previewPlayGeneration = (this._previewPlayGeneration || 0) + 1;
+        this.seamlessPreview?.stop();
+        // Invalidate pending metadata and cut callbacks before touching the media
+        // element: pause/load may synchronously or asynchronously emit events.
+        this._mediaLoadGeneration++;
+        this._boundaryJumpToken++;
+        this.currentFilePath = null;
+        this.metadata = null;
+        this.isPlaying = false;
+        this.isRangePlaying = false;
+        this.rangeEnd = null;
+        this.playbackStartPosition = null;
+        this.isPreviewingCut = false;
+        clearTimeout(this._audioScrubTimeout);
+        this.stopTimelineBoundaryMonitor();
+        if (this.bgAudioPlayer) this.bgAudioPlayer.pause();
         if (this.video) {
             this.video.pause();
-            this.video.src = '';
+            this.video.removeAttribute('src');
             this.video.load();
         }
 
@@ -1387,6 +1448,7 @@ const VideoPlayer = {
      * Her seferinde mevcut konumu tüm segmentlerde arar
      */
     skipDeletedSegments(frameAccurate = false) {
+        if (this.seamlessPreview?.active) return;
         // Kaynak değiştirme devam ediyorsa bekle
         if (this.ignoreTimeline || this._isLoadingSource) return;
         if (!this.isPlaying) return; // Sadece oynatma sırasında

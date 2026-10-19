@@ -1012,8 +1012,10 @@
 
     <audio id="audio-timing-player" preload="metadata"></audio>
 
+    <script src="../scripts/utils.js"></script>
     <script>
         const { ipcRenderer } = require('electron');
+        ipcRenderer.on('ai-services-notice', (_event, message) => announce(message));
         const path = require('path');
         let i18nState = { lang: 'tr', cache: {} };
 
@@ -3127,10 +3129,15 @@
         // Video oluşturma ilerleme durumu
         let exportProgressInterval = null;
         let lastAnnouncedPercent = -1;
+        let lastSoundPercent = 0;
+        let exportSoundActive = false;
         ipcRenderer.on('export-progress', (event, { status, message, percent }) => {
             const exportBtn = document.getElementById('export-btn');
 
             if (status === 'started') {
+                if (exportProgressInterval) clearInterval(exportProgressInterval);
+                lastSoundPercent = 0;
+                exportSoundActive = true;
                 exportBtn.disabled = true;
                 exportBtn.textContent = t('dialog.slideshow_editor.creating_video', 'Creating video...');
                 lastAnnouncedPercent = -1;
@@ -3149,6 +3156,10 @@
 
             } else if (status === 'progress') {
                 const safePercent = typeof percent === 'number' ? Math.max(0, Math.min(99, Math.round(percent))) : null;
+                if (exportSoundActive && safePercent !== null && safePercent >= lastSoundPercent + 2) {
+                    lastSoundPercent = safePercent;
+                    window.Utils.playProgressTone(safePercent);
+                }
                 exportBtn.disabled = true;
                 exportBtn.textContent = safePercent !== null
                     ? t('dialog.slideshow_editor.creating_video_percent', 'Creating video... %{percent}', { percent: safePercent })
@@ -3161,6 +3172,8 @@
                     }));
                 }
             } else if (status === 'completed') {
+                if (exportSoundActive) window.Utils.playSound('success');
+                exportSoundActive = false;
                 if (exportProgressInterval) {
                     clearInterval(exportProgressInterval);
                     exportProgressInterval = null;
@@ -3171,6 +3184,8 @@
                 announce(message);
 
             } else if (status === 'error') {
+                if (exportSoundActive) window.Utils.playSound('error');
+                exportSoundActive = false;
                 if (exportProgressInterval) {
                     clearInterval(exportProgressInterval);
                     exportProgressInterval = null;
@@ -3290,6 +3305,26 @@
                 }
             });
         });
+
+        // Standard local tab navigation, not a global editor command: keep it
+        // outside the main-window shortcut manager and inside this dialog only.
+        function handleSlideshowTabShortcut(event) {
+            if (event.key !== 'Tab' || !event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return;
+            // Do not escape a modal's focus trap or change panels behind a menu.
+            if (document.querySelector('dialog[open]') || hasVisibleContextMenu()) return;
+            const tabs = Array.from(document.querySelectorAll('.tab-btn')).filter(tab =>
+                !tab.disabled && !tab.hidden && tab.getAttribute('aria-disabled') !== 'true'
+            );
+            if (tabs.length < 2) return;
+            const current = tabs.findIndex(tab => tab.classList.contains('active'));
+            const direction = event.shiftKey ? -1 : 1;
+            const next = current < 0 ? 0 : (current + direction + tabs.length) % tabs.length;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            tabs[next].click();
+            tabs[next].focus();
+        }
+        document.addEventListener('keydown', handleSlideshowTabShortcut, true);
 
         // Resim ekleme
         document.getElementById('add-image-btn').addEventListener('click', async () => {

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EVD</title>
+  <link rel="stylesheet" href="/yayinodasi/admin.css">
+  <script src="/yayinodasi/admin.js?v=20261011-recording-storage" defer></script>
+  <script src="/yayinodasi/admin-rooms.js?v=20261012-cloud-waiting" defer></script>
+  <script src="/yayinodasi/admin-recordings.js?v=20261012-cloud-recording" defer></script>
+  <script src="/yayinodasi/admin-managers.js?v=20261011-host-workflow" defer></script>
+</head>
+<body>
+  <main>
+    <header><span class="brand">EVD</span><h1 id="page-heading"></h1></header>
+    <label for="language" data-i18n="language"></label>
+    <select id="language"><option value="tr">Türkçe</option><option value="en">English</option><option value="de">Deutsch</option><option value="es">Español</option><option value="fr">Français</option></select>
+    <p data-i18n="intro"></p>
+    <p id="status" role="status" aria-live="polite" aria-atomic="true"></p>
+    <div id="login" hidden>
+      <form id="password-login-form">
+        <h2 data-i18n="password_login"></h2>
+        <label for="password-email" data-i18n="email"></label>
+        <input id="password-email" type="email" autocomplete="username" required maxlength="254">
+        <label for="login-password" data-i18n="password"></label>
+        <input id="login-password" type="password" autocomplete="current-password" required maxlength="128">
+        <button type="submit" data-i18n="password_login"></button>
+      </form>
+      <label class="remember"><input type="checkbox" id="remember"><span data-i18n="remember"></span></label>
+      <form id="email-form">
+        <label for="email" data-i18n="email"></label>
+        <input id="email" type="email" autocomplete="email" required maxlength="254" spellcheck="false" autocapitalize="none">
+        <button type="submit" data-i18n="send"></button>
+      </form>
+      <form id="code-form" hidden>
+        <label for="code" data-i18n="code"></label>
+        <input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" maxlength="8" required aria-describedby="code-hint">
+        <p id="code-hint" data-i18n="code_hint"></p>
+        <button type="submit" data-i18n="verify"></button>
+        <button id="resend" type="button" data-i18n="resend"></button>
+        <button id="change-email" type="button" data-i18n="restart"></button>
+      </form>
+      <section id="link-panel" hidden>
+        <p data-i18n="link_hint"></p>
+        <button id="verify-link" type="button" data-i18n="verify"></button>
+        <button id="restart" type="button" data-i18n="restart"></button>
+      </section>
+    </div>
+    <section id="account" hidden>
+      <h2 tabindex="-1" id="account-heading" data-i18n="signed_in"></h2>
+      <form id="profile-form">
+        <label for="profile-name" data-i18n="profile_name"></label>
+        <input id="profile-name" autocomplete="name" required maxlength="120">
+        <button type="submit" data-i18n="profile_save"></button>
+      </form>
+      <p id="account-email"></p>
+      <p data-i18n="phase_note"></p>
+      <form id="password-change-form" hidden>
+        <p data-i18n="password_change_required"></p>
+        <label for="new-password" data-i18n="new_password"></label>
+        <input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+        <label for="new-password-repeat" data-i18n="password_repeat"></label>
+        <input id="new-password-repeat" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+        <button type="submit" data-i18n="password_change"></button>
+      </form>
+      <section id="room-dashboard">
+        <h2 id="rooms-heading" tabindex="-1" data-i18n="rooms_title"></h2>
+        <button id="new-room" type="button" data-i18n="room_create"></button>
+        <button id="refresh-rooms" type="button" data-i18n="rooms_refresh"></button>
+        <button id="link-room" type="button" data-i18n="room_link"></button>
+        <p id="rooms-empty" data-i18n="rooms_empty" hidden></p>
+        <ul id="room-list"></ul>
+        <section id="manager-invitations-panel">
+          <h2 data-i18n="manager_invitations"></h2>
+          <button type="button" id="manager-refresh" data-i18n="manager_refresh"></button>
+          <ul id="manager-invitations"></ul>
+          <p id="manager-status" role="status"></p>
+        </section>
+        <h2 data-i18n="recordings_title"></h2>
+        <section id="recording-panel">
+          <p data-i18n="recording_scope"></p>
+          <p id="recording-availability"></p>
+          <form id="recording-form">
+            <label for="recording-room" data-i18n="recording_room"></label>
+            <select id="recording-room"></select>
+            <label class="remember"><input id="recording-consent" type="checkbox" required><span data-i18n="recording_consent"></span></label>
+            <p data-i18n="recording_consent_meeting_hint"></p>
+            <button id="recording-start" type="submit" data-i18n="recording_start"></button>
+          </form>
+          <button id="recording-refresh" type="button" data-i18n="recording_refresh"></button>
+          <p id="recording-message" role="status" aria-live="polite"></p>
+          <ul id="recording-list"></ul>
+        </section>
+      </section>
+      <button id="logout" type="button" data-i18n="logout"></button>
+    </section>
+    <p class="privacy" data-i18n="privacy"></p>
+  </main>
+  <dialog id="recording-delete-dialog" aria-labelledby="recording-delete-title" aria-describedby="recording-delete-description">
+    <h2 id="recording-delete-title" data-i18n="recording_delete"></h2>
+    <p id="recording-delete-description" tabindex="-1"></p>
+    <p id="recording-delete-error" role="status" aria-live="polite"></p>
+    <button type="button" id="recording-delete-cancel" data-i18n="cancel"></button>
+    <button type="button" id="recording-delete-confirm" data-i18n="recording_delete"></button>
+  </dialog>
+  <dialog id="manager-dialog" aria-labelledby="manager-title" aria-describedby="manager-hint">
+    <h2 id="manager-title" data-i18n="manager_title"></h2>
+    <p id="manager-room-name"></p>
+      <p id="manager-hint" data-i18n="manager_assignment_hint"></p>
+    <form id="manager-form">
+      <label for="manager-method" data-i18n="manager_method"></label>
+      <select id="manager-method">
+        <option value="email" data-i18n="manager_method_email"></option>
+        <option value="account" data-i18n="manager_method_account"></option>
+      </select>
+      <label for="manager-email" data-i18n="email"></label>
+      <input id="manager-email" type="email" required maxlength="254" autocomplete="off">
+      <div id="manager-password-fields" hidden>
+        <label for="manager-password" data-i18n="initial_password"></label>
+        <input id="manager-password" type="password" autocomplete="new-password" maxlength="128" aria-describedby="manager-password-hint">
+        <p id="manager-password-hint" data-i18n="manager_password_hint"></p>
+      </div>
+      <label class="remember"><input id="manager-recordings" type="checkbox"><span data-i18n="manager_recordings"></span></label>
+        <button type="submit" data-i18n="manager_assign"></button>
+    </form>
+    <ul id="manager-list"></ul>
+    <p id="manager-dialog-status" role="status"></p>
+    <button id="manager-close" type="button" data-i18n="cancel"></button>
+  </dialog>
+  <dialog id="manager-revoke-dialog" aria-labelledby="manager-revoke-title" aria-describedby="manager-revoke-text">
+    <h2 id="manager-revoke-title" data-i18n="manager_revoke"></h2>
+    <p id="manager-revoke-text"></p>
+    <button id="manager-revoke-cancel" type="button" data-i18n="cancel"></button>
+    <button id="manager-revoke-ok" type="button" data-i18n="manager_revoke"></button>
+  </dialog>
+  <dialog id="room-dialog" aria-labelledby="room-dialog-title" aria-describedby="room-dialog-hint">
+    <h2 id="room-dialog-title" data-i18n="room_settings"></h2>
+    <p id="room-dialog-hint" data-i18n="room_form_hint"></p>
+    <form id="room-form">
+      <label for="room-title" data-i18n="room_title"></label>
+      <input id="room-title" required maxlength="120" autocomplete="off">
+      <label for="room-kind" data-i18n="room_kind"></label>
+      <select id="room-kind"><option value="persistent" data-i18n="room_persistent"></option><option value="temporary" data-i18n="room_temporary"></option></select>
+      <label class="remember"><input id="room-password-enabled" type="checkbox"><span data-i18n="room_password_enabled"></span></label>
+      <div id="room-password-fields" hidden>
+        <label for="room-password" data-i18n="room_password"></label>
+        <input id="room-password" type="password" autocomplete="new-password" maxlength="128" aria-describedby="room-password-hint">
+        <p id="room-password-hint" data-i18n="room_password_hint"></p>
+      </div>
+      <label class="remember"><input id="room-absent" type="checkbox"><span data-i18n="room_absent"></span></label>
+      <label for="room-waiting-enabled" data-i18n="waiting_room_enabled"></label>
+      <input id="room-waiting-enabled" type="checkbox">
+      <label for="room-waiting-decision" data-i18n="waiting_room_disable_label"></label>
+      <select id="room-waiting-decision">
+        <option value="" data-i18n="waiting_room_disable_choice"></option>
+        <option value="admit" data-i18n="waiting_room_admit"></option>
+        <option value="reject" data-i18n="waiting_room_reject"></option>
+      </select>
+      <details><summary data-i18n="room_advanced"></summary>
+        <label class="remember"><input id="room-microphone" type="checkbox"><span data-i18n="room_microphone"></span></label>
+        <label class="remember"><input id="room-camera" type="checkbox"><span data-i18n="room_camera"></span></label>
+        <label class="remember"><input id="room-share" type="checkbox"><span data-i18n="room_share"></span></label>
+        <p data-i18n="room_media_hint"></p>
+      </details>
+      <p id="room-error" role="alert"></p>
+      <button type="submit" data-i18n="room_save"></button>
+      <button type="button" data-close-dialog="room-dialog" data-i18n="cancel"></button>
+    </form>
+  </dialog>
+  <dialog id="link-dialog" aria-labelledby="link-title" aria-describedby="link-hint">
+    <h2 id="link-title" data-i18n="room_link"></h2>
+    <p id="link-hint" data-i18n="room_link_hint"></p>
+    <form id="link-form">
+      <label for="link-invite" data-i18n="room_invite_id"></label>
+      <input id="link-invite" required maxlength="100" autocomplete="off">
+      <label for="link-key" data-i18n="room_owner_key"></label>
+      <input id="link-key" type="password" required maxlength="256" autocomplete="off">
+      <p id="link-error" role="alert"></p>
+      <button type="submit" data-i18n="room_link"></button>
+      <button type="button" data-close-dialog="link-dialog" data-i18n="cancel"></button>
+    </form>
+  </dialog>
+  <dialog id="delete-dialog" aria-labelledby="delete-title" aria-describedby="delete-description">
+    <h2 id="delete-title" data-i18n="room_delete"></h2>
+    <p id="delete-room-name"></p>
+    <p id="delete-description" data-i18n="room_delete_hint"></p>
+    <p id="delete-error" role="alert"></p>
+    <button id="confirm-delete" type="button" data-i18n="room_delete"></button>
+    <button type="button" data-close-dialog="delete-dialog" data-i18n="cancel" autofocus></button>
+  </dialog>
+</body>
+</html>

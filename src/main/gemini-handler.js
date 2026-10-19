@@ -22,6 +22,7 @@ if (!WebSocketImpl) {
 const CONFIG_DIR = path.join(require('os').homedir(), '.korcul-video-editor');
 const API_KEY_FILE = path.join(CONFIG_DIR, 'gemini-api-key.enc');
 const AI_MODEL_FILE = path.join(CONFIG_DIR, 'ai-model.txt');
+const modelCatalog = require('./ai-model-catalog').createModelCatalog('gemini', CONFIG_DIR);
 const liveTranslateSessions = new Map();
 
 const GEMINI_LIVE_TRANSLATE_MODEL = 'models/gemini-3.5-live-translate-preview';
@@ -1128,8 +1129,9 @@ function saveApiKey(apiKey) {
     if (!fs.existsSync(CONFIG_DIR)) {
         fs.mkdirSync(CONFIG_DIR, { recursive: true });
     }
-    // Basit base64 encoding (gerçek şifreleme için electron-store kullanılabilir)
-    const encoded = Buffer.from(apiKey).toString('base64');
+    const { safeStorage } = require('electron');
+    if (!safeStorage.isEncryptionAvailable()) throw new Error('secure_storage');
+    const encoded = 'safeStorage:' + safeStorage.encryptString(apiKey).toString('base64');
     fs.writeFileSync(API_KEY_FILE, encoded, 'utf8');
 }
 
@@ -1168,6 +1170,11 @@ function getApiKey() {
     }
     try {
         const encoded = fs.readFileSync(API_KEY_FILE, 'utf8');
+        if (encoded.startsWith('safeStorage:')) {
+            const { safeStorage } = require('electron');
+            if (!safeStorage.isEncryptionAvailable()) return null;
+            return safeStorage.decryptString(Buffer.from(encoded.slice('safeStorage:'.length), 'base64'));
+        }
         return Buffer.from(encoded, 'base64').toString('utf8');
     } catch (error) {
         console.error('API anahtarı okunamadı:', error);
@@ -1433,6 +1440,10 @@ async function sendGeminiRequestWithRetry(apiKey, model, imageBase64, prompt, hi
  */
 function setupGeminiHandlers(mainWindow) {
     const ffmpegHandler = require('./ffmpeg-handler');
+    ipcMain.handle('refresh-gemini-models', (event, payload = {}) => {
+        if (event.senderFrame && event.senderFrame !== event.sender.mainFrame) return { success: false, error: 'failed' };
+        return modelCatalog.refresh(payload.apiKey === undefined ? getApiKey() : payload.apiKey);
+    });
 
     // API anahtarını kaydet
     ipcMain.handle('save-gemini-api-key', async (event, { apiKey, model }) => {
@@ -1449,7 +1460,8 @@ function setupGeminiHandlers(mainWindow) {
     ipcMain.handle('get-gemini-api-data', async () => {
         return {
             apiKey: getApiKey(),
-            model: getAiModel()
+            model: getAiModel(),
+            models: modelCatalog.cached(getApiKey())
         };
     });
 
@@ -1755,6 +1767,7 @@ async function sendGeminiRequestBatchWithRetry(apiKey, model, contents, systemIn
 module.exports = {
     setupGeminiHandlers,
     saveApiKey,
+    saveAiModel,
     getApiKey,
     getAiModel
 };

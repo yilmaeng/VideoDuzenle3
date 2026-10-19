@@ -254,6 +254,7 @@
 
     <script>
         const { ipcRenderer } = require('electron');
+        ipcRenderer.on('ai-services-notice', (_event, message) => announce(message));
         const { pathToFileURL } = require('url');
         let currentLang = 'tr';
         let i18nCache = {};
@@ -598,10 +599,6 @@
             $('ai-loading').textContent = t('runtime.slideshow_ticker_overlay.ai_loading', 'AI is evaluating the ticker preview...');
             announce($('ai-loading').textContent);
             try {
-                const apiData = await ipcRenderer.invoke('get-gemini-api-data');
-                if (!apiData?.apiKey) {
-                    throw new Error(t('runtime.slideshow_ticker_overlay.ai_key_missing', 'Gemini API key was not found. Add it from the AI menu.'));
-                }
                 await ensurePreviewMediaReady();
                 const imageBase64 = captureAiPreviewFrame();
                 const languageNames = { tr: 'Turkish', en: 'English', de: 'German', es: 'Spanish', fr: 'French' };
@@ -635,15 +632,13 @@ Required JSON schema:
   "borderColor": "#000000",
   "reason": "brief reason for the full recommendation"
 }`;
-                const result = await ipcRenderer.invoke('gemini-vision-request', {
-                    apiKey: apiData.apiKey,
-                    model: apiData.model || 'gemini-2.5-flash',
+                const result = await ipcRenderer.invoke('ai-services-request', {
                     imageBase64,
                     prompt,
                     history: [],
                     systemInstruction: 'Return only one valid JSON object matching the requested schema.'
                 });
-                if (!result?.success) throw new Error(result?.error || 'ai_request_failed');
+                if (!result?.success) throw new Error(result?.message || t('ai_services.errors.request'));
                 pendingAiSuggestion = normalizeAiSuggestion(parseAiSuggestion(result.text));
                 const response = formatAiSuggestion(pendingAiSuggestion);
                 $('ai-response').value = response;

@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://evd.drenginyilmaz.net">
+    content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://evd.drenginyilmaz.net">
   <title data-i18n="messages.app_window_title">EVD</title>
   <link rel="stylesheet" href="styles/main.css">
   <link rel="stylesheet" href="styles/wizard.css">
@@ -1214,17 +1214,14 @@
       <div class="form-group">
         <label for="gemini-model-select" data-i18n="dialog.gemini_api.model">Model Seçin:</label>
         <select id="gemini-model-select" style="width: 100%;">
-          <option value="gemini-3.0-pro">Gemini 3.0 Pro (En Yeni & Gelişmiş - Ücretli)</option>
-          <option value="gemini-3.0-flash">Gemini 3.0 Flash (En Yeni & Hızlı - Ücretsiz)</option>
-          <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretli)</option>
-          <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Önerilen - Ücretsiz)</option>
-          <option value="gemini-1.5-pro">Gemini 1.5 Pro (Ücretli)</option>
-          <option value="gemini-1.5-flash">Gemini 1.5 Flash (Kota Dostu - Ücretsiz)</option>
+          <option value="gemini-2.5-flash">gemini-2.5-flash</option>
         </select>
-        <p class="hint" data-i18n="dialog.gemini_api.hint">Ücretsiz API katmanındaysanız "Flash" modellerini seçmeniz önerilir. "Pro" modelleri çoğunlukla
-          ücretli abonelik veya kotalama gerektirir.</p>
+        <button type="button" id="gemini-models-refresh" data-i18n="ai_models.refresh"></button>
+        <p id="gemini-models-status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <p class="hint" data-i18n="ai_models.help"></p>
       </div>
       <div class="dialog-buttons">
+        <button type="button" data-api-key-guide="gemini" data-i18n="api_key_guide.button"></button>
         <button type="submit" id="gemini-api-key-confirm" data-i18n="dialog.common.save">Kaydet</button>
         <button type="button" id="gemini-api-key-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
@@ -1242,9 +1239,17 @@
           <input type="checkbox" id="openai-api-key-show">
           <label for="openai-api-key-show" data-i18n="dialog.openai_api.show_key">Anahtarı Göster</label>
         </div>
-        <p class="hint" data-i18n="dialog.openai_api.hint">Bu anahtar şu aşamada yalnızca canlı çeviri özellikleri için saklanır. Gemini ayarlarınız ayrı kalır.</p>
+        <label for="openai-model-select" data-i18n="ai_models.openai_model"></label>
+        <select id="openai-model-select" style="width: 100%;">
+          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+        </select>
+        <button type="button" id="openai-models-refresh" data-i18n="ai_models.refresh"></button>
+        <p id="openai-models-status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <p class="hint" data-i18n="ai_models.openai_help"></p>
+        <p class="hint" data-i18n="ai_models.help"></p>
       </div>
       <div class="dialog-buttons">
+        <button type="button" data-api-key-guide="openai" data-i18n="api_key_guide.button"></button>
         <button type="submit" id="openai-api-key-confirm" data-i18n="dialog.common.save">Kaydet</button>
         <button type="button" id="openai-api-key-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
@@ -1265,6 +1270,7 @@
         <p class="hint" data-i18n="dialog.elevenlabs_api.hint">Bu anahtar şimdilik yalnızca yayın odasındaki canlı dublaj ve sesli çeviri deneyleri için saklanır.</p>
       </div>
       <div class="dialog-buttons">
+        <button type="button" data-api-key-guide="elevenlabs" data-i18n="api_key_guide.button"></button>
         <button type="submit" id="elevenlabs-api-key-confirm" data-i18n="dialog.common.save">Kaydet</button>
         <button type="button" id="elevenlabs-api-key-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
@@ -1704,7 +1710,7 @@
       </div>
 
       <!-- Adım 1: Mod Seçimi (Şablon) -->
-      <div id="vl-wizard-step-1" class="wizard-step" role="region" aria-labelledby="vl-step-1-title">
+      <div id="vl-wizard-step-1" class="wizard-step">
         <h3 id="vl-step-1-title" class="sr-only" data-i18n="dialog.video_layer_wizard.step_1_title">Adım 1: Yerleşim Modu Seçimi</h3>
 
         <div class="form-group info-group">
@@ -1712,42 +1718,17 @@
           <p><strong data-i18n="dialog.video_layer_wizard.video_duration">Video Süresi:</strong> <span id="vl-layer-duration">-</span></p>
         </div>
 
-        <fieldset class="radio-group-vertical">
-          <legend data-i18n="dialog.video_layer_wizard.mode_legend">Hazır yerleşim modunu seçin:</legend>
-
-          <label class="radio-option">
-            <input type="radio" name="vl-mode" value="sign-language" checked>
-            <span class="option-content">
-              <strong data-i18n="dialog.video_layer_wizard.mode_sign_language">İşaret Dili (Türkiye Standardı)</strong>
-              <span class="description" data-i18n="dialog.video_layer_wizard.mode_sign_language_desc">Sağ alt köşe, %12.5 boyut (8'de bir), ses kapalı. İşaret dili tercümanı için
-                ideal.</span>
-            </span>
-          </label>
-
-          <label class="radio-option">
-            <input type="radio" name="vl-mode" value="split-screen">
-            <span class="option-content">
-              <strong data-i18n="dialog.video_layer_wizard.mode_split_screen">Sunucu + İçerik (Split Screen)</strong>
-              <span class="description" data-i18n="dialog.video_layer_wizard.mode_split_screen_desc">Ekran %50/%50 bölünür. Sol: sunucu, sağ: ana video.</span>
-            </span>
-          </label>
-
-          <label class="radio-option">
-            <input type="radio" name="vl-mode" value="camera-corner">
-            <span class="option-content">
-              <strong data-i18n="dialog.video_layer_wizard.mode_camera_corner">Kamera Köşede</strong>
-              <span class="description" data-i18n="dialog.video_layer_wizard.mode_camera_corner_desc">Sağ üst köşe, %15 boyut. Reaction veya anlatım videoları için.</span>
-            </span>
-          </label>
-
-          <label class="radio-option">
-            <input type="radio" name="vl-mode" value="custom">
-            <span class="option-content">
-              <strong data-i18n="dialog.video_layer_wizard.mode_custom">Serbest Yerleşim</strong>
-              <span class="description" data-i18n="dialog.video_layer_wizard.mode_custom_desc">Konum ve boyutu kendiniz belirleyin.</span>
-            </span>
-          </label>
-        </fieldset>
+        <div class="form-group">
+          <label for="vl-mode" data-i18n="dialog.video_layer_wizard.mode_legend">Hazır yerleşim modunu seçin:</label>
+          <!-- Keep focus on one native control while navigating options. -->
+          <select id="vl-mode" size="4">
+            <option value="sign-language" data-i18n="dialog.video_layer_wizard.mode_sign_language">İşaret Dili (Türkiye Standardı)</option>
+            <option value="split-screen" data-i18n="dialog.video_layer_wizard.mode_split_screen">Sunucu + İçerik (Split Screen)</option>
+            <option value="camera-corner" data-i18n="dialog.video_layer_wizard.mode_camera_corner">Kamera Köşede</option>
+            <option value="custom" data-i18n="dialog.video_layer_wizard.mode_custom">Serbest Yerleşim</option>
+          </select>
+          <p id="vl-mode-description" class="description"></p>
+        </div>
       </div>
 
       <!-- Adım 2: Konum ve Boyut -->
@@ -2504,16 +2485,26 @@
   <script src="scripts/utils.js"></script>
   <script src="scripts/insertion-queue.js"></script>
   <script src="scripts/timeline.js"></script>
+  <script src="scripts/speech-search-core.js"></script>
+  <script src="scripts/speech-search.js"></script>
+  <script src="scripts/vocal-separation.js"></script>
+  <script src="scripts/crop-framing.js"></script>
+  <script src="scripts/video-crop.js"></script>
+  <script src="scripts/seamless-preview.js"></script>
   <script src="scripts/video-player.js"></script>
   <script src="scripts/markers.js"></script>
   <script src="scripts/transitions.js"></script>
   <script src="scripts/selection.js"></script>
   <script src="scripts/keyboard.js"></script>
+  <script src="scripts/ai-model-picker.js"></script>
+  <script src="scripts/api-key-guide.js"></script>
+  <script src="scripts/ai-services.js"></script>
   <script src="scripts/dialogs.js"></script>
   <script src="scripts/tab-manager.js"></script>
   <script src="scripts/status-bar.js"></script>
   <script src="scripts/update-manager.js"></script>
   <script src="scripts/app.js"></script>
+  <script src="scripts/native-menu-availability.js"></script>
   <script src="scripts/startup-welcome.js"></script>
   <script src="scripts/cta-library.js"></script>
   <script src="scripts/cta-overlay-preview.js"></script>

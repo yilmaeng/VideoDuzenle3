@@ -14,6 +14,13 @@ $portableExeSource = Join-Path $portableFolder 'Engelsiz Video Düzenleyicisi.ex
 $portableExeTarget = Join-Path $portableFolder 'EVD.exe'
 $zipPath = Join-Path $distDir ("EVD-Portable-v{0}.zip" -f $Version)
 
+# Keep cleanup confined to generated output, even when invoked from another cwd.
+foreach ($outputPath in @($portableFolder, $zipPath)) {
+    if (-not [IO.Path]::GetFullPath($outputPath).StartsWith([IO.Path]::GetFullPath($distDir) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Unsafe release output path: $outputPath"
+    }
+}
+
 & (Join-Path $PSScriptRoot 'build-native-audio.ps1')
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE

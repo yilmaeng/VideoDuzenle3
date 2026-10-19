@@ -41,6 +41,18 @@ function isRuntimeAvailable() {
     return Boolean(resolveAligner());
 }
 
+function resolveFfmpegPath() {
+    let binary = null;
+    try { binary = require('ffmpeg-static'); } catch (_error) {}
+    if (!binary) {
+        try { binary = require('@ffmpeg-installer/ffmpeg').path; } catch (_error) {}
+    }
+    if (binary && binary.includes('app.asar')) {
+        binary = binary.replace('app.asar', 'app.asar.unpacked');
+    }
+    return binary && fs.existsSync(binary) ? binary : null;
+}
+
 function transcriptionCachePath(audioPath, language, model) {
     const stat = fs.statSync(audioPath);
     const fingerprint = crypto.createHash('sha256')
@@ -59,6 +71,14 @@ function runTranscriber(runtime, scriptPath, args, onProgress) {
     return new Promise((resolve, reject) => {
         const env = { ...process.env };
         env.PYTHONPATH = [runtime.pythonPath, env.PYTHONPATH].filter(Boolean).join(path.delimiter);
+        const ffmpegPath = resolveFfmpegPath();
+        if (ffmpegPath) {
+            // lyric_align invokes `ffmpeg` by name, so expose EVD's bundled binary
+            // without requiring a separate system-wide FFmpeg installation.
+            env.PATH = [path.dirname(ffmpegPath), env.PATH].filter(Boolean).join(path.delimiter);
+            env.FFMPEG_BINARY = ffmpegPath;
+            env.IMAGEIO_FFMPEG_EXE = ffmpegPath;
+        }
         const child = spawn(runtime.python, [scriptPath, ...args], { windowsHide: true, env });
         let output = '';
         const consume = chunk => {

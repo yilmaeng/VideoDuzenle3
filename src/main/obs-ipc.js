@@ -67,6 +67,10 @@ function setupObsIpcHandlers(mainWindow) {
     ipcMain.handle('obs-get-config', async () => {
         return obsController.getConfig();
     });
+    ipcMain.handle('obs-audio-stability', async (_event, enabled) => {
+        try { return await obsController.setAudioStability(enabled); }
+        catch (error) { return { success: false, error: ['busy','plugin_missing'].includes(error.message) ? error.message : 'save' }; }
+    });
 
     ipcMain.handle('obs-save-config', async (event, config) => {
         return obsController.saveConfig(config);

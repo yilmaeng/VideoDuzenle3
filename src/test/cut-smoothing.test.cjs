@@ -1,0 +1,30 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {execFileSync} = require('node:child_process');
+const {cutSmoothingFilter, needsCutSmoothing} = require('../main/export/seamless-timeline');
+const {renderPreviewAudio} = require('../main/export/timeline-preview-audio');
+const {ffmpegPath} = require('../main/ffmpeg-handler').getFFmpegPaths();
+const root=fs.mkdtempSync(path.join(__dirname,'../../temp/cut-smoothing-'));
+const source=path.join(root,'source.wav');
+execFileSync(ffmpegPath,['-v','error','-f','lavfi','-i','aevalsrc=0.5|0.5:s=48000:d=3','-c:a','pcm_f32le',source]);
+assert.equal(cutSmoothingFilter(48000,48000,false,false),'');
+assert(cutSmoothingFilter(100,48000,true,true).includes('ns=50'));
+assert.equal(needsCutSmoothing({f:'a',e:1},{f:'a',s:1}),false);
+assert.equal(needsCutSmoothing({f:'a',e:1},{f:'a',s:2}),true);
+(async()=>{
+    const spans=[{start:0,end:1,segmentStart:0,segmentEnd:1,fadeOut:true},
+        {start:2,end:3,segmentStart:2,segmentEnd:3,fadeIn:true}];
+    const {pcm}=await renderPreviewAudio(ffmpegPath,{source,spans});
+    const graph=`[0:a]asplit=2[l][r];[l]atrim=0:1,asetpts=N/SR/TB${cutSmoothingFilter(48000,48000,false,true)}[a];[r]atrim=2:3,asetpts=N/SR/TB${cutSmoothingFilter(48000,48000,true,false)}[b];[a][b]concat=n=2:v=0:a=1[out]`;
+    const rendered=execFileSync(ffmpegPath,['-v','error','-i',source,'-filter_complex',graph,'-map','[out]','-f','f32le','pipe:1']);
+    assert.equal(pcm.length,48000*2*2*4);
+    assert.equal(rendered.length,pcm.length);
+    for(let i=0;i<pcm.length;i+=4) assert(Math.abs(pcm.readFloatLE(i)-rendered.readFloatLE(i))<1e-6);
+    assert.equal(pcm.readFloatLE(0),.5,'No fade at file start');
+    assert.equal(pcm.readFloatLE(pcm.length-4),.5,'No fade at file end');
+    assert.equal(pcm.readFloatLE(48000*8),0,'Join starts at zero');
+    const partial=await renderPreviewAudio(ffmpegPath,{source,spans:[{start:2.001,end:2.1,segmentStart:2,segmentEnd:3,fadeIn:true}]});
+    assert(Math.abs(partial.pcm.readFloatLE(0)-1/6)<1e-6,'Partial buffering window retains fade position');
+    console.log('PASS: preview/export parity, unchanged length, 3ms edges, partial windows, short clips, contiguous joins');
+})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,8 +1,10 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { createWaitingRoom } = require('../services/waiting-room');
+const validMeetingId = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+const sessionEndedAt = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
 
-const STALE_GUEST_PARTICIPANT_MS = 45000;
 
 function randomId(prefix) {
     return `${prefix}-${crypto.randomBytes(6).toString('hex')}`;
@@ -58,6 +60,22 @@ function createEmptyAccessibleShare() {
     };
 }
 
+function sanitizeParticipantVolumes(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return {};
+    }
+    return Object.fromEntries(Object.entries(value)
+        .slice(0, 100)
+        .map(([identity, percent]) => {
+            const numeric = Number(percent);
+            return [
+                String(identity || '').trim().slice(0, 160),
+                Math.max(0, Math.min(200, Math.round(Number.isFinite(numeric) ? numeric : 100)))
+            ];
+        })
+        .filter(([identity]) => identity));
+}
+
 function sanitizeConnectionQuality(value) {
     if (!value || typeof value !== 'object') {
         return null;
@@ -66,6 +84,9 @@ function sanitizeConnectionQuality(value) {
         packetsLost: Number(media?.packetsLost || 0) || 0,
         packetsReceived: Number(media?.packetsReceived || 0) || 0,
         bytesReceived: Number(media?.bytesReceived || 0) || 0,
+        totalAudioEnergy: Number(media?.totalAudioEnergy || 0) || 0,
+        totalSamplesDuration: Number(media?.totalSamplesDuration || 0) || 0,
+        concealedSamples: Number(media?.concealedSamples || 0) || 0,
         jitter: Number(media?.jitter || 0) || 0,
         framesDecoded: Number(media?.framesDecoded || 0) || 0,
         framesDropped: Number(media?.framesDropped || 0) || 0,
@@ -86,13 +107,41 @@ function sanitizeConnectionQuality(value) {
         remoteVideoTrackCount: Number(value.remoteVideoTrackCount || 0) || 0,
         remoteAudioTrackCount: Number(value.remoteAudioTrackCount || 0) || 0,
         video: sanitizeMedia(value.video),
-        audio: sanitizeMedia(value.audio)
+        audio: sanitizeMedia(value.audio),
+        audioDiagnostics: value.audioDiagnostics?.version === 1 ? {
+            version: 1,
+            microphoneTransitions: (Array.isArray(value.audioDiagnostics.microphoneTransitions)
+                ? value.audioDiagnostics.microphoneTransitions : []).slice(-20).filter(item => item && typeof item === 'object')
+                .map(item => ({ at: Math.max(0, Number(item.at) || 0),
+                    event: ['system-toggle', 'host-mute', 'shortcut-toggle', 'role-blocked', 'permission-blocked',
+                        'capture-start', 'published', 'capture-failed', 'applied', 'button-toggle'].includes(item.event) ? item.event : 'unknown',
+                    requested: item.requested === true, captured: item.captured === true,
+                    muted: item.muted === true, enabled: item.enabled === true,
+                    focus: ['microphone', 'body', 'other'].includes(item.focus) ? item.focus : 'other',
+                    error: String(item.error || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 48) })),
+            microphoneEnabled: value.audioDiagnostics.microphoneEnabled === true,
+            microphoneMuted: value.audioDiagnostics.microphoneMuted === true,
+            ...Object.fromEntries(['outboundBytes', 'sourceEnergy', 'sourceDuration'].map((key) => [
+                key,
+                typeof value.audioDiagnostics[key] === 'number' && Number.isFinite(value.audioDiagnostics[key])
+                    ? Math.max(0, value.audioDiagnostics[key]) : null
+            ])),
+            playback: (Array.isArray(value.audioDiagnostics.playback) ? value.audioDiagnostics.playback : []).slice(0, 100).map((item) => ({
+                paused: item.paused === true,
+                muted: item.muted === true,
+                volume: Math.max(0, Math.min(1, Number(item.volume) || 0)),
+                readyState: Math.max(0, Math.min(4, Number(item.readyState) || 0)),
+                hasStream: item.hasStream === true,
+                trackCount: Math.max(0, Math.min(100, Number(item.trackCount) || 0))
+            }))
+        } : null
     };
 }
 
 class RoomStore {
     constructor(options = {}) {
         this.rooms = new Map();
+        this.waitingRoom = createWaitingRoom();
         this.inviteToRoom = new Map();
         this.persistentRoomsFilePath = String(options.persistentRoomsFilePath || '').trim();
         this.webinarRequestsFilePath = String(options.webinarRequestsFilePath || '').trim();
@@ -195,17 +244,21 @@ class RoomStore {
                     persistent: true,
                     createdAt: Number(item.createdAt || now) || now,
                     closedAt: null,
+                    ...(validMeetingId(item.recordingMeetingId) ? { recordingMeetingId: item.recordingMeetingId } : {}),
                     settings: {
+                        sessionEndedAt: sessionEndedAt(item.settings?.sessionEndedAt),
                         roomTitle: String(item.settings?.roomTitle || item.title || '').trim(),
                         hostDisplayName: String(item.settings?.hostDisplayName || item.hostDisplayName || '').trim() || 'Host',
                         allowGuestScreenShare: item.settings?.allowGuestScreenShare !== false,
                         allowGuestCamera: item.settings?.allowGuestCamera !== false,
                         allowGuestMicrophone: item.settings?.allowGuestMicrophone !== false,
                         webinarMode: item.settings?.webinarMode === true,
+                        waitingRoomEnabled: item.settings?.waitingRoomEnabled === true,
                         hostRecordingActive: false,
                         hostShareActive: false,
                         hostShareLabel: '',
                         hostShareMonitorAudioEnabled: false,
+                        participantVolumes: {},
                         persistentRoom: true,
                         ownerKey: String(item.settings?.ownerKey || '').trim(),
                         roomSlug: String(item.settings?.roomSlug || inviteId).trim(),
@@ -249,13 +302,16 @@ class RoomStore {
                 hostDisplayName: room.hostDisplayName,
                 scheduledAt: room.scheduledAt || null,
                 createdAt: room.createdAt,
+                ...(validMeetingId(room.recordingMeetingId) ? { recordingMeetingId: room.recordingMeetingId } : {}),
                 settings: {
+                    sessionEndedAt: sessionEndedAt(room.settings?.sessionEndedAt),
                     roomTitle: String(room.settings?.roomTitle || room.title || '').trim(),
                     hostDisplayName: String(room.settings?.hostDisplayName || room.hostDisplayName || '').trim() || 'Host',
                     allowGuestScreenShare: room.settings?.allowGuestScreenShare !== false,
                     allowGuestCamera: room.settings?.allowGuestCamera !== false,
                     allowGuestMicrophone: room.settings?.allowGuestMicrophone !== false,
                     webinarMode: room.settings?.webinarMode === true,
+                    waitingRoomEnabled: room.settings?.waitingRoomEnabled === true,
                     persistentRoom: true,
                     ownerKey: String(room.settings?.ownerKey || '').trim(),
                     roomSlug: String(room.settings?.roomSlug || room.inviteId || '').trim(),
@@ -267,7 +323,9 @@ class RoomStore {
                     updatedAt: Number(room.settings?.updatedAt || Date.now()) || Date.now()
                 }
             }));
-        fs.writeFileSync(this.persistentRoomsFilePath, JSON.stringify({ rooms }, null, 2), 'utf8');
+        const temporaryPath = `${this.persistentRoomsFilePath}.tmp`;
+        fs.writeFileSync(temporaryPath, JSON.stringify({ rooms }, null, 2), { encoding: 'utf8', mode: 0o600 });
+        fs.renameSync(temporaryPath, this.persistentRoomsFilePath);
     }
 
     roomHasConnectedHost(room) {
@@ -282,7 +340,6 @@ class RoomStore {
         if (!room || !Array.isArray(room.participants)) {
             return false;
         }
-        const now = Date.now();
         const beforeCount = room.participants.length;
         room.participants = room.participants.filter((participant) => {
             if (String(participant.role || '').trim() === 'host') {
@@ -291,13 +348,15 @@ class RoomStore {
             if (participant.connected === false) {
                 return false;
             }
-            const updatedAt = Number(participant.updatedAt || participant.joinedAt || 0) || 0;
-            return !updatedAt || now - updatedAt <= STALE_GUEST_PARTICIPANT_MS;
+            // Backgrounded mobile tabs can stop HTTP heartbeats while WebRTC stays
+            // connected. Only authoritative media reconciliation may expire them.
+            return true;
         });
         return beforeCount !== room.participants.length;
     }
 
-    createRoom({ hostDisplayName, title, scheduledAt, inviteBaseUrl, persistentRoom = false, roomSlug = '', password = '', allowJoinWhenHostAbsent = false, requirePasswordWhenHostPresent = false, requirePasswordWhenHostAbsent = false, webinarMode = false, ownerKey = '' }) {
+    createRoom({ hostDisplayName, title, scheduledAt, inviteBaseUrl, persistentRoom = false, roomSlug = '', password = '', allowJoinWhenHostAbsent = false, requirePasswordWhenHostPresent = false, requirePasswordWhenHostAbsent = false, webinarMode = false, ownerKey = '', waitingRoomEnabled, waitingRoomDecision }) {
+        if (waitingRoomEnabled !== undefined && typeof waitingRoomEnabled !== 'boolean') throw new Error('waiting_setting_invalid');
         const normalizedPersistent = persistentRoom === true;
         const normalizedOwnerKey = String(ownerKey || '').trim();
         const normalizedSlug = normalizeRoomSlug(roomSlug, normalizedPersistent ? randomId('oda') : '');
@@ -307,13 +366,13 @@ class RoomStore {
         if (
             normalizedPersistent
             && existingPersistentRoom
-            && String(existingPersistentRoom.settings?.ownerKey || '').trim()
-            && normalizedOwnerKey
-            && String(existingPersistentRoom.settings.ownerKey || '').trim() !== normalizedOwnerKey
+            && (!String(existingPersistentRoom.settings?.ownerKey || '').trim()
+                || String(existingPersistentRoom.settings.ownerKey || '').trim() !== normalizedOwnerKey)
         ) {
             return null;
         }
         const roomId = existingPersistentRoom?.roomId || (normalizedPersistent ? `persistent-${normalizedSlug}` : randomId('room'));
+        if (existingPersistentRoom) this.waitingRoom.setting(existingPersistentRoom, waitingRoomEnabled, waitingRoomDecision);
         const inviteId = existingPersistentRoom?.inviteId || (normalizedPersistent ? normalizedSlug : randomId('invite'));
         const now = Date.now();
         const normalizedTitle = String(title || '').trim();
@@ -354,6 +413,7 @@ class RoomStore {
         room.settings = {
             ...room.settings,
             roomTitle: normalizedTitle,
+            waitingRoomEnabled: waitingRoomEnabled ?? (room.settings?.waitingRoomEnabled === true),
             hostDisplayName: normalizedHostDisplayName,
             allowGuestScreenShare: room.settings?.allowGuestScreenShare !== false,
             allowGuestCamera: room.settings?.allowGuestCamera !== false,
@@ -363,9 +423,10 @@ class RoomStore {
             hostShareActive: false,
             hostShareLabel: '',
             hostShareMonitorAudioEnabled: false,
+            participantVolumes: {},
             sessionEndedAt: 0,
             persistentRoom: normalizedPersistent,
-            ownerKey: normalizedPersistent ? (String(room.settings?.ownerKey || '').trim() || normalizedOwnerKey) : '',
+            ownerKey: String(room.settings?.ownerKey || '').trim() || normalizedOwnerKey,
             roomSlug: normalizedPersistent ? inviteId : '',
             passwordConfigured: normalizedPersistent ? !!effectivePasswordHash : false,
             roomPasswordHash: normalizedPersistent ? effectivePasswordHash : '',
@@ -419,6 +480,7 @@ class RoomStore {
                 hostShareActive: false,
                 hostShareLabel: '',
                 hostShareMonitorAudioEnabled: false,
+                participantVolumes: {},
                 youtubeWatchUrl: '',
                 youtubeLiveActive: false,
                 updatedAt: Date.now()
@@ -432,6 +494,20 @@ class RoomStore {
         return room;
     }
 
+    deleteIdleRoom(roomId) {
+        const room = this.getRoom(roomId);
+        if (!room || room.participants.some(participant => participant.connected !== false)
+            || room.settings?.hostRecordingActive || room.settings?.youtubeLiveActive
+            || ['starting', 'active', 'ending', 'unknown'].includes(room.settings?.serverRecordingStatus)) return false;
+        this.rooms.delete(room.roomId);
+        this.inviteToRoom.delete(room.inviteId);
+        try { this.savePersistentRooms(); }
+        catch (error) {
+            this.rooms.set(room.roomId, room); this.inviteToRoom.set(room.inviteId, room.roomId); throw error;
+        }
+        return true;
+    }
+
     endRoomSessionForEveryone(roomId) {
         const room = this.getRoom(roomId);
         if (!room) {
@@ -439,6 +515,8 @@ class RoomStore {
         }
         const now = Date.now();
         room.participants = [];
+        delete room.recordingMeetingId;
+        this.waitingRoom.invalidate(room);
         room.chatMessages = [];
         room.accessibleShare = createEmptyAccessibleShare();
         room.liveCaption = {
@@ -459,6 +537,7 @@ class RoomStore {
             hostShareActive: false,
             hostShareLabel: '',
             hostShareMonitorAudioEnabled: false,
+            participantVolumes: {},
             youtubeWatchUrl: '',
             youtubeLiveActive: false,
             sessionEndedAt: now,
@@ -468,6 +547,7 @@ class RoomStore {
             room.active = false;
             room.closedAt = now;
         }
+        this.savePersistentRooms();
         return room;
     }
 
@@ -488,6 +568,8 @@ class RoomStore {
             || !String(existingParticipant?.displayName || '').trim();
         const nextParticipant = {
             identity,
+            // Moderator-owned state must survive media/heartbeat updates, not client input.
+            spotlighted: existingParticipant?.spotlighted === true,
             displayName: (shouldApplyDisplayName
                 ? requestedDisplayName
                 : String(existingParticipant?.displayName || '').trim()) || identity,
@@ -607,14 +689,13 @@ class RoomStore {
         const currentOwnerKey = String(room.settings?.ownerKey || '').trim();
         const requestedOwnerKey = String(settings?.ownerKey || '').trim();
         if (
-            room.settings?.persistentRoom === true
-            && currentOwnerKey
-            && requestedOwnerKey
+            currentOwnerKey
             && currentOwnerKey !== requestedOwnerKey
         ) {
             return null;
         }
         const previousInviteId = String(room.inviteId || '').trim();
+        this.waitingRoom.setting(room, settings?.waitingRoomEnabled, settings?.waitingRoomDecision);
         const requestedSlug = settings?.roomSlug !== undefined
             ? normalizeRoomSlug(settings.roomSlug, previousInviteId)
             : String(room.settings?.roomSlug || room.inviteId || '').trim();
@@ -627,6 +708,7 @@ class RoomStore {
             roomTitle: settings?.roomTitle !== undefined
                 ? String(settings.roomTitle || '').trim()
                 : String(room.settings?.roomTitle || room.title || '').trim(),
+            waitingRoomEnabled: settings?.waitingRoomEnabled ?? (room.settings?.waitingRoomEnabled === true),
             hostDisplayName: settings?.hostDisplayName !== undefined
                 ? String(settings.hostDisplayName || '').trim()
                 : String(room.settings?.hostDisplayName || room.hostDisplayName || '').trim(),
@@ -654,6 +736,9 @@ class RoomStore {
             hostShareMonitorAudioEnabled: settings?.hostShareMonitorAudioEnabled !== undefined
                 ? settings.hostShareMonitorAudioEnabled === true
                 : room.settings?.hostShareMonitorAudioEnabled === true,
+            participantVolumes: settings?.participantVolumes !== undefined
+                ? sanitizeParticipantVolumes(settings.participantVolumes)
+                : sanitizeParticipantVolumes(room.settings?.participantVolumes),
             youtubeWatchUrl: settings?.youtubeWatchUrl !== undefined
                 ? String(settings.youtubeWatchUrl || '').trim()
                 : String(room.settings?.youtubeWatchUrl || '').trim(),
@@ -663,9 +748,7 @@ class RoomStore {
             persistentRoom: settings?.persistentRoom !== undefined
                 ? settings.persistentRoom === true
                 : room.settings?.persistentRoom === true,
-            ownerKey: room.settings?.persistentRoom === true || settings?.persistentRoom === true
-                ? (currentOwnerKey || requestedOwnerKey)
-                : '',
+            ownerKey: currentOwnerKey || requestedOwnerKey,
             roomSlug: requestedSlug,
             passwordConfigured: !!nextPasswordHash,
             roomPasswordHash: nextPasswordHash,
@@ -723,6 +806,9 @@ class RoomStore {
         const nextRole = updates?.role !== undefined
             ? String(updates.role || participant.role || 'guest').trim()
             : String(participant.role || 'guest').trim();
+        if (updates?.spotlighted === true) {
+            room.participants.forEach((item) => { item.spotlighted = false; });
+        }
         const nextRequestedCameraEnabled = updates?.requestedCameraEnabled === null
             ? undefined
             : (updates?.requestedCameraEnabled !== undefined ? updates.requestedCameraEnabled === true : participant.requestedCameraEnabled);
@@ -735,6 +821,7 @@ class RoomStore {
                 ? (String(updates.displayName || '').trim() || participant.displayName || normalizedIdentity)
                 : participant.displayName,
             role: nextRole || 'guest',
+            spotlighted: updates?.spotlighted !== undefined ? updates.spotlighted === true : participant.spotlighted === true,
             allowCamera: updates?.allowCamera !== undefined ? updates.allowCamera === true : participant.allowCamera !== false,
             allowMicrophone: updates?.allowMicrophone !== undefined ? updates.allowMicrophone === true : participant.allowMicrophone !== false,
             allowScreenShare: updates?.allowScreenShare !== undefined ? updates.allowScreenShare === true : participant.allowScreenShare !== false,

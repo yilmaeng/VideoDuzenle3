@@ -1,0 +1,32 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const source = fs.readFileSync(path.join(__dirname, '../main/slideshow-handler.js'), 'utf8');
+const code = source.slice(source.indexOf('function isPinnedSlideshowMediaItem('), source.indexOf('function escapeDrawtextFilePath('));
+const build = vm.runInNewContext(`${code}\nbuildMediaTimings`);
+const photo = {id:'photo',type:'image',duration:5};
+const video = {id:'video',type:'video',duration:12};
+const plain = value => JSON.parse(JSON.stringify(value));
+for (const items of [[photo,video],[video,photo],[photo],[photo,{...photo,id:'second'}]]) {
+    const result=plain(build(items));
+    assert.deepEqual(result.map(x=>x.id),items.map(x=>x.id),'No audio must retain every item in order');
+    assert.equal(result.at(-1).end,items.reduce((sum,x)=>sum+x.duration,0));
+    assert.equal(new Set(result.map(x=>x.id)).size,items.length);
+}
+const short=plain(build([photo,video],8));
+assert.equal(short.length,2,'Short audio must not discard deferred photo');
+assert.equal(short.at(-1).end,17);
+const fitting=plain(build([photo,video],20));
+assert.equal(fitting[0].duration,8);
+assert.equal(fitting[1].end,20);
+const pinned={id:'pinned',type:'image',placementMode:'pinned',manualStart:2,manualEnd:4,duration:2};
+const deferred=plain(build([photo,video,pinned]));
+assert.deepEqual(deferred.map(x=>x.id).sort(),['photo','pinned','video']);
+assert.equal(deferred.find(x=>x.id==='pinned').start,2);
+assert.equal(deferred.find(x=>x.id==='pinned').end,4);
+const tail=plain(build([pinned,photo]));
+assert.equal(tail.at(-1).id,'photo');
+assert.equal(tail.at(-1).end,9);
+assert.deepEqual(plain(build([])),[]);
+console.log('PASS: silent mixed/image-only projects, ordering, short audio, audio fitting, pinned timing and deferred photos');

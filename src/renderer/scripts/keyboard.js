@@ -21,6 +21,7 @@ const Keyboard = {
     },
 
     getLocalizedCategory(category) {
+        if (category === 'speech_search') return this.t('speech_search.category', '');
         if (category === 'Kayıt Global Kısayolları') {
             return this.t('dialog.keyboard_manager.category_recording_global', 'Recording Global Shortcuts');
         }
@@ -47,6 +48,9 @@ const Keyboard = {
     },
 
     getLocalizedActionLabel(actionId, fallbackLabel) {
+        if (actionId === 'vocalSeparation') return this.t('vocal_separation.title', '');
+        if (actionId === 'videoCrop') return this.t('video_crop.title', '');
+        if (actionId === 'aiServiceSettings') return this.t('ai_services.settings', '');
         const translated = this.t(`dialog.keyboard_manager.actions.${actionId}`, '');
         if (translated) {
             return translated;
@@ -228,6 +232,14 @@ const Keyboard = {
         'synthesizeAllDescriptions': { default: null, category: 'Ekle', label: 'Tüm Betimlemeleri Seslendir' },
         'renderDescribedVideo': { default: null, category: 'Dosya', label: 'Betimlemeli Video Oluştur' },
         'findDescriptionText': { default: 'Mod+F', category: 'Düzenleme', label: 'Betimleme Metninde Ara' },
+        // Ctrl/Cmd+F is contextual: the specialist editor owns findDescriptionText,
+        // while the main timeline owns speechSearch. Neither handles the other's window.
+        'speechSearch': { default: 'Mod+F', category: 'speech_search', label: '' },
+        'vocalSeparation': { default: null, category: 'Düzenleme', label: '' },
+        'videoCrop': { default: null, category: 'Düzenleme', label: '' },
+        'aiServiceSettings': { default: null, category: 'Düzenleme', label: '' },
+        'speechSearchExport': { default: null, category: 'speech_search', label: '' },
+        'speechSearchImport': { default: null, category: 'speech_search', label: '' },
         'replaceDescriptionText': { default: 'Mod+H', category: 'Düzenleme', label: 'Betimleme Metninde Ara ve Değiştir' },
         'focusDescriptionEventList': { default: 'Alt+L', category: 'Navigasyon', label: 'Betimleme Olay Listesine Git' },
         'focusDescriptionPlayback': { default: 'Alt+T', category: 'Navigasyon', label: 'Betimleme Oynatma ve Zaman Çizelgesi Alanına Git' },
@@ -263,10 +275,10 @@ const Keyboard = {
         'scrubLeft5m': { default: 'Mod+Alt+ArrowLeft', category: 'Navigasyon', label: '5 Dakika Geri' },
         'seekF5': { default: 'PageDown', category: 'Navigasyon', label: '5 Saniye İleri' },
         'seekB5': { default: 'PageUp', category: 'Navigasyon', label: '5 Saniye Geri' },
-        'goToStart': { default: ['Mod+ArrowUp', 'Ctrl+Home'], category: 'Navigasyon', label: 'Başa Git' },
-        'goToEnd': { default: ['Mod+ArrowDown', 'Ctrl+End'], category: 'Navigasyon', label: 'Sona Git' },
+        'goToStart': { default: 'Mod+Home', category: 'Navigasyon', label: 'Başa Git' },
+        'goToEnd': { default: 'Mod+End', category: 'Navigasyon', label: 'Sona Git' },
         'goToMiddle': { default: ['Mod+Shift+Delete', 'Ctrl+Shift+Backspace'], category: 'Navigasyon', label: 'Ortaya Git' },
-        'goToBeforeEnd': { default: 'Shift+Delete', category: 'Navigasyon', label: 'Sondan 30sn Önce' },
+        'goToBeforeEnd': { default: 'Mod+Backspace', category: 'Navigasyon', label: 'Sondan 30sn Önce' },
         'goToTime': { default: 'Mod+G', category: 'Navigasyon', label: 'Zaman Koduna Git' },
         'markerNext': { default: 'Alt+ArrowRight', category: 'İşaretçiler', label: 'Sonraki İşaretçi' },
         'markerPrev': { default: 'Alt+ArrowLeft', category: 'İşaretçiler', label: 'Önceki İşaretçi' },
@@ -275,7 +287,7 @@ const Keyboard = {
         'sensDecr': { default: 'Alt+ArrowUp', category: 'Navigasyon', label: 'Hassasiyet Azalt (+)' },
 
         // --- İşaretçiler (Markers) ---
-        'deleteMarker': { default: null, category: 'İşaretçiler', label: 'İşaretçi Sil' },
+        'deleteMarker': { default: 'Shift+M', category: 'İşaretçiler', label: 'İşaretçi Sil' },
         'clearAllMarkers': { default: null, category: 'İşaretçiler', label: 'Tüm İşaretçileri Temizle' },
         'markerList': { default: null, category: 'İşaretçiler', label: 'İşaretçi Listesi' },
 
@@ -361,6 +373,8 @@ const Keyboard = {
         'recordingGlobalPreviousWindow': { default: 'Alt+Ctrl+U', category: 'Kayıt Global Kısayolları', label: 'Global: Önceki Pencere' },
         'recordingGlobalNextWindow': { default: 'Alt+Ctrl+O', category: 'Kayıt Global Kısayolları', label: 'Global: Sonraki Pencere' },
         'recordingGlobalWindowList': { default: 'Alt+Ctrl+I', category: 'Kayıt Global Kısayolları', label: 'Global: Pencere Listesini Aç' },
+        'broadcastRoomCloudPanel': { default: '', category: 'Yayın Odası', label: '' },
+        'broadcastRoomGlobalAdmitAll': { default: 'Alt+Ctrl+A', category: 'Yayın Odası', label: '' },
         'broadcastRoomGlobalToggleYouTubeLive': { default: 'Alt+Ctrl+L', category: 'Yayın Odası', label: 'Yayın Odası: YouTube Canlı Yayını Başlat/Durdur' },
         'broadcastRoomGlobalToggleBotRecording': { default: 'Alt+Ctrl+B', category: 'Yayın Odası', label: 'Yayın Odası: Bot Kaydını Başlat/Durdur' },
         'broadcastRoomGlobalToggleLiveTranslation': { default: 'Alt+Ctrl+T', category: 'Yayın Odası', label: 'Yayın Odası: Canlı Çeviri/Altyazıyı Başlat/Durdur' },
@@ -596,6 +610,12 @@ const Keyboard = {
         else if (this.check('contextMenu', e) || this.check('contextMenuAlt', e)) { this.showContextMenu(); handled = true; }
 
         // Dosya
+        else if (this.check('speechSearch', e)) { window.SpeechSearch.open(); handled = true; }
+        else if (this.check('vocalSeparation', e)) { window.VocalSeparation.open(); handled = true; }
+        else if (this.check('videoCrop', e)) { window.VideoCrop.open(); handled = true; }
+        else if (this.check('aiServiceSettings', e)) { window.AiServices.open(); handled = true; }
+        else if (this.check('speechSearchExport', e)) { window.SpeechSearch.transfer('export'); handled = true; }
+        else if (this.check('speechSearchImport', e)) { window.SpeechSearch.transfer('import'); handled = true; }
         else if (this.check('newProject', e)) { App.newProject(); handled = true; }
         else if (this.check('tabNext', e)) { TabManager.nextTab(); handled = true; }
         else if (this.check('tabPrev', e)) { TabManager.prevTab(); handled = true; }
@@ -941,5 +961,3 @@ const Keyboard = {
 };
 
 window.Keyboard = Keyboard;
-
-

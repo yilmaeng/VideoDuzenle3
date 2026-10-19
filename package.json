@@ -1,6 +1,6 @@
 {
   "name": "evd",
-  "version": "5.0.0",
+  "version": "5.5.0",
   "description": "Bir video oynatıcıyı klavyeyle kontrol eden el ve kulak - Görme engelli kullanıcılar için erişilebilir video düzenleme",
   "main": "src/main/index.js",
   "scripts": {
@@ -51,11 +51,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "dir",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "Start_icon.ico"
@@ -64,7 +68,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "Start_icon.png",
@@ -75,7 +82,10 @@
       "type": "development"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "Start_icon.png",
       "category": "AudioVideo"
     },
@@ -86,7 +96,13 @@
       "shortcutName": "EVD",
       "createDesktopShortcut": false,
       "include": "build/installer.nsh",
-      "installerLanguages": ["tr", "en", "de", "es", "fr"]
+      "installerLanguages": [
+        "tr",
+        "en",
+        "de",
+        "es",
+        "fr"
+      ]
     },
     "files": [
       "src/**/*",
@@ -116,13 +132,18 @@
       },
       {
         "from": "src/resources/obs-studio",
-        "to": "obs-studio"
+        "to": "obs-studio",
+        "filter": [
+          "**/*",
+          "!config/**/*"
+        ]
       },
       {
         "from": "tools/EvdProcessLoopbackCapture/bin/Release/net8.0-windows/win-x64/publish",
         "to": "native-audio"
       }
     ],
+    "afterPack": "build/sanitize-obs-test-settings.cjs",
     "asar": true,
     "asarUnpack": [
       "node_modules/@ffmpeg-installer/**/*",

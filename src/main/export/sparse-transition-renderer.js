@@ -6,6 +6,7 @@ const { getAvailableEncoders, atomicReplace } = require('./source-aware-renderer
 const {
     resolveBoundaryEncoder,
     renderHybridChunk,
+    attachChunkDecodeTimes,
     writeConcatList
 } = require('./hybrid-smart-renderer');
 
@@ -71,7 +72,7 @@ function buildSparseTransitionPlan(transitions, keyframes, duration, frameRate =
         cursor = Math.max(cursor, window.end);
     }
     if (duration - cursor > frameStep / 2) chunks.push({ type: 'copy', start: cursor, end: duration });
-    return chunks;
+    return attachChunkDecodeTimes(chunks, keyframes, frameStep / 4);
 }
 
 function buildTransitionFilter(transitions, offset) {
@@ -137,7 +138,7 @@ async function muxSparseResult({ ffmpegPath, videoListPath, sourcePath, outputPa
         });
         const count = inputs.length;
         filters.push(`${inputs.join('')}amix=inputs=${count}:duration=first,volume=${count}[a_out]`);
-        args.push('-filter_complex', filters.join(';'), '-map', '[a_out]', '-c:a', 'aac', '-b:a', String(Math.max(192000, Number(sourceAudio.bitrate || 0))));
+        args.push('-filter_complex', filters.join(';'), '-map', '[a_out]', ...require('../slideshow-audio-policy').aacEncodingArgs([sourceAudio]));
     } else if (sourceAudio) {
         args.push('-map', '1:a:0', '-c:a', 'copy');
     }

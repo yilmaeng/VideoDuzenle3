@@ -93,8 +93,8 @@ async function muxHybridChunksAndValidate({
         path.dirname(outputPath),
         `${path.basename(outputPath, extension)}.evd-partial-${Date.now()}${extension}`
     );
-    const audioArgs = audioProfile.codec === 'aac'
-        ? ['-c:a', 'aac', '-b:a', String(audioProfile.bitrate)]
+    const audioArgs = audioProfile.copied ? ['-c:a', 'copy'] : audioProfile.codec === 'aac'
+        ? require('../slideshow-audio-policy').aacEncodingArgs([audioProfile])
         : ['-c:a', audioProfile.codec];
     const args = [
         '-y',
@@ -103,8 +103,7 @@ async function muxHybridChunksAndValidate({
         '-map', '0:v:0', '-map', '1:a:0',
         '-map_metadata', '0', '-map_chapters', '0',
         '-c:v', 'copy', ...audioArgs,
-        '-ar', String(audioProfile.sampleRate),
-        '-fflags', '+genpts', '-avoid_negative_ts', 'make_zero',
+        '-fflags', '+genpts', '-avoid_negative_ts', 'disabled',
         '-t', expectedDuration.toFixed(6)
     ];
     if (['.mp4', '.mov', '.m4v'].includes(extension.toLowerCase())) {
@@ -287,6 +286,16 @@ function buildHybridChunkPlan(segments, keyframes, frameTolerance) {
             chunks.push({ type: 'encode', start: cursor, end, segmentIndex });
         }
     }
+    return attachChunkDecodeTimes(chunks, keyframes, frameTolerance);
+}
+
+function attachChunkDecodeTimes(chunks, keyframes, frameTolerance) {
+    for (const chunk of chunks) {
+        if (chunk.type !== 'copy' || !keyframes.decodeTimes) continue;
+        const nearest = time => keyframes.find(value => Math.abs(value - time) <= frameTolerance);
+        chunk.decodeStart = keyframes.decodeTimes.get(nearest(chunk.start));
+        chunk.decodeEnd = keyframes.decodeTimes.get(nearest(chunk.end));
+    }
     return chunks;
 }
 
@@ -317,9 +326,17 @@ function resolveBoundaryEncoder(profile, encoders) {
 async function renderHybridChunk({ ffmpegPath, source, chunk, outputPath, sourceProfile, targetProfile, encoder, videoFilter = '', onProgress }) {
     const duration = Math.max(0.001, chunk.end - chunk.start);
     if (chunk.type === 'copy') {
+        // Output seeking uses DTS for stream copy. Seeking by the keyframe PTS
+        // can retain the preceding GOP or skip the intended keyframe entirely.
+        const decodeStart = Number.isFinite(chunk.decodeStart) ? chunk.decodeStart : chunk.start;
+        const decodeEnd = Number.isFinite(chunk.decodeEnd) ? chunk.decodeEnd : chunk.end;
+        const preSeek = Math.max(0, decodeStart - 5);
+        const outputSeek = Math.max(0, decodeStart - preSeek);
+        const copyDuration = Math.max(0.001, decodeEnd - Math.max(0, decodeStart));
         await runFfmpeg(ffmpegPath, [
-            '-y', '-ss', chunk.start.toFixed(6), '-i', source,
-            '-t', duration.toFixed(6),
+            '-y', '-ss', preSeek.toFixed(6), '-i', source,
+            ...(outputSeek > 0 ? ['-ss', outputSeek.toFixed(6)] : []),
+            '-t', copyDuration.toFixed(6),
             '-map', '0:v:0', '-an', '-c:v', 'copy',
             '-bsf:v', encoder.bitstreamFilter,
             '-avoid_negative_ts', 'make_zero', '-mpegts_flags', '+resend_headers',
@@ -530,7 +547,7 @@ async function renderHybridSmart({
     const tempBase = path.join(path.dirname(outputPath), `evd_hybrid_${Date.now()}_${process.pid}`);
     const segmentFiles = [];
     const listPath = `${tempBase}.concat.txt`;
-    const audioPath = `${tempBase}.audio.wav`;
+    const audioPath = `${tempBase}.audio.mov`;
     const duration = sumTimelineDuration(segments);
     const videoProfile = {
         width: assessment.profile.video.width,
@@ -595,6 +612,7 @@ async function renderHybridSmart({
         writeConcatList(listPath, segmentFiles);
         const audioResult = await renderContinuousAudio({
             ffmpegPath,
+            ffprobePath,
             inputPath,
             segments,
             sourceProfiles: assessment.profiles || [assessment.profile],
@@ -603,7 +621,9 @@ async function renderHybridSmart({
             onProgress: (percent) => onProgress?.({ operation: 'hybrid-smart-audio', percent: 65 + percent * 0.18 })
         });
         audioProfile.sampleRate = audioResult.sampleRate;
+        audioProfile.copied = audioResult.copied === true;
         audioProfile.channelLayout = audioResult.channelLayout;
+        audioProfile.channels = require('../slideshow-audio-policy').sourceAudioProfile((assessment.profiles || [assessment.profile]).flatMap(p => p.audio || [])).channels;
         const validation = await muxHybridChunksAndValidate({
             ffmpegPath,
             ffprobePath,
@@ -640,6 +660,7 @@ module.exports = {
     renderHybridSmart,
     nearestKeyframeDistance,
     buildHybridChunkPlan,
+    attachChunkDecodeTimes,
     resolveBoundaryEncoder,
     renderHybridChunk,
     writeConcatList,

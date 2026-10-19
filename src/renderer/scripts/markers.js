@@ -316,6 +316,7 @@ const Markers = {
      * İşaretçi sayısını güncelle
      */
     updateMarkerCount() {
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         const countEl = document.getElementById('marker-count');
         if (countEl) {
             countEl.textContent = window.i18nHelper ? window.i18nHelper.t('player.marker_count', { count: this.markers.length }) : `İşaretçi: ${this.markers.length}`;

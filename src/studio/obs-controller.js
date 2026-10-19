@@ -5,6 +5,7 @@ const { app } = require('electron');
 const { detectOBS } = require('./obs-detect');
 const { spawn } = require('child_process');
 const ffmpegHandler = require('../main/ffmpeg-handler');
+const { resolveDeviceTiming, syncFilter } = require('./obs-audio-timing');
 
 const CONFIG_DIR = path.join(os.homedir(), '.korcul-video-editor');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'obs-config.json');
@@ -231,6 +232,27 @@ class OBSController {
 
     getConfig() {
         return this.config || loadConfig();
+    }
+
+    async setAudioStability(enabled) {
+        if (typeof enabled !== 'boolean') throw new Error('invalid');
+        if (this.connected) {
+            if ((await this._call('GetRecordStatus')).outputActive || (await this._call('GetStreamStatus')).outputActive) throw new Error('busy');
+            if (enabled) {
+                const { sourceFilterKinds = [] } = await this._call('GetSourceFilterKindList');
+                if (!sourceFilterKinds.includes('net.nagater.obs.asynchronous-audio-filter')) throw new Error('plugin_missing');
+            }
+            const { inputs = [] } = await this._call('GetInputList');
+            for (const input of inputs.filter(i => ['wasapi_input_capture','wasapi_output_capture'].includes(i.inputKind))) {
+                await syncFilter(this._call.bind(this), input.inputName, enabled, require('../main/i18n').t('audio_stability.filter'));
+                await this._call('SetInputSettings', { inputName: input.inputName, inputSettings: {
+                    use_device_timing: !enabled && input.inputKind === 'wasapi_output_capture'
+                }, overlay: true });
+            }
+        }
+        const saved = this.saveConfig({ audioStabilityEnabled: enabled });
+        if (!saved.success) throw new Error('save');
+        return { success: true, deferred: !this.connected };
     }
 
     saveConfig(config) {
@@ -925,6 +947,16 @@ class OBSController {
         if (normalizedKind && !normalizedKind.startsWith('wasapi_')) return;
 
         try {
+            try {
+                await syncFilter(this._call.bind(this), inputName, this.config.audioStabilityEnabled === true,
+                    require('../main/i18n').t('audio_stability.filter'));
+                useDeviceTiming = await resolveDeviceTiming(this._call.bind(this), inputName, useDeviceTiming);
+            } catch (error) {
+                // Do not overwrite a potentially active filter's timing contract
+                // when its state cannot be inspected.
+                console.warn(`Could not inspect audio timing filters for ${inputName}:`, error.message);
+                return;
+            }
             await this._call('SetInputSettings', {
                 inputName,
                 inputSettings: { use_device_timing: !!useDeviceTiming },

@@ -247,6 +247,7 @@ const Transitions = {
         // Erişilebilirlik duyurusu
         // this.announceActiveTransition();
 
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         if (this.onActiveTransitionChanged) {
             this.onActiveTransitionChanged(this.activeTransition, this.activeSettings);
         }
@@ -365,6 +366,7 @@ const Transitions = {
         if (this.onTransitionApplied) {
             this.onTransitionApplied(transition);
         }
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         if (this.onTransitionsListChanged) {
             this.onTransitionsListChanged(this.appliedTransitions);
         }
@@ -478,6 +480,7 @@ const Transitions = {
 
         Accessibility.announce(`Aktif geçiş ${appliedCount} işaretçiye uygulandı.`);
 
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         if (this.onTransitionsListChanged) {
             this.onTransitionsListChanged(this.appliedTransitions);
         }
@@ -514,6 +517,7 @@ const Transitions = {
         if (this.onTransitionRemoved) {
             this.onTransitionRemoved(transition);
         }
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         if (this.onTransitionsListChanged) {
             this.onTransitionsListChanged(this.appliedTransitions);
         }
@@ -539,6 +543,7 @@ const Transitions = {
 
         Accessibility.announce(`${count} geçiş silindi`);
 
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         if (this.onTransitionsListChanged) {
             this.onTransitionsListChanged(this.appliedTransitions);
         }
@@ -553,6 +558,7 @@ const Transitions = {
         this.appliedTransitions = list;
         this.sortTransitions();
 
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         if (this.onTransitionsListChanged) {
             this.onTransitionsListChanged(this.appliedTransitions);
         }
@@ -572,6 +578,7 @@ const Transitions = {
 
         Accessibility.announce(`Geçiş güncellendi`);
 
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         if (this.onTransitionsListChanged) {
             this.onTransitionsListChanged(this.appliedTransitions);
         }
@@ -1031,6 +1038,7 @@ const Transitions = {
             this.appliedTransitions = state.appliedTransitions.map(t => ({ ...t }));
         }
 
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         if (this.onTransitionsListChanged) {
             this.onTransitionsListChanged(this.appliedTransitions);
         }
@@ -1043,6 +1051,7 @@ const Transitions = {
         this.appliedTransitions = [];
         this.setActiveTransition('crossDissolve');
 
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         if (this.onTransitionsListChanged) {
             this.onTransitionsListChanged(this.appliedTransitions);
         }

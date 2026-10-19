@@ -233,6 +233,8 @@ const TabManager = {
         };
 
         // Cursor ve seçim durumunu kaydet
+        tab.undoStack = JSON.parse(JSON.stringify(Timeline.undoStack));
+        tab.redoStack = JSON.parse(JSON.stringify(Timeline.redoStack));
         tab.cursorPosition = VideoPlayer.getCurrentTime();
         tab.selection = {
             start: Selection.start,
@@ -254,6 +256,10 @@ const TabManager = {
         // Timeline'ı yükle
         Timeline.segments = tab.timeline.segments.map(s => ({ ...s }));
         Timeline.sourceFile = tab.timeline.sourceFile;
+        Timeline.undoStack = JSON.parse(JSON.stringify(tab.undoStack || []));
+        Timeline.redoStack = JSON.parse(JSON.stringify(tab.redoStack || []));
+        Timeline.pendingHistoryView = null;
+        Timeline.lastHistoryAction = null;
         Timeline.hasChanges = tab.hasChanges;
         Timeline.renderVisuals();
 
@@ -390,6 +396,8 @@ const TabManager = {
         Selection.clear(true);
         Markers.clearAll();
         Timeline.segments = [];
+        Timeline.undoStack = [];
+        Timeline.redoStack = [];
 
         const fileNameEl = document.getElementById('file-name');
         if (fileNameEl) {
@@ -434,6 +442,7 @@ const TabManager = {
      */
     copyToClipboard(segments, metadata) {
         this.clipboard = segments.map(s => ({ ...s }));
+        document.dispatchEvent(new Event('editor-menu-state-changed'));
         this.clipboardMetadata = metadata ? { ...metadata } : null;
     },
 

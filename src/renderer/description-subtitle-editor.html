@@ -63,6 +63,12 @@
                 <button id="zoom-in" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.zoom_in">Yakınlaştır</button>
                 <button id="analyze-scenes" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.analyze_scenes">Sahne değişimlerini analiz et</button>
                 <button id="cancel-analysis" type="button" class="secondary" hidden data-i18n="description_subtitle_editor.cancel_analysis">Analizi iptal et</button>
+                <button id="goto-time" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.goto_time_button">Zaman koduna git (Ctrl+G)</button>
+                <button id="goto-start" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.goto_start_button">Filmin başına git (Ctrl/Command+Home)</button>
+                <button id="goto-end" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.goto_end_button">Filmin sonuna git (Ctrl/Command+End)</button>
+                <button id="goto-before-end" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.goto_before_end_button">Sondan 30 saniyeye git (Ctrl/Command+Backspace)</button>
+                <button id="delete-current-marker" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.delete_current_marker_button">Geçerli işaretçiyi sil (Shift+M)</button>
+                <button id="clear-markers" type="button" class="secondary" disabled data-i18n="description_subtitle_editor.clear_markers_button">Tüm işaretçileri temizle</button>
             </div>
             <div id="timeline-visual" class="timeline-visual" tabindex="0" role="application"
                 aria-label="Klavye ile düzenleme zaman çizelgesi"
@@ -76,7 +82,7 @@
                 <progress id="analysis-progress" max="100" value="0" hidden></progress>
             </div>
             <p id="waveform-summary" class="muted"></p>
-            <p id="timeline-keyboard-help" class="muted" data-i18n="description_subtitle_editor.timeline_keyboard_help">Ana EVD oynatma, sarma ve işaretçi kısayolları bu editörde de çalışır. Yukarı ve aşağı ok oynatıcı sesini değiştirir. X yavaşlatır, C hızlandırır, Z normal hıza getirir; B konumu ve kalan süreyi okur. M işaretçi ekler; Alt+oklar işaretçiler arasında gezer ve Shift+Boşluk iki işaretçi arasını oynatır.</p>
+            <p id="timeline-keyboard-help" class="muted" data-i18n="description_subtitle_editor.timeline_keyboard_help">Ana EVD oynatma ve sarma kısayolları bu editörde de çalışır. Ctrl/Command+G zaman koduna, Ctrl/Command+Home başa, Ctrl/Command+End sona ve Ctrl/Command+Backspace sondan 30 saniye öncesine gider. M işaretçi ekler, Shift+M geçerli işaretçiyi siler; Alt+oklar işaretçiler arasında gezer ve Shift+Boşluk iki işaretçi arasını oynatır.</p>
         </section>
 
         <section class="event-card" aria-labelledby="events-heading">

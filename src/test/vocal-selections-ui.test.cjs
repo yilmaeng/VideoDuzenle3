@@ -1,0 +1,32 @@
+const { app, BrowserWindow } = require('electron');
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+app.whenReady().then(async () => {
+    const win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: false, offscreen: true } });
+    await win.loadURL('about:blank');
+    const js = code => win.webContents.executeJavaScript(code);
+    await js(`
+        const locale=${JSON.stringify(require('../locales/tr.json'))};
+        window.i18nHelper={t:(key)=>key.split('.').reduce((v,k)=>v?.[k],locale)||key,translateDOM(root){root.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=this.t(el.dataset.i18n));}};
+        window.VideoPlayer={pause:()=>{}};window.Timeline={sourceFile:'D:/source.mp4',hasChanges:false};
+        window.App={verticalClipQueue:[{sourcePath:'D:/source.mp4',startTime:1,endTime:2}]};
+        window.Utils={playSound:()=>{}};window.calls=[];
+        window.api={platform:'win32',vocalSeparationInspect:async()=>({ready:true}),onVocalSeparationProgress:()=>()=>{},vocalSeparationRun:async p=>{calls.push(p);return {cancelled:true};}};
+        void 0;
+    `);
+    await js(fs.readFileSync(path.resolve(__dirname, '../renderer/scripts/vocal-separation.js'), 'utf8'));
+    await js('VocalSeparation.open()');
+    await js("document.querySelector('#vocal-selected').click()");
+    assert.equal(await js("document.querySelector('#vocal-both').disabled"), true);
+    assert.equal(await js("document.querySelector('[data-action=run]').disabled"), false);
+    await js("document.querySelector('[data-action=run]').onclick()");
+    assert.deepEqual(await js('calls[0].selections'), [{ sourcePath: 'D:/source.mp4', startTime: 1, endTime: 2 }]);
+    assert.equal(await js('calls[0].mode'), 'instrumental');
+    await js("Timeline.hasChanges=true;document.querySelector('[data-action=run]').onclick()");
+    assert.equal(await js('calls.length'), 1);
+    await js("document.querySelector('#vocal-whole').click()");
+    assert.equal(await js("document.querySelector('#vocal-both').disabled"), false);
+    console.log('Vocal range scope, payload, output restrictions and unsaved edit guard passed.');
+    win.destroy(); app.quit();
+}).catch(error => { console.error(error); app.exit(1); });

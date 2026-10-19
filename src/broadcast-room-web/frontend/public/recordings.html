@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'">
+  <title>EVD</title>
+  <link rel="stylesheet" href="admin.css">
+  <script src="recordings.js?v=20261012-recording-focus" defer></script>
+</head>
+<body><main>
+  <h1 data-i18n="recordings_title"></h1>
+  <label for="language" data-i18n="language"></label>
+  <select id="language"><option value="tr">Türkçe</option><option value="en">English</option><option value="de">Deutsch</option><option value="es">Español</option><option value="fr">Français</option></select>
+  <p data-i18n="recording_share_hint"></p>
+  <button id="refresh" type="button" data-i18n="recording_refresh"></button>
+  <p id="message" role="status"></p>
+  <ul id="recordings"></ul>
+</main></body></html>

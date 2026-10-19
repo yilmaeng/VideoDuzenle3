@@ -1,5 +1,5 @@
 (function () {
-    const ASSET_VERSION = '20260819a';
+    const ASSET_VERSION = '20261012-room-audio';
     const LOCAL_BACKUP_DB_NAME = 'evd-local-backup-recordings';
     const LOCAL_BACKUP_DB_VERSION = 1;
     const LOCAL_BACKUP_CHUNK_STORE = 'chunks';
@@ -7,6 +7,10 @@
     const MICROPHONE_ECHO_CANCELLATION_STORAGE_KEY = 'evd.broadcastRoomJoin.microphoneEchoCancellation';
     const MICROPHONE_NOISE_SUPPRESSION_STORAGE_KEY = 'evd.broadcastRoomJoin.microphoneNoiseSuppression';
     const MICROPHONE_AUTO_GAIN_CONTROL_STORAGE_KEY = 'evd.broadcastRoomJoin.microphoneAutoGainControl';
+    const LIVE_CAPTION_FONT_SIZE_STORAGE_KEY = 'evd.broadcastRoomJoin.liveCaptionFontSize';
+    const MIRROR_PARTICIPANT_VIDEOS_STORAGE_KEY = 'evd.broadcastRoomJoin.mirrorParticipantVideos';
+    const ACTIVE_SPEAKER_SWITCH_DELAY_MS = 1100;
+    const ACTIVE_SPEAKER_HOLD_MS = 2800;
     let localBackupDbPromise = null;
 
     function loadStoredBoolean(key, fallback = true) {
@@ -23,6 +27,24 @@
     function saveStoredBoolean(key, value) {
         try {
             window.localStorage.setItem(key, value ? 'true' : 'false');
+        } catch (_error) {
+            // Ignore storage failures.
+        }
+    }
+
+    function loadStoredChoice(key, choices, fallback) {
+        try {
+            const value = String(window.localStorage.getItem(key) || '').trim();
+            if (choices.includes(value)) return value;
+        } catch (_error) {
+            // Ignore storage failures and use the default.
+        }
+        return fallback;
+    }
+
+    function saveStoredChoice(key, value) {
+        try {
+            window.localStorage.setItem(key, String(value || ''));
         } catch (_error) {
             // Ignore storage failures.
         }
@@ -59,6 +81,8 @@
         allowJoinWhenHostAbsent: false,
         requirePasswordNow: false,
         passwordConfigured: false,
+        requirePasswordWhenHostPresent: false,
+        requirePasswordWhenHostAbsent: false,
         hostConnected: false,
         livekitUrl: '',
         lastJoinError: '',
@@ -91,7 +115,13 @@
         hostActivityPanelExpanded: false,
         moreInfoPanelExpanded: false,
         participantsPanelExpanded: false,
+        meetingOptionsExpanded: false,
         liveCaptionPreferredLanguage: (navigator.language || 'tr').toLowerCase().startsWith('tr') ? 'tr' : 'en',
+        liveCaptionFontSize: loadStoredChoice(
+            LIVE_CAPTION_FONT_SIZE_STORAGE_KEY,
+            ['small', 'medium', 'large', 'extra-large'],
+            'large'
+        ),
         liveCaptionAutoAnnounce: false,
         lastPreferredLanguageStateSignature: '',
         lastLiveCaptionAnnouncementKey: '',
@@ -139,6 +169,9 @@
         lastSceneAnnouncementKey: '',
         lastHostActivityKey: '',
         activeSpeakerIdentities: [],
+        featuredSpeakerIdentity: '',
+        pendingFeaturedSpeakerIdentity: '',
+        featuredSpeakerTimer: null,
         hostRecordingActive: false,
         lastParticipantHeartbeatAt: 0,
         leaveBeaconSent: false,
@@ -157,6 +190,8 @@
         lastTranslationAudioReceivedAtByTarget: {},
         remoteAudioContext: null,
         remoteAudioMixNodes: {},
+        remoteAudioPlaybackBlocked: false,
+        statusClearTimer: null,
         audioTest: {
             microphoneStream: null,
             microphoneAudio: null,
@@ -185,9 +220,11 @@
         },
         microphoneVolume: 1,
         speakerVolume: 1,
-        microphoneEchoCancellation: loadStoredBoolean(MICROPHONE_ECHO_CANCELLATION_STORAGE_KEY, false),
+        participantVolumes: {},
+        microphoneEchoCancellation: loadStoredBoolean(MICROPHONE_ECHO_CANCELLATION_STORAGE_KEY, true),
         microphoneNoiseSuppression: loadStoredBoolean(MICROPHONE_NOISE_SUPPRESSION_STORAGE_KEY, false),
         microphoneAutoGainControl: loadStoredBoolean(MICROPHONE_AUTO_GAIN_CONTROL_STORAGE_KEY, false),
+        mirrorParticipantVideos: loadStoredBoolean(MIRROR_PARTICIPANT_VIDEOS_STORAGE_KEY, true),
         avatarDataUrl: '',
         avatarUrl: '',
         avatarFileName: ''
@@ -242,6 +279,7 @@
         btnStopScreenShare: document.getElementById('btn-stop-screen-share'),
         btnJoinRoom: document.getElementById('btn-join-room'),
         btnLeaveRoom: document.getElementById('btn-leave-room'),
+        btnToggleMeetingOptions: document.getElementById('btn-toggle-meeting-options'),
         btnReturnFocusedShare: document.getElementById('btn-return-focused-share'),
         joinResultGroup: document.getElementById('join-result-group'),
         connectionStatusGroup: document.getElementById('connection-status-group'),
@@ -264,8 +302,10 @@
         localPreview: document.getElementById('local-preview'),
         remoteMediaList: document.getElementById('remote-media-list'),
         remoteVisualStage: document.getElementById('remote-visual-stage'),
+        liveCaptionVisualBanner: document.getElementById('live-caption-visual-banner'),
         remoteAudioHost: document.getElementById('remote-audio-host'),
         lowBandwidthMode: document.getElementById('low-bandwidth-mode'),
+        mirrorParticipantVideos: document.getElementById('mirror-participant-videos'),
         focusedShareView: document.getElementById('focused-share-view'),
         focusedShareTitle: document.getElementById('focused-share-title'),
         focusedShareVideo: document.getElementById('focused-share-video'),
@@ -289,6 +329,7 @@
         liveCaptionPanelStatus: document.getElementById('live-caption-panel-status'),
         btnToggleLiveCaptionView: document.getElementById('btn-toggle-live-caption-view'),
         liveCaptionPreferredLanguage: document.getElementById('live-caption-preferred-language'),
+        liveCaptionFontSize: document.getElementById('live-caption-font-size'),
         liveCaptionAudioModeStatus: document.getElementById('live-caption-audio-mode-status'),
         liveCaptionAutoAnnounce: document.getElementById('live-caption-auto-announce'),
         liveCaptionAutoAnnounceLabel: document.getElementById('live-caption-auto-announce-label'),
@@ -425,35 +466,196 @@
         el.setAttribute('title', label);
     }
 
-    function playRoomTone(type = 'join') {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextClass) {
-            return;
-        }
+    const notificationSoundFiles = {
+        'microphone-on': 'microphone-on.wav',
+        'microphone-off': 'microphone-off.wav',
+        'camera-on': 'camera-on.mp3',
+        'camera-off': 'camera-off.wav',
+        'room-join': 'room-join.mp3',
+        'room-leave': 'room-leave.mp3'
+    };
+    const notificationSoundData = new Map();
+    let mediaToggleToneContext = null;
+    const pendingRoomAudioClosures = new Set();
+    let roomAudioReleaseGeneration = 0;
+    let pendingMicrophoneCaptures = 0;
+    const roomMicrophoneCaptures = new Set();
+    let microphoneOperation = Promise.resolve();
+    let microphoneCaptureSettingsDirty = false;
+    let microphoneUserTogglePending = false;
+
+    async function requestUserMicrophoneToggle() {
+        const button = els.microphoneEnabled;
+        if (!button || button.disabled || microphoneUserTogglePending) return;
+        microphoneUserTogglePending = true;
+        const room = state.roomConnection;
+        const restoreFocus = document.activeElement === button;
+        button.setAttribute('aria-busy', 'true');
+        // Native disabled drops VoiceOver focus; guard activation without replacing the button.
+        button.setAttribute('aria-disabled', 'true');
+        button.checked = !button.checked;
+        updateJoinMediaToggleButtons();
         try {
-            const audioContext = new AudioContextClass();
-            const frequencies = type === 'leave' ? [440, 330] : [660, 880];
-            let startTime = audioContext.currentTime + 0.02;
-            frequencies.forEach((frequency) => {
-                const oscillator = audioContext.createOscillator();
-                const gain = audioContext.createGain();
-                oscillator.type = 'sine';
-                oscillator.frequency.value = frequency;
-                gain.gain.setValueAtTime(0.0001, startTime);
-                gain.gain.exponentialRampToValueAtTime(0.06, startTime + 0.015);
-                gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.14);
-                oscillator.connect(gain);
-                gain.connect(audioContext.destination);
-                oscillator.start(startTime);
-                oscillator.stop(startTime + 0.16);
-                startTime += 0.16;
-            });
-            window.setTimeout(() => {
-                try { audioContext.close(); } catch (_error) {}
-            }, 700);
-        } catch (_error) {
-            // Notification tones are best-effort only.
+            await handleMicrophoneToggleChange();
+        } catch (error) {
+            button.checked = !!state.localAudioTrack && !state.localAudioTrack.isMuted;
+            updateJoinMediaToggleButtons();
+            throw error;
+        } finally {
+            microphoneUserTogglePending = false;
+            button.removeAttribute('aria-busy');
+            button.removeAttribute('aria-disabled');
+            if (restoreFocus && state.roomConnection === room && !state.intentionalDisconnect
+                && !button.disabled && document.activeElement === document.body) {
+                button.focus({ preventScroll: true });
+            }
         }
+    }
+    const microphoneTransitions = [];
+    let microphoneDiagnosticTimer = null;
+
+    // Bounded control-state diagnostics only; never collect speech, device names or input text.
+    function traceMicrophoneTransition(event, error) {
+        microphoneTransitions.push({ at: Date.now(), event,
+            requested: !!els.microphoneEnabled?.checked,
+            captured: !!state.localAudioTrack,
+            muted: state.localAudioTrack?.isMuted === true,
+            enabled: state.localAudioTrack?.mediaStreamTrack?.enabled === true,
+            focus: document.activeElement === els.microphoneEnabled ? 'microphone'
+                : document.activeElement === document.body ? 'body' : 'other',
+            error: error ? String(error.name || 'Error').replace(/[^A-Za-z0-9_]/g, '').slice(0, 48) : '' });
+        if (microphoneTransitions.length > 20) microphoneTransitions.shift();
+        clearTimeout(microphoneDiagnosticTimer);
+        microphoneDiagnosticTimer = setTimeout(() => sendConnectionQualityReport({ force: true }).catch(() => {}), 500);
+    }
+
+    function queueMicrophoneOperation(work) {
+        const room = state.roomConnection;
+        const result = microphoneOperation.catch(() => {}).then(() => {
+            if (!room || state.roomConnection !== room || state.intentionalDisconnect) return;
+            return work();
+        });
+        microphoneOperation = result.catch(() => {});
+        return result;
+    }
+
+    function setIOSRoomAudioMode(type) {
+        const ua = String(navigator.userAgent || '');
+        const ios = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+        if (!ios) return;
+        try {
+            if (navigator.audioSession && navigator.audioSession.type !== type) navigator.audioSession.type = type;
+        } catch (_error) { /* Optional Safari API; retain browser defaults if unsupported. */ }
+    }
+
+    function syncIOSRoomAudioMode() {
+        for (const track of roomMicrophoneCaptures) if (track.readyState === 'ended') roomMicrophoneCaptures.delete(track);
+        if (state.intentionalDisconnect) return; // Final cleanup owns the return to auto.
+        const capturing = pendingMicrophoneCaptures > 0 || roomMicrophoneCaptures.size > 0;
+        setIOSRoomAudioMode(capturing ? 'play-and-record' : state.roomConnection ? 'playback' : 'auto');
+    }
+
+    async function acquireRoomMicrophone(acquire) {
+        pendingMicrophoneCaptures++;
+        setIOSRoomAudioMode('play-and-record');
+        try {
+            const result = await acquire();
+            const tracks = result.getAudioTracks ? result.getAudioTracks() : [result.mediaStreamTrack || result];
+            for (const track of tracks) {
+                roomMicrophoneCaptures.add(track);
+                track.addEventListener?.('ended', syncIOSRoomAudioMode, { once: true });
+            }
+            return result;
+        } finally {
+            pendingMicrophoneCaptures--;
+            syncIOSRoomAudioMode();
+        }
+    }
+
+    function loadNotificationSound(name) {
+        if (!notificationSoundData.has(name)) {
+            const pending = fetch(`/yayinodasi/sounds/${notificationSoundFiles[name]}?v=${ASSET_VERSION}`)
+                .then((response) => {
+                    if (!response.ok) throw new Error('notification_sound_unavailable');
+                    return response.arrayBuffer();
+                }).catch((error) => {
+                    notificationSoundData.delete(name);
+                    throw error;
+                });
+            notificationSoundData.set(name, pending);
+        }
+        return notificationSoundData.get(name);
+    }
+
+    function prepareMediaToggleTone(desktopOnly = true) {
+        if (desktopOnly && isMobileBrowser()) return null;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return null;
+        try {
+            if (!mediaToggleToneContext || mediaToggleToneContext.state === 'closed') {
+                mediaToggleToneContext = new AudioContextClass();
+            }
+            mediaToggleToneContext.resume().catch(() => {});
+            return mediaToggleToneContext;
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    async function playNotificationSound(context, name) {
+        if (!context) return;
+        try {
+            const data = await loadNotificationSound(name);
+            const buffer = await context.decodeAudioData(data.slice(0));
+            if (context.state !== 'running') return;
+            const source = context.createBufferSource();
+            source.buffer = buffer;
+            // Local output only: never feed notifications into published media.
+            source.connect(context.destination);
+            await new Promise(resolve => {
+                source.onended = () => { source.disconnect(); resolve(); };
+                source.start();
+            });
+        } catch (_error) {
+            // Notification failures must not interrupt meeting controls.
+        }
+    }
+
+    function playRoomTone(type = 'join') {
+        const context = prepareMediaToggleTone(false);
+        const playback = playNotificationSound(context, type === 'leave' ? 'room-leave' : 'room-join');
+        if (type === 'leave') {
+            const release = () => releaseRoomAudioSession(context);
+            const timeout = setTimeout(release, 5000);
+            playback.finally(() => { clearTimeout(timeout); release(); });
+        }
+    }
+
+    function closeRoomAudioContext(context) {
+        if (!context) return Promise.resolve();
+        let closing;
+        try { closing = Promise.resolve(context.close()).catch(() => {}); }
+        catch (_error) { closing = Promise.resolve(); }
+        pendingRoomAudioClosures.add(closing);
+        closing.finally(() => pendingRoomAudioClosures.delete(closing));
+        return closing;
+    }
+
+    async function releaseRoomAudioSession(context = mediaToggleToneContext) {
+        // A delayed leave sound must never close the audio context of a newly joined room.
+        if (state.roomConnection || !state.intentionalDisconnect || mediaToggleToneContext !== context) return;
+        const generation = ++roomAudioReleaseGeneration;
+        mediaToggleToneContext = null;
+        closeRoomAudioContext(context);
+        await Promise.all(Array.from(pendingRoomAudioClosures));
+        if (generation !== roomAudioReleaseGeneration || state.roomConnection || !state.intentionalDisconnect || mediaToggleToneContext) return;
+        try {
+            if (navigator.audioSession) navigator.audioSession.type = 'auto';
+        } catch (_error) { /* Optional API; do not change system volume or speaker selection. */ }
+    }
+
+    function playMediaToggleTone(context, type, enabled) {
+        playNotificationSound(context, `${type}-${enabled ? 'on' : 'off'}`);
     }
 
     function detachMediaSessionHandlers() {
@@ -473,6 +675,7 @@
                 return;
             }
             navigator.mediaSession.setActionHandler('togglemicrophone', () => {
+                traceMicrophoneTransition('system-toggle');
                 toggleGuestMicrophoneShortcut().catch(() => {});
             });
         } catch (_error) {
@@ -480,13 +683,16 @@
         }
     }
 
+    let statusRevision = 0, liveAnnouncementRevision = 0;
     function announce(message) {
+        const revision = ++liveAnnouncementRevision;
         const targets = [els.liveRegion, els.focusedLiveRegion].filter(Boolean);
         if (!targets.length) return;
         targets.forEach((target) => {
             target.textContent = '';
         });
         requestAnimationFrame(() => {
+            if (revision !== liveAnnouncementRevision) return;
             targets.forEach((target) => {
                 target.textContent = message;
             });
@@ -494,10 +700,33 @@
     }
 
     function setStatus(message) {
+        statusRevision += 1;
+        if (state.statusClearTimer != null) {
+            clearTimeout(state.statusClearTimer);
+            state.statusClearTimer = null;
+        }
         if (els.statusLine) {
             els.statusLine.textContent = message;
         }
         announce(message);
+    }
+
+    function setTransientStatus(message, durationMs = 6000) {
+        setStatus(message);
+        const revision = statusRevision, announcementRevision = liveAnnouncementRevision;
+        state.statusClearTimer = window.setTimeout(() => {
+            if (revision !== statusRevision) return;
+            state.statusClearTimer = null;
+            if (els.statusLine && els.statusLine.textContent === message) {
+                els.statusLine.textContent = '';
+            }
+            if (announcementRevision === liveAnnouncementRevision) {
+                liveAnnouncementRevision += 1;
+                [els.liveRegion, els.focusedLiveRegion].filter(Boolean).forEach(target => {
+                    if (target.textContent === message) target.textContent = '';
+                });
+            }
+        }, durationMs);
     }
 
     function setJoinResult(message) {
@@ -540,7 +769,7 @@
     }
 
     function setRoomSummaryStatus(message) {
-        if (els.roomSummaryStatus) {
+        if (els.roomSummaryStatus && els.roomSummaryStatus.textContent !== message) {
             els.roomSummaryStatus.textContent = message;
         }
     }
@@ -589,6 +818,23 @@
 
     function updateJoinViewState() {
         const joined = !!state.roomConnection;
+        document.body.classList.toggle('meeting-joined', joined);
+        document.body.classList.toggle('meeting-options-expanded', joined && state.meetingOptionsExpanded);
+        if (els.btnToggleParticipantsPanel) els.btnToggleParticipantsPanel.hidden = !joined;
+        renderChatPanel();
+        updateHandRaiseButtonUi();
+        if (els.btnToggleMeetingOptions) {
+            els.btnToggleMeetingOptions.hidden = !joined;
+            els.btnToggleMeetingOptions.setAttribute('aria-expanded', state.meetingOptionsExpanded ? 'true' : 'false');
+            const optionsLabelKey = state.meetingOptionsExpanded
+                ? 'broadcast_room_join.meeting_options_hide'
+                : 'broadcast_room_join.meeting_options_show';
+            const optionsFallback = state.meetingOptionsExpanded
+                ? 'Toplantı seçeneklerini gizle'
+                : 'Toplantı seçeneklerini göster';
+            els.btnToggleMeetingOptions.setAttribute('data-i18n', optionsLabelKey);
+            setControlText(els.btnToggleMeetingOptions, t(optionsLabelKey, optionsFallback));
+        }
         if (els.joinStatusSection) {
             els.joinStatusSection.hidden = joined;
             els.joinStatusSection.setAttribute('aria-hidden', joined ? 'true' : 'false');
@@ -640,7 +886,13 @@
         if (!els.roomPasswordGroup) {
             return;
         }
-        const passwordRequired = state.requirePasswordNow === true && !state.roomConnection;
+        const activePolicyRequiresPassword = state.hostConnected
+            ? state.requirePasswordWhenHostPresent === true
+            : state.requirePasswordWhenHostAbsent === true;
+        const passwordRequired = state.passwordConfigured === true
+            && state.requirePasswordNow === true
+            && activePolicyRequiresPassword
+            && !state.roomConnection;
         els.roomPasswordGroup.hidden = !passwordRequired;
         els.roomPasswordGroup.setAttribute('aria-hidden', passwordRequired ? 'false' : 'true');
         if (!passwordRequired && els.roomPassword) {
@@ -784,9 +1036,12 @@
         }
         const previousValue = String(els.chatTarget.value || 'all');
         const options = getChatTargetOptions();
-        els.chatTarget.innerHTML = options.map((option) => (
+        const optionsHtml = options.map((option) => (
             `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`
         )).join('');
+        if (els.chatTarget._optionsHtml === optionsHtml) return;
+        els.chatTarget._optionsHtml = optionsHtml;
+        els.chatTarget.innerHTML = optionsHtml;
         els.chatTarget.value = options.some((option) => option.value === previousValue) ? previousValue : 'all';
     }
 
@@ -812,6 +1067,15 @@
         }
 
         const messages = getVisibleChatMessages();
+        const signature = JSON.stringify(messages.map((message) => [message.id, describeChatMessage(message)]));
+        if (els.chatMessageList._messageSignature === signature) {
+            const index = Math.max(0, Math.min(state.chatSelectedIndex, messages.length - 1));
+            if (messages.length && els.chatMessageList.selectedIndex !== index) els.chatMessageList.selectedIndex = index;
+            renderSelectedChatMessageDetail();
+            if (announceSelection && messages[index]) announceChatMessage(describeChatMessage(messages[index]));
+            return;
+        }
+        els.chatMessageList._messageSignature = signature;
         if (!messages.length) {
             els.chatMessageList.innerHTML = `<option value="">${escapeHtml(t('broadcast_room_join.chat_no_messages', 'Henüz mesaj yok.'))}</option>`;
             els.chatMessageList.disabled = true;
@@ -836,11 +1100,17 @@
     }
 
     function renderChatPanel() {
+        const joined = !!state.roomConnection;
+        const expanded = joined && state.chatPanelExpanded;
         if (els.chatPanel) {
-            els.chatPanel.hidden = !state.chatPanelExpanded;
+            if (els.chatPanel.hidden !== !expanded) els.chatPanel.hidden = !expanded;
         }
         if (els.btnToggleChatPanel) {
-            els.btnToggleChatPanel.setAttribute('aria-expanded', state.chatPanelExpanded ? 'true' : 'false');
+            if (els.btnToggleChatPanel.hidden !== !joined) els.btnToggleChatPanel.hidden = !joined;
+            const value = expanded ? 'true' : 'false';
+            if (els.btnToggleChatPanel.getAttribute('aria-expanded') !== value) {
+                els.btnToggleChatPanel.setAttribute('aria-expanded', value);
+            }
         }
         renderChatTargetSelector();
     }
@@ -865,41 +1135,42 @@
         updateAudioLevelLabels();
     }
 
-    function updateMediaActionButton(button, isEnabled, buttonLabelKey, buttonFallback) {
+    function updateMediaActionButton(button, isEnabled, enabledLabelKey, enabledFallback, disabledLabelKey, disabledFallback) {
         if (!button) {
             return;
         }
         const enabled = Boolean(isEnabled);
-        const label = t(buttonLabelKey, buttonFallback);
+        const buttonLabelKey = enabled ? enabledLabelKey : disabledLabelKey;
+        const label = t(buttonLabelKey, enabled ? enabledFallback : disabledFallback);
         button.checked = enabled;
         if (button.getAttribute('data-i18n') !== buttonLabelKey) {
             button.setAttribute('data-i18n', buttonLabelKey);
         }
-        if (button.textContent !== label) {
-            button.textContent = label;
-        }
-        // Keep the accessible name stable; expose the binary media state natively.
+        setControlText(button, label);
+        // This remains a plain action button. The next action is its accessible name.
         if (button.hasAttribute('aria-label')) {
             button.removeAttribute('aria-label');
         }
-        const pressedValue = enabled ? 'true' : 'false';
-        if (button.getAttribute('aria-pressed') !== pressedValue) {
-            button.setAttribute('aria-pressed', pressedValue);
-        }
+        button.removeAttribute('aria-pressed');
+        button.dataset.mediaState = enabled ? 'on' : 'off';
     }
 
     function updateJoinMediaToggleButtons() {
         updateMediaActionButton(
             els.microphoneEnabled,
             typeof els.microphoneEnabled?.checked === 'boolean' ? els.microphoneEnabled.checked : true,
-            'broadcast_room_join.microphone_toggle',
-            'Mikrofon (Ctrl+D)'
+            'broadcast_room_join.microphone_turn_off',
+            'Mikrofonu kapat (Ctrl+D)',
+            'broadcast_room_join.microphone_turn_on',
+            'Mikrofonu aç (Ctrl+D)'
         );
         updateMediaActionButton(
             els.cameraEnabled,
             typeof els.cameraEnabled?.checked === 'boolean' ? els.cameraEnabled.checked : true,
-            'broadcast_room_join.camera_toggle',
-            'Video (Ctrl+E)'
+            'broadcast_room_join.camera_stop',
+            'Videomu durdur (Ctrl+E)',
+            'broadcast_room_join.camera_start',
+            'Videomu başlat (Ctrl+E)'
         );
     }
 
@@ -912,12 +1183,29 @@
             ? Boolean(els.cameraEnabled?.checked) && !!state.localVideoTrack
             : Boolean(els.microphoneEnabled?.checked) && !!state.localAudioTrack;
         const key = isCamera
-            ? (enabled ? 'broadcast_room.status_camera_enabled_self' : 'broadcast_room.status_camera_disabled_self')
-            : (enabled ? 'broadcast_room.status_microphone_enabled_self' : 'broadcast_room.status_microphone_disabled_self');
+            ? (enabled ? 'broadcast_room_join.camera_enabled' : 'broadcast_room_join.camera_disabled')
+            : (enabled ? 'broadcast_room_join.microphone_enabled' : 'broadcast_room_join.microphone_disabled');
         const fallback = isCamera
             ? (enabled ? 'Videonuz açıldı.' : 'Videonuz kapatıldı.')
             : (enabled ? 'Sesiniz açıldı.' : 'Sesiniz kapatıldı.');
-        setStatus(t(key, fallback));
+        setTransientStatus(t(key, fallback));
+    }
+
+    function announceLocalMediaRequestedState(type) {
+        if (!state.roomConnection) {
+            return;
+        }
+        const isCamera = type === 'camera';
+        const enabled = isCamera
+            ? Boolean(els.cameraEnabled?.checked)
+            : Boolean(els.microphoneEnabled?.checked);
+        const key = isCamera
+            ? (enabled ? 'broadcast_room_join.camera_enabled' : 'broadcast_room_join.camera_disabled')
+            : (enabled ? 'broadcast_room_join.microphone_enabled' : 'broadcast_room_join.microphone_disabled');
+        const fallback = isCamera
+            ? (enabled ? 'Videonuz açıldı.' : 'Videonuz kapatıldı.')
+            : (enabled ? 'Sesiniz açıldı.' : 'Sesiniz kapatıldı.');
+        setTransientStatus(t(key, fallback));
     }
 
     function setAudioTestStatus(message) {
@@ -983,6 +1271,7 @@
             });
             state.audioTest.microphoneStream = null;
         }
+        syncIOSRoomAudioMode();
         if (els.btnTestMicrophone) {
             const label = t('broadcast_room_join.test_microphone_button', 'Mikrofonu test et');
             els.btnTestMicrophone.textContent = label;
@@ -999,9 +1288,9 @@
             return;
         }
         const deviceId = String(els.microphoneDevice?.value || '').trim();
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const stream = await acquireRoomMicrophone(() => navigator.mediaDevices.getUserMedia({
             audio: buildAudioCaptureOptions(deviceId ? { exact: deviceId } : undefined)
-        });
+        }));
         const audio = document.createElement('audio');
         audio.autoplay = true;
         audio.srcObject = stream;
@@ -1188,6 +1477,11 @@
 
     async function runCameraFramingAnalysis() {
         if (!state.cameraTest.active || !state.cameraTest.detector || !els.cameraFramingPreview) return;
+        if (state.cameraTest.participantId && getParticipantCameraFramingTrack(state.cameraTest.participantId) !== state.cameraTest.stream?.getVideoTracks()[0]) {
+            cleanupCameraFramingTest();
+            setCameraFramingStatus(t('broadcast_room.camera_check_unavailable'));
+            return;
+        }
         if (document.hidden) {
             scheduleCameraFramingAnalysis(1500);
             return;
@@ -1248,12 +1542,46 @@
         cleanupCameraFramingTest();
         if (els.cameraFramingDialog?.open) els.cameraFramingDialog.close();
         if (announceStatus) setStatus(t('broadcast_room.camera_test_stopped', 'Kamera ve kadraj testi kapatıldı.'));
-        if (restoreFocus) els.btnTestCameraFraming?.focus?.();
+        if (restoreFocus) {
+            const origin = state.cameraTest.origin;
+            (origin?.isConnected ? origin : els.btnTestCameraFraming)?.focus?.();
+        }
     }
 
-    async function startCameraFramingTest() {
+    function getParticipantCameraFramingTrack(identity) {
+        const participant = state.participants.find(item => item.identity === identity);
+        const self = identity === state.participantIdentity;
+        // Own camera state is authoritative locally; the server snapshot can lag behind activation.
+        if (!self && (!participant || participant.cameraEnabled === false || !(state.webHost && state.participantRole === 'host'))) return null;
+        const entry = self ? null : state.remoteParticipants[identity]?.videoTracks?.find(item => !isShareTrack(item));
+        const track = self ? state.localVideoTrack : entry?.track;
+        const native = getNativeVideoTrackFromLocalTrack(track);
+        return native?.kind === 'video' && native.readyState === 'live' && native.enabled && !native.muted
+            && !track.isMuted && !entry?.publication?.isMuted ? native : null;
+    }
+
+    async function startCameraFramingTest(participantId = null) {
         if (!els.cameraFramingDialog || !els.cameraFramingPreview) return;
+        const origin = document.activeElement;
+        const borrowedTrack = participantId ? getParticipantCameraFramingTrack(participantId) : null;
+        if (participantId && !borrowedTrack) {
+            cleanupCameraFramingTest();
+            state.cameraTest.origin = origin;
+            els.cameraFramingTitle.textContent = t('broadcast_room.camera_test_dialog_title');
+            document.getElementById('camera-framing-help').textContent = t('broadcast_room.camera_check_unavailable');
+            if (!els.cameraFramingDialog.open) els.cameraFramingDialog.showModal();
+            els.cameraFramingTitle?.focus?.();
+            setCameraFramingStatus(t('broadcast_room.camera_check_unavailable'), { forceRepeat: true });
+            return;
+        }
         cleanupCameraFramingTest();
+        state.cameraTest.origin = origin;
+        state.cameraTest.participantId = participantId;
+        els.cameraFramingTitle.textContent = participantId
+            ? t('broadcast_room.camera_check_title', '', { name: state.participants.find(item => item.identity === participantId)?.displayName || participantId })
+            : t('broadcast_room.camera_test_dialog_title');
+        document.getElementById('camera-framing-help').textContent = t(participantId
+            ? 'broadcast_room.camera_check_help' : 'broadcast_room.camera_test_help');
         const session = {};
         let previewStarted = false;
         state.cameraTest.session = session;
@@ -1263,7 +1591,7 @@
         state.cameraTest.lastDetailedMessage = '';
         setCameraFramingStatus(t('broadcast_room.camera_test_starting', 'Kamera ve çevrimdışı kadraj yardımı hazırlanıyor...'));
         try {
-            const nativeTrack = getNativeVideoTrackFromLocalTrack(state.localVideoTrack);
+            const nativeTrack = borrowedTrack || getNativeVideoTrackFromLocalTrack(state.localVideoTrack);
             let stream = null;
             let ownsStream = false;
             if (nativeTrack?.kind === 'video' && nativeTrack.readyState !== 'ended') {
@@ -1369,8 +1697,9 @@
     }
 
     function renderParticipantsPanel() {
+        syncSelfParticipantTiles();
         if (els.participantsPanel) {
-            els.participantsPanel.hidden = !state.participantsPanelExpanded;
+            els.participantsPanel.hidden = !state.roomConnection || !state.participantsPanelExpanded;
         }
         if (els.btnToggleParticipantsPanel) {
             els.btnToggleParticipantsPanel.setAttribute('aria-expanded', state.participantsPanelExpanded ? 'true' : 'false');
@@ -1383,6 +1712,9 @@
         }
         const messages = getVisibleChatMessages();
         const message = state.chatSelectedIndex >= 0 ? messages[state.chatSelectedIndex] : null;
+        const signature = JSON.stringify([state.lang, message]);
+        if (els.chatSelectedDetail._messageSignature === signature) return;
+        els.chatSelectedDetail._messageSignature = signature;
         if (!message) {
             els.chatSelectedDetail.innerHTML = escapeHtml(t('broadcast_room_join.chat_selected_detail_empty', 'Seçili mesaj yok.'));
             return;
@@ -1400,18 +1732,21 @@
             return;
         }
         const microphoneActive = Boolean(els.microphoneEnabled?.checked) && !!state.localAudioTrack;
-        els.btnHandRaise.hidden = microphoneActive;
+        els.btnHandRaise.hidden = !state.roomConnection || (microphoneActive && !state.handRaiseActive);
         const key = state.handRaiseActive
             ? 'broadcast_room_join.hand_raise_cancel'
             : 'broadcast_room_join.hand_raise_request';
         const fallback = state.handRaiseActive ? 'Söz İstemeyi Geri Al' : 'Söz İste';
         const label = t(key, fallback);
-        els.btnHandRaise.textContent = label;
+        els.btnHandRaise.setAttribute('data-i18n', key);
+        els.btnHandRaise.dataset.requestActive = state.handRaiseActive ? 'true' : 'false';
+        setControlText(els.btnHandRaise, label);
         setShortcutAccessibleLabel(els.btnHandRaise, label);
         updateHandRaiseStatusVisibility();
     }
 
     function updateHandRaiseStateFromParticipants({ announce = true } = {}) {
+        syncParticipantDeviceLabels();
         const ownParticipant = getOwnParticipant();
         if (!ownParticipant) {
             setHandRaiseStatus(t('broadcast_room_join.hand_raise_waiting', 'Söz isteği için önce odaya katılın.'));
@@ -1465,6 +1800,7 @@
     }
 
     function renderParticipantList() {
+        window.EvdWebHost?.render();
         renderRoomSummary();
         updateAudioChannelVisibility();
         updateHandRaiseStatusVisibility();
@@ -1577,7 +1913,7 @@
         }
 
         try {
-            await fetch('/api/broadcast-room/participant-state', {
+            await roomApiFetch('/api/broadcast-room/participant-state', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1606,6 +1942,54 @@
         };
     }
 
+    function guestNameStorageKey() {
+        return state.room?.roomId ? `evd.guest-name.v1:${state.room.roomId}` : '';
+    }
+
+    function syncRememberGuestNameControls() {
+        for (const prefix of ['', 'joined-']) {
+            const control = document.getElementById(`${prefix}remember-guest-name`);
+            if (control) control.checked = state.rememberGuestName === true;
+            const group = document.getElementById(`${prefix}remember-guest-name-group`);
+            if (group) group.hidden = state.webHost === true;
+        }
+    }
+
+    function persistGuestName(name = els.displayName?.value) {
+        const key = guestNameStorageKey();
+        if (!key || state.webHost) return;
+        try {
+            if (!state.rememberGuestName) localStorage.removeItem(key);
+            else {
+                const value = String(name || '').trim().slice(0, 120);
+                if (value) localStorage.setItem(key, JSON.stringify({ version: 1, name: value }));
+            }
+        } catch (_error) {
+            state.rememberGuestName = false;
+            syncRememberGuestNameControls();
+            setStatus(t('broadcast_room_join.remember_guest_name_failed'));
+        }
+    }
+
+    function restoreGuestName() {
+        state.rememberGuestName = false;
+        if (!state.webHost && guestNameStorageKey()) {
+            try {
+                const saved = JSON.parse(localStorage.getItem(guestNameStorageKey()) || 'null');
+                if (saved?.version === 1 && typeof saved.name === 'string' && saved.name.trim() && saved.name.length <= 120) {
+                    els.displayName.value = saved.name.trim();
+                    state.rememberGuestName = true;
+                }
+            } catch (_error) { /* Unavailable or malformed storage must not block manual joining. */ }
+        }
+        syncRememberGuestNameControls();
+    }
+
+    function shouldAutoJoinRememberedGuest() {
+        return !state.webHost && state.rememberGuestName === true && !state.passwordConfigured
+            && Boolean(String(els.displayName?.value || '').trim());
+    }
+
     async function updateOwnDisplayName() {
         if (!state.room?.roomId || !state.participantIdentity) {
             return;
@@ -1616,7 +2000,7 @@
             els.joinedDisplayName?.focus?.();
             return;
         }
-        const response = await fetch('/api/broadcast-room/participant-state', {
+        const response = await roomApiFetch('/api/broadcast-room/participant-state', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -1638,6 +2022,7 @@
             els.joinedDisplayName.value = nextName;
         }
         state.participants = Array.isArray(payload.participants) ? payload.participants : state.participants;
+        persistGuestName(nextName);
         syncParticipantPresenceAnnouncements(state.participants, { announce: false });
         state.chatMessages = Array.isArray(payload.chatMessages) ? payload.chatMessages : state.chatMessages;
         renderParticipantList();
@@ -1674,6 +2059,7 @@
         state.leaveBeaconSent = true;
         const body = JSON.stringify({
             roomId: state.room.roomId,
+            participantApiKey: state.participantApiKey || '',
             identity: state.participantIdentity
         });
         if (navigator.sendBeacon) {
@@ -1681,7 +2067,7 @@
             navigator.sendBeacon('/api/broadcast-room/leave', blob);
             return;
         }
-        fetch('/api/broadcast-room/leave', {
+        roomApiFetch('/api/broadcast-room/leave', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -1701,7 +2087,7 @@
 
         state.leaveBeaconSent = true;
         try {
-            await fetch('/api/broadcast-room/leave', {
+            await roomApiFetch('/api/broadcast-room/leave', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1749,7 +2135,7 @@
         }
 
         const selectedTarget = audience ? { audience, recipientIdentity: '', recipientName: '' } : getSelectedChatTarget();
-        const response = await fetch('/api/broadcast-room/chat-message', {
+        const response = await roomApiFetch('/api/broadcast-room/chat-message', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -1788,7 +2174,7 @@
             return;
         }
 
-        const response = await fetch('/api/broadcast-room/hand-raise', {
+        const response = await roomApiFetch('/api/broadcast-room/hand-raise', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -1812,12 +2198,58 @@
             : t('broadcast_room_join.hand_raise_cancelled', 'Söz isteğiniz geri alındı.'));
     }
 
+    function setControlText(element, text) {
+        const iconName = element.dataset.controlIcon;
+        if (!iconName) {
+            if (element.textContent !== text) element.textContent = text;
+            return;
+        }
+        let label = element.querySelector('.control-label');
+        if (!label) {
+            const paths = {
+                chat: 'M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-6 4v-4H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M6 8h12 M6 12h8',
+                hand: 'M8 13V5a1.5 1.5 0 0 1 3 0v6 M11 11V3a1.5 1.5 0 0 1 3 0v8 M14 11V4a1.5 1.5 0 0 1 3 0v8 M17 12V7a1.5 1.5 0 0 1 3 0v9a6 6 0 0 1-6 6h-1a7 7 0 0 1-5-2l-5-6a1.5 1.5 0 0 1 2-2l3 3',
+                microphone: 'M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0V5 M5 10v2a7 7 0 0 0 14 0v-2 M12 19v3 M8 22h8',
+                camera: 'M4 6h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z M16 10l6-4v12l-6-4',
+                // Microsoft Fluent System Icons (MIT); see icons/LICENSE.txt.
+                settings: 'M12.0122 2.25C12.7462 2.25846 13.4773 2.34326 14.1937 2.50304C14.5064 2.57279 14.7403 2.83351 14.7758 3.15196L14.946 4.67881C15.0231 5.37986 15.615 5.91084 16.3206 5.91158C16.5103 5.91188 16.6979 5.87238 16.8732 5.79483L18.2738 5.17956C18.5651 5.05159 18.9055 5.12136 19.1229 5.35362C20.1351 6.43464 20.8889 7.73115 21.3277 9.14558C21.4223 9.45058 21.3134 9.78203 21.0564 9.9715L19.8149 10.8866C19.4607 11.1468 19.2516 11.56 19.2516 11.9995C19.2516 12.4389 19.4607 12.8521 19.8157 13.1129L21.0582 14.0283C21.3153 14.2177 21.4243 14.5492 21.3297 14.8543C20.8911 16.2685 20.1377 17.5649 19.1261 18.6461C18.9089 18.8783 18.5688 18.9483 18.2775 18.8206L16.8712 18.2045C16.4688 18.0284 16.0068 18.0542 15.6265 18.274C15.2463 18.4937 14.9933 18.8812 14.945 19.3177L14.7759 20.8444C14.741 21.1592 14.5122 21.4182 14.204 21.4915C12.7556 21.8361 11.2465 21.8361 9.79803 21.4915C9.48991 21.4182 9.26105 21.1592 9.22618 20.8444L9.05736 19.32C9.00777 18.8843 8.75434 18.498 8.37442 18.279C7.99451 18.06 7.5332 18.0343 7.1322 18.2094L5.72557 18.8256C5.43422 18.9533 5.09403 18.8833 4.87678 18.6509C3.86462 17.5685 3.11119 16.2705 2.6732 14.8548C2.57886 14.5499 2.68786 14.2186 2.94485 14.0293L4.18818 13.1133C4.54232 12.8531 4.75147 12.4399 4.75147 12.0005C4.75147 11.561 4.54232 11.1478 4.18771 10.8873L2.94516 9.97285C2.6878 9.78345 2.5787 9.45178 2.67337 9.14658C3.11212 7.73215 3.86594 6.43564 4.87813 5.35462C5.09559 5.12236 5.43594 5.05259 5.72724 5.18056L7.12762 5.79572C7.53056 5.97256 7.9938 5.94585 8.37577 5.72269C8.75609 5.50209 9.00929 5.11422 9.05817 4.67764L9.22824 3.15196C9.26376 2.83335 9.49786 2.57254 9.8108 2.50294C10.5281 2.34342 11.26 2.25865 12.0122 2.25ZM12.0124 3.7499C11.5583 3.75524 11.1056 3.79443 10.6578 3.86702L10.5489 4.84418C10.4471 5.75368 9.92003 6.56102 9.13042 7.01903C8.33597 7.48317 7.36736 7.53903 6.52458 7.16917L5.62629 6.77456C5.05436 7.46873 4.59914 8.25135 4.27852 9.09168L5.07632 9.67879C5.81513 10.2216 6.25147 11.0837 6.25147 12.0005C6.25147 12.9172 5.81513 13.7793 5.0771 14.3215L4.27805 14.9102C4.59839 15.752 5.05368 16.5361 5.626 17.2316L6.53113 16.8351C7.36923 16.4692 8.33124 16.5227 9.12353 16.9794C9.91581 17.4361 10.4443 18.2417 10.548 19.1526L10.657 20.1365C11.5466 20.2878 12.4555 20.2878 13.3451 20.1365L13.4541 19.1527C13.5549 18.2421 14.0828 17.4337 14.876 16.9753C15.6692 16.5168 16.6332 16.463 17.4728 16.8305L18.3772 17.2267C18.949 16.5323 19.4041 15.7495 19.7247 14.909L18.9267 14.3211C18.1879 13.7783 17.7516 12.9162 17.7516 11.9995C17.7516 11.0827 18.1879 10.2206 18.9258 9.67847L19.7227 9.09109C19.4021 8.25061 18.9468 7.46784 18.3748 6.77356L17.4783 7.16737C17.113 7.32901 16.7178 7.4122 16.3187 7.41158C14.849 7.41004 13.6155 6.30355 13.4551 4.84383L13.3462 3.8667C12.9007 3.7942 12.4526 3.75512 12.0124 3.7499ZM11.9997 8.24995C14.0708 8.24995 15.7497 9.92888 15.7497 12C15.7497 14.071 14.0708 15.75 11.9997 15.75C9.92863 15.75 8.2497 14.071 8.2497 12C8.2497 9.92888 9.92863 8.24995 11.9997 8.24995ZM11.9997 9.74995C10.7571 9.74995 9.7497 10.7573 9.7497 12C9.7497 13.2426 10.7571 14.25 11.9997 14.25C13.2423 14.25 14.2497 13.2426 14.2497 12C14.2497 10.7573 13.2423 9.74995 11.9997 9.74995Z',
+                participants: 'M14 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M2 21v-3a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v3 M17 3a4 4 0 0 1 0 8 M20 14a5 5 0 0 1 2 4v3',
+                devices: 'M4 4h16v12H4Z M8 21h8 M12 16v5 M7 8h10 M7 12h6',
+                leave: 'M9 4H3v16h6 M8 12h14 M17 7l5 5-5 5',
+                expand: 'M9 3H3v6 M15 3h6v6 M3 15v6h6 M21 15v6h-6'
+            };
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('aria-hidden', 'true');
+            svg.setAttribute('focusable', 'false');
+            svg.classList.add('control-icon');
+            const path = document.createElementNS(svg.namespaceURI, 'path');
+            path.setAttribute('d', paths[iconName] || paths.settings);
+            if (iconName === 'settings') {
+                path.style.fill = 'currentColor';
+                path.style.stroke = 'none';
+            }
+            svg.appendChild(path);
+            if (iconName === 'microphone' || iconName === 'camera') {
+                const slash = document.createElementNS(svg.namespaceURI, 'path');
+                slash.setAttribute('d', 'M3 3l18 18');
+                slash.classList.add('control-icon-off');
+                svg.appendChild(slash);
+            }
+            label = document.createElement('span');
+            label.className = 'control-label sr-only';
+            element.replaceChildren(svg, label);
+        }
+        if (label.textContent !== text) label.textContent = text;
+        if (element.title !== text) element.title = text;
+    }
+
     function translateDom() {
         document.querySelectorAll('[data-i18n]').forEach((el) => {
             const key = el.getAttribute('data-i18n');
             const value = t(key, '');
             if (value) {
-                el.textContent = value;
+                setControlText(el, value);
             }
         });
         document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
@@ -1843,6 +2275,21 @@
         }
     }
 
+    async function roomApiFetch(url, options = {}) {
+        const headers = new Headers(options.headers || {});
+        if (state.participantApiKey) headers.set('X-EVD-Participant-Key', state.participantApiKey);
+        const response = await fetch(url, { ...options, headers });
+        const json = response.json.bind(response);
+        response.json = async () => {
+            const payload = await json();
+            if (response.ok && payload?.participantApiKey) state.participantApiKey = payload.participantApiKey;
+            if (payload?.error === 'participant_session_required') payload.error = t('broadcast_room.security_session_required');
+            if (payload?.error === 'room_owner_required') payload.error = t('broadcast_room.security_owner_required');
+            return payload;
+        };
+        return response;
+    }
+
     function getInviteIdFromPath() {
         const parts = window.location.pathname.split('/').filter(Boolean);
         return decodeURIComponent(parts[parts.length - 1] || '');
@@ -1859,17 +2306,30 @@
 
     async function loadInviteInfo() {
         setStatus(t('broadcast_room_join.invite_status_loading', 'Davet bilgisi yükleniyor...'));
-        const response = await fetch(`/api/broadcast-room/invite/${encodeURIComponent(state.inviteId)}`);
+        const response = await roomApiFetch(`/api/broadcast-room/invite/${encodeURIComponent(state.inviteId)}`);
         if (!response.ok) {
             setStatus(t('broadcast_room_join.invite_status_invalid', 'Davet bağlantısı geçersiz veya oda kapalı.'));
             throw new Error('invite_not_found');
         }
         const payload = await response.json();
         state.room = payload;
+        if (new URLSearchParams(location.search).get('host') === '1') {
+            const auth = await fetch(`/api/admin-auth/meeting/${encodeURIComponent(payload.roomId)}`, { credentials: 'same-origin' });
+            if (!auth.ok) {
+                if (els.btnJoinRoom) els.btnJoinRoom.disabled = true;
+                throw new Error(t('admin_auth.meeting_login_required'));
+            }
+            state.webHost = true;
+            const account = await auth.json();
+            state.accountDisplayName = account.displayName || '';
+            if (state.accountDisplayName) els.displayName.value = state.accountDisplayName;
+        }
         state.hostConnected = payload.hostConnected !== false;
         state.allowJoinWhenHostAbsent = payload.joinPolicy?.allowJoinWhenHostAbsent === true;
         state.passwordConfigured = payload.joinPolicy?.passwordConfigured === true;
-        state.requirePasswordNow = payload.joinPolicy?.requirePasswordNow === true;
+        state.requirePasswordWhenHostPresent = payload.settings?.requirePasswordWhenHostPresent === true;
+        state.requirePasswordWhenHostAbsent = payload.settings?.requirePasswordWhenHostAbsent === true;
+        state.requirePasswordNow = !state.webHost && payload.joinPolicy?.requirePasswordNow === true;
         setRoomInfo({
             title: getLocalizedDefaultRoomTitle(payload.title),
             host: payload.hostDisplayName || t('broadcast_room_join.host_fallback', 'Host')
@@ -1960,8 +2420,51 @@
         return '';
     }
 
+    let serverRecordingNoticeRoom = '', serverRecordingConfirmedState = 'idle', serverRecordingNoticeTimer = null;
+    function updateServerRecordingNotice(payload = {}) {
+        const settings = payload.settings;
+        const notice = document.getElementById('server-recording-notice');
+        if (!notice) return;
+        const roomId = payload.roomId || state.room?.roomId || '';
+        if (serverRecordingNoticeRoom !== roomId) {
+            serverRecordingNoticeRoom = roomId; serverRecordingConfirmedState = 'idle';
+            clearTimeout(serverRecordingNoticeTimer); notice.textContent = '';
+            const previousIndicator = document.getElementById('server-recording-indicator');
+            if (previousIndicator) { previousIndicator.textContent = ''; previousIndicator.hidden = true; }
+        }
+        if (!settings || !Object.prototype.hasOwnProperty.call(settings, 'serverRecordingStatus')) return;
+        const status = String(settings.serverRecordingStatus || 'unknown');
+        notice.dataset.status = status;
+        // Assembly starts only after media capture has finished; later idle must not repeat stop.
+        const confirmed = status === 'active' || status === 'paused' ? status
+            : ['idle', 'complete', 'assembling'].includes(status) ? 'idle' : null;
+        // Transitional/unknown states cannot establish success or erase the last confirmed state.
+        const previous = serverRecordingConfirmedState;
+        let key = '';
+        if (confirmed !== null && confirmed !== previous) {
+            key = confirmed === 'active' ? (previous === 'paused' ? 'resumed' : 'active')
+                : confirmed === 'paused' ? 'paused' : 'stopped';
+            serverRecordingConfirmedState = confirmed;
+        }
+        let indicator = document.getElementById('server-recording-indicator');
+        if (!indicator) {
+            indicator = document.createElement('span'); indicator.id = 'server-recording-indicator';
+            indicator.setAttribute('aria-live', 'off'); notice.after(indicator);
+        }
+        const indicatorText = serverRecordingConfirmedState === 'idle' ? ''
+            : t('admin_auth.recording_' + serverRecordingConfirmedState);
+        if (indicator.textContent !== indicatorText) indicator.textContent = indicatorText;
+        indicator.hidden = !indicatorText;
+        if (key) {
+            clearTimeout(serverRecordingNoticeTimer);
+            notice.textContent = t('admin_auth.recording_notice_' + key);
+            serverRecordingNoticeTimer = setTimeout(() => { notice.textContent = ''; }, 6000);
+        }
+    }
+
     function updateHostActivityFromPayload(payload = {}, { announce = true } = {}) {
         const settings = payload?.settings || {};
+        updateServerRecordingNotice(payload);
         const nextMessage = describeHostActivity(settings);
         setHostActivityStatus(nextMessage);
 
@@ -2218,6 +2721,7 @@
     function renderLiveCaptionPanel() {
         const available = isLiveCaptionAvailable();
         const modeLabel = getLiveCaptionModeLabel();
+        const displayText = getLiveCaptionDisplayText();
         if (els.btnToggleLiveCaptionPanel) {
             els.btnToggleLiveCaptionPanel.disabled = !available;
             els.btnToggleLiveCaptionPanel.setAttribute('aria-expanded', state.liveCaptionPanelExpanded && available ? 'true' : 'false');
@@ -2257,6 +2761,10 @@
             els.liveCaptionPreferredLanguage.disabled = !available || !state.liveCaptionViewEnabled || !isTranslatedCaptionMode();
             els.liveCaptionPreferredLanguage.value = state.liveCaptionPreferredLanguage || 'tr';
         }
+        if (els.liveCaptionFontSize) {
+            els.liveCaptionFontSize.disabled = !available || !state.liveCaptionViewEnabled;
+            els.liveCaptionFontSize.value = state.liveCaptionFontSize || 'large';
+        }
         if (els.liveCaptionAudioModeStatus) {
             const showAudioMode = available && state.liveCaptionViewEnabled && isVoiceTranslationMode();
             els.liveCaptionAudioModeStatus.hidden = !showAudioMode;
@@ -2270,7 +2778,15 @@
                 : t('broadcast_room_join.live_caption_auto_announce_caption', 'Altyazıyı otomatik seslendir');
         }
         if (els.liveCaptionText) {
-            els.liveCaptionText.value = getLiveCaptionDisplayText();
+            els.liveCaptionText.value = displayText;
+            els.liveCaptionText.dataset.captionSize = state.liveCaptionFontSize || 'large';
+        }
+        if (els.liveCaptionVisualBanner) {
+            const showVisualBanner = available && state.liveCaptionViewEnabled;
+            els.liveCaptionVisualBanner.hidden = !showVisualBanner;
+            els.liveCaptionVisualBanner.textContent = showVisualBanner ? displayText : '';
+            els.liveCaptionVisualBanner.dataset.captionSize = state.liveCaptionFontSize || 'large';
+            els.liveCaptionVisualBanner.scrollTop = els.liveCaptionVisualBanner.scrollHeight;
         }
         updateRemoteAudioElementVolumes();
     }
@@ -2307,6 +2823,8 @@
     function updateLiveCaptionFromPayload(payload = {}, { announce = true } = {}) {
         const caption = payload?.liveCaption || {};
         const previousCaption = { ...state.liveCaption };
+        const previousAvailable = previousCaption.enabled === true
+            && ['captions_only', 'translated_captions', 'voice_translation'].includes(String(previousCaption.mode || '').trim());
         state.liveCaption = {
             enabled: caption.enabled === true,
             text: String(caption.text || '').trim(),
@@ -2320,6 +2838,12 @@
             mode: String(caption.mode || '').trim(),
             updatedAt: Number(caption.updatedAt || 0) || 0
         };
+        const nextAvailable = isLiveCaptionAvailable();
+        if (nextAvailable && !previousAvailable) {
+            state.liveCaptionViewEnabled = true;
+            state.liveCaptionAutoAnnounce = false;
+            state.lastLiveCaptionAnnouncementKey = '';
+        }
         const translationAudioSessionChanged = previousCaption.mode !== state.liveCaption.mode
             || previousCaption.scope !== state.liveCaption.scope
             || previousCaption.targetLanguage !== state.liveCaption.targetLanguage
@@ -2428,6 +2952,11 @@
                 const message = t('broadcast_room_join.room_ended_for_everyone', 'Host toplantıyı herkes için sonlandırdı. Odadan çıkarıldınız.');
                 disconnectRoom({ announceStatus: false }).finally(() => {
                     setStatus(message);
+                    const recordingLink = document.getElementById('meeting-recording-link');
+                    if (recordingLink && !recordingLink.hidden && recordingLink.hasAttribute('href')) {
+                        setStatus(message + ' ' + t('admin_auth.recording_share_hint'));
+                        recordingLink.focus();
+                    }
                 });
             });
             eventSource.addEventListener('participantRemoved', (event) => {
@@ -2472,6 +3001,15 @@
     }
 
     function getRemoteMediaRenderSignature(participants) {
+        const trackIds = getRemoteMediaRenderSignature.trackIds ||= new WeakMap();
+        const trackIdentity = (track) => {
+            if (!track || typeof track !== 'object') return 0;
+            if (!trackIds.has(track)) {
+                getRemoteMediaRenderSignature.nextId = (getRemoteMediaRenderSignature.nextId || 0) + 1;
+                trackIds.set(track, getRemoteMediaRenderSignature.nextId);
+            }
+            return trackIds.get(track);
+        };
         return JSON.stringify((Array.isArray(participants) ? participants : [])
             .map((participantState) => ({
                 identity: String(participantState.identity || '').trim(),
@@ -2483,13 +3021,15 @@
                     .map((trackState) => ({
                         sid: String(trackState.sid || '').trim(),
                         source: String(trackState.source || '').trim(),
-                        share: isShareTrack(trackState)
+                        share: isShareTrack(trackState),
+                        instance: trackIdentity(trackState.track)
                     }))
                     .sort((left, right) => String(left.sid || '').localeCompare(String(right.sid || ''))),
                 audioTracks: (Array.isArray(participantState.audioTracks) ? participantState.audioTracks : [])
                     .map((trackState) => ({
                         sid: String(trackState.sid || '').trim(),
-                        source: String(trackState.source || '').trim()
+                        source: String(trackState.source || '').trim(),
+                        instance: trackIdentity(trackState.track)
                     }))
                     .sort((left, right) => String(left.sid || '').localeCompare(String(right.sid || '')))
             }))
@@ -2610,7 +3150,9 @@
     }
 
     async function applyRoomSettingsFromPayload(payload = {}, { announce = true } = {}) {
+        window.EvdWebHost?.update(payload);
         const previousOwnDisplayName = String(getOwnParticipant()?.displayName || '').trim();
+        const previousParticipantVolumes = JSON.stringify(state.participantVolumes || {});
         state.participants = Array.isArray(payload.participants) ? payload.participants : state.participants;
         syncParticipantPresenceAnnouncements(state.participants, { announce });
         const nextOwnDisplayName = String(getOwnParticipant()?.displayName || '').trim();
@@ -2627,13 +3169,15 @@
             const displayNameMessage = t('broadcast_room_join.display_name_changed_by_host', 'Host görünen adınızı değiştirdi: {name}', {
                 name: nextOwnDisplayName
             });
+            persistGuestName(nextOwnDisplayName);
             setStatus(displayNameMessage);
             announceMessage(displayNameMessage);
         }
         state.chatMessages = Array.isArray(payload.chatMessages) ? payload.chatMessages : state.chatMessages;
-        const nextAllowGuestScreenShare = payload?.settings?.allowGuestScreenShare !== false;
-        const nextAllowGuestCamera = payload?.settings?.allowGuestCamera !== false;
-        const nextAllowGuestMicrophone = payload?.settings?.allowGuestMicrophone !== false;
+        const isWebHost = state.webHost === true && state.participantRole === 'host';
+        const nextAllowGuestScreenShare = isWebHost || payload?.settings?.allowGuestScreenShare !== false;
+        const nextAllowGuestCamera = isWebHost || payload?.settings?.allowGuestCamera !== false;
+        const nextAllowGuestMicrophone = isWebHost || payload?.settings?.allowGuestMicrophone !== false;
         const permissionChanged = state.allowGuestScreenShare !== nextAllowGuestScreenShare;
         const cameraPermissionChanged = state.allowGuestCamera !== nextAllowGuestCamera;
         const microphonePermissionChanged = state.allowGuestMicrophone !== nextAllowGuestMicrophone;
@@ -2643,9 +3187,13 @@
         state.hostConnected = payload?.hostConnected !== false;
         state.allowJoinWhenHostAbsent = payload?.joinPolicy?.allowJoinWhenHostAbsent === true;
         state.passwordConfigured = payload?.joinPolicy?.passwordConfigured === true;
-        state.requirePasswordNow = payload?.joinPolicy?.requirePasswordNow === true;
+        state.requirePasswordWhenHostPresent = payload?.settings?.requirePasswordWhenHostPresent === true;
+        state.requirePasswordWhenHostAbsent = payload?.settings?.requirePasswordWhenHostAbsent === true;
+        state.requirePasswordNow = !state.webHost && payload?.joinPolicy?.requirePasswordNow === true;
         state.hostShareMonitorAudioEnabled = payload?.settings?.hostShareMonitorAudioEnabled === true;
         state.hostRecordingActive = payload?.settings?.hostRecordingActive === true;
+        state.participantVolumes = normalizeParticipantVolumeMap(payload?.settings?.participantVolumes);
+        const participantVolumesChanged = previousParticipantVolumes !== JSON.stringify(state.participantVolumes);
         updateRoomPasswordVisibility();
         updateMediaPermissionControls();
         updateScreenShareControls();
@@ -2654,6 +3202,11 @@
         renderChatMessageList();
         connectMonitorAudioSocket();
         syncLocalBackupRecordingWithHostState();
+        if (participantVolumesChanged) {
+            refreshRemoteAudioPlaybackGraph();
+        } else {
+            updateRemoteAudioElementVolumes();
+        }
 
         if (permissionChanged && !nextAllowGuestScreenShare && isScreenShareActive()) {
             await stopScreenShare({
@@ -2702,6 +3255,24 @@
         return Math.max(0, Math.min(200, numeric));
     }
 
+    function normalizeParticipantVolumeMap(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            return {};
+        }
+        return Object.fromEntries(Object.entries(value)
+            .slice(0, 100)
+            .map(([identity, percent]) => [
+                String(identity || '').trim().slice(0, 160),
+                Math.round(clampAudioLevelPercent(percent, 100))
+            ])
+            .filter(([identity]) => identity));
+    }
+
+    function getParticipantVolumeGain(participantIdentity) {
+        const identity = String(participantIdentity || '').trim();
+        return clampAudioLevelPercent(state.participantVolumes?.[identity], 100) / 100;
+    }
+
     function getMicrophoneVolume() {
         return clampAudioLevelPercent(els.microphoneVolume?.value || state.microphoneVolume * 100) / 100;
     }
@@ -2743,18 +3314,18 @@
         const isInterpreter = role === 'live_interpreter';
         const channel = String(state.audioChannel || 'original');
         if (shouldPlayTranslationAudio()) {
-            return 0.08 * getSpeakerVolume();
+            return 0.08 * getSpeakerVolume() * getParticipantVolumeGain(participantIdentity);
         }
         if (!hasLiveInterpreter() || channel === 'original') {
-            return 1 * getSpeakerVolume();
+            return 1 * getSpeakerVolume() * getParticipantVolumeGain(participantIdentity);
         }
         if (channel === 'interpreter_only') {
-            return (isInterpreter ? 1 : 0) * getSpeakerVolume();
+            return (isInterpreter ? 1 : 0) * getSpeakerVolume() * getParticipantVolumeGain(participantIdentity);
         }
         if (channel === 'interpreter_overlay') {
-            return (isInterpreter ? 1 : 0.2) * getSpeakerVolume();
+            return (isInterpreter ? 1 : 0.2) * getSpeakerVolume() * getParticipantVolumeGain(participantIdentity);
         }
-        return 1 * getSpeakerVolume();
+        return 1 * getSpeakerVolume() * getParticipantVolumeGain(participantIdentity);
     }
 
     function getRemoteAudioMixKey(participantIdentity, trackSid) {
@@ -2972,7 +3543,7 @@
                 startedAt: String(record.startedAt || Date.now()),
                 final: record.final === '1' ? '1' : '0'
             });
-            const response = await fetch(`/api/broadcast-room/local-recording-chunk?${params.toString()}`, {
+            const response = await roomApiFetch(`/api/broadcast-room/local-recording-chunk?${params.toString()}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': record.mimeType || blob.type || 'application/octet-stream'
@@ -3028,7 +3599,7 @@
         await uploadQueuedLocalBackupChunks(completedSessionId);
         if (completedSessionId && state.room?.roomId && state.participantIdentity) {
             try {
-                await fetch('/api/broadcast-room/local-recording-complete', {
+                await roomApiFetch('/api/broadcast-room/local-recording-complete', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -3053,6 +3624,8 @@
 
     function stopLocalBackupRecording() {
         const backup = state.localBackupRecording;
+        // Cloned capture tracks must be silenced too, before async recorder cleanup.
+        for (const track of backup.stream?.getAudioTracks?.() || []) track.enabled = false;
         if (!backup.active && !backup.recorder) {
             updateLocalBackupRecordingStatus();
             return;
@@ -3073,6 +3646,7 @@
 
     function startLocalBackupRecording() {
         const backup = state.localBackupRecording;
+        if (!els.microphoneEnabled?.checked || state.localAudioTrack?.isMuted) return;
         if (backup.active || backup.recorder) {
             return;
         }
@@ -3172,15 +3746,40 @@
     function closeRemoteAudioContext() {
         clearRemoteAudioMixNodes();
         if (state.remoteAudioContext) {
-            try { state.remoteAudioContext.close(); } catch (_error) {}
+            closeRoomAudioContext(state.remoteAudioContext);
         }
         state.remoteAudioContext = null;
     }
 
+    async function resumeRemoteAudioPlayback() {
+        if (typeof state.roomConnection?.startAudio === 'function') {
+            await state.roomConnection.startAudio().catch(() => {});
+        }
+        if (state.remoteAudioContext?.state === 'suspended') {
+            await state.remoteAudioContext.resume().catch(() => {});
+        }
+        const audioElements = Array.from(els.remoteAudioHost?.querySelectorAll?.('audio') || []);
+        if (!audioElements.length) {
+            return;
+        }
+        let blocked = false;
+        for (const audio of audioElements) {
+            if (!audio.paused) {
+                continue;
+            }
+            try {
+                await audio.play();
+            } catch (_error) {
+                blocked = true;
+            }
+        }
+        state.remoteAudioPlaybackBlocked = blocked;
+    }
+
     function syncRemoteAudioMixNode(trackState, participantIdentity, audioEl) {
         const key = getRemoteAudioMixKey(participantIdentity, trackState?.sid);
-        const useOverlayMix = shouldPlayTranslationAudio();
         const volume = getRemoteAudioVolume(participantIdentity);
+        const useOverlayMix = shouldPlayTranslationAudio() || volume > 1;
         if (!useOverlayMix) {
             if (state.remoteAudioMixNodes[key]) {
                 try { state.remoteAudioMixNodes[key].source?.disconnect(); } catch (_error) {}
@@ -3188,14 +3787,14 @@
                 delete state.remoteAudioMixNodes[key];
             }
             audioEl.muted = false;
-            audioEl.volume = volume;
+            audioEl.volume = Math.max(0, Math.min(1, volume));
             return;
         }
         const audioContext = ensureRemoteAudioContext();
         const nativeTrack = getNativeAudioTrackFromRemoteTrack(trackState?.track);
         if (!audioContext || !nativeTrack) {
             audioEl.muted = false;
-            audioEl.volume = volume;
+            audioEl.volume = Math.max(0, Math.min(1, volume));
             return;
         }
         audioEl.muted = true;
@@ -3210,7 +3809,7 @@
                 state.remoteAudioMixNodes[key] = { source, gain };
             } catch (_error) {
                 audioEl.muted = false;
-                audioEl.volume = volume;
+                audioEl.volume = Math.max(0, Math.min(1, volume));
                 return;
             }
         }
@@ -3226,23 +3825,24 @@
         const audioElements = Array.from(els.remoteAudioHost.querySelectorAll('audio[data-participant-identity]'));
         audioElements.forEach((audio) => {
             const participantIdentity = audio.dataset.participantIdentity || '';
-            audio.volume = getRemoteAudioVolume(participantIdentity);
+            const volume = getRemoteAudioVolume(participantIdentity);
+            audio.volume = Math.max(0, Math.min(1, volume));
             const key = getRemoteAudioMixKey(participantIdentity, audio.dataset.trackSid || '');
             const mixEntry = state.remoteAudioMixNodes?.[key] || null;
-            if (mixEntry && shouldPlayTranslationAudio()) {
+            if (mixEntry && (shouldPlayTranslationAudio() || volume > 1)) {
                 audio.muted = true;
                 audio.volume = 0;
                 try {
-                    mixEntry.gain.gain.value = getRemoteAudioVolume(participantIdentity);
+                    mixEntry.gain.gain.value = volume;
                 } catch (_error) {}
-            } else if (!shouldPlayTranslationAudio()) {
+            } else if (!shouldPlayTranslationAudio() && volume <= 1) {
                 if (mixEntry) {
                     try { mixEntry.source?.disconnect(); } catch (_error) {}
                     try { mixEntry.gain?.disconnect(); } catch (_error) {}
                     delete state.remoteAudioMixNodes[key];
                 }
                 audio.muted = false;
-                audio.volume = getRemoteAudioVolume(participantIdentity);
+                audio.volume = Math.max(0, Math.min(1, volume));
             }
         });
     }
@@ -3258,7 +3858,7 @@
         }
         state.roleRefreshInProgress = true;
         try {
-            const response = await fetch('/api/broadcast-room/participant-role-token', {
+            const response = await roomApiFetch('/api/broadcast-room/participant-role-token', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -3406,6 +4006,7 @@
         }
 
         if (shouldDisableMicrophone && Boolean(els.microphoneEnabled?.checked)) {
+            traceMicrophoneTransition('host-mute');
             els.microphoneEnabled.checked = false;
             await handleMicrophoneToggleChange();
             setStatus(t('broadcast_room_join.microphone_forced_off', 'Host mikrofonunuzu kapattı.'));
@@ -3429,7 +4030,7 @@
             return;
         }
         try {
-            const response = await fetch(`/api/broadcast-room/${encodeURIComponent(state.room.roomId)}`);
+            const response = await roomApiFetch(`/api/broadcast-room/${encodeURIComponent(state.room.roomId)}`);
             if (!response.ok) {
                 return;
             }
@@ -3493,10 +4094,15 @@
             state.devices.speakers = devices.filter((device) => device.kind === 'audiooutput');
             const cameraChange = renderDeviceSelect(els.cameraDevice, state.devices.cameras, t('broadcast_room.no_camera_devices', 'Kullanılabilir kamera bulunamadı'));
             const microphoneChange = renderDeviceSelect(els.microphoneDevice, state.devices.microphones, t('broadcast_room.no_microphone_devices', 'Kullanılabilir mikrofon bulunamadı'));
-            renderDeviceSelect(els.speakerDevice, state.devices.speakers, t('broadcast_room.no_speaker_devices', 'Kullanılabilir hoparlör bulunamadı'));
+            const speakerChange = renderDeviceSelect(els.speakerDevice, state.devices.speakers, t('broadcast_room.no_speaker_devices', 'Kullanılabilir hoparlör bulunamadı'));
             if (announceChanges) {
                 await announceAndApplyAutomaticDeviceChange('camera', cameraChange, { applyActiveTracks });
                 await announceAndApplyAutomaticDeviceChange('microphone', microphoneChange, { applyActiveTracks });
+            }
+            if (applyActiveTracks && state.roomConnection && speakerChange.changed) {
+                // A disconnected output can leave existing players bound to a stale sink.
+                // Safari may require a user gesture; never loop or interrupt the microphone.
+                await applySpeakerSelectionToRemoteAudioElements({ reportError: false });
             }
             updateAudioLevelLabels();
         } catch (error) {
@@ -3512,11 +4118,15 @@
 
     async function handleDeviceListChanged() {
         if (state.deviceRefreshInProgress) {
+            state.deviceRefreshPending = true;
             return;
         }
         state.deviceRefreshInProgress = true;
         try {
-            await refreshDevices({ announceChanges: true, applyActiveTracks: true });
+            do {
+                state.deviceRefreshPending = false;
+                await refreshDevices({ announceChanges: true, applyActiveTracks: true });
+            } while (state.deviceRefreshPending);
         } finally {
             state.deviceRefreshInProgress = false;
         }
@@ -3530,15 +4140,16 @@
 
         setStatus(t('broadcast_room_join.permission_requesting', 'Kamera ve mikrofon izni isteniyor...'));
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
+            const stream = await acquireRoomMicrophone(() => navigator.mediaDevices.getUserMedia({
                 video: true,
                 audio: true
-            });
+            }));
             try {
                 stream.getTracks().forEach((track) => track.stop());
             } catch (_error) {
                 // ignore stop failures
             }
+            syncIOSRoomAudioMode();
             await refreshDevices();
             setStatus(t('broadcast_room_join.permission_granted', 'Kamera ve mikrofon izni verildi.'));
         } catch (error) {
@@ -3575,7 +4186,8 @@
         const nextValue = String(selectEl.value || '').trim();
         const nextLabel = selectEl.options?.[selectEl.selectedIndex]?.textContent || fallbackLabel;
         return {
-            changed: Boolean(previousValue) && (previousValue !== nextValue || (previousLabel && previousLabel !== nextLabel)),
+            // Permission grants reveal labels; a new label is not a new device.
+            changed: Boolean(previousValue) && previousValue !== nextValue,
             previousValue,
             nextValue,
             previousLabel,
@@ -3589,6 +4201,9 @@
             return;
         }
         const isCamera = kind === 'camera';
+        const activeTrack = isCamera ? state.localVideoTrack : state.localAudioTrack;
+        const activeDeviceId = activeTrack?.mediaStreamTrack?.getSettings?.().deviceId;
+        if (change.hasDevices && activeDeviceId && activeDeviceId === change.nextValue) return;
         if (!change.hasDevices) {
             setStatus(t(
                 isCamera ? 'broadcast_room_join.camera_device_lost' : 'broadcast_room_join.microphone_device_lost',
@@ -3620,6 +4235,7 @@
 
 
     function updateButtons() {
+        window.EvdWebHost?.render();
         const connected = Boolean(state.roomConnection);
         if (els.btnJoinRoom) {
             els.btnJoinRoom.disabled = connected || joinInProgress;
@@ -3656,16 +4272,17 @@
             return;
         }
         els.cameraEnabled.checked = !els.cameraEnabled.checked;
+        updateJoinMediaToggleButtons();
+        announceLocalMediaRequestedState('camera');
         await handleCameraToggleChange();
-        announceLocalMediaToggleResult('camera');
     }
 
     async function toggleGuestMicrophoneShortcut() {
-        if (!els.microphoneEnabled || els.microphoneEnabled.disabled) {
+        if (!els.microphoneEnabled || els.microphoneEnabled.disabled || microphoneUserTogglePending) {
             return;
         }
-        els.microphoneEnabled.checked = !els.microphoneEnabled.checked;
-        await handleMicrophoneToggleChange();
+        traceMicrophoneTransition('shortcut-toggle');
+        await requestUserMicrophoneToggle();
         announceLocalMediaToggleResult('microphone');
     }
 
@@ -3697,6 +4314,7 @@
     }
 
     function syncLocalCameraPreview() {
+        syncSelfParticipantTiles();
         if (!els.localPreview) return;
         const cameraEnabled = Boolean(els.cameraEnabled?.checked);
         const localTrack = state.localVideoTrack;
@@ -3756,7 +4374,7 @@
         return hash % 360;
     }
 
-    function appendParticipantAvatar(container, { identity = '', name = '' } = {}) {
+    function appendParticipantAvatar(container, { identity = '', name = '', displayLabel = name } = {}) {
         const card = document.createElement('div');
         card.className = 'participant-avatar-card';
         const avatarUrl = getParticipantAvatarUrl(identity);
@@ -3777,12 +4395,13 @@
         }
         const label = document.createElement('span');
         label.className = 'participant-avatar-name';
-        label.textContent = name;
+        label.textContent = displayLabel;
         card.appendChild(label);
         container.appendChild(card);
     }
 
     function renderLocalAvatarFallback() {
+        syncSelfParticipantTiles();
         const holder = document.getElementById('local-avatar-fallback');
         if (!holder || !els.localPreview) return;
         const nativeTrack = getNativeVideoTrackFromLocalTrack(state.localVideoTrack);
@@ -3829,7 +4448,7 @@
 
     async function syncParticipantAvatar({ clear = false } = {}) {
         if (!state.room?.roomId || !state.participantIdentity) return;
-        const response = await fetch('/api/broadcast-room/participant-avatar', {
+        const response = await roomApiFetch('/api/broadcast-room/participant-avatar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -4051,18 +4670,40 @@
     }
 
     function buildAudioCaptureOptions(deviceId) {
+        const music = document.getElementById('microphone-music-mode')?.checked === true;
         return {
             deviceId: deviceId || undefined,
             channelCount: { ideal: 2 },
             sampleRate: 48000,
             volume: getMicrophoneVolume(),
-            echoCancellation: state.microphoneEchoCancellation,
-            noiseSuppression: state.microphoneNoiseSuppression,
-            autoGainControl: state.microphoneAutoGainControl
+            // Override LiveKit's default without changing the user's other processing preferences.
+            voiceIsolation: false,
+            echoCancellation: !music && state.microphoneEchoCancellation,
+            noiseSuppression: !music && state.microphoneNoiseSuppression,
+            autoGainControl: !music && state.microphoneAutoGainControl
         };
     }
 
+    async function createLocalMicrophoneTrack(deviceId = '') {
+        const client = window.LivekitClient;
+        return acquireRoomMicrophone(async () => {
+        try {
+            return await client.createLocalAudioTrack(buildAudioCaptureOptions(deviceId));
+        } catch (primaryError) {
+            if (!deviceId) {
+                throw primaryError;
+            }
+            // Safari may retain an unusable device id after permissions or devices change.
+            return client.createLocalAudioTrack(buildAudioCaptureOptions());
+        }
+        });
+    }
+
     async function handleMicrophoneProcessingChange() {
+        const music = document.getElementById('microphone-music-mode')?.checked === true;
+        for (const control of [els.microphoneEchoCancellation, els.microphoneNoiseSuppression, els.microphoneAutoGainControl]) {
+            if (control) control.disabled = music;
+        }
         state.microphoneEchoCancellation = Boolean(els.microphoneEchoCancellation?.checked);
         state.microphoneNoiseSuppression = Boolean(els.microphoneNoiseSuppression?.checked);
         state.microphoneAutoGainControl = Boolean(els.microphoneAutoGainControl?.checked);
@@ -4169,6 +4810,9 @@
                     aggregate.audio.packetsReceived += Number(stat.packetsReceived || 0);
                     aggregate.audio.bytesReceived += Number(stat.bytesReceived || 0);
                     aggregate.audio.jitter = Math.max(aggregate.audio.jitter, Number(stat.jitter || 0));
+                    aggregate.audio.totalAudioEnergy += Number(stat.totalAudioEnergy || 0);
+                    aggregate.audio.totalSamplesDuration += Number(stat.totalSamplesDuration || 0);
+                    aggregate.audio.concealedSamples += Number(stat.concealedSamples || 0);
                 }
             }
         });
@@ -4215,9 +4859,45 @@
                 packetsLost: 0,
                 packetsReceived: 0,
                 bytesReceived: 0,
-                jitter: 0
+                jitter: 0,
+                totalAudioEnergy: 0,
+                totalSamplesDuration: 0,
+                concealedSamples: 0
             }
         };
+
+        // Numeric diagnostics only: no microphone recording or speech content.
+        aggregate.audioDiagnostics = {
+            version: 1,
+            microphoneTransitions: microphoneTransitions.map(item => ({ ...item })),
+            microphoneEnabled: state.localAudioTrack?.mediaStreamTrack?.enabled === true,
+            microphoneMuted: state.localAudioTrack?.mediaStreamTrack?.muted === true,
+            outboundBytes: null,
+            sourceEnergy: null,
+            sourceDuration: null,
+            playback: Array.from(els.remoteAudioHost?.querySelectorAll('audio') || []).map((audio) => ({
+                paused: audio.paused,
+                muted: audio.muted,
+                volume: audio.volume,
+                readyState: audio.readyState,
+                hasStream: !!audio.srcObject,
+                trackCount: audio.srcObject?.getAudioTracks?.().length || 0
+            }))
+        };
+        try {
+            const report = await state.localAudioTrack?.sender?.getStats?.();
+            report?.forEach((stat) => {
+                if (stat.type === 'outbound-rtp' && (stat.kind || stat.mediaType) === 'audio') {
+                    aggregate.audioDiagnostics.outboundBytes = Number(stat.bytesSent || 0);
+                }
+                if (stat.type === 'media-source' && (stat.kind || stat.mediaType) === 'audio') {
+                    aggregate.audioDiagnostics.sourceEnergy = stat.totalAudioEnergy ?? null;
+                    aggregate.audioDiagnostics.sourceDuration = stat.totalSamplesDuration ?? null;
+                }
+            });
+        } catch (_error) {
+            // Unsupported sender stats must not interrupt room state updates.
+        }
 
         for (const participantState of participants) {
             const videoTracks = Array.isArray(participantState.videoTracks) ? participantState.videoTracks : [];
@@ -4387,11 +5067,11 @@
         }
     }
 
-    async function applySpeakerSelectionToRemoteAudioElements() {
+    async function applySpeakerSelectionToRemoteAudioElements({ reportError = true } = {}) {
         const audioElements = Array.from(els.remoteAudioHost?.querySelectorAll?.('audio') || []);
         let reportedError = false;
         for (const audio of audioElements) {
-            const applied = await applySpeakerSelectionToElement(audio, { reportError: !reportedError });
+            const applied = await applySpeakerSelectionToElement(audio, { reportError: reportError && !reportedError });
             if (!applied) {
                 reportedError = true;
             }
@@ -4411,7 +5091,7 @@
             } catch (_error) {}
         }
         if (state.monitorAudioContext) {
-            try { state.monitorAudioContext.close(); } catch (_error) {}
+            closeRoomAudioContext(state.monitorAudioContext);
         }
         state.monitorAudioContext = null;
         state.monitorAudioScheduledTime = 0;
@@ -4503,7 +5183,7 @@
             } catch (_error) {}
         }
         if (closeContext && state.translationAudioContext) {
-            try { state.translationAudioContext.close(); } catch (_error) {}
+            closeRoomAudioContext(state.translationAudioContext);
             state.translationAudioContext = null;
             state.translationAudioScheduledTime = 0;
         }
@@ -4515,7 +5195,7 @@
         state.lastTranslationAudioReceivedAtByTarget = {};
         state.translationAudioScheduledTime = 0;
         if (closeContext && state.translationAudioContext) {
-            try { state.translationAudioContext.close(); } catch (_error) {}
+            closeRoomAudioContext(state.translationAudioContext);
             state.translationAudioContext = null;
         }
     }
@@ -4759,10 +5439,70 @@
                 .map((identity) => String(identity || '').trim())
                 .filter(Boolean)
         );
-        els.remoteVisualStage.querySelectorAll('.remote-visual-tile').forEach((tile) => {
+        const tiles = Array.from(els.remoteVisualStage.querySelectorAll('.remote-visual-tile'));
+        // Speaking changes only the border; only a moderator can change tile geometry.
+        const featuredSpeakerIdentity = String((state.participants || []).find((item) => item.spotlighted)?.identity || '');
+        tiles.forEach((tile) => {
             const identity = String(tile.dataset.participantIdentity || '').trim();
             tile.classList.toggle('is-speaking', activeIdentities.has(identity));
+            tile.classList.toggle('is-active-speaker', !!featuredSpeakerIdentity && identity === featuredSpeakerIdentity && !tile.classList.contains('is-sign-interpreter'));
         });
+        const hasSignInterpreter = tiles.some((tile) => tile.classList.contains('is-sign-interpreter'));
+        const hasFeaturedSpeaker = tiles.some((tile) => tile.classList.contains('is-active-speaker'));
+        els.remoteVisualStage.classList.toggle('has-sign-interpreter', hasSignInterpreter);
+        els.remoteVisualStage.classList.toggle('has-featured-speaker', hasFeaturedSpeaker);
+        els.remoteVisualStage.classList.toggle('has-priority-pair', hasSignInterpreter && hasFeaturedSpeaker);
+        els.remoteVisualStage.classList.toggle('mirror-participant-videos', state.mirrorParticipantVideos === true);
+        els.remoteMediaList?.classList.toggle('mirror-participant-videos', state.mirrorParticipantVideos === true);
+    }
+
+    function clearFeaturedSpeakerTimer() {
+        if (state.featuredSpeakerTimer) {
+            clearTimeout(state.featuredSpeakerTimer);
+            state.featuredSpeakerTimer = null;
+        }
+    }
+
+    function scheduleFeaturedSpeakerUpdate() {
+        const candidate = (Array.isArray(state.activeSpeakerIdentities) ? state.activeSpeakerIdentities : [])
+            .map((identity) => String(identity || '').trim())
+            .find((identity) => (
+                identity
+                && !!state.remoteParticipants?.[identity]
+                && getParticipantRole(identity) !== 'sign_interpreter'
+            )) || '';
+
+        if (candidate === state.featuredSpeakerIdentity) {
+            state.pendingFeaturedSpeakerIdentity = '';
+            clearFeaturedSpeakerTimer();
+            return;
+        }
+        if (candidate && candidate === state.pendingFeaturedSpeakerIdentity && state.featuredSpeakerTimer) {
+            return;
+        }
+
+        clearFeaturedSpeakerTimer();
+        state.pendingFeaturedSpeakerIdentity = candidate;
+        state.featuredSpeakerTimer = window.setTimeout(() => {
+            state.featuredSpeakerTimer = null;
+            const expectedIdentity = state.pendingFeaturedSpeakerIdentity;
+            const remainsActive = !expectedIdentity || state.activeSpeakerIdentities.includes(expectedIdentity);
+            if (!remainsActive) {
+                scheduleFeaturedSpeakerUpdate();
+                return;
+            }
+            state.featuredSpeakerIdentity = expectedIdentity;
+            state.pendingFeaturedSpeakerIdentity = '';
+            updateRemoteVisualActiveSpeakerState();
+        }, candidate ? ACTIVE_SPEAKER_SWITCH_DELAY_MS : ACTIVE_SPEAKER_HOLD_MS);
+    }
+
+    function releaseParticipantTile(tile) {
+        for (const video of tile.querySelectorAll('video')) {
+            video._remoteTrack?.detach(video);
+            video.pause();
+            video.srcObject = null;
+        }
     }
 
     function appendRemoteVisualTile(participantState, cameraTrackState = null) {
@@ -4772,6 +5512,15 @@
         const tile = document.createElement('div');
         tile.className = 'remote-visual-tile';
         tile.dataset.participantIdentity = String(participantState.identity || '');
+        const participantRole = getParticipantRole(participantState.identity);
+        tile.dataset.participantRole = participantRole;
+        if (participantRole === 'sign_interpreter') {
+            tile.classList.add('is-sign-interpreter');
+            const roleBadge = document.createElement('div');
+            roleBadge.className = 'remote-visual-role';
+            roleBadge.textContent = t('broadcast_room.role_sign_interpreter', 'İşaret dili tercümanı');
+            tile.appendChild(roleBadge);
+        }
 
         if (cameraTrackState?.track) {
             const video = document.createElement('video');
@@ -4781,6 +5530,7 @@
             video.muted = true;
             video.defaultMuted = true;
             cameraTrackState.track.attach(video);
+            video._remoteTrack = cameraTrackState.track;
             bindRemoteVideoRecovery(
                 video,
                 cameraTrackState,
@@ -4805,6 +5555,126 @@
         els.remoteVisualStage.appendChild(tile);
     }
 
+    function syncSelfParticipantTiles() {
+        const nativeTrack = getNativeVideoTrackFromLocalTrack(state.localVideoTrack);
+        const cameraActive = !!els.cameraEnabled?.checked && nativeTrack?.readyState === 'live';
+        for (const [container, stage] of [[els.remoteMediaList, false], [els.remoteVisualStage, true]]) {
+            if (!container) continue;
+            let tile = container.querySelector('[data-self-participant]');
+            if (!state.roomConnection) {
+                tile?.remove();
+                continue;
+            }
+            if (!tile) {
+                tile = document.createElement('section');
+                tile.dataset.selfParticipant = 'true';
+                tile.className = stage ? 'remote-visual-tile is-self' : 'participant-panel-tile is-self';
+                container.prepend(tile);
+            }
+            const name = String(els.joinedDisplayName?.value || els.displayName?.value || '').trim();
+            tile.dataset.participantIdentity = state.participantIdentity || '';
+            tile.classList.toggle('is-sign-interpreter', stage && getParticipantRole(state.participantIdentity) === 'sign_interpreter');
+            const label = `${name} (${t('broadcast_room_join.you_label', 'Siz')})`;
+            const signature = JSON.stringify([label, cameraActive ? nativeTrack.id : '', getParticipantAvatarUrl(state.participantIdentity)]);
+            if (tile.dataset.selfSignature === signature) continue;
+            tile.dataset.selfSignature = signature;
+            let media = tile.querySelector('video');
+            if (cameraActive) {
+                if (!media) {
+                    tile.replaceChildren();
+                    media = document.createElement('video');
+                    media.className = stage ? 'remote-visual-video' : 'participant-panel-video';
+                    media.muted = true;
+                    media.defaultMuted = true;
+                    media.autoplay = true;
+                    media.playsInline = true;
+                    tile.appendChild(media);
+                    const title = document.createElement('div');
+                    title.className = stage ? 'remote-visual-name' : 'participant-panel-name';
+                    tile.appendChild(title);
+                }
+                if (media.srcObject?.getVideoTracks?.()[0] !== nativeTrack) {
+                    // Reuse the camera track without acquiring another camera or microphone.
+                    media.srcObject = new MediaStream([nativeTrack]);
+                    media.play()?.catch(() => {});
+                }
+                media.setAttribute('aria-label', t('broadcast_room_join.remote_participant_video_aria', '{name} video önizlemesi', { name: label }));
+                tile.querySelector(stage ? '.remote-visual-name' : '.participant-panel-name').textContent = label;
+            } else {
+                if (media) { media.pause(); media.srcObject = null; }
+                tile.replaceChildren();
+                // Avatar initials use the actual name, not the localized self label.
+                appendParticipantAvatar(tile, { identity: state.participantIdentity, name, displayLabel: label });
+            }
+            if (stage) container.hidden = false;
+        }
+        syncParticipantDeviceLabels();
+    }
+
+    function participantActivityState(identity) {
+        const participant = (state.participants || []).find(item => item.identity === identity && item.connected !== false);
+        return {
+            speaking: (state.activeSpeakerIdentities || []).includes(identity),
+            raised: participant?.handRaiseActive === true
+        };
+    }
+
+    function prioritizeParticipantsOnOpen() {
+        const container = els.remoteMediaList;
+        if (!container) return;
+        const tiles = Array.from(container.children);
+        const ranked = tiles.map((tile, index) => {
+            const activity = participantActivityState(tile.dataset.participantIdentity);
+            return { tile, index, rank: activity.speaking ? 0 : activity.raised ? 1 : 2 };
+        }).sort((a, b) => a.rank - b.rank || a.index - b.index);
+        // Reorder only on explicit panel opening, never while someone navigates it.
+        // Move existing tiles: media streams and participant actions stay attached.
+        ranked.forEach(({ tile }, index) => {
+            if (container.children[index] !== tile) container.insertBefore(tile, container.children[index] || null);
+        });
+    }
+
+    function participantDeviceState(participant, source) {
+        const publications = participant?.trackPublications;
+        if (publications?.values) {
+            return Array.from(publications.values()).some(publication => publication.source === source && !publication.isMuted);
+        }
+        return source === 'microphone' ? participant?.isMicrophoneEnabled === true : participant?.isCameraEnabled === true;
+    }
+
+    function syncParticipantDeviceLabels() {
+        for (const tile of Array.from(els.remoteMediaList?.children || [])) {
+            const identity = tile.dataset.participantIdentity;
+            const participant = tile.dataset.selfParticipant
+                ? state.roomConnection?.localParticipant
+                : state.roomConnection?.remoteParticipants?.get(identity);
+            const microphone = participantDeviceState(participant, 'microphone');
+            const camera = participantDeviceState(participant, 'camera');
+            const activity = participantActivityState(identity);
+            const details = [];
+            if (activity.speaking) details.push(t('broadcast_room_join.participant_speaking'));
+            if (activity.raised) details.push(t('broadcast_room_join.participant_hand_raised'));
+            details.push(t('broadcast_room_join.participant_microphone_' + (microphone ? 'on' : 'off')),
+                t('broadcast_room_join.participant_camera_' + (camera ? 'on' : 'off')));
+            const record = (state.participants || []).find(item => item.identity === identity);
+            const name = tile.dataset.selfParticipant
+                ? String(els.joinedDisplayName?.value || els.displayName?.value || record?.displayName || participant?.name || identity || '').trim()
+                : String(record?.displayName || state.remoteParticipants?.[identity]?.name || participant?.name || identity || '').trim();
+            const displayName = tile.dataset.selfParticipant ? `${name} (${t('broadcast_room_join.you_label')})` : name;
+            const label = [displayName, ...details].filter(Boolean).join(', ');
+            // One native text node contains the name and state. Decorative media and
+            // old separate name captions must not split the VoiceOver swipe sequence.
+            for (const caption of tile.querySelectorAll('.participant-panel-name, .participant-avatar-name')) caption.hidden = true;
+            for (const preview of tile.querySelectorAll('video, .participant-avatar-card')) preview.setAttribute('aria-hidden', 'true');
+            let status = tile.querySelector('.participant-audio-status');
+            if (!status) {
+                status = document.createElement('p'); tile.appendChild(status);
+            }
+            status.className = 'participant-audio-status';
+            if (status.textContent !== label) status.textContent = label;
+        }
+    }
+
     async function renderRemoteParticipants() {
         if (!els.remoteMediaList) {
             return;
@@ -4813,146 +5683,183 @@
         const participants = Object.values(state.remoteParticipants || {});
         const signature = getRemoteMediaRenderSignature(participants);
         if (signature === state.remoteMediaRenderSignature) {
+            syncSelfParticipantTiles();
+            syncParticipantDeviceLabels();
+            updateRemoteVisualActiveSpeakerState();
             updateFocusedShareView();
             return;
         }
         state.remoteMediaRenderSignature = signature;
 
-        if (els.remoteAudioHost) {
-            clearRemoteAudioMixNodes();
-            els.remoteAudioHost.innerHTML = '';
+        const desiredAudio = new Map(participants.flatMap((participant) =>
+            (participant.audioTracks || []).map((track) => [getRemoteAudioMixKey(participant.identity, track.sid), track.track])));
+        for (const audio of Array.from(els.remoteAudioHost?.children || [])) {
+            const key = getRemoteAudioMixKey(audio.dataset.participantIdentity, audio.dataset.trackSid);
+            if (desiredAudio.get(key) === audio._remoteTrack) continue;
+            audio._remoteTrack?.detach(audio);
+            audio.remove();
+            const entry = state.remoteAudioMixNodes?.[key];
+            try { entry?.source?.disconnect(); } catch (_error) {}
+            try { entry?.gain?.disconnect(); } catch (_error) {}
+            if (state.remoteAudioMixNodes) delete state.remoteAudioMixNodes[key];
         }
 
-        if (!participants.length) {
-            els.remoteMediaList.innerHTML = `<p>${t('broadcast_room_join.no_remote_media', 'Henüz başka bir katılımcı bağlanmadı.')}</p>`;
-            if (els.remoteVisualStage) {
-                els.remoteVisualStage.innerHTML = '';
-                els.remoteVisualStage.hidden = true;
+        // Reconcile by identity. Microphone changes must never rebuild camera tiles.
+        const identities = new Set(participants.map((item) => String(item.identity || '')));
+        for (const container of [els.remoteMediaList, els.remoteVisualStage]) {
+            for (const child of Array.from(container?.children || [])) {
+                if (child.dataset.selfParticipant) continue;
+                if (!identities.has(child.dataset.participantIdentity)) {
+                    releaseParticipantTile(child);
+                    child.remove();
+                }
             }
-            updateFocusedShareView();
-            return;
         }
-
-        els.remoteMediaList.innerHTML = '';
         if (els.remoteVisualStage) {
-            els.remoteVisualStage.innerHTML = '';
             els.remoteVisualStage.hidden = false;
         }
         for (const participantState of participants) {
+            const identity = String(participantState.identity || '');
+            const visualSignature = getRemoteMediaRenderSignature([{ ...participantState, audioTracks: [] }]);
+            const existing = Array.from(els.remoteMediaList.children).find((item) => item.dataset.participantIdentity === identity && !item.dataset.selfParticipant);
+            const keepVisual = existing?._visualSignature === visualSignature;
             const wrapper = document.createElement('section');
-            wrapper.style.marginBottom = '16px';
-            wrapper.style.display = 'flex';
-            wrapper.style.flexDirection = 'column';
-            wrapper.style.gap = '10px';
-            wrapper.style.padding = '12px';
-            wrapper.style.border = '1px solid #3f3f3f';
-            wrapper.style.borderRadius = '12px';
-            wrapper.style.background = '#111';
+            wrapper.className = 'participant-panel-tile';
+            wrapper.dataset.participantIdentity = identity;
+            wrapper._visualSignature = visualSignature;
 
-            const title = document.createElement('h3');
-            title.textContent = getRemoteParticipantLabel(participantState);
-            title.style.marginTop = '0';
-            wrapper.appendChild(title);
+            if (!keepVisual) {
 
-            const videoTracks = Array.isArray(participantState.videoTracks)
-                ? [...participantState.videoTracks].sort((left, right) => {
-                    const leftShare = isShareTrack(left);
-                    const rightShare = isShareTrack(right);
-                    if (leftShare !== rightShare) {
-                        return leftShare ? -1 : 1;
-                    }
-                    return String(left?.sid || '').localeCompare(String(right?.sid || ''));
-                })
-                : [];
-            const cameraTrackState = videoTracks.find((trackState) => !isShareTrack(trackState)) || null;
+                const title = document.createElement('h3');
+                title.className = 'participant-panel-name';
+                title.textContent = getRemoteParticipantLabel(participantState);
+                title.style.marginTop = '0';
+                wrapper.appendChild(title);
 
-            if (videoTracks.length > 0) {
-                videoTracks.forEach((trackState, index) => {
-                    const shareTrack = isShareTrack(trackState);
-                    const trackLabel = document.createElement('p');
-                    trackLabel.textContent = getTrackSourceLabel(trackState);
-                    wrapper.appendChild(trackLabel);
-
-                    const video = document.createElement('video');
-                    video.autoplay = true;
-                    video.playsInline = true;
-                    video.style.width = '100%';
-                    video.style.maxHeight = shareTrack && index === 0 ? '520px' : '260px';
-                    video.style.minHeight = shareTrack && index === 0 ? '420px' : '220px';
-                    video.style.objectFit = shareTrack ? 'contain' : 'cover';
-                    video.style.background = '#111';
-                    video.muted = true;
-                    video.defaultMuted = true;
-                    video.setAttribute('aria-label', t('broadcast_room_join.remote_participant_video_aria', '{name} video önizlemesi', {
-                        name: `${getRemoteParticipantLabel(participantState)} - ${getTrackSourceLabel(trackState)}`
-                    }));
-                    const videoKey = `${participantState.identity || ''}:${trackState.sid || ''}`;
-                    trackState.track.detach();
-                    trackState.track.attach(video);
-                    bindRemoteVideoRecovery(video, trackState, videoKey);
-                    if (typeof video.play === 'function') {
-                        const playPromise = video.play();
-                        if (playPromise && typeof playPromise.catch === 'function') {
-                            playPromise.catch(() => {});
+                const videoTracks = Array.isArray(participantState.videoTracks)
+                    ? [...participantState.videoTracks].sort((left, right) => {
+                        const leftShare = isShareTrack(left);
+                        const rightShare = isShareTrack(right);
+                        if (leftShare !== rightShare) {
+                            return leftShare ? -1 : 1;
                         }
-                    }
-                    wrapper.appendChild(video);
+                        return String(left?.sid || '').localeCompare(String(right?.sid || ''));
+                    })
+                    : [];
+                const cameraTrackState = videoTracks.find((trackState) => !isShareTrack(trackState)) || null;
 
-                    if (shareTrack) {
-                        const focusButton = document.createElement('button');
-                        focusButton.type = 'button';
-                        focusButton.textContent = t('broadcast_room_join.focused_share_open', 'Büyük görünümde aç');
-                        focusButton.setAttribute('aria-label', t('broadcast_room_join.focused_share_open_aria', '{name} paylaşımını büyük görünümde aç', {
+                if (videoTracks.length > 0) {
+                    const previewTracks = cameraTrackState ? [cameraTrackState] : videoTracks.slice(0, 1);
+                    previewTracks.forEach((trackState, index) => {
+                        const shareTrack = isShareTrack(trackState);
+                        const trackLabel = document.createElement('p');
+                        trackLabel.className = 'sr-only';
+                        trackLabel.textContent = shareTrack ? getTrackSourceLabel(trackState) : '';
+                        wrapper.appendChild(trackLabel);
+
+                        const video = document.createElement('video');
+                        video.className = 'participant-panel-video';
+                        video.dataset.shareTrack = shareTrack ? 'true' : 'false';
+                        video.autoplay = true;
+                        video.playsInline = true;
+                        video.style.width = '100%';
+                        video.style.objectFit = shareTrack ? 'contain' : 'cover';
+                        video.style.background = '#111';
+                        video.muted = true;
+                        video.defaultMuted = true;
+                        video.setAttribute('aria-label', t('broadcast_room_join.remote_participant_video_aria', '{name} video önizlemesi', {
                             name: `${getRemoteParticipantLabel(participantState)} - ${getTrackSourceLabel(trackState)}`
                         }));
-                        focusButton.addEventListener('click', () => {
-                            state.focusedShareDismissedKey = '';
-                            openFocusedShareView({
-                                key: `${participantState.identity || ''}:${trackState.sid || ''}`,
-                                participantState,
-                                trackState
-                            });
-                        });
-                        wrapper.appendChild(focusButton);
-                    }
-                });
-            } else {
-                appendParticipantAvatar(wrapper, {
-                    identity: participantState.identity,
-                    name: getRemoteParticipantLabel(participantState)
-                });
-            }
-            appendRemoteVisualTile(participantState, cameraTrackState);
+                        const videoKey = `${participantState.identity || ''}:${trackState.sid || ''}`;
+                        video._remoteTrack = trackState.track;
+                        trackState.track.attach(video);
+                        bindRemoteVideoRecovery(video, trackState, videoKey);
+                        if (typeof video.play === 'function') {
+                            const playPromise = video.play();
+                            if (playPromise && typeof playPromise.catch === 'function') {
+                                playPromise.catch(() => {});
+                            }
+                        }
+                        wrapper.appendChild(video);
 
-            const audioStatus = document.createElement('p');
-            audioStatus.textContent = Array.isArray(participantState.audioTracks) && participantState.audioTracks.length > 0
-                ? t('broadcast_room_join.remote_media_audio_active', 'Ses akışı hazır.')
-                : t('broadcast_room_join.remote_media_audio_missing', 'Ses akışı henüz gelmedi.');
-            wrapper.appendChild(audioStatus);
+                    });
+                    videoTracks.filter(isShareTrack).forEach((trackState) => {
+                            const focusButton = document.createElement('button');
+                            focusButton.type = 'button';
+                            focusButton.className = 'participant-panel-share-button';
+                            focusButton.textContent = t('broadcast_room_join.focused_share_open', 'Büyük görünümde aç');
+                            focusButton.setAttribute('aria-label', t('broadcast_room_join.focused_share_open_aria', '{name} paylaşımını büyük görünümde aç', {
+                                name: `${getRemoteParticipantLabel(participantState)} - ${getTrackSourceLabel(trackState)}`
+                            }));
+                            focusButton.addEventListener('click', () => {
+                                state.focusedShareDismissedKey = '';
+                                openFocusedShareView({
+                                    key: `${participantState.identity || ''}:${trackState.sid || ''}`,
+                                    participantState,
+                                    trackState
+                                });
+                            });
+                            wrapper.appendChild(focusButton);
+                    });
+                } else {
+                    appendParticipantAvatar(wrapper, {
+                        identity: participantState.identity,
+                        name: getRemoteParticipantLabel(participantState)
+                    });
+                }
+                const previousTile = Array.from(els.remoteVisualStage?.children || []).find((item) => item.dataset.participantIdentity === identity && !item.dataset.selfParticipant);
+                const nextSibling = previousTile?.nextSibling || null;
+                if (previousTile) releaseParticipantTile(previousTile);
+                previousTile?.remove();
+                appendRemoteVisualTile(participantState, cameraTrackState);
+                const newTile = els.remoteVisualStage?.lastElementChild;
+                if (previousTile && newTile) els.remoteVisualStage.insertBefore(newTile, nextSibling);
+
+                const audioStatus = document.createElement('p');
+                audioStatus.className = 'sr-only participant-audio-status';
+                wrapper.appendChild(audioStatus);
+            }
 
             if (Array.isArray(participantState.audioTracks) && els.remoteAudioHost) {
                 for (const trackState of participantState.audioTracks) {
+                    const existingAudio = Array.from(els.remoteAudioHost.children).find((item) =>
+                        item.dataset.participantIdentity === identity && item.dataset.trackSid === String(trackState.sid || ''));
+                    if (existingAudio) {
+                        syncRemoteAudioMixNode(trackState, participantState.identity, existingAudio);
+                        continue;
+                    }
                     const audio = document.createElement('audio');
+                    audio._remoteTrack = trackState.track;
                     audio.autoplay = true;
+                    audio.playsInline = true;
                     audio.dataset.participantIdentity = String(participantState.identity || '');
                     audio.dataset.trackSid = String(trackState.sid || '');
-                    audio.volume = getRemoteAudioVolume(participantState.identity);
-                    trackState.track.detach();
+                    audio.volume = Math.max(0, Math.min(1, getRemoteAudioVolume(participantState.identity)));
+                    els.remoteAudioHost.appendChild(audio);
                     trackState.track.attach(audio);
+                    applySpeakerSelectionToElement(audio, { reportError: false }).catch(() => {});
                     syncRemoteAudioMixNode(trackState, participantState.identity, audio);
                     const playPromise = audio.play?.();
                     if (playPromise && typeof playPromise.catch === 'function') {
-                        playPromise.catch(() => {});
+                        playPromise.catch(() => {
+                            state.remoteAudioPlaybackBlocked = true;
+                        });
                     }
                     // Track changes can rebuild media without a user gesture on iOS.
                     // Fall back to Safari's active output silently in that background path.
-                    await applySpeakerSelectionToElement(audio, { reportError: false });
-                    els.remoteAudioHost.appendChild(audio);
                 }
             }
 
-            els.remoteMediaList.appendChild(wrapper);
+            if (!keepVisual) {
+                if (existing) {
+                    releaseParticipantTile(existing);
+                    existing.replaceWith(wrapper);
+                }
+                else els.remoteMediaList.appendChild(wrapper);
+            }
         }
+        syncSelfParticipantTiles();
+        syncParticipantDeviceLabels();
         updateRemoteVisualActiveSpeakerState();
         updateFocusedShareView();
     }
@@ -5190,6 +6097,7 @@
 
     async function disconnectRoom({ announceStatus = true } = {}) {
         state.intentionalDisconnect = true;
+        clearTimeout(microphoneDiagnosticTimer);
         state.reconnectInProgress = false;
         state.reconnectAttempts = 0;
         if (state.reconnectTimer) {
@@ -5205,20 +6113,20 @@
         stopConnectionQualityDiagnostics();
         state.hostRecordingActive = false;
         stopLocalBackupRecording();
+        // Recorder.onstop may run later. Release its cloned devices before changing iOS mode.
+        for (const track of state.localBackupRecording?.stream?.getTracks?.() || []) {
+            try { track.stop(); } catch (_error) {}
+        }
         closeRoomEventSource();
+        for (const audio of Array.from(els.remoteAudioHost?.children || [])) {
+            try { audio.pause(); audio._remoteTrack?.detach(audio); audio.srcObject = null; } catch (_error) {}
+        }
         closeMonitorAudioSocket();
         closeTranslationAudioSocket({ closeContext: true });
         closeRemoteAudioContext();
         closeFocusedShareView({ dismiss: false });
-        await stopScreenShare({ announceStatus: false, notifyState: false });
-        await notifyLeave();
-        if (state.roomConnection) {
-            try {
-                state.roomConnection.disconnect();
-            } catch (_error) {
-                // ignore disconnect errors
-            }
-        }
+        stopMicrophoneTest({ announceStatus: false });
+        cleanupCameraFramingTest();
         if (state.localVideoTrack) {
             try {
                 state.localVideoTrack.stop();
@@ -5233,6 +6141,15 @@
                 // ignore stop errors
             }
         }
+        // The leave sound must not play through the receiver in a stale call session.
+        // Final cleanup restores auto after all notification/audio contexts have closed.
+        setIOSRoomAudioMode('playback');
+        await stopScreenShare({ announceStatus: false, notifyState: false });
+        // Network leave notification must not postpone stopping the local microphone.
+        notifyLeave().catch(() => {});
+        if (state.roomConnection) {
+            try { await state.roomConnection.disconnect(); } catch (_error) {}
+        }
         state.roomConnection = null;
         state.localVideoTrack = null;
         state.localAudioTrack = null;
@@ -5244,7 +6161,11 @@
         Object.values(state.remoteVideoRecoveryTimers || {}).forEach((timer) => clearTimeout(timer));
         state.remoteVideoRecoveryTimers = {};
         state.remoteParticipants = {};
+        state.remoteAudioPlaybackBlocked = false;
         state.activeSpeakerIdentities = [];
+        state.featuredSpeakerIdentity = '';
+        state.pendingFeaturedSpeakerIdentity = '';
+        clearFeaturedSpeakerTimer();
         state.participantListRenderSignature = '';
         state.remoteMediaRenderSignature = '';
         state.focusedShareKey = '';
@@ -5253,6 +6174,7 @@
         state.hostActivityPanelExpanded = false;
         state.moreInfoPanelExpanded = false;
         state.participantsPanelExpanded = false;
+        state.meetingOptionsExpanded = false;
         state.handRaiseActive = false;
         state.lastHandRaiseSeenAt = 0;
         state.lastSceneAnnouncementKey = '';
@@ -5269,7 +6191,7 @@
         if (announceStatus) {
             playRoomTone('leave');
             setStatus(t('broadcast_room_join.leave_success', 'Odadan ayrıldınız.'));
-        }
+        } else await releaseRoomAudioSession();
         updateJoinViewState();
         renderChatPanel();
         renderJoinDevicePanel();
@@ -5304,7 +6226,7 @@
         state.reconnectAttempts += 1;
         setConnectionStatus(t('broadcast_room.status_live_media_reconnecting', 'Canlı oda medya bağlantısı yeniden bağlanıyor.'));
         try {
-            const response = await fetch('/api/broadcast-room/participant-role-token', {
+            const response = await roomApiFetch('/api/broadcast-room/participant-role-token', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -5365,9 +6287,7 @@
 
         if (microphoneEnabled && !state.localAudioTrack) {
             try {
-                state.localAudioTrack = await client.createLocalAudioTrack(buildAudioCaptureOptions(String(els.microphoneDevice?.value || '').trim()));
-                await applyMicrophoneVolumeToTrack(state.localAudioTrack);
-                await state.roomConnection.localParticipant.publishTrack(state.localAudioTrack);
+                await handleMicrophoneToggleChange();
             } catch (_error) {
                 // quiet retry
             }
@@ -5396,7 +6316,8 @@
         setConnectionStatus(t('broadcast_room_join.connection_connecting', 'Canlı oda bağlantısı kuruluyor...'));
         const room = new client.Room({
             adaptiveStream: true,
-            dynacast: true
+            dynacast: true,
+            webAudioMix: false
         });
 
         room.on(client.RoomEvent.Disconnected, () => {
@@ -5433,6 +6354,11 @@
                 setConnectionStatus(t('broadcast_room.status_live_media_reconnected', 'Canlı oda medya bağlantısı yeniden kuruldu.'));
             });
         }
+        if (client.RoomEvent.AudioPlaybackStatusChanged) {
+            room.on(client.RoomEvent.AudioPlaybackStatusChanged, () => {
+                state.remoteAudioPlaybackBlocked = room.canPlaybackAudio === false;
+            });
+        }
         room.on(client.RoomEvent.ParticipantConnected, (participant) => {
             ensureRemoteParticipantState(participant);
             renderRemoteParticipants().catch(() => {});
@@ -5449,6 +6375,19 @@
         room.on(client.RoomEvent.TrackSubscribed, (track, publication, participant) => {
             bindRemoteParticipantTrack(track, participant, publication);
         });
+        for (const event of ['TrackMuted', 'TrackUnmuted', 'LocalTrackPublished', 'LocalTrackUnpublished', 'TrackUnpublished']) {
+            if (client.RoomEvent[event]) room.on(client.RoomEvent[event], () => {
+                renderRemoteParticipants().catch(() => {});
+            });
+        }
+        if (client.RoomEvent.TrackPublished) {
+            room.on(client.RoomEvent.TrackPublished, (publication) => {
+                try {
+                    publication?.setSubscribed?.(true);
+                } catch (_error) {}
+                renderRemoteParticipants().catch(() => {});
+            });
+        }
         room.on(client.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
             unbindRemoteParticipantTrack(track, participant, publication);
         });
@@ -5456,11 +6395,18 @@
             state.activeSpeakerIdentities = (Array.isArray(speakers) ? speakers : [])
                 .map((speaker) => String(speaker?.identity || '').trim())
                 .filter(Boolean);
+            syncParticipantDeviceLabels();
             updateRemoteVisualActiveSpeakerState();
+            scheduleFeaturedSpeakerUpdate();
         });
 
-        await room.connect(payload.livekitUrl, payload.token);
+        await room.connect(payload.livekitUrl, payload.token, {
+            autoSubscribe: true
+        });
         state.roomConnection = room;
+        // Use the same deduplicated warning for late joins and subsequent room snapshots.
+        updateServerRecordingNotice(payload);
+        syncIOSRoomAudioMode();
         connectMonitorAudioSocket();
         startConnectionQualityDiagnostics();
         updateJoinViewState();
@@ -5475,6 +6421,10 @@
             participant.trackPublications.forEach((publication) => {
                 if (publication.track) {
                     bindRemoteParticipantTrack(publication.track, participant, publication);
+                } else {
+                    try {
+                        publication.setSubscribed?.(true);
+                    } catch (_error) {}
                 }
             });
         });
@@ -5503,10 +6453,11 @@
 
         if (microphoneEnabled) {
             try {
-                state.localAudioTrack = await client.createLocalAudioTrack(buildAudioCaptureOptions(microphoneDeviceId));
-                await applyMicrophoneVolumeToTrack(state.localAudioTrack);
-                await room.localParticipant.publishTrack(state.localAudioTrack);
+                await handleMicrophoneToggleChange();
             } catch (error) {
+                try { state.localAudioTrack?.stop(); } catch (_error) {}
+                state.localAudioTrack = null;
+                syncIOSRoomAudioMode();
                 const micWarning = t('broadcast_room_join.microphone_publish_failed', 'Mikrofon açılamadı: {error}', {
                     error: formatErrorMessage(error)
                 });
@@ -5568,6 +6519,8 @@
         }
 
         const enabled = Boolean(els.cameraEnabled?.checked);
+        const wasEnabled = !!state.localVideoTrack;
+        const toneContext = wasEnabled !== enabled ? prepareMediaToggleTone() : null;
         const client = window.LivekitClient;
         if (enabled && !state.localVideoTrack) {
             state.localVideoTrack = await client.createLocalVideoTrack(buildVideoCaptureOptions(String(els.cameraDevice?.value || '').trim()));
@@ -5588,6 +6541,7 @@
 
         updateJoinMediaToggleButtons();
         renderLocalAvatarFallback();
+        if (wasEnabled !== enabled) playMediaToggleTone(toneContext, 'camera', enabled);
         await postParticipantState({
             cameraEnabled: enabled,
             microphoneEnabled: Boolean(els.microphoneEnabled?.checked),
@@ -5599,7 +6553,17 @@
         });
     }
 
-    async function handleMicrophoneToggleChange() {
+    function handleMicrophoneToggleChange() {
+        // Silence immediately even if an earlier capture/publish operation is pending.
+        if (!els.microphoneEnabled?.checked) {
+            const nativeTrack = state.localAudioTrack?.mediaStreamTrack;
+            if (nativeTrack) nativeTrack.enabled = false;
+            stopLocalBackupRecording();
+        }
+        return queueMicrophoneOperation(applyMicrophoneToggleChange);
+    }
+
+    async function applyMicrophoneToggleChange() {
         if (!state.roomConnection) {
             return;
         }
@@ -5607,35 +6571,78 @@
             if (els.microphoneEnabled) {
                 els.microphoneEnabled.checked = false;
             }
+            traceMicrophoneTransition('role-blocked');
+            await state.localAudioTrack?.mute();
+            stopLocalBackupRecording();
             updateJoinMediaToggleButtons();
             setStatus(t('broadcast_room_join.webinar_audience_media_disabled', 'Webinar izleyicisi olarak katıldınız. Kamera, mikrofon ve ekran paylaşımı host onayıyla açılır.'));
             return;
         }
         if ((state.allowGuestMicrophone === false || state.ownAllowMicrophone === false) && Boolean(els.microphoneEnabled?.checked)) {
             els.microphoneEnabled.checked = false;
+            traceMicrophoneTransition('permission-blocked');
+            await state.localAudioTrack?.mute();
+            stopLocalBackupRecording();
             updateJoinMediaToggleButtons();
             setStatus(t('broadcast_room_join.microphone_permission_blocked', 'Host şu anda mikrofon açmanıza izin vermiyor.'));
             return;
         }
 
         const enabled = Boolean(els.microphoneEnabled?.checked);
-        const client = window.LivekitClient;
+        const room = state.roomConnection;
+        const wasEnabled = !!state.localAudioTrack && !state.localAudioTrack.isMuted;
+        const toneContext = wasEnabled !== enabled ? prepareMediaToggleTone() : null;
         if (enabled && !state.localAudioTrack) {
-            state.localAudioTrack = await client.createLocalAudioTrack(buildAudioCaptureOptions(String(els.microphoneDevice?.value || '').trim()));
-            await applyMicrophoneVolumeToTrack(state.localAudioTrack);
-            await state.roomConnection.localParticipant.publishTrack(state.localAudioTrack);
-            syncLocalBackupRecordingWithHostState();
+            let track;
+            try {
+                traceMicrophoneTransition('capture-start');
+                track = await createLocalMicrophoneTrack(String(els.microphoneDevice?.value || '').trim());
+                // Never publish live sound if the user muted or left while permission was pending.
+                if (state.roomConnection !== room || state.intentionalDisconnect) { track.stop(); return; }
+                if (!els.microphoneEnabled?.checked) await track.mute();
+                state.localAudioTrack = track;
+                await applyMicrophoneVolumeToTrack(track);
+                if (!els.microphoneEnabled?.checked) await track.mute();
+                await room.localParticipant.publishTrack(track, { stopMicTrackOnMute: false });
+                traceMicrophoneTransition('published');
+                if (state.roomConnection !== room || state.intentionalDisconnect) { track.stop(); return; }
+                microphoneCaptureSettingsDirty = false;
+            } catch (error) {
+                traceMicrophoneTransition('capture-failed', error);
+                try { track?.stop(); } catch (_error) {}
+                if (state.localAudioTrack === track) state.localAudioTrack = null;
+                syncIOSRoomAudioMode();
+                throw error;
+            }
+        } else if (enabled && state.localAudioTrack) {
+            const track = state.localAudioTrack;
+            if (microphoneCaptureSettingsDirty) {
+                await acquireRoomMicrophone(async () => {
+                    await track.restartTrack(buildAudioCaptureOptions(String(els.microphoneDevice?.value || '').trim()));
+                    return track;
+                });
+                await applyMicrophoneVolumeToTrack(track);
+                microphoneCaptureSettingsDirty = false;
+            }
+            if (state.roomConnection !== room || state.intentionalDisconnect) { track.stop(); return; }
+            if (els.microphoneEnabled?.checked) await track.unmute();
         } else if (!enabled && state.localAudioTrack) {
-            stopLocalBackupRecording();
-            await state.roomConnection.localParticipant.unpublishTrack(state.localAudioTrack);
-            state.localAudioTrack.stop();
-            state.localAudioTrack = null;
+            // Keep the device/session stable; LiveKit mute disables audio and signals peers.
+            await state.localAudioTrack.mute();
         }
-
+        if (!els.microphoneEnabled?.checked) await state.localAudioTrack?.mute();
+        if (els.microphoneEnabled?.checked && state.localAudioTrack && !state.localAudioTrack.isMuted) {
+            state.localAudioTrack.mediaStreamTrack.enabled = true;
+        }
+        const actualEnabled = !!state.localAudioTrack && !state.localAudioTrack.isMuted && !!els.microphoneEnabled?.checked;
+        traceMicrophoneTransition('applied');
+        if (actualEnabled) syncLocalBackupRecordingWithHostState();
+        syncIOSRoomAudioMode();
         updateJoinMediaToggleButtons();
+        if (wasEnabled !== actualEnabled) playMediaToggleTone(toneContext, 'microphone', actualEnabled);
         await postParticipantState({
             cameraEnabled: Boolean(els.cameraEnabled?.checked),
-            microphoneEnabled: enabled,
+            microphoneEnabled: actualEnabled,
             shareEnabled: isScreenShareActive(),
             shareAudioEnabled: !!state.screenShareAudioTrack,
             shareSourceType: state.screenShareSourceType,
@@ -5726,7 +6733,13 @@
         }
     }
 
-    async function handleMicrophoneDeviceChange({ statusMessage = '' } = {}) {
+    function handleMicrophoneDeviceChange(options = {}) {
+        microphoneCaptureSettingsDirty = true;
+        if (!state.roomConnection) return applyMicrophoneDeviceChange(options);
+        return queueMicrophoneOperation(() => applyMicrophoneDeviceChange(options));
+    }
+
+    async function applyMicrophoneDeviceChange({ statusMessage = '' } = {}) {
         const label = getSelectedDeviceLabel(els.microphoneDevice, 'broadcast_room_join.track_source_microphone', 'Mikrofon');
         if (!state.roomConnection || !Boolean(els.microphoneEnabled?.checked)) {
             setStatus(statusMessage || t('broadcast_room.status_guest_microphone_device_selected', 'Seçili mikrofon değiştirildi: {name}', {
@@ -5739,20 +6752,26 @@
             return;
         }
 
-        const client = window.LivekitClient;
+        const room = state.roomConnection;
         const previousTrack = state.localAudioTrack;
         let nextTrack = null;
         try {
-            nextTrack = await client.createLocalAudioTrack(buildAudioCaptureOptions(String(els.microphoneDevice?.value || '').trim()));
+            nextTrack = await createLocalMicrophoneTrack(String(els.microphoneDevice?.value || '').trim());
+            if (state.roomConnection !== room || state.intentionalDisconnect) { nextTrack.stop(); return; }
             await applyMicrophoneVolumeToTrack(nextTrack);
             if (previousTrack) {
                 stopLocalBackupRecording();
-                try { await state.roomConnection.localParticipant.unpublishTrack(previousTrack); } catch (_error) {}
+                try { await room.localParticipant.unpublishTrack(previousTrack); } catch (_error) {}
                 try { previousTrack.stop(); } catch (_error) {}
             }
             state.localAudioTrack = null;
-            await state.roomConnection.localParticipant.publishTrack(nextTrack);
+            if (!els.microphoneEnabled?.checked) await nextTrack.mute();
+            if (state.roomConnection !== room || state.intentionalDisconnect) { nextTrack.stop(); return; }
             state.localAudioTrack = nextTrack;
+            await room.localParticipant.publishTrack(nextTrack, { stopMicTrackOnMute: false });
+            if (state.roomConnection !== room || state.intentionalDisconnect) { nextTrack.stop(); return; }
+            if (!els.microphoneEnabled?.checked) await nextTrack.mute();
+            microphoneCaptureSettingsDirty = false;
             syncLocalBackupRecordingWithHostState();
             await postCurrentMediaState();
             setStatus(statusMessage || t('broadcast_room.status_guest_microphone_device_selected', 'Seçili mikrofon değiştirildi: {name}', {
@@ -5767,10 +6786,14 @@
             }));
             state.localAudioTrack = null;
             await postCurrentMediaState().catch(() => {});
+        } finally {
+            syncIOSRoomAudioMode();
         }
     }
 
     async function joinRoom() {
+        microphoneTransitions.length = 0;
+        let issuedWebHostToken = false;
         const displayName = String(els.displayName.value || '').trim();
         const roomPassword = String(els.roomPassword?.value || '');
         if (!displayName) {
@@ -5784,7 +6807,11 @@
         setConnectionStatus(t('broadcast_room_join.connection_connecting', 'Canlı oda bağlantısı kuruluyor...'));
 
         try {
-            const response = await fetch('/api/broadcast-room/join-token', {
+            const hostRequested = new URLSearchParams(location.search).get('host') === '1';
+            if (hostRequested && !state.webHost) throw new Error(t('admin_auth.meeting_login_required'));
+            const response = await roomApiFetch(hostRequested
+                ? `/api/admin-auth/meeting/${encodeURIComponent(state.room.roomId)}/join`
+                : '/api/broadcast-room/join-token', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -5798,15 +6825,30 @@
                 })
             });
 
-            const payload = await response.json().catch(() => ({}));
+            let payload = await response.json().catch(() => ({}));
             if (!response.ok || !payload.success) {
-                throw new Error(payload.error || 'unknown_error');
+                if (String(payload.error || '').startsWith('waiting_')) throw new Error(t(payload.error === 'waiting_queue_full' ? 'waiting_room.queue_full' : 'waiting_room.failed'));
+                throw new Error(['meeting_host_present', 'meeting_name_required', 'session_required', 'room_not_found'].includes(payload.error)
+                    ? t('admin_auth.' + payload.error) : payload.error || 'unknown_error');
             }
 
+            if (payload.waiting) {
+                if (!window.EvdWaitingRoom) throw new Error(t('waiting_room.unavailable'));
+                setJoinResult(t('waiting_room.pending'));
+                setConnectionStatus(t('waiting_room.pending'));
+                payload = await window.EvdWaitingRoom.wait({ payload, t, request: roomApiFetch,
+                    body: { inviteId: state.inviteId, displayName, password: roomPassword,
+                        cameraEnabled: Boolean(els.cameraEnabled?.checked), microphoneEnabled: Boolean(els.microphoneEnabled?.checked) },
+                    container: els.joinResult.parentElement });
+            }
             state.token = payload.token || '';
             state.participantIdentity = payload.participantIdentity || '';
             state.participantRole = String(payload.participantRole || 'guest').trim() || 'guest';
+            issuedWebHostToken = state.webHost === true && state.participantRole === 'host';
             state.canPublishMedia = roleCanPublishMedia(state.participantRole);
+            if (state.webHost && state.participantRole === 'host') {
+                state.allowGuestMicrophone = true; state.allowGuestCamera = true; state.allowGuestScreenShare = true;
+            }
             if (!state.canPublishMedia) {
                 if (els.cameraEnabled) {
                     els.cameraEnabled.checked = false;
@@ -5816,7 +6858,7 @@
                 }
             }
             state.livekitUrl = payload.livekitUrl || '';
-            state.allowGuestScreenShare = payload.allowGuestScreenShare !== false;
+            state.allowGuestScreenShare = (state.webHost && state.participantRole === 'host') || payload.allowGuestScreenShare !== false;
             state.hostConnected = payload.hostConnected !== false;
             state.allowJoinWhenHostAbsent = payload.settings?.allowJoinWhenHostAbsent === true;
             state.passwordConfigured = payload.settings?.passwordConfigured === true;
@@ -5834,6 +6876,7 @@
             updateHandRaiseStateFromParticipants({ announce: false });
             setJoinResult(t('broadcast_room_join.join_step_token_ready', 'Katılım bilgisi alındı. Canlı oda bağlantısı kuruluyor...'));
             await connectToLiveKit(payload);
+            persistGuestName(els.displayName.value);
             if (state.avatarDataUrl) {
                 await syncParticipantAvatar();
             }
@@ -5848,6 +6891,7 @@
             }
         } catch (error) {
             const rawError = formatErrorMessage(error);
+            if (issuedWebHostToken) await disconnectRoom({ announceStatus: false }).catch(() => {});
             const message = rawError === 'host_not_connected'
                 ? t('broadcast_room_join.host_not_connected', 'Host şu anda bağlı değil. Bu oda host olmadan katılıma açık değil.')
                 : (rawError === 'room_password_invalid'
@@ -5865,26 +6909,36 @@
     }
 
     function bindEvents() {
+        // Standard checkbox navigation; this preference does not need a global shortcut.
+        for (const prefix of ['', 'joined-']) {
+            document.getElementById(`${prefix}remember-guest-name`)?.addEventListener('change', event => {
+                state.rememberGuestName = event.target.checked;
+                syncRememberGuestNameControls();
+                if (!state.rememberGuestName || state.roomConnection) persistGuestName(getOwnParticipant()?.displayName || els.displayName.value);
+            });
+        }
+        window.EvdWebHost?.init({ t, state: () => state, checkCamera: startCameraFramingTest, apply: payload => applyRoomSettingsFromPayload(payload, { announce: true }) });
+        window.EvdWaitingRoom?.init({ t, state: () => state });
+        // On-demand participant action; no global shortcut or background analysis.
+        document.getElementById('participant-check-self-camera')?.addEventListener('click', () => {
+            if (state.participantIdentity) startCameraFramingTest(state.participantIdentity);
+        });
+        const recoverRemoteAudioOnUserGesture = () => {
+            const hasRemoteAudio = Boolean(els.remoteAudioHost?.querySelector?.('audio'));
+            if (hasRemoteAudio || state.remoteAudioPlaybackBlocked || state.remoteAudioContext?.state === 'suspended') {
+                resumeRemoteAudioPlayback().catch(() => {});
+            }
+        };
+        document.addEventListener('pointerdown', recoverRemoteAudioOnUserGesture, true);
+        document.addEventListener('keydown', recoverRemoteAudioOnUserGesture, true);
         els.participantAvatarFile?.addEventListener('change', () => {
             handleParticipantAvatarSelection().catch(() => {});
         });
         els.btnRemoveParticipantAvatar?.addEventListener('click', () => {
             removeParticipantAvatar().catch(() => {});
         });
-        [els.displayName, els.joinedDisplayName].filter(Boolean).forEach((input) => {
-            input.addEventListener('click', () => {
-                if (document.activeElement === input) {
-                    return;
-                }
-                // VoiceOver's virtual cursor and Safari's keyboard focus can diverge.
-                // Keep this synchronous with the trusted activation so iOS may open the keyboard.
-                try {
-                    input.focus({ preventScroll: true });
-                } catch (_error) {
-                    input.focus();
-                }
-            });
-        });
+        // Name inputs use native label activation and Safari's default focus/scroll.
+        // Do not override clicks: VoiceOver virtual focus is not keyboard focus.
         els.btnUpdateDisplayName?.addEventListener('click', () => {
             updateOwnDisplayName().catch((error) => {
                 setStatus(t('broadcast_room_join.display_name_update_failed', 'Görünen adınız güncellenemedi: {error}', {
@@ -5942,8 +6996,9 @@
         els.cameraEnabled?.addEventListener('click', () => {
             els.cameraEnabled.checked = !Boolean(els.cameraEnabled.checked);
             updateJoinMediaToggleButtons();
+            const previousStatusRevision = statusRevision;
             handleCameraToggleChange()
-                .then(() => announceLocalMediaToggleResult('camera'))
+                .then(() => { if (previousStatusRevision === statusRevision) announceLocalMediaToggleResult('camera'); })
                 .catch((error) => {
                     els.cameraEnabled.checked = !Boolean(els.cameraEnabled.checked);
                     updateJoinMediaToggleButtons();
@@ -5953,12 +7008,13 @@
                 });
         });
         els.microphoneEnabled?.addEventListener('click', () => {
-            els.microphoneEnabled.checked = !Boolean(els.microphoneEnabled.checked);
-            updateJoinMediaToggleButtons();
-            handleMicrophoneToggleChange()
-                .then(() => announceLocalMediaToggleResult('microphone'))
+            if (microphoneUserTogglePending || els.microphoneEnabled.disabled) return;
+            traceMicrophoneTransition('button-toggle');
+            const previousStatusRevision = statusRevision;
+            requestUserMicrophoneToggle()
+                .then(() => { if (previousStatusRevision === statusRevision) announceLocalMediaToggleResult('microphone'); })
                 .catch((error) => {
-                    els.microphoneEnabled.checked = !Boolean(els.microphoneEnabled.checked);
+                    els.microphoneEnabled.checked = !!state.localAudioTrack && !state.localAudioTrack.isMuted;
                     updateJoinMediaToggleButtons();
                     setStatus(t('broadcast_room_join.microphone_publish_failed', 'Mikrofon açılamadı: {error}', {
                         error: formatErrorMessage(error)
@@ -6051,6 +7107,14 @@
                 }));
             });
         });
+        els.mirrorParticipantVideos?.addEventListener('change', () => {
+            state.mirrorParticipantVideos = !!els.mirrorParticipantVideos.checked;
+            saveStoredBoolean(MIRROR_PARTICIPANT_VIDEOS_STORAGE_KEY, state.mirrorParticipantVideos);
+            updateRemoteVisualActiveSpeakerState();
+            setStatus(state.mirrorParticipantVideos
+                ? t('broadcast_room_join.mirror_participant_videos_enabled', 'Katılımcı görüntüleri aynalandı.')
+                : t('broadcast_room_join.mirror_participant_videos_disabled', 'Katılımcı görüntüleri normal yönde gösteriliyor.'));
+        });
         if (navigator.mediaDevices?.addEventListener) {
             navigator.mediaDevices.addEventListener('devicechange', () => {
                 handleDeviceListChanged().catch((error) => {
@@ -6060,6 +7124,10 @@
                 });
             });
         }
+        // This per-session preference is keyboard reachable; it does not need a global shortcut.
+        document.getElementById('microphone-music-mode')?.addEventListener('change', () => {
+            handleMicrophoneProcessingChange().catch(error => setStatus(formatErrorMessage(error)));
+        });
         els.btnRequestPermissions?.addEventListener('click', () => {
             requestInitialMediaPermissions().catch((error) => {
                 setStatus(t('broadcast_room_join.permission_request_failed', 'Kamera ve mikrofon izni alınamadı: {error}', {
@@ -6084,12 +7152,22 @@
         els.btnToggleChatPanel?.addEventListener('click', () => {
             state.chatPanelExpanded = !state.chatPanelExpanded;
             renderChatPanel();
+            if (state.chatPanelExpanded) els.chatCompose?.focus();
         });
         els.btnToggleJoinDevicePanel?.addEventListener('click', () => {
             state.joinDevicePanelExpanded = !state.joinDevicePanelExpanded;
             renderJoinDevicePanel();
             if (state.joinDevicePanelExpanded) {
                 els.microphoneDevice?.focus?.();
+            }
+        });
+        els.btnToggleMeetingOptions?.addEventListener('click', () => {
+            state.meetingOptionsExpanded = !state.meetingOptionsExpanded;
+            updateJoinViewState();
+            if (state.meetingOptionsExpanded) {
+                els.btnToggleParticipantsPanel?.focus?.();
+            } else {
+                els.btnToggleMeetingOptions?.focus?.();
             }
         });
         els.btnToggleHostActivityPanel?.addEventListener('click', () => {
@@ -6103,6 +7181,7 @@
         els.btnToggleParticipantsPanel?.addEventListener('click', () => {
             state.participantsPanelExpanded = !state.participantsPanelExpanded;
             renderParticipantsPanel();
+            if (state.participantsPanelExpanded) prioritizeParticipantsOnOpen();
         });
         els.btnHandRaise?.addEventListener('click', () => {
             setHandRaiseActive(!state.handRaiseActive).catch((error) => {
@@ -6186,6 +7265,14 @@
                 language: label
             }));
             syncPreferredLanguageParticipantState({ force: true });
+        });
+        els.liveCaptionFontSize?.addEventListener('change', () => {
+            const nextSize = String(els.liveCaptionFontSize.value || 'large');
+            state.liveCaptionFontSize = ['small', 'medium', 'large', 'extra-large'].includes(nextSize)
+                ? nextSize
+                : 'large';
+            saveStoredChoice(LIVE_CAPTION_FONT_SIZE_STORAGE_KEY, state.liveCaptionFontSize);
+            renderLiveCaptionPanel();
         });
         els.liveCaptionAutoAnnounce?.addEventListener('change', () => {
             state.liveCaptionAutoAnnounce = !!els.liveCaptionAutoAnnounce.checked;
@@ -6286,6 +7373,10 @@
             }
         });
         window.addEventListener('pagehide', () => {
+            if (mediaToggleToneContext) {
+                mediaToggleToneContext.close().catch(() => {});
+                mediaToggleToneContext = null;
+            }
             cleanupCameraFramingTest();
             sendLeaveBeacon();
         });
@@ -6312,6 +7403,7 @@
     }
 
     async function init() {
+        Object.keys(notificationSoundFiles).forEach((name) => loadNotificationSound(name).catch(() => {}));
         state.inviteId = getInviteIdFromPath();
         await loadLocale();
         if (els.cameraEnabled) {
@@ -6328,6 +7420,9 @@
         }
         if (els.microphoneAutoGainControl) {
             els.microphoneAutoGainControl.checked = state.microphoneAutoGainControl;
+        }
+        if (els.mirrorParticipantVideos) {
+            els.mirrorParticipantVideos.checked = state.mirrorParticipantVideos;
         }
         updateJoinMediaToggleButtons();
         bindEvents();
@@ -6352,6 +7447,7 @@
         updateScreenShareControls();
         updateJoinViewState();
         await loadInviteInfo();
+        restoreGuestName();
         await refreshDevices();
         updateJoinMediaToggleButtons();
         updateButtons();
@@ -6365,11 +7461,33 @@
             els.lowBandwidthMode.checked = state.lowBandwidthMode;
         }
         setStatus(t('broadcast_room_join.ready_status', 'Katılım sayfası hazır.'));
+        // Explicit host link is the join gesture; saved profile avoids a second name form.
+        // Microphone and camera stay off until the user enables them.
+        if (state.webHost && state.accountDisplayName) await joinRoom();
+        else if (!initialFocusCancelled && shouldAutoJoinRememberedGuest()) await joinRoom();
     }
 
-    init().catch((error) => {
+    // Initial focus only: never steal focus after the visitor starts navigating,
+    // and never refocus on polling, disconnect, or a failed join attempt.
+    let initialFocusCancelled = false;
+    const cancelInitialFocus = () => { initialFocusCancelled = true; };
+    const initialFocusEvents = ['pointerdown', 'keydown', 'focusin'];
+    initialFocusEvents.forEach((type) => document.addEventListener(type, cancelInitialFocus, true));
+    init().then(() => {
+        initialFocusEvents.forEach((type) => document.removeEventListener(type, cancelInitialFocus, true));
+        if (!initialFocusCancelled && !state.roomConnection && !joinInProgress
+            && els.displayName && !els.displayName.disabled && !els.displayNameGroup?.hidden
+            && document.visibilityState === 'visible'
+            && (!document.activeElement || document.activeElement === document.body)) {
+            // Let Safari manage scrolling and keyboard activation naturally.
+            if (state.rememberGuestName && state.passwordConfigured && els.roomPassword) els.roomPassword.focus();
+            else els.displayName.focus();
+        }
+    }).catch((error) => {
         setStatus(t('broadcast_room_join.init_failed', 'Katılım sayfası başlatılamadı: {error}', {
             error: error.message
         }));
+    }).finally(() => {
+        initialFocusEvents.forEach((type) => document.removeEventListener(type, cancelInitialFocus, true));
     });
 }());

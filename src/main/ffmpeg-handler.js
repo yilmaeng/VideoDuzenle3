@@ -6,6 +6,7 @@ const { spawn } = require('child_process');
 const { buildVerticalPlacementFilter } = require('./media-placement');
 const { renderSparseTransitions } = require('./export/sparse-transition-renderer');
 const { renderSparseOverlays } = require('./export/sparse-overlay-renderer');
+const { sourceAudioProfile, aacEncodingArgs, AAC_CODEC_ARGS, AAC_CODEC_OPTIONS } = require('./slideshow-audio-policy');
 
 /* =========================================
    DIAGNOSTIC & UTILS (V61 AUDIO MIXER REVIVAL)
@@ -97,18 +98,18 @@ function _getVerticalOutputOptions(options = {}, isPreview = false) {
     const quality = options.quality || 'balanced';
 
     if (isPreview) {
-        return ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart'];
+        return ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30', ...AAC_CODEC_ARGS, '-b:a', '96k', '-movflags', '+faststart'];
     }
 
     if (codec === 'libx265') {
         const crf = quality === 'high' ? '24' : quality === 'fast' ? '30' : '27';
         const preset = quality === 'high' ? 'medium' : quality === 'fast' ? 'veryfast' : 'fast';
-        return ['-c:v', 'libx265', '-preset', preset, '-crf', crf, '-c:a', 'aac', '-movflags', '+faststart'];
+        return ['-c:v', 'libx265', '-preset', preset, '-crf', crf, ...aacEncodingArgs(options.sourceAudioStreams || []), '-movflags', '+faststart'];
     }
 
     const crf = quality === 'high' ? '18' : quality === 'fast' ? '28' : '23';
     const preset = quality === 'high' ? 'slow' : quality === 'fast' ? 'veryfast' : 'medium';
-    return ['-c:v', 'libx264', '-preset', preset, '-crf', crf, '-c:a', 'aac', '-movflags', '+faststart'];
+    return ['-c:v', 'libx264', '-preset', preset, '-crf', crf, ...aacEncodingArgs(options.sourceAudioStreams || []), '-movflags', '+faststart'];
 }
 
 function _getSourcePreservingVisualOptions(metadata = {}, { audioMode = 'copy', audioBitrate = '320k' } = {}) {
@@ -151,7 +152,7 @@ function _getSourcePreservingVisualOptions(metadata = {}, { audioMode = 'copy', 
     );
     if (audioMode === 'copy') options.push('-c:a', 'copy');
     else if (audioMode === 'none') options.push('-an');
-    else options.push('-c:a', 'aac', '-b:a', audioBitrate);
+    else options.push(...aacEncodingArgs(streams.filter(stream => stream.codec_type === 'audio')));
     return [...options, ..._buildProcessedVideoColorOutputOptions(metadata)];
 }
 
@@ -298,7 +299,9 @@ function _applyVerticalTrim(command, options = {}, isPreview = false) {
     }
 }
 
-function _runVerticalVideoJob(inputPath, outputPath, options = {}, onProgress = null, isPreview = false) {
+async function _runVerticalVideoJob(inputPath, outputPath, options = {}, onProgress = null, isPreview = false) {
+    const metadata = await _getVideoMetadata(inputPath);
+    options = { ...options, sourceAudioStreams: (metadata.streams || []).filter(s => s.codec_type === 'audio') };
     return new Promise((resolve, reject) => {
         const safeInput = _getSafePath(inputPath);
         const safeOutput = _getSafePath(outputPath);
@@ -401,16 +404,18 @@ async function _mixAudioAdvanced(options, onProgress) {
 
     return new Promise((resolve, reject) => {
         // First get metadata for duration
-        ffmpeg.ffprobe(videoPath, (err, videoMeta) => {
+        ffmpeg.ffprobe(videoPath, async (err, videoMeta) => {
             if (err) return reject(err);
 
             const videoDuration = videoMeta.format.duration;
             const remainingDuration = videoDuration - insertTime;
             const sourceAudioStream = videoMeta.streams.find(s => s.codec_type === 'audio');
             const hasVideoAudio = Boolean(sourceAudioStream);
-            const sourceSampleRate = Number(sourceAudioStream?.sample_rate || 48000);
-            const supportedSampleRates = new Set([32000, 44100, 48000, 88200, 96000]);
-            const mixSampleRate = supportedSampleRates.has(sourceSampleRate) ? sourceSampleRate : 48000;
+            let externalMeta;
+            try { externalMeta = await _getVideoMetadata(audioPath); } catch (e) { return reject(e); }
+            const mixProfile = sourceAudioProfile([sourceAudioStream, ...(externalMeta.streams || []).filter(s => s.codec_type === 'audio')]);
+            const mixSampleRate = mixProfile.sampleRate;
+            const mixLayout = mixProfile.layout;
             const delayMs = Math.round(insertTime * 1000);
 
             // Filter Chain Construction
@@ -426,10 +431,10 @@ async function _mixAudioAdvanced(options, onProgress) {
                 const volumeFilter = videoVolumeSegments.length
                     ? `volume='${originalVolumeExpression}':eval=frame`
                     : `volume=${videoVolume}`;
-                filters.push(`[0:a]aformat=sample_rates=${mixSampleRate}:channel_layouts=stereo:sample_fmts=fltp,${volumeFilter}[a0]`);
+                filters.push(`[0:a]${mixProfile.filter}:sample_fmts=fltp,${volumeFilter}[a0]`);
             } else {
                 // Generate silence matching video duration if no audio
-                filters.push(`anullsrc=r=${mixSampleRate}:cl=stereo,atrim=0:${videoDuration}[a0]`);
+                filters.push(`anullsrc=r=${mixSampleRate}:cl=${mixLayout},atrim=0:${videoDuration}[a0]`);
             }
 
             // 2. Prepare External Audio [1:a] -> [a1]
@@ -444,7 +449,7 @@ async function _mixAudioAdvanced(options, onProgress) {
             }
 
             // Standardize
-            audioFilters.push(`aformat=sample_rates=${mixSampleRate}:channel_layouts=stereo:sample_fmts=fltp`);
+            audioFilters.push(`${mixProfile.filter}:sample_fmts=fltp`);
             audioFilters.push(`volume=${audioVolume}`);
 
             // Delay or Loop
@@ -453,9 +458,9 @@ async function _mixAudioAdvanced(options, onProgress) {
                 audioFilters.push(`atrim=0:${remainingDuration}`);
                 // If delayed loop needed, we might need adelay after or complex calc. 
                 // Assuming simple loop for now as per backup. 
-                if (delayMs > 0) audioFilters.push(`adelay=${delayMs}|${delayMs}`);
+                if (delayMs > 0) audioFilters.push(`adelay=${Array(mixProfile.channels).fill(delayMs).join('|')}`);
             } else if (delayMs > 0) {
-                audioFilters.push(`adelay=${delayMs}|${delayMs}`);
+                audioFilters.push(`adelay=${Array(mixProfile.channels).fill(delayMs).join('|')}`);
             }
 
             const audioChain = audioFilters.join(',');
@@ -480,7 +485,8 @@ async function _mixAudioAdvanced(options, onProgress) {
                     ? ',alimiter=limit=0.98:level=false'
                     : ',alimiter=limit=0.95')
                 : '';
-            filters.push(`[merged]pan=stereo|c0=c0+c2|c1=c1+c3${outputLimiter}[aout]`);
+            const sumChannels = Array.from({ length: mixProfile.channels }, (_, i) => `c${i}=c${i}+c${i + mixProfile.channels}`).join('|');
+            filters.push(`[merged]pan=${mixLayout}|${sumChannels}${outputLimiter}[aout]`);
 
             ffmpeg(videoPath)
                 .input(audioPath)
@@ -489,9 +495,7 @@ async function _mixAudioAdvanced(options, onProgress) {
                     '-map 0:v',     // Keep original video
                     '-map [aout]',  // Use mixed audio
                     '-c:v copy',    // Copy video stream (FAST)
-                    '-c:a aac',     // Encode audio
-                    '-b:a 320k',    // High Quality Audio
-                    `-ar ${mixSampleRate}`,
+                    ...mixProfile.encoding.split(' '),
                     '-map_metadata 0',
                     '-map_chapters 0',
                     '-shortest'
@@ -648,7 +652,7 @@ async function _addSeparateAudioTrack(videoPath, segments, outputPath, options =
                 '-map', '0:a?',
                 '-map', hasOriginalAudio && originalUnderVolume > 0 ? '[dubmix]' : '[dubvoice]',
                 '-c:v', 'copy',
-                '-c:a', 'aac',
+                ...AAC_CODEC_ARGS,
                 '-b:a', '192k',
                 `-metadata:s:a:${dubAudioIndex}`, `title=${trackTitle}`,
                 '-disposition:a:0', '0',
@@ -717,7 +721,7 @@ async function _addSeparateAudioTrackFromAudio(videoPath, audioPath, outputPath,
             '-map', '0:a?',
             '-map', hasOriginalAudio && originalUnderVolume > 0 ? '[interpmix]' : '[interpvoice]',
             '-c:v', 'copy',
-            '-c:a', 'aac',
+            ...AAC_CODEC_ARGS,
             '-b:a', '192k',
             `-metadata:s:a:${newAudioIndex}`, `title=${trackTitle}`,
             '-disposition:a:0', 'default',
@@ -782,7 +786,7 @@ async function _createSingleDubbedRecording(videoPath, segments, outputPath, opt
             '-map', '0:v?',
             '-map', hasOriginalAudio && originalUnderVolume > 0 ? '[dubmix]' : '[dubvoice]',
             '-c:v', 'copy',
-            '-c:a', 'aac',
+            ...AAC_CODEC_ARGS,
             '-b:a', '192k',
             '-metadata:s:a:0', `title=${trackTitle}`,
             '-max_muxing_queue_size', '9999'
@@ -854,7 +858,7 @@ async function _createSingleDubbedRecordingFromAudio(videoPath, dubAudioPath, ou
                 '-crf', '23',
                 '-pix_fmt', 'yuv420p'
             ] : []),
-            '-c:a', 'aac',
+            ...AAC_CODEC_ARGS,
             '-b:a', '192k',
             '-metadata:s:a:0', `title=${trackTitle}`,
             '-max_muxing_queue_size', '9999'
@@ -901,7 +905,7 @@ async function _previewRebalancedDubbedRecording(videoPath, outputPath, options 
             .outputOptions([
                 '-map', '[outa]',
                 '-t', String(duration),
-                '-c:a', 'aac',
+                ...AAC_CODEC_ARGS,
                 '-b:a', '192k'
             ])
             .output(safeOutputPath)
@@ -925,7 +929,7 @@ async function _createRebalancedDubbedRecording(videoPath, outputPath, options =
                 '-map', '0:v?',
                 '-map', '[outa]',
                 '-c:v', 'copy',
-                '-c:a', 'aac',
+                ...AAC_CODEC_ARGS,
                 '-b:a', '192k',
                 '-metadata:s:a:0', `title=${trackTitle}`,
                 '-max_muxing_queue_size', '9999'
@@ -1414,7 +1418,7 @@ async function _cutVideoDeepFilter(input, output, start, end, onProgress, noiseR
         report(90);
 
         // 4. Merge back
-        await new Promise((r, j) => ffmpeg().input(tV).input(processed ? tC : tA).outputOptions(['-c:v copy', '-c:a aac', '-map 0:v', '-map 1:a']).output(output).on('end', r).on('error', j).run());
+        await new Promise((r, j) => ffmpeg().input(tV).input(processed ? tC : tA).outputOptions(['-c:v copy', ...AAC_CODEC_OPTIONS, '-map 0:v', '-map 1:a']).output(output).on('end', r).on('error', j).run());
         report(100);
 
         [tV, tA, tC].forEach(f => { try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (e) { } });
@@ -1507,6 +1511,7 @@ async function _processSegmentWithOverlays(input, output, start, duration, overl
             soundPath: _resolveOverlayAsset(ov.sound)
         };
     }));
+    const overlayAudio = sourceAudioProfile((sourceMetadata.streams || []).filter(s => s.codec_type === 'audio'));
 
     return new Promise((resolve, reject) => {
         const cmd = ffmpeg()
@@ -1721,16 +1726,16 @@ async function _processSegmentWithOverlays(input, output, start, duration, overl
                 const audioVolume = Number.isFinite(rawVolume)
                     ? (rawVolume > 4 ? rawVolume / 100 : rawVolume)
                     : 1;
-                const filterStr = `[${item.index}:a]atrim=0:${overlayDuration},asetpts=PTS-STARTPTS,aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp,volume=${Math.max(0, audioVolume)},adelay=${delayMs}|${delayMs},apad[${audPad}]`;
+                const filterStr = `[${item.index}:a]atrim=0:${overlayDuration},asetpts=PTS-STARTPTS,${overlayAudio.filter}:sample_fmts=fltp,volume=${Math.max(0, audioVolume)},adelay=${Array(overlayAudio.channels).fill(delayMs).join('|')},apad[${audPad}]`;
                 filters.push(filterStr);
             }
         });
         const audios = subInputs.filter(x => x.type === 'audio');
         if (audios.length > 0) {
             if (sourceMetadata.hasAudio) {
-                filters.push(`[0:a]aformat=sample_rates=44100:channel_layouts=stereo:sample_fmts=fltp[v_aud]`);
+                filters.push(`[0:a]${overlayAudio.filter}:sample_fmts=fltp[v_aud]`);
             } else {
-                filters.push(`anullsrc=r=44100:cl=stereo,atrim=0:${duration}[v_aud]`);
+                filters.push(`anullsrc=r=${overlayAudio.sampleRate}:cl=${overlayAudio.layout},atrim=0:${duration}[v_aud]`);
             }
             let inputs = ['[v_aud]'];
             audios.forEach(x => inputs.push(`[aud_${x.index}]`));
@@ -2168,8 +2173,9 @@ module.exports = {
             console.log(`[Render Switch] Using Safe Single-Pass Mode for high segment count. Segs=${segs.length}, Forced=${!!(options && options.forceSmartCut)}`);
             return module.exports._renderTimeline_SinglePass(inp, segs, out, onP);
         } else if (useSmartCut) {
-            console.log(`[Render Switch] Using Chunked/Smart Mode. Segs=${segs.length}, Forced=${!!(options && options.forceSmartCut)}`);
-            return module.exports._renderTimeline_Chunked(inp, segs, out, onP);
+            // Legacy packet concatenation encoded audio repeatedly. Keep one audio
+            // encode here; the explicit hybrid exporter handles fast video copies.
+            return module.exports._renderTimeline_SinglePass(inp, segs, out, onP);
         } else {
             console.log(`[Render Switch] Using Single-Pass Mode. Segs=${segs.length}`);
             return module.exports._renderTimeline_SinglePass(inp, segs, out, onP);
@@ -2194,6 +2200,7 @@ module.exports = {
         // V114: Hızlı Dışa Aktar için Hedef Çözünürlük (En Uzun Süreli Videodan)
         let targetW = 1920;
         let targetH = 1080;
+        let targetFrameRate = 30;
         let resolutionSet = false;
 
         // En uzun videodan çözünürlük al
@@ -2291,7 +2298,7 @@ module.exports = {
                                 '-map', '[outa]',
                                 '-c:v', 'libx264',
                                 '-preset', 'fast',
-                                '-c:a', 'aac'
+                                ...AAC_CODEC_ARGS
                             ]);
                         } else {
                             cmd.inputOptions([
@@ -2307,9 +2314,9 @@ module.exports = {
                             if (atempoStr) {
                                 let aFilters = atempoStr;
                                 if (seg.isMuted) aFilters += ',volume=0';
-                                cmd.outputOptions(['-filter:a', aFilters, '-c:a', 'aac']);
+                                cmd.outputOptions(['-filter:a', aFilters, ...AAC_CODEC_ARGS]);
                             } else if (seg.isMuted) {
-                                cmd.outputOptions(['-filter:a', 'volume=0', '-c:a', 'aac']);
+                                cmd.outputOptions(['-filter:a', 'volume=0', ...AAC_CODEC_ARGS]);
                             }
                         }
 
@@ -2414,7 +2421,7 @@ module.exports = {
                         intermediateTemps.push(volOut);
                         const volVal = segMuted ? 0 : (segVol / 100);
                         await new Promise((r, j) => ffmpeg(processedSrc)
-                            .outputOptions(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '320k'])
+                            .outputOptions(['-c:v', 'copy', ...AAC_CODEC_ARGS, '-b:a', '320k'])
                             .audioFilters(`volume=${volVal.toFixed(2)}`)
                             .output(volOut)
                             .on('end', r).on('error', j).run()
@@ -2454,7 +2461,7 @@ module.exports = {
                         intermediateTemps.push(segOut); // orijinal segOut'u temizlemek için
                         const volVal = segMuted ? 0 : (segVol / 100);
                         await new Promise((r, j) => ffmpeg(segOut)
-                            .outputOptions(['-c:v', 'copy', '-c:a', 'aac', '-b:a', '320k'])
+                            .outputOptions(['-c:v', 'copy', ...AAC_CODEC_ARGS, '-b:a', '320k'])
                             .audioFilters(`volume=${volVal.toFixed(2)}`)
                             .output(volOut)
                             .on('end', r).on('error', j).run()
@@ -2533,6 +2540,7 @@ module.exports = {
                 if (bestMeta && bestMeta.width && bestMeta.height) {
                     targetW = bestMeta.width;
                     targetH = bestMeta.height;
+                    if (Number.isFinite(bestMeta.frameRate) && bestMeta.frameRate > 0) targetFrameRate = bestMeta.frameRate;
                     console.log(`[Render V114] Determined output resolution from longest clip: ${targetW}x${targetH} (Duration: ${longestSourceDuration}s)`);
                 } else {
                     // Video bulunamadıysa (sadece resim varsa) varsayılan kalır.
@@ -2579,7 +2587,9 @@ module.exports = {
                     const applySpeed = seg.speed && seg.speed !== 1.0;
                     const speedMultiplier = applySpeed ? seg.speed : 1.0;
                     const targetDur = relDur / speedMultiplier;
-                    const speedTemp = path.join(path.dirname(out), `sp_speedbg_${i}_${Date.now()}.mp4`);
+                    const speedTemp = path.join(path.dirname(out), `sp_speedbg_${i}_${Date.now()}.mov`);
+                    const bgMetadata = await _getVideoMetadata(seg.speedBgAudio);
+                    const bgAudio = sourceAudioProfile((bgMetadata.streams || []).filter(st => st.codec_type === 'audio'));
                     temps.push(speedTemp);
                     const vPts = applySpeed ? `(PTS-STARTPTS)/${speedMultiplier}` : 'PTS-STARTPTS';
 
@@ -2599,7 +2609,7 @@ module.exports = {
                         // Videonun hızını ayarla, Fon sesini sürece yay
                         cmd.complexFilter([
                             `[0:v]setpts=${vPts}[outv]`,
-                            `[1:a]asetpts=PTS-STARTPTS,atrim=0:${targetDur},aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0[outa]`
+                            `[1:a]asetpts=PTS-STARTPTS,atrim=0:${targetDur},${bgAudio.filter},volume=1.0[outa]`
                         ]);
 
                         cmd.outputOptions([
@@ -2607,7 +2617,7 @@ module.exports = {
                             '-map', '[outa]',
                             '-c:v', 'libx264',
                             '-preset', 'fast',
-                            '-c:a', 'aac'
+                            ...bgAudio.intermediate.split(' ')
                         ]);
 
                         cmd.output(speedTemp)
@@ -2654,10 +2664,12 @@ module.exports = {
 
                 // Audio Check
                 let hasAudio = true;
+                let audioStream = null;
                 try {
                     const md = await _getVideoMetadata(cSrc);
                     if (md.streams) {
                         const aud = md.streams.find(st => st.codec_type === 'audio');
+                        audioStream = aud || null;
                         if (!aud) hasAudio = false;
                     }
                 } catch (x) { hasAudio = true; }
@@ -2667,7 +2679,7 @@ module.exports = {
                 const segMuted = !!seg.isMuted;
                 const speed = seg.speed || 1.0;
                 estimatedOutputDuration += (relDur / speed);
-                procs.push({ f: cSrc, s, e, hasAudio, dur: relDur, audioVolume: segVol, isMuted: segMuted, speed: speed, audioChannelMode: seg.audioChannelMode || 'source' });
+                procs.push({ f: cSrc, s, e, hasAudio, audioStream, dur: relDur, audioVolume: segVol, isMuted: segMuted, speed: speed, audioChannelMode: seg.audioChannelMode || 'source' });
 
                 // Segment bitti, segment sonu progress'i gönder
                 if (onP) onP({ operation: 'render-timeline', percent: ((i + 1) / segs.length) * PREP_WEIGHT });
@@ -2677,6 +2689,20 @@ module.exports = {
 
             // 2. Tek FFmpeg Komutu Oluştur
             console.log(`[Render V109] Building complex filter for ${procs.length} segments...`);
+            const outputAudio = sourceAudioProfile(procs.map(p => p.audioStream && p.audioChannelMode === 'mono'
+                ? { ...p.audioStream, channels: 1, channel_layout: 'mono' } : p.audioStream));
+            let copiedAudioPath = null;
+            if (procs.length === 1 && procs[0].hasAudio && procs[0].f === (segs[0].sourceFile || inp)) {
+                const copyPath = path.join(path.dirname(out), `evd_selection_audio_${Date.now()}.mov`);
+                temps.push(copyPath);
+                const profile = await require('./export/source-profile-analyzer').analyzeSource(ffprobePath, procs[0].f);
+                const copied = await require('./export/selection-audio-copy').tryCopySelectionAudio({
+                    ffmpegPath, ffprobePath, inputPath: inp, segments: segs,
+                    sourceProfiles: [profile], outputPath: copyPath,
+                    runFfmpeg: require('./export/continuous-audio-renderer').runFfmpeg
+                });
+                if (copied) copiedAudioPath = copyPath;
+            }
 
             const cmd = ffmpeg();
             const map = new Map();
@@ -2689,6 +2715,14 @@ module.exports = {
                     cmd.input(sf);
                 }
             });
+            if (copiedAudioPath) cmd.input(copiedAudioPath);
+
+            const { planTimeline, videoTimingFilter, concatTimeline, sourceAudioTimelineFilter, cutSmoothingFilter, needsCutSmoothing } = require('./export/seamless-timeline');
+            const durations = procs.map(p => p.dur / p.speed);
+            const videoPlan = planTimeline(durations, targetFrameRate);
+            if (!videoPlan.some(item => item.count > 0)) videoPlan[0].count = 1;
+            const audioPlan = planTimeline(durations, outputAudio.sampleRate);
+            const videoIndexes = [];
 
             // Filter zinciri oluştur
             let flt = [];
@@ -2699,11 +2733,17 @@ module.exports = {
                 const vPts = p.speed !== 1.0 ? `(PTS-STARTPTS)/${p.speed}` : 'PTS-STARTPTS';
 
                 // Video: Trim -> ResetPTS -> Scale/Pad -> SAR -> Format
-                flt.push(`[${idx}:v]trim=${p.s}:${p.e},setpts=${vPts},scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p[v${i}]`);
+                if (copiedAudioPath || videoPlan[i].count > 0) {
+                    const timing = copiedAudioPath ? '' : `,${videoTimingFilter(videoPlan[i].count, targetFrameRate)}`;
+                    flt.push(`[${idx}:v]trim=${p.s}:${p.e},setpts=${vPts},scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p${timing}[v${i}]`);
+                    videoIndexes.push(i);
+                }
+
+                if (copiedAudioPath) return;
 
                 if (p.hasAudio) {
                     // Audio: Trim -> ResetPTS -> Tempo -> APAD (Safe) -> Trim (Duration fix) -> Volume -> Format
-                    let audioFilter = `[${idx}:a]atrim=${p.s}:${p.e},asetpts=PTS-STARTPTS`;
+                    let audioFilter = `[${idx}:a]${sourceAudioTimelineFilter(outputAudio.sampleRate)},atrim=${p.s}:${p.e},asetpts=PTS-STARTPTS`;
                     if (p.speed !== 1.0 && !p.isMuted) {
                         let atempoStr = '';
                         let tempSpeed = p.speed;
@@ -2729,17 +2769,22 @@ module.exports = {
                         const vol = (p.audioVolume / 100).toFixed(2);
                         audioFilter += `,volume=${vol}`;
                     }
-                    const targetLayout = p.audioChannelMode === 'mono' ? 'mono' : 'stereo';
-                    audioFilter += `,aformat=sample_rates=44100:channel_layouts=${targetLayout}[a${i}]`;
+                    if (p.audioChannelMode === 'mono') audioFilter += ',aformat=channel_layouts=mono';
+                    audioFilter += `,${outputAudio.filter},apad,atrim=end_sample=${audioPlan[i].count},asetpts=N/SR/TB`;
+                    audioFilter += cutSmoothingFilter(audioPlan[i].count, outputAudio.sampleRate,
+                        needsCutSmoothing(procs[i-1], p), needsCutSmoothing(p, procs[i+1]));
+                    audioFilter += `[a${i}]`;
                     flt.push(audioFilter);
                 } else {
                     // Silence Gen (Muted or no audio)
-                    flt.push(`anullsrc=r=44100:cl=stereo:duration=${outDur}[a${i}]`);
+                    flt.push(`anullsrc=r=${outputAudio.sampleRate}:cl=${outputAudio.layout},atrim=end_sample=${audioPlan[i].count},asetpts=N/SR/TB[a${i}]`);
                 }
             });
 
             // Concat
-            const complexStr = `${procs.map((_, i) => `[v${i}][a${i}]`).join('')}concat=n=${procs.length}:v=1:a=1:unsafe=1[ov][oa]`;
+            const complexStr = copiedAudioPath
+                ? '[v0]null[ov]'
+                : concatTimeline(videoIndexes, procs.length);
             flt.push(complexStr);
             const filterScriptPath = path.join(path.dirname(out), `render_filter_${Date.now()}.txt`);
             fs.writeFileSync(filterScriptPath, flt.join(';\n'));
@@ -2751,9 +2796,10 @@ module.exports = {
                 cmd.outputOptions('-filter_complex_script', filterScriptPath)
                     .outputOptions([
                         '-map', '[ov]',
-                        '-map', '[oa]',
+                        '-map', copiedAudioPath ? `${map.size}:a:0` : '[oa]',
                         '-c:v', 'libx264', '-preset', 'fast',
-                        '-c:a', 'aac', '-b:a', '320k', '-ar', '44100', // High Quality Audio
+                        ...(copiedAudioPath ? [] : ['-r', String(targetFrameRate)]),
+                        ...(copiedAudioPath ? ['-c:a', 'copy'] : outputAudio.encoding.split(' ')),
                         '-pix_fmt', 'yuv420p',
                         '-max_muxing_queue_size', '4096',
                         '-threads', '4'
@@ -2954,7 +3000,7 @@ module.exports = {
                             '-map', '[ov]',
                             '-map', '[oa]',
                             '-c:v', 'libx264', '-preset', 'fast',
-                            '-c:a', 'aac', '-b:a', '320k', '-ar', '44100', // High Quality Audio
+                            ...AAC_CODEC_ARGS, '-b:a', '320k', '-ar', '44100', // High Quality Audio
                             '-pix_fmt', 'yuv420p',
                             '-max_muxing_queue_size', '1024',
                             '-threads', '2'
@@ -3232,7 +3278,7 @@ async function _replaceAudio(videoPath, audioPath, offsetMs, muteOriginal, outpu
             '-map 0:v',          // Keep original video
             `-map ${audioMap}`,  // Use our calculated audio
             '-c:v copy',         // Fast copy video stream
-            '-c:a aac',          // Encode audio to AAC
+            ...AAC_CODEC_OPTIONS,          // Encode audio to AAC
             '-b:a 320k',         // High Quality Audio
             '-shortest'          // End when the shortest stream (video) ends
         ])
@@ -3729,7 +3775,7 @@ async function _applyTransitionsSmart(videoPath, outputPath, transitions, onProg
                         '-map', '0:v',
                         '-c:v', 'copy',
                         '-map', '[a_out]',
-                        '-c:a', 'aac',
+                        ...AAC_CODEC_ARGS,
                         '-max_muxing_queue_size', '9999'
                     ])
                     .output(outputPath)
@@ -3977,7 +4023,7 @@ async function _applyTransitionsWithBreaks(videoPath, outputPath, transitions, o
                 '-map [outv]',
                 '-map [outa]',
                 '-c:v libx264',
-                '-c:a aac',
+                ...AAC_CODEC_OPTIONS,
                 '-preset ultrafast',
                 '-crf 18',
                 '-b:a 320k',
@@ -4070,8 +4116,7 @@ async function _safeConvertVideo(videoPath, outputPath, options = {}, onProgress
             '-c:v', videoCodec,
             '-preset', videoCodec.includes('libvpx') ? 'good' : 'ultrafast',
             ...(videoCodec.includes('libx265') ? ['-crf', '28'] : ['-crf', '23']),
-            '-c:a', audioCodec,
-            '-b:a', audioCodec === 'libopus' ? '160k' : '128k',
+            ...(audioCodec === 'aac' ? aacEncodingArgs((sourceMetadata.streams || []).filter(s => s.codec_type === 'audio')) : ['-c:a', audioCodec, '-b:a', '160k']),
             ...(targetBitrate ? ['-b:v', `${targetBitrate}k`] : []),
             ...extraOutputOptions,
             ..._buildProcessedVideoColorOutputOptions(sourceMetadata)
@@ -4186,20 +4231,23 @@ async function cutVideo(inputPath, outputPath, startTime, endTime, onProgress, o
     const duration = endTime - startTime;
     const gpuEncoder = await detectGpuEncoder();
     const videoCodec = gpuEncoder || 'libx264';
-    const sampleRate = options.sampleRate || 44100;
+    const sourceMeta = await _getVideoMetadata(inputPath);
+    const audioStreams = (sourceMeta.streams || []).filter(s => s.codec_type === 'audio');
+    const audioProfile = sourceAudioProfile(audioStreams);
+    const sampleRate = options.sampleRate || audioProfile.outputSampleRate;
 
     let outputOptions = [];
     if (gpuEncoder) {
-        if (gpuEncoder.includes('nvenc')) outputOptions = ['-preset', 'p4', '-rc', 'vbr', '-cq', '23', '-ar', String(sampleRate), '-ac', '2', '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'];
-        else if (gpuEncoder.includes('qsv')) outputOptions = ['-preset', 'veryfast', '-global_quality', '23', '-ar', String(sampleRate), '-ac', '2', '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'];
-        else if (gpuEncoder.includes('videotoolbox')) outputOptions = ['-q:v', '65', '-ar', String(sampleRate), '-ac', '2', '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'];
+        if (gpuEncoder.includes('nvenc')) outputOptions = ['-preset', 'p4', '-rc', 'vbr', '-cq', '23', '-ar', String(sampleRate), '-ac', String(audioProfile.channels), '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'];
+        else if (gpuEncoder.includes('qsv')) outputOptions = ['-preset', 'veryfast', '-global_quality', '23', '-ar', String(sampleRate), '-ac', String(audioProfile.channels), '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'];
+        else if (gpuEncoder.includes('videotoolbox')) outputOptions = ['-q:v', '65', '-ar', String(sampleRate), '-ac', String(audioProfile.channels), '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'];
     } else {
-        outputOptions = ['-preset', 'veryfast', '-crf', '23', '-ar', String(sampleRate), '-ac', '2', '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'];
+        outputOptions = ['-preset', 'veryfast', '-crf', '23', '-ar', String(sampleRate), '-ac', String(audioProfile.channels), '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'];
     }
 
     // CPU fallback option handled in usage
     if (!gpuEncoder) {
-        outputOptions = ['-preset', 'ultrafast', '-crf', '28', '-ar', String(sampleRate), '-ac', '2', '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'];
+        outputOptions = ['-preset', 'ultrafast', '-crf', '28', '-ar', String(sampleRate), '-ac', String(audioProfile.channels), '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'];
     }
 
     const filters = [`afade=t=in:st=0:d=0.01`, `afade=t=out:st=${Math.max(0, duration - 0.01)}:d=0.01`];
@@ -4213,7 +4261,7 @@ async function cutVideo(inputPath, outputPath, startTime, endTime, onProgress, o
             .setStartTime(startTime)
             .setDuration(duration)
             .videoCodec(videoCodec)
-            .audioCodec('aac')
+            .outputOptions(aacEncodingArgs(audioStreams))
             .outputOptions(outputOptions)
             .output(outputPath)
             // .videoFilters(filters) // audioFilters ve videoFilters ayrı olmalı veya complexFilter kullanılmalı
@@ -4238,9 +4286,12 @@ async function cutVideo(inputPath, outputPath, startTime, endTime, onProgress, o
     });
 }
 
-function cutVideoWithCpu(inputPath, outputPath, startTime, endTime, onProgress, options = {}, onLog = null) {
+async function cutVideoWithCpu(inputPath, outputPath, startTime, endTime, onProgress, options = {}, onLog = null) {
     const duration = endTime - startTime;
-    const sampleRate = options.sampleRate || 44100;
+    const sourceMeta = await _getVideoMetadata(inputPath);
+    const audioStreams = (sourceMeta.streams || []).filter(s => s.codec_type === 'audio');
+    const audioProfile = sourceAudioProfile(audioStreams);
+    const sampleRate = options.sampleRate || audioProfile.outputSampleRate;
     const filters = [`afade=t=in:st=0:d=0.01`, `afade=t=out:st=${Math.max(0, duration - 0.01)}:d=0.01`];
     if (options.width && options.height) {
         filters.push(`scale=${options.width}:${options.height}:force_original_aspect_ratio=decrease,pad=${options.width}:${options.height}:(ow-iw)/2:(oh-ih)/2,setsar=1`);
@@ -4251,10 +4302,10 @@ function cutVideoWithCpu(inputPath, outputPath, startTime, endTime, onProgress, 
             .setStartTime(startTime)
             .setDuration(duration)
             .videoCodec('libx264')
-            .audioCodec('aac')
+            .outputOptions(aacEncodingArgs(audioStreams))
             .audioFilters(filters.filter(f => f.startsWith('afade')))
             .videoFilters(filters.filter(f => f.startsWith('scale')))
-            .outputOptions(['-preset', 'ultrafast', '-crf', '28', '-ar', String(sampleRate), '-ac', '2', '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'])
+            .outputOptions(['-preset', 'ultrafast', '-crf', '28', '-ar', String(sampleRate), '-ac', String(audioProfile.channels), '-avoid_negative_ts', 'make_zero', '-max_muxing_queue_size', '9999'])
             .output(outputPath)
             .on('progress', (p) => { if (onProgress) onProgress(p.percent); })
             .on('stderr', (l) => { if (onLog) onLog(l); })
@@ -4444,7 +4495,7 @@ async function concatenateVideosSafeReencode(inputPaths, outputPath, expectedDur
                     '-avoid_negative_ts', 'make_zero',
                     '-c:v', 'libx264',
                     '-preset', 'veryfast',
-                    '-c:a', 'aac',
+                    ...AAC_CODEC_ARGS,
                     '-b:a', '192k',
                     '-movflags', '+faststart'
                 ])
@@ -4735,7 +4786,7 @@ async function addCtaOverlay(params, onProgress) {
                         ? [
                             '-c:v', videoCodec,
                             '-preset', preset,
-                            '-c:a', mixesAudio ? 'aac' : 'copy',
+                            ...(mixesAudio ? aacEncodingArgs((mainMeta.streams || []).filter(s => s.codec_type === 'audio')) : ['-c:a', 'copy']),
                             ..._buildProcessedVideoColorOutputOptions(mainMeta)
                         ]
                         : _getSourcePreservingVisualOptions(mainMeta, {
@@ -4773,152 +4824,13 @@ async function generateSilence(duration, outputPath) {
    ========================================= */
 
 async function _addVideoLayer(params, onProgress) {
-    console.log('[AddVideoLayer] Params:', params);
-    const { mainVideoPath, layerVideoPath, outputPath, x, y, width, height, scale, startTime, duration, opacity, audioVolume, loop } = params;
-
-    const mainSafe = _getSafePath(mainVideoPath);
-    const layerSafe = _getSafePath(layerVideoPath);
-
-    if (!mainSafe || !layerSafe) {
-        throw new Error("Missing video paths for layer");
-    }
-
-    // V115: Get metadata before starting to support percentage scale
-    let mainW = 1920;
-    let sourceMetadata = {};
-    try {
-        sourceMetadata = await _getVideoMetadata(mainSafe);
-        mainW = sourceMetadata.width || 1920;
-    } catch (e) {
-        console.warn('[AddVideoLayer] Metadata fetch error, defaulting to 1920w:', e);
-    }
-
-    return new Promise((resolve, reject) => {
-        const cmd = ffmpeg(mainSafe);
-        cmd.input(layerSafe);
-
-        // Check if layer is image using helper
-        const isImage = _isImageFile(layerSafe) || (loop === true);
-        if (isImage) {
-            cmd.inputOption('-loop 1');
-        }
-
-        // Filter Chain
-        const filters = [];
-
-        // 1. Prepare Layer Video [1:v] -> [layerVal]
-        let layerLabel = '[1:v]';
-
-        // Scale Logic (V115: AI suggested scale support)
-        let targetW = width;
-        let targetH = height;
-        if (scale && parseFloat(scale) > 0) {
-            targetW = Math.round(mainW * (parseFloat(scale) / 100));
-            targetH = -1;
-            console.log(`[AddVideoLayer] Scale applied: ${scale}% -> ${targetW}px`);
-        }
-
-        if (targetW && targetH) {
-            filters.push(`${layerLabel}scale=${targetW}:${targetH}[scaled]`);
-            layerLabel = '[scaled]';
-        }
-
-        // Opacity / Transparency
-        if (opacity !== undefined && opacity < 1.0) {
-            filters.push(`${layerLabel}format=rgba,colorchannelmixer=aa=${opacity}[opaque]`);
-            layerLabel = '[opaque]';
-        }
-
-        // Overlay command
-        // enable='between(t,start,end)'
-        let enableExpr = '';
-        if (startTime !== undefined) {
-            const endT = (duration !== undefined) ? (startTime + duration) : (startTime + 3600); // 1 hour fallback instead of 99999
-            enableExpr = `:enable='between(t,${startTime},${endT})'`;
-        }
-
-        const posX = (x !== undefined) ? x : 0;
-        const posY = (y !== undefined) ? y : 0;
-
-        // Ensure main video is SDR/yuv420p for compatibility; HDR sources are tone-mapped first.
-        filters.push(`[0:v]${_joinVideoFilters(_buildHdrToSdrFilter(sourceMetadata), 'format=yuv420p')}[mainv]`);
-        filters.push(`[mainv]${layerLabel}overlay=x=${posX}:y=${posY}${enableExpr}[outv]`);
-
-        // Audio Mixing (Simple)
-        // If audioVolume > 0 and it's not an image (or we assume video has audio)
-        const shouldMixAudio = !isImage && (audioVolume !== undefined && audioVolume > 0);
-
-        if (shouldMixAudio) {
-            // [1:a]volume=vol[a1]; [0:a][a1]amix...
-            filters.push(`[1:a]volume=${audioVolume}[a1]`);
-            // amix: inputs=2, duration=first (video length limits), dropout_transition=0
-            filters.push(`[0:a][a1]amix=inputs=2:duration=first:dropout_transition=0[aout]`);
-            cmd.outputOptions(['-map [outv]', '-map [aout]']);
-        } else {
-            // Keep main audio
-            cmd.outputOptions(['-map [outv]', '-map 0:a']);
-        }
-
-        // Get duration for progress calculation
-        _getVideoMetadata(mainSafe).then(meta => {
-            const totalDuration = meta.duration || 0;
-
-            cmd.complexFilter(filters)
-                .outputOptions([
-                    ..._getSourcePreservingVisualOptions(meta, {
-                        audioMode: shouldMixAudio ? 'aac' : 'copy',
-                        audioBitrate: '320k'
-                    }),
-                    '-t', totalDuration.toString(), // Hard limit output duration
-                    '-shortest'
-                ])
-                .output(outputPath)
-                .on('progress', (p) => {
-                    let percent = p.percent;
-                    if ((!percent || percent < 0) && totalDuration > 0 && p.timemark) {
-                        const timeParts = p.timemark.split(':');
-                        if (timeParts.length === 3) {
-                            const seconds = (+timeParts[0]) * 3600 + (+timeParts[1]) * 60 + (+timeParts[2]);
-                            percent = (seconds / totalDuration) * 100;
-                        }
-                    }
-                    if (onProgress) onProgress(Math.min(99, Math.round(percent || 0)));
-                })
-                .on('end', () => {
-                    console.log('[AddVideoLayer] Success.');
-                    if (onProgress) onProgress(100);
-                    resolve(outputPath);
-                })
-                .on('error', (err) => {
-                    console.error('[AddVideoLayer] FFmpeg Error:', err);
-                    reject(err);
-                })
-                .run();
-        }).catch(err => {
-            console.error('[AddVideoLayer] Metadata fetch failed fallback.', err);
-            // Fallback: run without manual duration calculation
-            cmd.complexFilter(filters)
-                .outputOptions([
-                    ..._getSourcePreservingVisualOptions(sourceMetadata, {
-                        audioMode: shouldMixAudio ? 'aac' : 'copy',
-                        audioBitrate: '320k'
-                    }),
-                    '-shortest'
-                ])
-                .output(outputPath)
-                .on('progress', (p) => { if (onProgress) onProgress(Math.min(99, Math.round(p.percent || 0))); })
-                .on('end', () => {
-                    if (onProgress) onProgress(100);
-                    resolve(outputPath);
-                })
-                .on('error', (err) => {
-                    console.error('[AddVideoLayer] FFmpeg Error (fallback):', err);
-                    reject(err);
-                })
-                .run();
-        });
+    return require('./video-layer-renderer').renderVideoLayer(params, onProgress, {
+        metadata: _getVideoMetadata,
+        hdrFilter: _buildHdrToSdrFilter,
+        visualOptions: _getSourcePreservingVisualOptions,
     });
 }
+
 
 async function _remuxVideo(inputPath, targetFormat) {
     const ext = targetFormat.startsWith('.') ? targetFormat : `.${targetFormat}`;

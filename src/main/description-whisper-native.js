@@ -4,6 +4,8 @@ const os = require('os');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const extractZip = require('extract-zip');
+const { Readable, Transform } = require('stream');
+const { pipeline } = require('stream/promises');
 
 const RUNTIME_VERSION = 'v1.9.2';
 const RUNTIME_URL = `https://github.com/ggml-org/whisper.cpp/releases/download/${RUNTIME_VERSION}/whisper-bin-x64.zip`;
@@ -20,59 +22,59 @@ function sha256(filePath) {
     return hash.digest('hex');
 }
 
-async function downloadFile(url, destination, onProgress, range = [0, 100]) {
-    const partial = `${destination}.part`;
+async function downloadFile(url, destination, onProgress, range = [0, 100], signal) {
+    signal?.throwIfAborted();
+    const partial = `${destination}.${crypto.randomUUID()}.part`;
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    const response = await fetch(url, { redirect: 'follow' });
+    const response = await fetch(url, { redirect: 'follow', signal });
     if (!response.ok || !response.body) throw new Error(`whisper_download_http_${response.status}`);
     const total = Number(response.headers.get('content-length')) || 0;
-    const output = fs.createWriteStream(partial);
-    const reader = response.body.getReader();
     let received = 0;
     try {
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = Buffer.from(value);
-            received += chunk.length;
-            if (!output.write(chunk)) await new Promise(resolve => output.once('drain', resolve));
-            if (total > 0) {
-                const ratio = received / total;
-                onProgress?.(Math.round(range[0] + ((range[1] - range[0]) * ratio)));
+        const meter = new Transform({
+            transform(chunk, encoding, callback) {
+                received += chunk.length;
+                if (total > 0) onProgress?.(Math.round(range[0] + (range[1] - range[0]) * received / total));
+                callback(null, chunk);
             }
-        }
+        });
+        await pipeline(Readable.fromWeb(response.body), meter, fs.createWriteStream(partial), { signal });
+        signal?.throwIfAborted();
+        if (!received) throw new Error('whisper_download_empty');
+        if (fs.existsSync(destination)) fs.unlinkSync(destination);
+        fs.renameSync(partial, destination);
     } finally {
-        await new Promise((resolve, reject) => output.end(error => error ? reject(error) : resolve()));
+        fs.rmSync(partial, { force: true });
     }
-    if (!received) throw new Error('whisper_download_empty');
-    if (fs.existsSync(destination)) fs.unlinkSync(destination);
-    fs.renameSync(partial, destination);
 }
 
-async function ensureRuntime(root, onProgress) {
+async function ensureRuntime(root, onProgress, signal) {
+    signal?.throwIfAborted();
     const runtimeRoot = path.join(root, `runtime-${RUNTIME_VERSION}`);
     const executable = path.join(runtimeRoot, 'Release', 'whisper-cli.exe');
     if (fs.existsSync(executable)) return executable;
     const archive = path.join(root, `whisper-bin-x64-${RUNTIME_VERSION}.zip`);
     if (!fs.existsSync(archive) || sha256(archive) !== RUNTIME_SHA256) {
         if (fs.existsSync(archive)) fs.unlinkSync(archive);
-        await downloadFile(RUNTIME_URL, archive, onProgress, [0, 20]);
+        await downloadFile(RUNTIME_URL, archive, onProgress, [0, 20], signal);
         if (sha256(archive) !== RUNTIME_SHA256) throw new Error('whisper_runtime_checksum_failed');
     }
     fs.rmSync(runtimeRoot, { recursive: true, force: true });
     fs.mkdirSync(runtimeRoot, { recursive: true });
     await extractZip(archive, { dir: runtimeRoot });
+    signal?.throwIfAborted();
     if (!fs.existsSync(executable)) throw new Error('whisper_runtime_executable_missing');
     return executable;
 }
 
-async function ensureModel(root, modelName, onProgress) {
+async function ensureModel(root, modelName, onProgress, signal) {
+    signal?.throwIfAborted();
     const model = MODELS[modelName] || MODELS['Xenova/whisper-base'];
     const modelPath = path.join(root, 'models', model.file);
     if (fs.existsSync(modelPath) && fs.statSync(modelPath).size >= model.size * 0.98) return modelPath;
     if (fs.existsSync(modelPath)) fs.unlinkSync(modelPath);
     const url = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${model.file}?download=true`;
-    await downloadFile(url, modelPath, onProgress, [20, 100]);
+    await downloadFile(url, modelPath, onProgress, [20, 100], signal);
     if (!fs.existsSync(modelPath) || fs.statSync(modelPath).size < model.size * 0.98) {
         throw new Error('whisper_model_download_incomplete');
     }
@@ -80,12 +82,13 @@ async function ensureModel(root, modelName, onProgress) {
 }
 
 async function ensureNativeWhisper(options = {}) {
+    options.signal?.throwIfAborted();
     if (process.platform !== 'win32' || process.arch !== 'x64') return null;
     const root = path.join(path.dirname(options.modelCacheDir), 'whisper-cpp');
     fs.mkdirSync(root, { recursive: true });
     const report = percent => options.onProgress?.({ stage: 'model', percent });
-    const executable = await ensureRuntime(root, report);
-    const modelPath = await ensureModel(root, options.model, report);
+    const executable = await ensureRuntime(root, report, options.signal);
+    const modelPath = await ensureModel(root, options.model, report, options.signal);
     options.onProgress?.({ stage: 'model', percent: 100 });
     return { executable, modelPath, root };
 }
@@ -136,6 +139,7 @@ function wordsFromFullJson(payload) {
 }
 function runWhisperChunk(runtime, options = {}) {
     return new Promise((resolve, reject) => {
+        options.signal?.throwIfAborted();
         const durationMs = Math.max(1, Math.round(options.duration * 1000));
         const offsetMs = Math.max(0, Math.round(options.offset * 1000));
         const threadCount = Math.max(2, Math.min(16, (os.cpus()?.length || 4) - 2));
@@ -146,7 +150,7 @@ function runWhisperChunk(runtime, options = {}) {
             '-f', options.sourcePath,
             '-ot', String(offsetMs),
             '-d', String(durationMs),
-            '-l', 'auto',
+            '-l', options.language || 'auto',
             '-t', String(threadCount),
             '-pp', '-sow', '-ojf', '-of', outputBase
         ];
@@ -175,8 +179,20 @@ function runWhisperChunk(runtime, options = {}) {
             if (matches.length) options.onChunkProgress?.(Math.max(0, Math.min(100, Number(matches[matches.length - 1][1]))));
             if (stderrBuffer.length > 32000) stderrBuffer = stderrBuffer.slice(-16000);
         });
-        child.on('error', reject);
+        const abort = () => child.kill('SIGKILL');
+        options.signal?.addEventListener('abort', abort, { once: true });
+        if (options.signal?.aborted) abort();
+        child.on('error', error => {
+            options.signal?.removeEventListener('abort', abort);
+            reject(error);
+        });
         child.on('close', code => {
+            options.signal?.removeEventListener('abort', abort);
+            if (options.signal?.aborted) {
+                fs.rmSync(jsonPath, { force: true });
+                reject(Object.assign(new Error('speech_search_cancelled'), { name: 'AbortError' }));
+                return;
+            }
             consumeStdout(true);
             if (code !== 0) {
                 if (fs.existsSync(jsonPath)) fs.unlinkSync(jsonPath);
@@ -195,5 +211,16 @@ function runWhisperChunk(runtime, options = {}) {
     });
 }
 
-module.exports = { ensureNativeWhisper, runWhisperChunk };
+function inspectNativeWhisper(options = {}) {
+    const supported = (options.platform || process.platform) === 'win32' && (options.arch || process.arch) === 'x64';
+    const root = path.join(path.dirname(options.modelCacheDir), 'whisper-cpp');
+    const model = MODELS[options.model] || MODELS['Xenova/whisper-base'];
+    const executable = path.join(root, `runtime-${RUNTIME_VERSION}`, 'Release', 'whisper-cli.exe');
+    const modelPath = path.join(root, 'models', model.file);
+    const runtimeReady = fs.existsSync(executable);
+    const modelReady = fs.existsSync(modelPath) && fs.statSync(modelPath).size >= model.size * 0.98;
+    return { supported, runtimeReady, modelReady, ready: supported && runtimeReady && modelReady, executable, modelPath, root };
+}
+
+module.exports = { ensureNativeWhisper, runWhisperChunk, inspectNativeWhisper };
 

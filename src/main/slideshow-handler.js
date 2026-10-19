@@ -16,6 +16,9 @@ const { getVisualOrientation, buildSmartStillImagePlacementFilter, buildFitPadFi
 const karaokeForcedAlignment = require('./karaoke-forced-alignment');
 const karaokeEngineManager = require('./karaoke-engine-manager');
 const { installMacEditingShortcuts } = require('./mac-editing-shortcuts');
+const { buildSlideshowAudioMix } = require('./slideshow-audio-mix');
+const { createSlideshowProgressRange } = require('./slideshow-progress');
+const { sourceAudioProfile, singleAudioMap, canBypassSlideshowAudioMix } = require('./slideshow-audio-policy');
 
 let newProjectWindow = null;
 let slideshowEditorWindow = null;
@@ -306,104 +309,19 @@ function getAiLanguage() {
     return langMap[currentLang] || 'English';
 }
 
-function requestGeminiVisualAnalysis(apiKey, visualInput, prompt, aiLang) {
-    return new Promise((resolve, reject) => {
-        let requestBody = null;
-        try {
-            let mimeType = 'image/jpeg';
-            let base64 = '';
-
-            if (typeof visualInput === 'string') {
-                const imageBuffer = fs.readFileSync(visualInput);
-                base64 = imageBuffer.toString('base64');
-            } else if (visualInput?.data) {
-                mimeType = visualInput.mimeType || mimeType;
-                base64 = visualInput.data;
-            } else {
-                throw new Error('Visual input is required.');
-            }
-
-            requestBody = JSON.stringify({
-                contents: [{
-                    role: 'user',
-                    parts: [
-                        {
-                            inline_data: {
-                                mime_type: mimeType,
-                                data: base64
-                            }
-                        },
-                        { text: prompt }
-                    ]
-                }],
-                systemInstruction: {
-                    parts: [{ text: `Reply only in ${aiLang}.` }]
-                },
-                generationConfig: {
-                    temperature: 0.2,
-                    maxOutputTokens: 4096
-                }
-            });
-        } catch (error) {
-            reject(error);
-            return;
-        }
-
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-        const urlObj = new URL(url);
-        const options = {
-            hostname: urlObj.hostname,
-            path: urlObj.pathname + urlObj.search,
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(requestBody)
-            }
-        };
-
-        const req = https.request(options, (res) => {
-            let data = '';
-
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-
-            res.on('end', () => {
-                try {
-                    const response = JSON.parse(data);
-                    if (response.error) {
-                        reject(new Error(response.error.message));
-                        return;
-                    }
-
-                    if (response.candidates && response.candidates[0] &&
-                        response.candidates[0].content &&
-                        response.candidates[0].content.parts) {
-                        const text = response.candidates[0].content.parts
-                            .map(p => p.text)
-                            .join('');
-                        resolve(text);
-                        return;
-                    }
-
-                    reject(new Error(t('runtime.slideshow_editor.invalid_api_response', 'Invalid API response.')));
-                } catch (error) {
-                    reject(new Error(t('runtime.slideshow_editor.api_response_parse_error', 'API response could not be processed: {error}', {
-                        error: error.message
-                    })));
-                }
-            });
-        });
-
-        req.on('error', (error) => {
-            reject(new Error(t('runtime.slideshow_editor.connection_error', 'Connection error: {error}', {
-                error: error.message
-            })));
-        });
-
-        req.write(requestBody);
-        req.end();
-    });
+async function requestVisualAnalysis(visualInput, prompt, aiLang, sender) {
+    const imageBase64 = typeof visualInput === 'string'
+        ? { mimeType: 'image/jpeg', data: fs.readFileSync(visualInput).toString('base64') } : visualInput;
+    try {
+        const result = await require('./ai-services').getService().request({
+            imageBase64, prompt, systemInstruction: `Reply only in ${aiLang}.`
+        }, { notify: provider => {
+            if (sender && !sender.isDestroyed()) sender.send('ai-services-notice', i18n.t('ai_services.fallback_notice', {
+                provider: require('./ai-services').providers[provider].name
+            }));
+        } });
+        return result.text;
+    } catch (error) { throw new Error(i18n.t(`ai_services.errors.${error.code || 'request'}`)); }
 }
 
 /**
@@ -878,12 +796,6 @@ function setupSlideshowHandlers(mainWindow) {
 
     // AI ile resim betimleme
     ipcMain.handle('describe-image-ai', async (event, imageInput) => {
-        const geminiHandler = require('./gemini-handler');
-        const apiKey = geminiHandler.getApiKey();
-
-        if (!apiKey) {
-            throw new Error(t('runtime.slideshow_editor.api_key_missing', 'API key was not found. Please enter the API key in AI settings first.'));
-        }
 
         const preparedAnalysis = await prepareImageForAnalysis(imageInput);
 
@@ -912,7 +824,7 @@ DETAILED: [detailed description]
 ORIENTATION: [CORRECT/ROTATE_LEFT/ROTATE_RIGHT/UNCERTAIN]
 ORIENTATION_NOTE: [short user-facing note]`;
         try {
-            const text = await requestGeminiVisualAnalysis(apiKey, preparedAnalysis.image.path, prompt, aiLang);
+            const text = await requestVisualAnalysis(preparedAnalysis.image.path, prompt, aiLang, event.sender);
 
             const shortMatch = text.match(/(?:SHORT|KISA):\s*(.+?)(?=(?:DETAILED|DETAYLI):|$)/is);
             const longMatch = text.match(/(?:DETAILED|DETAYLI):\s*(.+?)(?=(?:ORIENTATION|YON|YÖN):|(?:ORIENTATION_NOTE|YON_NOTU|YÖN_NOTU):|$)/is);
@@ -943,12 +855,6 @@ ORIENTATION_NOTE: [short user-facing note]`;
     });
 
     ipcMain.handle('describe-slideshow-preview-scene-ai', async (event, sceneInput) => {
-        const geminiHandler = require('./gemini-handler');
-        const apiKey = geminiHandler.getApiKey();
-
-        if (!apiKey) {
-            throw new Error(t('runtime.slideshow_editor.api_key_missing', 'API key was not found. Please enter the API key in AI settings first.'));
-        }
 
         const preparedAnalysis = await prepareImageForAnalysis({
             path: sceneInput?.imagePath,
@@ -995,7 +901,7 @@ CROP_RISK: [SAFE/POSSIBLE/UNCERTAIN]
 CROP_NOTE: [crop note]`;
 
         try {
-            const text = await requestGeminiVisualAnalysis(apiKey, preparedAnalysis.image.path, prompt, aiLang);
+            const text = await requestVisualAnalysis(preparedAnalysis.image.path, prompt, aiLang, event.sender);
 
             const shortMatch = text.match(/SHORT:\s*(.+?)(?=DETAILED:|$)/is);
             const detailedMatch = text.match(/DETAILED:\s*(.+?)(?=VISIBLE_TEXT:|ORIENTATION:|$)/is);
@@ -1044,12 +950,6 @@ CROP_NOTE: [crop note]`;
     });
 
     ipcMain.handle('describe-slideshow-preview-frame-ai', async (event, sceneInput) => {
-        const geminiHandler = require('./gemini-handler');
-        const apiKey = geminiHandler.getApiKey();
-
-        if (!apiKey) {
-            throw new Error(t('runtime.slideshow_editor.api_key_missing', 'API key was not found. Please enter the API key in AI settings first.'));
-        }
 
         const aiLang = getAiLanguage();
         const visibleTexts = Array.isArray(sceneInput?.visibleTexts) ? sceneInput.visibleTexts.filter(Boolean) : [];
@@ -1089,10 +989,10 @@ ORIENTATION_NOTE: [orientation note]
 CROP_RISK: [SAFE/POSSIBLE/UNCERTAIN]
 CROP_NOTE: [crop note]`;
 
-        const text = await requestGeminiVisualAnalysis(apiKey, {
+        const text = await requestVisualAnalysis({
             mimeType: dataMatch[1],
             data: dataMatch[2]
-        }, prompt, aiLang);
+        }, prompt, aiLang, event.sender);
 
         const shortMatch = text.match(/SHORT:\s*(.+?)(?=DETAILED:|$)/is);
         const detailedMatch = text.match(/DETAILED:\s*(.+?)(?=VISIBLE_TEXT:|ORIENTATION:|$)/is);
@@ -2003,7 +1903,8 @@ function buildMediaTimings(mediaItems, targetDuration = 0) {
     const placeSegment = (segmentItems, segmentEnd = null) => {
         if (!Array.isArray(segmentItems) || segmentItems.length === 0) return [];
 
-        const boundedEnd = Number.isFinite(Number(segmentEnd)) ? Math.max(cursor, Number(segmentEnd)) : null;
+        const boundedEnd = segmentEnd !== null && segmentEnd !== undefined && Number.isFinite(Number(segmentEnd))
+            ? Math.max(cursor, Number(segmentEnd)) : null;
         const availableDuration = boundedEnd !== null ? Math.max(0, boundedEnd - cursor) : 0;
         const fixedDuration = segmentItems.reduce((sum, item) => (
             isFlexibleAutoItem(item) ? sum : sum + getSlideshowMediaDuration(item)
@@ -2064,7 +1965,9 @@ function buildMediaTimings(mediaItems, targetDuration = 0) {
         cursor = Math.max(cursor, pinnedEnd);
     });
 
-    placeSegment(currentSegment, safeTargetDuration > cursor ? safeTargetDuration : null);
+    const trailingItems = placeSegment(currentSegment, safeTargetDuration > cursor ? safeTargetDuration : null);
+    // There is no next pinned interval here: retain photos that outlast the audio.
+    placeSegment(trailingItems);
 
     return results.sort((a, b) => {
         if (Number(a.start) !== Number(b.start)) return Number(a.start) - Number(b.start);
@@ -2558,18 +2461,16 @@ function buildSlideshowColorOutputOptions(metadata = {}, defaultToBt709 = true, 
 const DEFAULT_SLIDESHOW_COLOR_OPTIONS = buildSlideshowColorOutputOptions({}, true);
 
 function buildSingleAudioMap(inputIdx, audioStreamInfo, durationSeconds) {
-    const codec = String(audioStreamInfo?.codec_name || '').trim().toLowerCase();
-    const safeDuration = Number(durationSeconds || 0).toFixed(3);
+    return singleAudioMap(inputIdx, audioStreamInfo, durationSeconds);
+}
 
-    if (codec === 'aac') {
-        console.log('[Slideshow] Single audio track is already AAC. Copying audio stream.');
-        return `-map ${inputIdx}:a -c:a copy -t ${safeDuration}`;
+async function inspectSlideshowAudio(tracks, media = []) {
+    const streams = [];
+    for (const track of tracks) streams.push(await getPrimaryAudioStreamInfo(track.path));
+    for (const item of media) {
+        if (item.type === 'video' && !item.muteVideoAudio) streams.push(await getPrimaryVideoAudioStreamInfo(item.path));
     }
-
-    console.log('[Slideshow] Single audio track is not AAC. Re-encoding for iOS compatibility.', {
-        codec: codec || 'unknown'
-    });
-    return `-map ${inputIdx}:a -c:a aac -b:a 192k -ar 48000 -ac 2 -t ${safeDuration}`;
+    return { streams, profile: sourceAudioProfile(streams) };
 }
 
 /**
@@ -2587,6 +2488,9 @@ async function createSlideshowVideo(projectData, outputPath, parentWindow) {
     const prepared = await prepareSlideshowImages(projectData.images);
     const slideshowImages = prepared.images;
     const audioTracks = projectData.audioTracks || [];
+    const audioInspection = await inspectSlideshowAudio(audioTracks);
+    const audioProfile = { ...(projectData._slideshowAudioProfile || audioInspection.profile) };
+    if (projectData._losslessAudioIntermediate) audioProfile.encoding = audioProfile.intermediate;
     const singleAudioStreamInfo = audioTracks.length === 1
         ? await getPrimaryAudioStreamInfo(audioTracks[0].path)
         : null;
@@ -2687,10 +2591,10 @@ async function createSlideshowVideo(projectData, outputPath, parentWindow) {
                     const segLabel = `aseg${segIdx}`;
                     const delayMs = Math.round(timing.start * 1000);
 
-                    filterComplex += `[${inputIdx}:a]atrim=${audioOffset.toFixed(3)}:${(audioOffset + segDuration).toFixed(3)},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo`;
+                    filterComplex += `[${inputIdx}:a]atrim=${audioOffset.toFixed(3)}:${(audioOffset + segDuration).toFixed(3)},asetpts=PTS-STARTPTS,${audioProfile.filter}`;
 
                     if (delayMs > 0) {
-                        filterComplex += `,adelay=${delayMs}|${delayMs}`;
+                        filterComplex += `,adelay=${Array(audioProfile.channels).fill(delayMs).join('|')}`;
                     }
 
                     filterComplex += `[${segLabel}]; `;
@@ -2704,7 +2608,7 @@ async function createSlideshowVideo(projectData, outputPath, parentWindow) {
             globalAudioTracks.forEach((_, i) => {
                 const gInputIdx = globalAudioInputStart + i;
                 const gLabel = `gaudio${i}`;
-                filterComplex += `[${gInputIdx}:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[${gLabel}]; `;
+                filterComplex += `[${gInputIdx}:a]${audioProfile.filter},aresample=${audioProfile.sampleRate}[${gLabel}]; `;
                 audioSegments.push(gLabel);
             });
 
@@ -2714,17 +2618,10 @@ async function createSlideshowVideo(projectData, outputPath, parentWindow) {
                 if (audioSegments.length === 1) {
                     filterComplex += `[${audioSegments[0]}]atrim=0:${currentTime.toFixed(3)},asetpts=PTS-STARTPTS[outa]`;
                 } else {
-                    audioSegments.forEach(seg => {
-                        filterComplex += `[${seg}]`;
-                    });
-                    // amix varsayılan olarak sesi giriş sayısına böler,
-                    // volume filtresiyle telafi ediyoruz
-                    const volBoost = audioSegments.length;
-                    filterComplex += `amix=inputs=${audioSegments.length}:duration=longest[amixed]; `;
-                    filterComplex += `[amixed]volume=${volBoost}[outa_pre]; `;
+                    filterComplex += `${buildSlideshowAudioMix(audioSegments, 'outa_pre', currentTime, audioProfile)}; `;
                     filterComplex += `[outa_pre]atrim=0:${currentTime.toFixed(3)},asetpts=PTS-STARTPTS[outa]`;
                 }
-                audioMap = '-map "[outa]" -c:a aac -b:a 192k -ar 48000 -ac 2';
+                audioMap = `-map "[outa]" ${audioProfile.encoding}`;
             }
 
             filterComplex = filterComplex.trim();
@@ -2772,16 +2669,18 @@ async function createSlideshowVideo(projectData, outputPath, parentWindow) {
             if (hasAudio) {
                 if (audioTracks.length === 1) {
                     const inputIdx = imageCount;
-                    audioMap = buildSingleAudioMap(inputIdx, singleAudioStreamInfo, currentTime);
+                    audioMap = projectData._losslessAudioIntermediate
+                        ? `-map ${inputIdx}:a:0 ${audioProfile.intermediate} -t ${currentTime.toFixed(3)}`
+                        : buildSingleAudioMap(inputIdx, singleAudioStreamInfo, currentTime);
                 } else {
                     let audioConcats = '';
                     audioTracks.forEach((_, i) => {
                         const inputIdx = imageCount + i;
-                        filterComplex += `; [${inputIdx}:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[aud${i}]`;
+                        filterComplex += `; [${inputIdx}:a]${audioProfile.filter},aresample=${audioProfile.sampleRate}[aud${i}]`;
                         audioConcats += `[aud${i}]`;
                     });
                     filterComplex += `; ${audioConcats}concat=n=${audioTracks.length}:v=0:a=1[outa_pre]; [outa_pre]atrim=0:${currentTime.toFixed(3)},asetpts=PTS-STARTPTS[outa]`;
-                    audioMap = '-map "[outa]" -c:a aac -b:a 192k -ar 48000 -ac 2';
+                    audioMap = `-map "[outa]" ${audioProfile.encoding}`;
                 }
             }
 
@@ -2837,6 +2736,9 @@ async function createMixedMediaSlideshowVideo(projectData, outputPath, parentWin
         item?.type === 'video' ? item : { ...item, ...(preparedImageMap.get(item.id) || {}) }
     ));
     const audioTracks = Array.isArray(projectData.audioTracks) ? projectData.audioTracks : [];
+    const audioInspection = await inspectSlideshowAudio(audioTracks, normalizedMediaItems);
+    const audioProfile = audioInspection.profile;
+    const bypassAudioMix = canBypassSlideshowAudioMix(audioTracks, normalizedMediaItems);
     const targetAudioDuration = audioTracks.reduce((sum, track) => sum + Math.max(0, Number(track?.duration || 0)), 0);
     const mediaTimings = buildMediaTimings(normalizedMediaItems, targetAudioDuration);
     const imageTimings = mediaTimings.filter(item => item?.type !== 'video');
@@ -2851,21 +2753,8 @@ async function createMixedMediaSlideshowVideo(projectData, outputPath, parentWin
         for (let index = 0; index < mediaTimings.length; index++) {
             const item = mediaTimings[index];
             const itemStart = Math.max(0, Number(item.start || 0));
-            const gapDuration = itemStart - timelineCursor;
-            if (gapDuration > 0.05) {
-                const gapSegmentPath = path.join(os.tmpdir(), `slideshow_media_gap_${Date.now()}_${index}.mp4`);
-                tempPaths.push(gapSegmentPath);
-                const gapCmd = `"${ffmpegPath}" -y -f lavfi -i color=c=black:s=${width}x${height}:d=${gapDuration.toFixed(3)} -f lavfi -t ${gapDuration.toFixed(3)} -i anullsrc=channel_layout=stereo:sample_rate=48000 -map 0:v -map 1:a -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${DEFAULT_SLIDESHOW_COLOR_OPTIONS} -r 25 -c:a aac -b:a 192k -ar 48000 -ac 2 -shortest "${gapSegmentPath}"`;
-                await runExecCommandPromise(gapCmd, gapSegmentPath);
-                segmentPaths.push(gapSegmentPath);
-                timelineCursor += gapDuration;
-            }
-
-            const segmentPath = path.join(os.tmpdir(), `slideshow_media_segment_${Date.now()}_${index}.mp4`);
-            tempPaths.push(segmentPath);
-
-            if (parentWindow) {
-                const percent = Math.min(70, Math.round(((index + 1) / Math.max(1, mediaTimings.length)) * 70));
+            const reportPart = percent => {
+                if (!parentWindow || parentWindow.isDestroyed()) return;
                 parentWindow.webContents.send('export-progress', {
                     status: 'progress',
                     message: t('runtime.slideshow_editor.batch_progress', 'Processing part {current} of {total}...', {
@@ -2874,7 +2763,32 @@ async function createMixedMediaSlideshowVideo(projectData, outputPath, parentWin
                     }),
                     percent
                 });
+            };
+            const preparationPercent = time => 70 * Math.min(1, time / Math.max(0.1, mediaDuration));
+            const gapDuration = itemStart - timelineCursor;
+            if (gapDuration > 0.05) {
+                const gapSegmentPath = path.join(os.tmpdir(), `slideshow_media_gap_${Date.now()}_${index}.mov`);
+                tempPaths.push(gapSegmentPath);
+                const gapCmd = `"${ffmpegPath}" -y -f lavfi -i color=c=black:s=${width}x${height}:d=${gapDuration.toFixed(3)} -f lavfi -t ${gapDuration.toFixed(3)} -i anullsrc=channel_layout=${audioProfile.layout}:sample_rate=${audioProfile.sampleRate} -map 0:v -map 1:a -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${DEFAULT_SLIDESHOW_COLOR_OPTIONS} -r 25 ${audioProfile.intermediate} -shortest "${gapSegmentPath}"`;
+                const gapProgress = createSlideshowProgressRange(reportPart, preparationPercent(timelineCursor), preparationPercent(itemStart));
+                gapProgress(0);
+                await runExecCommandPromise(gapCmd, gapSegmentPath, {
+                    totalDuration: gapDuration,
+                    onProgress: gapProgress
+                });
+                gapProgress(100);
+                segmentPaths.push(gapSegmentPath);
+                timelineCursor += gapDuration;
             }
+
+            const segmentPath = path.join(os.tmpdir(), `slideshow_media_segment_${Date.now()}_${index}.mov`);
+            tempPaths.push(segmentPath);
+
+            const segmentDuration = item.type === 'video'
+                ? Math.max(0.1, Number(item.duration || item.originalDuration || 5))
+                : Math.max(0.1, Number(item.duration || 5));
+            const partProgress = createSlideshowProgressRange(reportPart, preparationPercent(itemStart), preparationPercent(itemStart + segmentDuration));
+            partProgress(0);
 
             const placementFilter = buildMixedMediaPlacementFilter(item, width, height, projectData);
             let cmd = `"${ffmpegPath}" -y `;
@@ -2895,12 +2809,12 @@ async function createMixedMediaSlideshowVideo(projectData, outputPath, parentWin
                 const hasVideoAudio = Boolean(sourceAudioStream);
 
                 if (hasVideoAudio) {
-                    const audioFilter = `aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000${freezeTailDuration > 0 ? ',apad' : ''},atrim=0:${targetSegmentDuration.toFixed(3)},asetpts=PTS-STARTPTS`;
+                    const audioFilter = `${audioProfile.filter},aresample=${audioProfile.sampleRate}${freezeTailDuration > 0 ? ',apad' : ''},atrim=0:${targetSegmentDuration.toFixed(3)},asetpts=PTS-STARTPTS`;
                     cmd += `-i "${item.path}" `;
-                    cmd += `-vf "${videoFilter}" -af "${audioFilter}" -t ${targetSegmentDuration.toFixed(3)} -map 0:v -map 0:a? -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${sourceColorOptions} -r 25 -c:a aac -b:a 192k -ar 48000 -ac 2 "${segmentPath}"`;
+                    cmd += `-vf "${videoFilter}" -af "${audioFilter}" -t ${targetSegmentDuration.toFixed(3)} -map 0:v -map 0:a? -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${sourceColorOptions} -r 25 ${audioProfile.intermediate} "${segmentPath}"`;
                 } else {
-                    cmd += `-i "${item.path}" -f lavfi -t ${targetSegmentDuration.toFixed(3)} -i anullsrc=channel_layout=stereo:sample_rate=48000 `;
-                    cmd += `-vf "${videoFilter}" -t ${targetSegmentDuration.toFixed(3)} -map 0:v -map 1:a -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${sourceColorOptions} -r 25 -c:a aac -b:a 192k -ar 48000 -ac 2 "${segmentPath}"`;
+                    cmd += `-i "${item.path}" -f lavfi -t ${targetSegmentDuration.toFixed(3)} -i anullsrc=channel_layout=${audioProfile.layout}:sample_rate=${audioProfile.sampleRate} `;
+                    cmd += `-vf "${videoFilter}" -t ${targetSegmentDuration.toFixed(3)} -map 0:v -map 1:a -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${sourceColorOptions} -r 25 ${audioProfile.intermediate} "${segmentPath}"`;
                 }
             } else {
                 const imageDuration = Math.max(0.1, Number(item.duration || 5));
@@ -2911,15 +2825,19 @@ async function createMixedMediaSlideshowVideo(projectData, outputPath, parentWin
                         `"${ffmpegPath}" -y -i "${item.path}" -frames:v 1 -vf "${placementFilter}" "${renderedStillPath}"`,
                         renderedStillPath
                     );
-                    cmd += `-loop 1 -t ${imageDuration.toFixed(3)} -i "${renderedStillPath}" -f lavfi -t ${imageDuration.toFixed(3)} -i anullsrc=channel_layout=stereo:sample_rate=48000 `;
-                    cmd += `-map 0:v -map 1:a -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${DEFAULT_SLIDESHOW_COLOR_OPTIONS} -r 25 -c:a aac -b:a 192k -ar 48000 -ac 2 -shortest "${segmentPath}"`;
+                    cmd += `-loop 1 -t ${imageDuration.toFixed(3)} -i "${renderedStillPath}" -f lavfi -t ${imageDuration.toFixed(3)} -i anullsrc=channel_layout=${audioProfile.layout}:sample_rate=${audioProfile.sampleRate} `;
+                    cmd += `-map 0:v -map 1:a -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${DEFAULT_SLIDESHOW_COLOR_OPTIONS} -r 25 ${audioProfile.intermediate} -shortest "${segmentPath}"`;
                 } else {
-                    cmd += `-loop 1 -t ${imageDuration.toFixed(3)} -i "${item.path}" -f lavfi -t ${imageDuration.toFixed(3)} -i anullsrc=channel_layout=stereo:sample_rate=48000 `;
-                    cmd += `-vf "${placementFilter}" -map 0:v -map 1:a -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${DEFAULT_SLIDESHOW_COLOR_OPTIONS} -r 25 -c:a aac -b:a 192k -ar 48000 -ac 2 -shortest "${segmentPath}"`;
+                    cmd += `-loop 1 -t ${imageDuration.toFixed(3)} -i "${item.path}" -f lavfi -t ${imageDuration.toFixed(3)} -i anullsrc=channel_layout=${audioProfile.layout}:sample_rate=${audioProfile.sampleRate} `;
+                    cmd += `-vf "${placementFilter}" -map 0:v -map 1:a -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${DEFAULT_SLIDESHOW_COLOR_OPTIONS} -r 25 ${audioProfile.intermediate} -shortest "${segmentPath}"`;
                 }
             }
 
-            await runExecCommandPromise(cmd, segmentPath);
+            await runExecCommandPromise(cmd, segmentPath, {
+                totalDuration: segmentDuration,
+                onProgress: partProgress
+            });
+            partProgress(100);
             segmentPaths.push(segmentPath);
             timelineCursor = Math.max(timelineCursor, Number(item.end || (itemStart + getSlideshowMediaDuration(item))));
         }
@@ -2928,21 +2846,25 @@ async function createMixedMediaSlideshowVideo(projectData, outputPath, parentWin
         tempPaths.push(concatListPath);
         fs.writeFileSync(concatListPath, segmentPaths.map(filePath => `file '${filePath.replace(/\\/g, '/')}'`).join('\n'), 'utf8');
 
-        const baseConcatPath = path.join(os.tmpdir(), `slideshow_media_base_${Date.now()}.mp4`);
+        const baseConcatPath = path.join(os.tmpdir(), `slideshow_media_base_${Date.now()}.mov`);
         tempPaths.push(baseConcatPath);
 
-        if (parentWindow) {
+        const concatProgress = createSlideshowProgressRange(percent => {
+            if (!parentWindow || parentWindow.isDestroyed()) return;
             parentWindow.webContents.send('export-progress', {
                 status: 'progress',
-                message: t('runtime.slideshow_editor.merging_parts_80', 'Merging parts (80%)...'),
-                percent: 75
+                message: t('runtime.slideshow_editor.merging_parts', 'Merging parts...'),
+                percent
             });
-        }
+        }, 70, 80);
+        concatProgress(0);
 
         await runExecCommandPromise(
             `"${ffmpegPath}" -y -f concat -safe 0 -i "${concatListPath}" -c copy "${baseConcatPath}"`,
-            baseConcatPath
+            baseConcatPath,
+            { totalDuration: mediaDuration, onProgress: concatProgress }
         );
+        concatProgress(100);
 
         const pairedAudioIds = new Set(imageTimings.filter(item => item.pairedAudioId).map(item => item.pairedAudioId));
         const globalAudioTracks = audioTracks.filter(track => !pairedAudioIds.has(track.id));
@@ -2966,62 +2888,69 @@ async function createMixedMediaSlideshowVideo(projectData, outputPath, parentWin
         filterComplex += karaokeFilter.filterComplex;
         videoOutputLabel = karaokeFilter.outputLabel;
 
-        filterComplex += `[0:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[baseaud]; `;
+        let finalAudioMap;
+        if (bypassAudioMix) {
+            finalAudioMap = buildSingleAudioMap(1, audioInspection.streams[0], totalDuration);
+            console.log('[Slideshow] Unmodified single-track audio:', finalAudioMap);
+        } else {
+            filterComplex += `[0:a]${audioProfile.filter},aresample=${audioProfile.sampleRate}[baseaud]; `;
 
-        const backgroundSegments = [];
-        let pairedSegIndex = 0;
-        pairedAudioIds.forEach((audioId) => {
-            const inputIdx = audioInputMap.get(audioId);
-            if (inputIdx === undefined) return;
-            const pairedImages = imageTimings.filter(item => item.pairedAudioId === audioId);
-            let audioOffset = 0;
-            pairedImages.forEach((item) => {
-                const segLabel = `pbg${pairedSegIndex++}`;
-                const delayMs = Math.round(item.start * 1000);
-                filterComplex += `[${inputIdx}:a]atrim=${audioOffset.toFixed(3)}:${(audioOffset + item.duration).toFixed(3)},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo`;
-                if (delayMs > 0) {
-                    filterComplex += `,adelay=${delayMs}|${delayMs}`;
-                }
-                filterComplex += `[${segLabel}]; `;
-                backgroundSegments.push(segLabel);
-                audioOffset += item.duration;
+            const backgroundSegments = [];
+            let pairedSegIndex = 0;
+            pairedAudioIds.forEach((audioId) => {
+                const inputIdx = audioInputMap.get(audioId);
+                if (inputIdx === undefined) return;
+                const pairedImages = imageTimings.filter(item => item.pairedAudioId === audioId);
+                let audioOffset = 0;
+                pairedImages.forEach((item) => {
+                    const segLabel = `pbg${pairedSegIndex++}`;
+                    const delayMs = Math.round(item.start * 1000);
+                    filterComplex += `[${inputIdx}:a]atrim=${audioOffset.toFixed(3)}:${(audioOffset + item.duration).toFixed(3)},asetpts=PTS-STARTPTS,${audioProfile.filter}`;
+                    if (delayMs > 0) {
+                        filterComplex += `,adelay=${Array(audioProfile.channels).fill(delayMs).join('|')}`;
+                    }
+                    filterComplex += `[${segLabel}]; `;
+                    backgroundSegments.push(segLabel);
+                    audioOffset += item.duration;
+                });
             });
-        });
 
-        if (globalAudioTracks.length === 1) {
-            const inputIdx = audioInputMap.get(globalAudioTracks[0].id);
-            filterComplex += `[${inputIdx}:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000,atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[gaud0]; `;
-            backgroundSegments.push('gaud0');
-        } else if (globalAudioTracks.length > 1) {
-            let concatInputs = '';
-            globalAudioTracks.forEach((track, index) => {
-                const inputIdx = audioInputMap.get(track.id);
-                filterComplex += `[${inputIdx}:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[gaudsrc${index}]; `;
-                concatInputs += `[gaudsrc${index}]`;
-            });
-            filterComplex += `${concatInputs}concat=n=${globalAudioTracks.length}:v=0:a=1[gaud_concat_pre]; `;
-            filterComplex += `[gaud_concat_pre]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[gaud_concat]; `;
-            backgroundSegments.push('gaud_concat');
-        }
-
-        let audioOutputLabel = 'baseaud';
-        if (backgroundSegments.length > 0) {
-            if (backgroundSegments.length === 1) {
-                filterComplex += `[${backgroundSegments[0]}]anull[bgaud_pre]; `;
-            } else {
-                const backgroundMixInputs = backgroundSegments.map(label => `[${label}]`).join('');
-                filterComplex += `${backgroundMixInputs}amix=inputs=${backgroundSegments.length}:duration=longest:dropout_transition=0[bgaud_pre]; `;
+            if (globalAudioTracks.length === 1) {
+                const inputIdx = audioInputMap.get(globalAudioTracks[0].id);
+                filterComplex += `[${inputIdx}:a]${audioProfile.filter},aresample=${audioProfile.sampleRate},atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[gaud0]; `;
+                backgroundSegments.push('gaud0');
+            } else if (globalAudioTracks.length > 1) {
+                let concatInputs = '';
+                globalAudioTracks.forEach((track, index) => {
+                    const inputIdx = audioInputMap.get(track.id);
+                    filterComplex += `[${inputIdx}:a]${audioProfile.filter},aresample=${audioProfile.sampleRate}[gaudsrc${index}]; `;
+                    concatInputs += `[gaudsrc${index}]`;
+                });
+                filterComplex += `${concatInputs}concat=n=${globalAudioTracks.length}:v=0:a=1[gaud_concat_pre]; `;
+                filterComplex += `[gaud_concat_pre]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[gaud_concat]; `;
+                backgroundSegments.push('gaud_concat');
             }
 
-            const duckingFilters = buildBackgroundAudioDuckingFilters('bgaud_pre', mediaTimings);
-            filterComplex += `${duckingFilters.filterComplex}; `;
+            let audioOutputLabel = 'baseaud';
+            if (backgroundSegments.length > 0) {
+                if (backgroundSegments.length === 1) {
+                    filterComplex += `[${backgroundSegments[0]}]anull[bgaud_pre]; `;
+                } else {
+                    filterComplex += `${buildSlideshowAudioMix(backgroundSegments, 'bgaud_pre', totalDuration, audioProfile)}; `;
+                }
 
-            filterComplex += `[baseaud][${duckingFilters.outputLabel}]amix=inputs=2:duration=longest:dropout_transition=0[aout_pre]; `;
-            filterComplex += `[aout_pre]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[aout]; `;
-            audioOutputLabel = 'aout';
-        } else {
-            filterComplex += `[baseaud]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[aout]; `;
-            audioOutputLabel = 'aout';
+                const duckingFilters = buildBackgroundAudioDuckingFilters('bgaud_pre', mediaTimings);
+                filterComplex += `${duckingFilters.filterComplex}; `;
+
+                filterComplex += `${buildSlideshowAudioMix(['baseaud', duckingFilters.outputLabel], 'aout_pre', totalDuration, audioProfile)}; `;
+                filterComplex += `[aout_pre]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[aout]; `;
+                audioOutputLabel = 'aout';
+            } else {
+                filterComplex += `[baseaud]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[aout]; `;
+                audioOutputLabel = 'aout';
+            }
+
+            finalAudioMap = `-map "[${audioOutputLabel}]" ${audioProfile.encoding}`;
         }
 
         const mixedFilterPath = path.join(os.tmpdir(), `slideshow_media_fc_${Date.now()}.txt`);
@@ -3038,7 +2967,7 @@ async function createMixedMediaSlideshowVideo(projectData, outputPath, parentWin
             console.warn('[Slideshow] Failed to append mixed filter script to log:', error.message);
         }
 
-        finalCmd += `-filter_complex_script "${mixedFilterPath}" -map "[${videoOutputLabel}]" -map "[${audioOutputLabel}]" -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${DEFAULT_SLIDESHOW_COLOR_OPTIONS} -r 25 -c:a aac -b:a 192k -ar 48000 -ac 2 "${outputPath}"`;
+        finalCmd += `-filter_complex_script "${mixedFilterPath}" -map "[${videoOutputLabel}]" ${finalAudioMap} -c:v libx264 -preset faster -crf 23 -pix_fmt yuv420p ${DEFAULT_SLIDESHOW_COLOR_OPTIONS} -r 25 "${outputPath}"`;
 
         const onProgress = parentWindow ? (percent) => {
             const globalPercent = 80 + Math.round(percent * 0.19);
@@ -3081,6 +3010,7 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
     const totalImages = projectData.images.length;
     const [width, height] = projectData.aspectRatio === '16:9' ? [1920, 1080] : [1080, 1920];
     const allAudioTracks = projectData.audioTracks || [];
+    const audioProfile = (await inspectSlideshowAudio(allAudioTracks)).profile;
     const singleGlobalAudioInfo = allAudioTracks.length === 1
         ? await getPrimaryAudioStreamInfo(allAudioTracks[0].path)
         : null;
@@ -3092,7 +3022,7 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
         for (let i = 0; i < totalImages; i += BATCH_SIZE) {
             const batchImages = projectData.images.slice(i, i + BATCH_SIZE);
             const batchIndex = Math.floor(i / BATCH_SIZE);
-            const batchPath = path.join(tempDir, `batch_${Date.now()}_${batchIndex}.mp4`);
+            const batchPath = path.join(tempDir, `batch_${Date.now()}_${batchIndex}.mov`);
 
             console.log(`Batch ${batchIndex + 1} işleniyor (${batchImages.length} resim)...`);
 
@@ -3153,6 +3083,8 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
 
             const batchConfig = {
                 ...projectData,
+                _losslessAudioIntermediate: true,
+                _slideshowAudioProfile: audioProfile,
                 images: batchImages,
                 audioTracks: batchAudioTracks,
                 textOverlays: batchTextOverlays
@@ -3211,28 +3143,26 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
         if (hasPairedAudio && !hasAudio) {
             // Eşlenmiş sesler batch'lerde zaten işlendi, global ses yok
             // Video'nun sesini koru (batch'lerden gelen)
-            audioMap = '-map 0:a? -c:a aac -b:a 192k -ar 48000 -ac 2';
+            audioMap = `-map 0:a? ${audioProfile.encoding}`;
         } else if (hasAudio) {
             if (hasPairedAudio) {
                 // Batch'lerdeki ses var + global ses var: mix lazım
                 let audioConcats = '';
                 audioTracks.forEach((_, i) => {
                     const inputIdx = i + 1; // 0 video (concat), 1+ audio
-                    filterComplex += `[${inputIdx}:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[gaud${i}]; `;
+                    filterComplex += `[${inputIdx}:a]${audioProfile.filter},aresample=${audioProfile.sampleRate}[gaud${i}]; `;
                     audioConcats += `[gaud${i}]`;
                 });
                 if (audioTracks.length === 1) {
-                    filterComplex += `[0:a]aformat=sample_rates=48000:channel_layouts=stereo[batchaud]; `;
-                    filterComplex += `[batchaud]${audioConcats}amix=inputs=2:duration=longest[amixed]; `;
-                    filterComplex += `[amixed]volume=2[outa_pre]; `;
+                    filterComplex += `[0:a]${audioProfile.filter}[batchaud]; `;
+                    filterComplex += `${buildSlideshowAudioMix(['batchaud', 'gaud0'], 'outa_pre', totalDuration, audioProfile)}; `;
                 } else {
                     filterComplex += `${audioConcats}concat=n=${audioTracks.length}:v=0:a=1[gaud_concat]; `;
-                    filterComplex += `[0:a]aformat=sample_rates=48000:channel_layouts=stereo[batchaud]; `;
-                    filterComplex += `[batchaud][gaud_concat]amix=inputs=2:duration=longest[amixed]; `;
-                    filterComplex += `[amixed]volume=2[outa_pre]; `;
+                    filterComplex += `[0:a]${audioProfile.filter}[batchaud]; `;
+                    filterComplex += `${buildSlideshowAudioMix(['batchaud', 'gaud_concat'], 'outa_pre', totalDuration, audioProfile)}; `;
                 }
                 filterComplex += `[outa_pre]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[outa]`;
-                audioMap = '-map "[outa]" -c:a aac -b:a 192k -ar 48000 -ac 2';
+                audioMap = `-map "[outa]" ${audioProfile.encoding}`;
             } else if (audioTracks.length === 1) {
                 audioMap = buildSingleAudioMap(1, singleGlobalAudioInfo, totalDuration);
             } else {
@@ -3240,11 +3170,11 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
                 let audioConcats = '';
                 audioTracks.forEach((_, i) => {
                     const inputIdx = i + 1; // 0 video, 1+ audio
-                    filterComplex += `[${inputIdx}:a]aformat=sample_rates=48000:channel_layouts=stereo,aresample=48000[aud${i}]; `;
+                    filterComplex += `[${inputIdx}:a]${audioProfile.filter},aresample=${audioProfile.sampleRate}[aud${i}]; `;
                     audioConcats += `[aud${i}]`;
                 });
                 filterComplex += `${audioConcats}concat=n=${audioTracks.length}:v=0:a=1[outa_pre]; [outa_pre]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS[outa]`;
-                audioMap = '-map "[outa]" -c:a aac -b:a 192k -ar 48000 -ac 2';
+                audioMap = `-map "[outa]" ${audioProfile.encoding}`;
             }
         }
 
@@ -3265,12 +3195,12 @@ async function createSlideshowVideoBatched(projectData, outputPath, parentWindow
             cmd += `-filter_complex_script "${fcMergePath}" ${videoMap} ${audioMap} "${outputPath}"`;
         } else {
             // filterComplex yok (ya ses yok, ya da passthrough audio)
-            if (hasAudio && audioMap) {
+            if (audioMap) {
                 // Passthrough Audio + Video Copy
                 cmd += `${videoMap} ${audioMap} "${outputPath}"`;
             } else {
                 // Sadece video
-                cmd += `-c:v copy "${outputPath}"`;
+                cmd += `${videoMap} -an "${outputPath}"`;
             }
         }
 

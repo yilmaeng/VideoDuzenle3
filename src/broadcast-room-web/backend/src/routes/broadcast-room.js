@@ -5,6 +5,9 @@ const path = require('path');
 const { RoomServiceClient } = require('livekit-server-sdk');
 const { buildIdentity, createJoinToken } = require('../services/token-service');
 const { createParticipantAvatarStore } = require('../services/participant-avatar-store');
+const { isRoomOwner, publicRoomPayload, createParticipantSessions } = require('../services/room-authorization');
+const { createSystemAdminAccounts } = require('./system-admin-accounts');
+const { createParticipantPresence } = require('../services/participant-presence');
 
 const ADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const LOCAL_RECORDING_RETENTION_MS = 72 * 60 * 60 * 1000;
@@ -14,6 +17,50 @@ function createBroadcastRoomRouter({ config, roomStore }) {
     const inviteBaseUrl = `${config.appBaseUrl}${config.broadcastRoomBasePath}`;
     const adminSessions = new Map();
     const roomEventClients = new Map();
+    const participantSessions = createParticipantSessions();
+    const webHostIdentities = new Set();
+    const ownerActions = new Set(['waiting-list', 'waiting-decision', 'host-token', 'room-settings', 'participant-controls', 'all-guest-controls', 'scene-state', 'live-caption', 'translation-audio', 'accessible-share', 'participant-remove']);
+    const selfActions = new Set(['participant-state', 'participant-avatar', 'participant-role-token', 'chat-message', 'hand-raise', 'leave']);
+    router.use('/broadcast-room/admin/accounts', createSystemAdminAccounts({ config, roomStore,
+        accounts: () => router.accounts, authorize: requireAdminSession }));
+    router.use((req, res, next) => {
+        const json = res.json.bind(res);
+        res.json = (payload) => {
+            const safe = publicRoomPayload(payload);
+            if (safe?.token && safe?.participantIdentity && safe?.roomId) {
+                participantSessions.prune(roomStore);
+                safe.participantApiKey = participantSessions.issue(safe.roomId, safe.participantIdentity);
+            }
+            return json(safe);
+        };
+        if (req.method !== 'POST') return next();
+        const action = req.path.split('/').filter(Boolean).pop();
+        if (action === 'join-token' || action.startsWith('waiting-')) res.set('Cache-Control', 'no-store');
+        const ending = ['close', 'end-session'].includes(action);
+        if (!ownerActions.has(action) && !selfActions.has(action) && !ending) return next();
+        let roomId;
+        try {
+            roomId = ending ? decodeURIComponent(req.path.split('/').filter(Boolean).slice(-2)[0]) : String(req.body?.roomId || '').trim();
+        } catch (_error) {
+            return res.status(400).json({ success: false, error: 'room_id_required' });
+        }
+        const room = roomStore.getRoom(roomId);
+        if (!room) return res.status(404).json({ success: false, error: 'room_not_found' });
+        if (verifyRoomOwnerRequest(req, room)) return next();
+        if (['waiting-list', 'waiting-decision'].includes(action) && router.isTemporaryManager(roomId,
+            String(req.get('X-EVD-Participant-Identity') || req.body?.identity || ''),
+            String(req.get('X-EVD-Participant-Key') || req.body?.participantApiKey || ''))) return next();
+        if (ownerActions.has(action) || ending) return res.status(403).json({ success: false, error: 'room_owner_required' });
+        const identity = String(action === 'chat-message' ? req.body?.senderIdentity || '' : req.body?.identity || '').trim();
+        const key = String(req.get('X-EVD-Participant-Key') || req.body?.participantApiKey || '');
+        if (!participantSessions.verify(room, identity, key)) return res.status(403).json({ success: false, error: 'participant_session_required' });
+        if (action === 'chat-message') {
+            const participant = room.participants.find((item) => item.identity === identity);
+            req.body.senderName = participant.displayName;
+            req.body.senderRole = participant.role;
+        }
+        next();
+    });
     const livekitServiceUrl = String(config.livekitUrl || '')
         .replace(/^wss:/i, 'https:')
         .replace(/^ws:/i, 'http:');
@@ -69,12 +116,12 @@ function createBroadcastRoomRouter({ config, roomStore }) {
     }
 
     function getRoomOwnerKey(req) {
+        if (req.authenticatedWebOwnerRoomId) return roomStore.getRoom(req.authenticatedWebOwnerRoomId)?.settings?.ownerKey || '';
         return String(req.get('X-EVD-Room-Owner-Key') || req.body?.ownerKey || req.query?.ownerKey || '').trim();
     }
 
     function verifyRoomOwnerRequest(req, room) {
-        const expectedOwnerKey = String(room?.settings?.ownerKey || '').trim();
-        return !expectedOwnerKey || getRoomOwnerKey(req) === expectedOwnerKey;
+        return req.authenticatedWebOwnerRoomId === room?.roomId || isRoomOwner(room, getRoomOwnerKey(req));
     }
 
     function requireRoomOwnerRequest(req, res, room) {
@@ -101,7 +148,7 @@ function createBroadcastRoomRouter({ config, roomStore }) {
     function sendServerEvent(res, eventName, payload = {}) {
         try {
             res.write(`event: ${eventName}\n`);
-            res.write(`data: ${JSON.stringify(payload)}\n\n`);
+            res.write(`data: ${JSON.stringify(publicRoomPayload(payload))}\n\n`);
         } catch (_error) {
             // Connection cleanup is handled by the request close event.
         }
@@ -791,6 +838,11 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             res.status(403).json({ success: false, error: opened?.error || 'webinar_host_key_invalid' });
             return;
         }
+        // Possession of the webinar host key authorizes binding this host's local key.
+        if (getRoomOwnerKey(req)) {
+            opened.room.settings.ownerKey = getRoomOwnerKey(req);
+            roomStore.savePersistentRooms();
+        }
         res.json({
             success: true,
             roomId: opened.room.roomId,
@@ -807,6 +859,7 @@ function createBroadcastRoomRouter({ config, roomStore }) {
     });
 
     router.post('/broadcast-room/create', (req, res) => {
+        if (!getRoomOwnerKey(req)) return res.status(403).json({ success: false, error: 'room_owner_required' });
         const hostDisplayName = String(req.body?.hostDisplayName || '').trim() || 'Host';
         const title = String(req.body?.title || '').trim();
         const scheduledAt = req.body?.scheduledAt || null;
@@ -816,6 +869,8 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             scheduledAt,
             inviteBaseUrl,
             persistentRoom: req.body?.persistentRoom === true,
+            waitingRoomEnabled: req.body?.waitingRoomEnabled,
+            waitingRoomDecision: req.body?.waitingRoomDecision,
             ownerKey: getRoomOwnerKey(req),
             roomSlug: req.body?.roomSlug,
             password: req.body?.password,
@@ -845,6 +900,7 @@ function createBroadcastRoomRouter({ config, roomStore }) {
     });
 
     router.post('/broadcast-room/host-token', async (req, res, next) => {
+        let webHostReservation = null;
         try {
             const roomId = String(req.body?.roomId || '').trim();
             const hostDisplayName = String(req.body?.hostDisplayName || '').trim() || 'Host';
@@ -853,6 +909,15 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             if (!room || !room.active) {
                 res.status(404).json({ success: false, error: 'room_not_found' });
                 return;
+            }
+            // Reserve synchronously before issuing the asynchronous JWT. Never
+            // replace a desktop host or a simultaneous web host request.
+            if (req.authenticatedWebOwnerRoomId) {
+                if (room.webHostJoinPending || roomStore.roomHasConnectedHost(room)) {
+                    return res.status(409).json({ success: false, error: 'meeting_host_present' });
+                }
+                room.webHostJoinPending = true;
+                webHostReservation = room;
             }
             room.settings = {
                 ...room.settings,
@@ -865,8 +930,10 @@ function createBroadcastRoomRouter({ config, roomStore }) {
                 roomName: room.roomId,
                 identity,
                 displayName: hostDisplayName,
-                role: 'host'
+                role: 'host',
+                allowAdministration: !req.authenticatedWebOwnerRoomId
             });
+            if (req.authenticatedWebOwnerRoomId) webHostIdentities.add(identity);
 
             room.participants = Array.isArray(room.participants)
                 ? room.participants.filter((participant) => String(participant.role || '').trim() !== 'host')
@@ -881,6 +948,7 @@ function createBroadcastRoomRouter({ config, roomStore }) {
                 success: true,
                 roomId: room.roomId,
                 participantIdentity: identity,
+                participantRole: 'host',
                 token,
                 livekitUrl: config.livekitUrl,
                 allowGuestScreenShare: room.settings?.allowGuestScreenShare !== false,
@@ -919,7 +987,30 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             });
         } catch (error) {
             next(error);
+        } finally {
+            if (webHostReservation) webHostReservation.webHostJoinPending = false;
         }
+    });
+
+    for (const action of ['waiting-status', 'waiting-cancel']) {
+        router.post(`/broadcast-room/${action}`, (req, res) => {
+            const room = roomStore.getRoomByInviteId(String(req.body?.inviteId || ''));
+            if (!room) return res.status(404).json({ success: false, error: 'invite_not_found' });
+            const waiting = action === 'waiting-cancel'
+                ? roomStore.waitingRoom.cancel(room, req.body?.waiting)
+                : roomStore.waitingRoom.status(room, req.body?.waiting);
+            res.json({ success: true, roomId: room.roomId, waiting });
+        });
+    }
+    router.post('/broadcast-room/waiting-list', (req, res) => {
+        const room = roomStore.getRoom(req.body.roomId);
+        res.json({ success: true, roomId: room.roomId, waitingRoomEnabled: room.settings.waitingRoomEnabled === true,
+            requests: roomStore.waitingRoom.list(room) });
+    });
+    router.post('/broadcast-room/waiting-decision', (req, res) => {
+        const room = roomStore.getRoom(req.body.roomId);
+        const requests = roomStore.waitingRoom.decide(room, req.body);
+        res.json({ success: true, roomId: room.roomId, requests });
     });
 
     router.post('/broadcast-room/join-token', async (req, res, next) => {
@@ -932,7 +1023,7 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             const participantRole = webinarMode ? 'audience' : 'guest';
             const cameraEnabled = !webinarMode && req.body?.cameraEnabled === true;
             const microphoneEnabled = !webinarMode && req.body?.microphoneEnabled === true;
-            if (!displayName) {
+            if (!displayName || displayName.length > 120) {
                 res.status(400).json({ success: false, error: 'display_name_required' });
                 return;
             }
@@ -951,6 +1042,8 @@ function createBroadcastRoomRouter({ config, roomStore }) {
                 return;
             }
 
+            const admission = roomStore.waitingRoom.enter(room, displayName, req.body?.waiting);
+            if (admission) return res.json({ success: true, roomId: room.roomId, ...admission });
             const identity = buildIdentity(participantRole, displayName);
             const token = await createJoinToken(config, {
                 roomName: room.roomId,
@@ -1155,6 +1248,8 @@ function createBroadcastRoomRouter({ config, roomStore }) {
 
         const room = roomStore.updateRoomSettings(roomId, {
             ownerKey: getRoomOwnerKey(req),
+            waitingRoomEnabled: req.body?.waitingRoomEnabled,
+            waitingRoomDecision: req.body?.waitingRoomDecision,
             roomTitle: req.body?.roomTitle,
             hostDisplayName: req.body?.hostDisplayName,
             allowGuestScreenShare: req.body?.allowGuestScreenShare,
@@ -1171,6 +1266,7 @@ function createBroadcastRoomRouter({ config, roomStore }) {
             hostShareActive: req.body?.hostShareActive,
             hostShareLabel: req.body?.hostShareLabel,
             hostShareMonitorAudioEnabled: req.body?.hostShareMonitorAudioEnabled,
+            participantVolumes: req.body?.participantVolumes,
             youtubeWatchUrl: req.body?.youtubeWatchUrl,
             youtubeLiveActive: req.body?.youtubeLiveActive
         });
@@ -1224,6 +1320,7 @@ function createBroadcastRoomRouter({ config, roomStore }) {
         }
 
         const room = roomStore.updateParticipantControls(roomId, identity, {
+            spotlighted: req.body?.spotlighted,
             role: req.body?.role,
             allowCamera: req.body?.allowCamera,
             allowMicrophone: req.body?.allowMicrophone,
@@ -1276,7 +1373,8 @@ function createBroadcastRoomRouter({ config, roomStore }) {
                 roomName: room.roomId,
                 identity,
                 displayName,
-                role
+                role,
+                allowAdministration: !webHostIdentities.has(identity)
             });
 
             res.json({
@@ -1732,6 +1830,20 @@ function createBroadcastRoomRouter({ config, roomStore }) {
         });
     });
 
+    router.use((error, _req, res, next) => {
+        if (String(error.message).startsWith('waiting_')) return res.status(error.status || 400).json({ success: false, error: error.message });
+        next(error);
+    });
+    router.notifySettingsChanged = room => broadcastRoomEvent(room.roomId, 'roomSettings', buildRoomResponse(room));
+    const reconcilePresence = createParticipantPresence({ roomStore, roomService, onChanged: router.notifySettingsChanged });
+    const presenceTimer = setInterval(() => reconcilePresence().catch(() => {}), 60000);
+    presenceTimer.unref?.();
+    router.disposePresence = () => clearInterval(presenceTimer);
+    router.isTemporaryManager = (roomId, identity, key) => {
+        const room = roomStore.getRoom(roomId);
+        return !!room?.active && participantSessions.verify(room, identity, key)
+            && room.participants.some(person => person.identity === identity && person.role === 'co_host' && person.connected !== false);
+    };
     return router;
 }
 

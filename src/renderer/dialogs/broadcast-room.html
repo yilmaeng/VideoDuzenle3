@@ -584,6 +584,32 @@
                 <button id="btn-refresh-persistent-rooms" type="button" class="secondary" data-i18n="broadcast_room.refresh_persistent_rooms" data-i18n-aria="broadcast_room.refresh_persistent_rooms">Kalıcı Odaları Yenile</button>
             </div>
             <p class="hint" style="margin-top:12px;" data-i18n="broadcast_room.quick_vs_persistent_hint">Üstteki Oda Oluştur hızlı/geçici oda içindir. Kalıcı oda için Oda Yönetimi içindeki oluştur düğmesini veya aşağıdaki kayıtlı odalar listesini kullanın.</p>
+            <details id="desktop-room-account" class="subpanel" style="margin-top:16px;">
+                <summary data-i18n="admin_auth.desktop_title"></summary>
+                <p class="hint" data-i18n="admin_auth.desktop_hint"></p>
+                <div id="desktop-account-login">
+                    <label for="desktop-account-email" data-i18n="admin_auth.email"></label>
+                    <input id="desktop-account-email" class="value-box" type="email" autocomplete="username">
+                    <label for="desktop-account-password" data-i18n="admin_auth.password"></label>
+                    <input id="desktop-account-password" class="value-box" type="password" autocomplete="current-password">
+                    <button id="desktop-account-sign-in" type="button" data-i18n="admin_auth.password_login"></button>
+                </div>
+                <div id="desktop-account-change" hidden>
+                    <p data-i18n="admin_auth.password_change_required"></p>
+                    <label for="desktop-account-new-password" data-i18n="admin_auth.new_password"></label>
+                    <input id="desktop-account-new-password" class="value-box" type="password" autocomplete="new-password">
+                    <label for="desktop-account-repeat" data-i18n="admin_auth.password_repeat"></label>
+                    <input id="desktop-account-repeat" class="value-box" type="password" autocomplete="new-password">
+                    <button id="desktop-account-change-password" type="button" data-i18n="admin_auth.password_change"></button>
+                </div>
+                <label><input id="desktop-account-remember" type="checkbox" checked> <span data-i18n="admin_auth.desktop_remember"></span></label>
+                <div id="desktop-account-signed-in" hidden>
+                    <p id="desktop-account-user"></p>
+                    <button id="desktop-account-refresh" type="button" data-i18n="admin_auth.rooms_refresh"></button>
+                    <button id="desktop-account-sign-out" type="button" data-i18n="admin_auth.desktop_logout"></button>
+                </div>
+                <p id="desktop-account-status" role="status" aria-live="polite"></p>
+            </details>
             <div id="join-existing-room-panel" class="subpanel" style="margin-top:16px;">
                 <h3 style="margin:0 0 6px 0;" data-i18n="broadcast_room.join_existing_room_section">Toplantıya Katıl</h3>
                 <p id="join-existing-room-hint" class="hint" data-i18n="broadcast_room.join_existing_room_hint">Bir davet bağlantısı, oda anahtarı veya kalıcı oda adı yazın. Enter ya da Katıl düğmesi gerçek konuk katılım penceresini açar.</p>
@@ -647,6 +673,9 @@
                 </div>
                 <fieldset>
                     <legend data-i18n="broadcast_room.microphone_processing_label">Mikrofon sinyal işleme</legend>
+                    <label for="host-microphone-music-mode" data-i18n="broadcast_room.microphone_music_mode"></label>
+                    <input id="host-microphone-music-mode" type="checkbox" aria-describedby="host-microphone-music-hint">
+                    <p id="host-microphone-music-hint" class="hint" data-i18n="broadcast_room.microphone_music_hint"></p>
                     <p class="hint" data-i18n="broadcast_room.microphone_processing_hint">Varsayılan olarak EVD ek ses filtresi uygulamaz; mikrofonunuzun ve işletim sisteminizin hazırladığı ses korunur.</p>
                     <label style="display:flex; align-items:center; gap:8px;">
                         <input id="host-microphone-echo-cancellation" type="checkbox">
@@ -712,6 +741,7 @@
                 <div>
                     <h3 data-i18n="broadcast_room.room_status_label">Durum</h3>
                     <div id="room-status" class="value-box"></div>
+                    <p id="server-recording-notice" role="status" aria-live="polite" aria-atomic="true"></p>
                 </div>
                 <div>
                     <h3 data-i18n="broadcast_room.room_code_label">Oda Kodu</h3>
@@ -722,9 +752,47 @@
                     <div id="invite-link" class="value-box"></div>
                 </div>
             </div>
+            <div id="desktop-waiting-guest" hidden>
+                <p id="desktop-waiting-guest-status" role="status" aria-live="polite"></p>
+                <button id="desktop-waiting-cancel" type="button" data-i18n="desktop_cloud.cancel"></button>
+            </div>
+            <details id="desktop-waiting-queue" class="subpanel" hidden>
+                <summary data-i18n="desktop_cloud.waiting_title"></summary>
+                <p id="desktop-waiting-status" role="status" aria-live="polite"></p>
+                <button id="desktop-waiting-admit-all" type="button" data-i18n="desktop_cloud.admit_all"></button>
+                <ul id="desktop-waiting-list"></ul>
+            </details>
+            <dialog id="desktop-waiting-disable-dialog" aria-labelledby="desktop-waiting-disable-title" aria-describedby="desktop-waiting-disable-message">
+                <h2 id="desktop-waiting-disable-title" data-i18n="desktop_cloud.waiting_title"></h2>
+                <p id="desktop-waiting-disable-message" tabindex="-1" data-i18n="desktop_cloud.waiting_disable_message"></p>
+                <form method="dialog">
+                    <button value="cancel" data-i18n="desktop_cloud.cancel"></button>
+                    <button value="admit" data-i18n="desktop_cloud.admit_all"></button>
+                    <button value="reject" data-i18n="desktop_cloud.reject_all"></button>
+                </form>
+            </dialog>
+            <details id="desktop-cloud-recording" class="subpanel" hidden>
+                <summary data-i18n="desktop_cloud.title"></summary>
+                <p data-i18n="desktop_cloud.retention"></p>
+                <button id="desktop-cloud-start" type="button" data-i18n="desktop_cloud.start"></button>
+                <button id="desktop-cloud-pause" type="button" data-i18n="desktop_cloud.pause" disabled></button>
+                <button id="desktop-cloud-refresh" type="button" data-i18n="desktop_cloud.refresh"></button>
+                <p id="desktop-cloud-status" role="status" aria-live="polite"></p>
+                <ul id="desktop-cloud-recordings"></ul>
+            </details>
+            <dialog id="desktop-cloud-consent" aria-labelledby="desktop-cloud-consent-title" aria-describedby="desktop-cloud-consent-message">
+                <h2 id="desktop-cloud-consent-title" data-i18n="desktop_cloud.consent_title"></h2>
+                <p id="desktop-cloud-consent-message" tabindex="-1" data-i18n="desktop_cloud.consent_message"></p>
+                <form method="dialog">
+                    <button value="cancel" data-i18n="desktop_cloud.cancel"></button>
+                    <button value="confirm" data-i18n="desktop_cloud.confirm"></button>
+                </form>
+            </dialog>
             <div id="room-management-panel" class="subpanel" hidden>
                 <h3 data-i18n="broadcast_room.room_management_title">Oda Yönetimi</h3>
                 <p class="hint" data-i18n="broadcast_room.room_management_hint">Odanın adını ve konukların genel izinlerini buradan yönetin.</p>
+                <label for="desktop-waiting-enabled" data-i18n="desktop_cloud.waiting_enabled"></label>
+                <input id="desktop-waiting-enabled" type="checkbox">
                 <div class="grid">
                     <div>
                         <label for="host-display-name-input" data-i18n="broadcast_room.host_display_name_input_label">Host adı</label>
@@ -846,6 +914,26 @@
                         <button id="btn-admin-logout" type="button" class="secondary" data-i18n="broadcast_room.admin_logout_button" data-i18n-aria="broadcast_room.admin_logout_button">Admin oturumunu kapat</button>
                     </div>
                     <div id="webinar-admin-panel" style="margin-top: 16px;" hidden>
+                        <section aria-labelledby="system-accounts-title">
+                            <h4 id="system-accounts-title" data-i18n="admin_auth.provision_title"></h4>
+                            <p data-i18n="admin_auth.provision_hint"></p>
+                            <label for="system-account-email" data-i18n="admin_auth.email"></label>
+                            <input id="system-account-email" type="email" autocomplete="off" maxlength="254">
+                            <label for="system-account-password" data-i18n="admin_auth.initial_password"></label>
+                            <input id="system-account-password" type="password" autocomplete="new-password" maxlength="128">
+                            <p data-i18n="admin_auth.password_policy"></p>
+                            <label><input id="system-account-reset" type="checkbox"><span data-i18n="admin_auth.reset_confirm"></span></label>
+                            <button id="system-account-save" type="button" data-i18n="admin_auth.account_save"></button>
+                            <label for="system-owner-room" data-i18n="admin_auth.owner_room"></label>
+                            <select id="system-owner-room"></select>
+                            <button id="system-owner-refresh" type="button" data-i18n="admin_auth.rooms_refresh"></button>
+                            <label><input id="system-owner-transfer" type="checkbox"><span data-i18n="admin_auth.transfer_confirm"></span></label>
+                            <button id="system-owner-assign" type="button" data-i18n="admin_auth.owner_assign"></button>
+                            <label for="system-new-room-title" data-i18n="admin_auth.room_title"></label>
+                            <input id="system-new-room-title" type="text" maxlength="120">
+                            <button id="system-owner-create" type="button" data-i18n="admin_auth.owner_create"></button>
+                            <p id="system-accounts-status" role="status" aria-live="polite"></p>
+                        </section>
                         <h4 data-i18n="broadcast_room.webinar_requests_admin_title">Webinar talepleri</h4>
                         <p class="hint" data-i18n="broadcast_room.webinar_requests_admin_hint">Talepler arasında ok tuşlarıyla dolaşın. Seçili talep için e-posta taslağı hazırlayabilir veya durumunu güncelleyebilirsiniz.</p>
                         <div class="toolbar" style="margin-top: 12px;">
@@ -900,6 +988,10 @@
                                 <label style="display:flex; align-items:center; gap:8px;">
                                     <input id="webinar-create-allow-join-when-host-absent" type="checkbox">
                                     <span data-i18n="broadcast_room.webinar_create_allow_join_when_host_absent_label">Host yokken izleyici katılabilsin</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px;">
+                                    <input id="desktop-webinar-waiting-enabled" type="checkbox">
+                                    <span data-i18n="desktop_cloud.waiting_enabled"></span>
                                 </label>
                                 <label style="display:flex; align-items:center; gap:8px;">
                                     <input id="webinar-create-restrict-before-start" type="checkbox">
@@ -1797,6 +1889,18 @@
                 <button id="btn-participant-toggle-live-interpreter" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_make_live_interpreter" data-i18n-aria="broadcast_room.participant_make_live_interpreter">Canlı çevirmen yap</button>
                 <button id="btn-participant-start-camera" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_toggle_camera_off" data-i18n-aria="broadcast_room.participant_toggle_camera_off">Videosunu kapat</button>
                 <button id="btn-participant-start-microphone" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_toggle_microphone_off" data-i18n-aria="broadcast_room.participant_toggle_microphone_off">Sesini kapat</button>
+                <button id="btn-participant-spotlight" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_spotlight" data-i18n-aria="broadcast_room.participant_spotlight"></button>
+                <button id="btn-participant-check-camera" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.camera_check_self"></button>
+                <button id="btn-participant-volume" type="button" class="secondary" data-participant-menu-item data-i18n="broadcast_room.participant_volume_open" data-i18n-aria="broadcast_room.participant_volume_open">Konuşma ses düzeyini ayarla</button>
+            </div>
+            <div id="participant-volume-group" class="field-group" style="margin-top: 16px;" hidden>
+                <label id="participant-volume-label" for="participant-volume" data-i18n="broadcast_room.participant_volume_label">Konuşma ses düzeyi</label>
+                <input id="participant-volume" type="range" min="0" max="200" step="5" value="100" aria-describedby="participant-volume-help participant-volume-value" data-participant-menu-item>
+                <output id="participant-volume-value" for="participant-volume">100%</output>
+                <p id="participant-volume-help" class="hint" data-i18n="broadcast_room.participant_volume_help">Aşağı ve yukarı oklarla yüzde 5, Page Down ve Page Up ile yüzde 10 değiştirin. Değişikliği anında duyarsınız.</p>
+                <div class="toolbar" style="margin-top: 12px;">
+                    <button id="btn-participant-volume-confirm" type="button" data-participant-menu-item data-i18n="broadcast_room.participant_volume_confirm" data-i18n-aria="broadcast_room.participant_volume_confirm">Tamam</button>
+                </div>
             </div>
             <div id="participant-message-composer-group" class="field-group" style="margin-top: 16px;" hidden>
                 <label for="participant-message-compose" data-i18n="broadcast_room.participant_message_compose_label">Özel mesaj yaz</label>

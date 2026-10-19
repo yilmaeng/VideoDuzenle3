@@ -765,14 +765,7 @@ const CtaLibrary = {
             const prompt = this.buildAiOverlayRecommendationPrompt(overlayInfo);
 
             // API İsteği
-            const apiKey = await window.api.getGeminiApiKey();
-            if (!apiKey) {
-                throw new Error('Gemini API anahtarı ayarlanmamış.');
-            }
-
-            const response = await window.api.geminiVisionRequest({
-                apiKey,
-                model: 'gemini-2.5-flash',
+            const response = await window.AiServices.request({
                 imageBase64: base64,
                 prompt,
                 systemInstruction: this.getAiSystemInstruction()

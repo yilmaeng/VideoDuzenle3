@@ -272,6 +272,7 @@ app.whenReady().then(async () => {
             const { setupDescriptionSubtitleEditorHandlers } = require('./description-subtitle-editor-handler');
             setupDialogHandlers(mainWindow);
             setupObsIpcHandlers(mainWindow);
+            require('./room-account-client').setupRoomAccountHandlers();
             setupElevenLabsHandlers(mainWindow);
             setupYouTubeHandlers(mainWindow);
             setupEmergencyBroadcastHandlers(mainWindow);

@@ -5675,6 +5675,21 @@ async function init() {
     applyAudioBalancePresetSelection(state.audioBalancePreset, { announceChange: false });
     syncLiveAudioControlsFromMain();
     const config = await ipcRenderer.invoke('obs-get-config');
+    // Native checkbox keyboard behavior; this persistent setup preference is not
+    // a playback action and intentionally has no global shortcut-manager entry.
+    const stability = document.getElementById('obs-audio-stability');
+    stability.parentElement.hidden = process.platform !== 'win32';
+    stability.checked = config?.audioStabilityEnabled === true;
+    stability.addEventListener('change', async () => {
+        const desired = stability.checked;
+        stability.disabled = true;
+        try {
+            const result = await ipcRenderer.invoke('obs-audio-stability', desired);
+            if (!result.success) { stability.checked = !desired; announce(t(`audio_stability.${result.error}`)); }
+            else announce(t(result.deferred ? 'audio_stability.deferred' : 'audio_stability.saved'));
+        } catch (_) { stability.checked = !desired; announce(t('audio_stability.save')); }
+        finally { stability.disabled = false; stability.focus(); }
+    });
     const preferredYoutubeAccountId = config?.youtubeActiveAccountId || '';
     if (config) {
         els.obsHost.value = config.host || '127.0.0.1';

@@ -1,0 +1,18 @@
+# Installation template only, not started by the EVD deploy script.
+# Pin a tested version; provision the config, shared folder and permissions first.
+services:
+  egress:
+    image: livekit/egress:${LIVEKIT_EGRESS_VERSION:?Set an explicit tested Egress version}
+    restart: unless-stopped
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress/config.yaml
+    volumes:
+      - ./egress.yaml:/etc/egress/config.yaml:ro
+      - ${EVD_RECORDINGS_DIR:?Set the private shared recordings directory}:/out/recordings
+    # Required by the vendor's Chrome sandbox deployment; run on a dedicated trusted worker.
+    # Evaluate the vendor seccomp-profile alternative before production rollout.
+    cap_add:
+      - SYS_ADMIN
+    cpus: 4
+    mem_limit: 4g
+    shm_size: 1g

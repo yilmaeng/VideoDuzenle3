@@ -288,15 +288,14 @@ async function muxAndValidate({
 }) {
     const extension = path.extname(outputPath) || '.mp4';
     const tempOutput = path.join(path.dirname(outputPath), `${path.basename(outputPath, extension)}.evd-partial-${Date.now()}${extension}`);
-    const audioArgs = audioProfile.codec === 'aac'
-        ? ['-c:a', 'aac', '-b:a', String(audioProfile.bitrate)]
+    const audioArgs = audioProfile.copied ? ['-c:a', 'copy'] : audioProfile.codec === 'aac'
+        ? require('../slideshow-audio-policy').aacEncodingArgs([audioProfile])
         : ['-c:a', audioProfile.codec];
     const args = [
         '-y', '-i', videoPath, '-i', pcmAudioPath,
         '-map', '0:v:0', '-map', '1:a:0',
         '-map_metadata', '0', '-map_chapters', '0',
-        '-c:v', 'copy', ...audioArgs,
-        '-ar', String(audioProfile.sampleRate)
+        '-c:v', 'copy', ...audioArgs
     ];
     if (['.mp4', '.mov', '.m4v'].includes(extension.toLowerCase())) args.push('-movflags', '+faststart');
     if (Math.abs(Number(rotation || 0)) > 0.1) {
@@ -358,7 +357,7 @@ async function renderSourceAware({
     const audioProfile = resolveAudioProfile(dominantProfile, mode, path.extname(outputPath));
     const tempBase = path.join(path.dirname(outputPath), `evd_source_aware_${Date.now()}_${process.pid}`);
     const videoPath = `${tempBase}.video.mp4`;
-    const audioPath = `${tempBase}.audio.wav`;
+    const audioPath = `${tempBase}.audio.mov`;
     try {
         await renderVideoOnly({
             ffmpegPath,
@@ -372,6 +371,7 @@ async function renderSourceAware({
         onProgress?.({ operation: 'source-aware-audio', percent: 70 });
         const audioResult = await renderContinuousAudio({
             ffmpegPath,
+            ffprobePath: mode === 'lossless_master' ? undefined : ffprobePath,
             inputPath,
             segments,
             sourceProfiles: profiles,
@@ -380,7 +380,9 @@ async function renderSourceAware({
             onProgress: (percent) => onProgress?.({ operation: 'source-aware-audio', percent: 70 + percent * 0.18 })
         });
         audioProfile.sampleRate = audioResult.sampleRate;
+        audioProfile.copied = audioResult.copied === true;
         audioProfile.channelLayout = audioResult.channelLayout;
+        audioProfile.channels = require('../slideshow-audio-policy').sourceAudioProfile(profiles.flatMap(p => p.audio || [])).channels;
         const validation = await muxAndValidate({
             ffmpegPath,
             ffprobePath,

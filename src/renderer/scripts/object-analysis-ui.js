@@ -459,20 +459,9 @@ Summary: [1 sentence explanation]`;
                 time: midTime
             });
 
-            // Get Gemini API Data
-            const apiData = await window.api.getGeminiApiData();
-            if (!apiData || !apiData.apiKey) {
-                alert(t('runtime.object_analysis.gemini_key_missing', 'Gemini API key was not found.'));
-                aiLabelBtn.disabled = false;
-                aiLabelBtn.textContent = t('runtime.object_analysis.ai_label_button', 'Label with AI');
-                return;
-            }
-
             const prompt = buildAiLabelPrompt(selectedObject.label);
 
-            const response = await window.api.geminiVisionRequest({
-                apiKey: apiData.apiKey,
-                model: apiData.model,
+            const response = await window.AiServices.request({
                 imageBase64: base64,
                 prompt,
                 systemInstruction: getAiSystemInstruction()
@@ -662,22 +651,13 @@ Summary: [1 sentence explanation]`;
                 time: midTime
             });
 
-            // Gemini API bilgilerini al
-            const apiData = await window.api.getGeminiApiData();
-            if (!apiData || !apiData.apiKey) {
-                announce(t('runtime.object_analysis.preview_key_missing', 'Gemini API key was not found. Preview cannot continue.'));
-                return;
-            }
-
             // Konum bilgisini al
             const position = selectedObject.position || t('runtime.object_analysis.center', 'Center');
 
             // Gemini'ye sor
             const prompt = buildAiPreviewPrompt(selectedObject.label, position, effectName);
 
-            const response = await window.api.geminiVisionRequest({
-                apiKey: apiData.apiKey,
-                model: apiData.model,
+            const response = await window.AiServices.request({
                 imageBase64: base64,
                 prompt,
                 systemInstruction: getAiSystemInstruction()

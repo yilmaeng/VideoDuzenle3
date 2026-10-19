@@ -40,7 +40,7 @@ function loadConfig() {
     const embeddedPublicDir = path.resolve(backendRoot, 'public');
     const workspacePublicDir = path.resolve(backendRoot, '..', 'frontend', 'public');
     const embeddedLocaleDir = path.resolve(backendRoot, 'locales');
-    const workspaceLocaleDir = path.resolve(projectRoot, 'locales');
+    const workspaceLocaleDir = path.resolve(projectRoot, 'src', 'locales');
     const frontendPublicDir = getOptionalEnv('FRONTEND_PUBLIC_DIR')
         ? path.resolve(getOptionalEnv('FRONTEND_PUBLIC_DIR'))
         : getExistingPath([embeddedPublicDir, workspacePublicDir]);
@@ -57,8 +57,28 @@ function loadConfig() {
         livekitApiKey: requireEnv('LIVEKIT_API_KEY'),
         livekitApiSecret: requireEnv('LIVEKIT_API_SECRET'),
         webinarAdminSecret: getOptionalEnv('WEBINAR_ADMIN_SECRET'),
+        smtpHost: getOptionalEnv('ADMIN_SMTP_HOST'),
+        smtpPort: getNumberEnv('ADMIN_SMTP_PORT', 587),
+        smtpFrom: getOptionalEnv('ADMIN_SMTP_FROM'),
+        smtpUser: getOptionalEnv('ADMIN_SMTP_USER'),
+        smtpPassword: getOptionalEnv('ADMIN_SMTP_PASSWORD'),
         tokenTtlSeconds: getNumberEnv('TOKEN_TTL_SECONDS', 3600),
-        dataDir: path.resolve(process.cwd(), 'data'),
+        recordingEnabled: getOptionalEnv('SERVER_RECORDING_ENABLED', 'false') === 'true',
+        recordingFilesDir: getOptionalEnv('SERVER_RECORDING_FILES_DIR'),
+        recordingFfmpeg: getOptionalEnv('SERVER_RECORDING_FFMPEG', 'ffmpeg'),
+        recordingFfprobe: getOptionalEnv('SERVER_RECORDING_FFPROBE', 'ffprobe'),
+        recordingEgressDir: getOptionalEnv('SERVER_RECORDING_EGRESS_DIR'),
+        recordingS3: {
+            endpoint: getOptionalEnv('SERVER_RECORDING_S3_ENDPOINT'),
+            bucket: getOptionalEnv('SERVER_RECORDING_S3_BUCKET'),
+            region: getOptionalEnv('SERVER_RECORDING_S3_REGION', 'us-east-1'),
+            accessKey: getOptionalEnv('SERVER_RECORDING_S3_ACCESS_KEY'),
+            secret: getOptionalEnv('SERVER_RECORDING_S3_SECRET')
+        },
+        recordingMaxConcurrent: Math.max(1, Math.min(10, getNumberEnv('SERVER_RECORDING_MAX_CONCURRENT', 1))),
+        recordingMaxMinutes: Math.max(1, Math.min(1440, getNumberEnv('SERVER_RECORDING_MAX_MINUTES', 180))),
+        recordingMinFreeBytes: Math.max(1, getNumberEnv('SERVER_RECORDING_MIN_FREE_GB', 5)) * 1024 ** 3,
+        dataDir: path.resolve(getOptionalEnv('DATA_DIR', path.join(process.cwd(), 'data'))),
         frontendPublicDir,
         localeDir
     };
