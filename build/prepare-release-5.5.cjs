@@ -13,10 +13,17 @@ const extra = {
 function read(file) { return JSON.parse(fs.readFileSync(path.join(root, file), 'utf8')); }
 function write(file, data) { fs.writeFileSync(path.join(root, file), JSON.stringify(data, null, 2) + '\n'); }
 const notes = {};
+const platformNotes = {
+ tr: 'Platform notu: Vokal ayırma motorunun hazır indirme paketi şu anda yalnızca Windows x64 için sunulmaktadır; Mac motor paketi henüz hazır değildir.',
+ en: 'Platform note: the downloadable vocal-separation engine is currently available only for Windows x64; the Mac engine package is not ready yet.',
+ de: 'Plattformhinweis: Die herunterladbare Engine zur Gesangstrennung ist derzeit nur für Windows x64 verfügbar; das Mac-Paket ist noch nicht fertig.',
+ es: 'Nota de plataforma: el motor descargable de separación de voz está disponible actualmente solo para Windows x64; el paquete para Mac aún no está listo.',
+ fr: 'Note de plateforme : le moteur téléchargeable de séparation vocale est actuellement disponible uniquement pour Windows x64 ; le paquet Mac n’est pas encore prêt.'
+};
 for (const lang of Object.keys(extra)) {
  const paragraphs = [extra[lang]];
  for (const revision of [3, 4, 5, 6]) paragraphs.push(read(`patches/5.0.0-revision-${revision}/notes.json`)[lang]);
- notes[lang] = paragraphs.join('\n\n');
+ notes[lang] = [...paragraphs, platformNotes[lang]].join('\n\n');
  const locale = read(`src/locales/${lang}.json`);
  locale.messages.about_detail = locale.messages.about_detail.replace('5.0.0', version);
  write(`src/locales/${lang}.json`, locale);

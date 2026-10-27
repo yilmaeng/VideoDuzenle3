@@ -203,6 +203,7 @@ async function describeImageWithOpenAi({ apiKey, imageBase64, prompt, systemInst
         ? normalizedImage
         : `data:image/jpeg;base64,${normalizedImage}`;
     const response = await fetch('https://api.openai.com/v1/responses', {
+        signal: AbortSignal.timeout(90000),
         method: 'POST',
         headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -959,9 +960,12 @@ function setupOpenAiHandlers() {
                 text
             };
         } catch (error) {
+            console.warn('[AI vision] OpenAI failed:', error?.name, error?.cause?.code || error?.code || 'request');
             return {
                 success: false,
-                error: error?.message || String(error)
+                error: error?.name === 'TimeoutError' || error?.name === 'AbortError'
+                    ? require('./i18n').t('ai_connection.timeout')
+                    : error?.message || String(error)
             };
         }
     });

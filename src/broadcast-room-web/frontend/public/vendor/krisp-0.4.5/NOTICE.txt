@@ -1,0 +1,6 @@
+Source: @livekit/krisp-noise-filter 0.4.5
+Registry: https://registry.npmjs.org/@livekit/krisp-noise-filter/-/krisp-noise-filter-0.4.5.tgz
+Registry package SHA1: a248c084a2e6b9551e3c6c50588a920a57278338
+index.js is the unmodified package/dist/index.umd.cjs, renamed for HTTP MIME compatibility.
+License declared by upstream: SEE LICENSE IN https://livekit.io/legal/terms-of-service
+Models are obtained by the upstream SDK at runtime; LiveKit Cloud authorization is required.

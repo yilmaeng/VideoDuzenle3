@@ -136,6 +136,7 @@ const Timeline = {
         }
         if (typeof Selection !== 'undefined') {
             if (state.selection) {
+                Selection.stopExtended();
                 Selection.start = state.selection.start;
                 Selection.end = state.selection.end;
                 Selection.isSelecting = false;

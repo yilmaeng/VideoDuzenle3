@@ -4688,18 +4688,33 @@
         const client = window.LivekitClient;
         return acquireRoomMicrophone(async () => {
         try {
-            return await client.createLocalAudioTrack(buildAudioCaptureOptions(deviceId));
+            return await window.captureWithSystemEcho(
+                options => client.createLocalAudioTrack(options), buildAudioCaptureOptions(deviceId));
         } catch (primaryError) {
-            if (!deviceId) {
+            if (!deviceId || primaryError?.name === 'NotAllowedError' || primaryError?.name === 'SecurityError') {
                 throw primaryError;
             }
             // Safari may retain an unusable device id after permissions or devices change.
-            return client.createLocalAudioTrack(buildAudioCaptureOptions());
+            return window.captureWithSystemEcho(
+                options => client.createLocalAudioTrack(options), buildAudioCaptureOptions());
         }
         });
     }
 
+    let applyKrispPreview = null;
+    function syncKrispPreview(track = state.localAudioTrack) {
+        const control = document.getElementById('microphone-krisp-preview');
+        const music = document.getElementById('microphone-music-mode');
+        if (!control || !music || !window.createEvdKrispPreview) return Promise.resolve();
+        if (!applyKrispPreview) {
+            applyKrispPreview = window.createEvdKrispPreview({ control, music, announce: setStatus, translate: t });
+            control.addEventListener('change', () => syncKrispPreview());
+        }
+        return applyKrispPreview(track);
+    }
+
     async function handleMicrophoneProcessingChange() {
+        await syncKrispPreview();
         const music = document.getElementById('microphone-music-mode')?.checked === true;
         for (const control of [els.microphoneEchoCancellation, els.microphoneNoiseSuppression, els.microphoneAutoGainControl]) {
             if (control) control.disabled = music;
@@ -6604,6 +6619,8 @@
                 await applyMicrophoneVolumeToTrack(track);
                 if (!els.microphoneEnabled?.checked) await track.mute();
                 await room.localParticipant.publishTrack(track, { stopMicTrackOnMute: false });
+                // Model loading must not delay the microphone toggle/status workflow.
+                syncKrispPreview(track);
                 traceMicrophoneTransition('published');
                 if (state.roomConnection !== room || state.intentionalDisconnect) { track.stop(); return; }
                 microphoneCaptureSettingsDirty = false;
@@ -6618,7 +6635,10 @@
             const track = state.localAudioTrack;
             if (microphoneCaptureSettingsDirty) {
                 await acquireRoomMicrophone(async () => {
-                    await track.restartTrack(buildAudioCaptureOptions(String(els.microphoneDevice?.value || '').trim()));
+                    await window.captureWithSystemEcho(async options => {
+                        await track.restartTrack(options);
+                        return track;
+                    }, buildAudioCaptureOptions(String(els.microphoneDevice?.value || '').trim()), { verify: false });
                     return track;
                 });
                 await applyMicrophoneVolumeToTrack(track);
@@ -6769,6 +6789,7 @@
             if (state.roomConnection !== room || state.intentionalDisconnect) { nextTrack.stop(); return; }
             state.localAudioTrack = nextTrack;
             await room.localParticipant.publishTrack(nextTrack, { stopMicTrackOnMute: false });
+            syncKrispPreview(nextTrack);
             if (state.roomConnection !== room || state.intentionalDisconnect) { nextTrack.stop(); return; }
             if (!els.microphoneEnabled?.checked) await nextTrack.mute();
             microphoneCaptureSettingsDirty = false;
@@ -7128,6 +7149,7 @@
         document.getElementById('microphone-music-mode')?.addEventListener('change', () => {
             handleMicrophoneProcessingChange().catch(error => setStatus(formatErrorMessage(error)));
         });
+        syncKrispPreview(null);
         els.btnRequestPermissions?.addEventListener('click', () => {
             requestInitialMediaPermissions().catch((error) => {
                 setStatus(t('broadcast_room_join.permission_request_failed', 'Kamera ve mikrofon izni alınamadı: {error}', {

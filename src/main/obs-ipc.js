@@ -2,6 +2,22 @@ const { ipcMain, globalShortcut, BrowserWindow } = require('electron');
 const obsController = require('../studio/obs-controller');
 
 function setupObsIpcHandlers(mainWindow) {
+    ipcMain.handle('obs-gtcrn-process', async (event, source) => {
+        const i18n = require('./i18n');
+        const t = i18n.t.bind(i18n);
+        if (!obsController.gtcrnPending?.has(source)) return { success: false, error: t('recording_microphone_noise.gtcrn_failed') };
+        obsController.gtcrnPending.delete(source);
+        try {
+            const outputPath = await require('../studio/gtcrn-recording').processRecording(source,
+                require('path').join(__dirname, '../..'), stage => {
+                    if (!event.sender.isDestroyed()) event.sender.send('obs-gtcrn-progress', stage);
+                });
+            return { success: true, outputPath };
+        } catch (error) {
+            console.error('[GTCRN] Postprocessing failed:', error);
+            return { success: false, error: t('recording_microphone_noise.gtcrn_failed') };
+        }
+    });
     ipcMain.handle('register-global-shortcut', (event, registration) => {
         try {
             const accelerator = typeof registration === 'string'

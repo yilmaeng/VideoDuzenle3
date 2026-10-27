@@ -1,4 +1,153 @@
 {
+  "silence_cleanup_result": {
+    "title": "Silence cleanup completed",
+    "message": "Deleted {count} silent sections, removing {seconds} seconds in total. New total duration: {total}. Sections skipped due to protection padding: {skipped}. Undo restores the deletion."
+  },
+  "filler_review": {
+    "help_title": "Help and keyboard shortcuts",
+    "result_title": "Filler cleanup completed",
+    "ok": "OK",
+    "selected_for_deletion": "Selected for deletion.",
+    "not_selected_for_deletion": "Not selected; will not be deleted.",
+    "apply_all": "Delete all",
+    "confirm_all": "Delete all {count} candidates, including unapproved ones? Detection errors are possible. A single Undo restores them.",
+    "title": "Review filler sounds (experimental)",
+    "help": "Find Turkish fillers. Strong candidates are preselected; uncertain ones appear in a separate group. This is not a guarantee of correctness. Arrows preview context, Enter replays, Space toggles deletion, Ctrl+Space previews the cut. Review selections before deleting. Silence cleanup is unchanged.",
+    "strong_group": "Strong candidates (preselected)",
+    "review_group": "Candidates awaiting your decision",
+    "analyze": "Start analysis (download engine if needed)",
+    "list": "Filler candidates",
+    "start": "Start (seconds)",
+    "end": "End (seconds)",
+    "range": "Apply boundaries",
+    "preview": "Listen with context (Enter)",
+    "cut": "Preview cut (Ctrl+Space)",
+    "stop": "Stop preview",
+    "toggle": "Approve / unapprove deletion (Space)",
+    "apply": "Delete approved ranges",
+    "item": "{text}; {time} – {end}; {state}",
+    "approved": "Will be deleted",
+    "review": "Needs review",
+    "preview_unavailable": "The speed or effects here are incompatible with continuous preview. Check this candidate in the regular timeline.",
+    "error": "Operation failed: {error}",
+    "invalid": "Times must be valid and remain inside the same video segment.",
+    "stale": "The timeline changed. Close this window and analyze again.",
+    "confirm": "Delete {count} approved ranges? One Undo restores them.",
+    "done": "Deleted {count} ranges. Removed {seconds} seconds in total. New total duration: {total}. Undo restores them.",
+    "results": "Found {count} candidates. Listen before approving.",
+    "unsupported": "This experiment currently requires Turkish whisper.cpp analysis on Windows x64. Mac support is not enabled yet."
+  },
+  "timeline_pointer": {
+    "play": "Play / pause",
+    "preview": "Preview selection",
+    "cutPreview": "Preview cut",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "delete": "Delete",
+    "undo": "Undo",
+    "redo": "Redo",
+    "queue": "Add to selection list",
+    "clear": "Clear selection",
+    "zoom": "Timeline zoom",
+    "hint": "Click the timeline to seek. Drag with the left mouse button to select a range. For long videos, zoom in and use the scrollbar below."
+  },
+  "automatic_subtitles": {
+    "title": "Add subtitles",
+    "choose": "Choose an existing subtitle file or generate subtitles from speech in the open source video.",
+    "file": "Choose subtitle file",
+    "generate": "Generate subtitles with Whisper",
+    "info": "Speech in the entire open source file is analyzed locally. Timeline cuts are not applied to this analysis; like existing subtitle insertion, it uses the source file. Review automatic text and timing. After saving the SRT, the usual subtitle, appearance and voiceover options open.",
+    "start": "Start analysis (download engine if needed)",
+    "empty": "No speech found; no subtitles generated.",
+    "ready": "Subtitles are ready. Save the SRT file.",
+    "save": "Save automatic subtitles",
+    "source_changed": "The open video changed. Open the saved SRT with the correct video.",
+    "error": "Could not generate subtitles: {error}"
+  },
+  "recording_camera": {
+    "available": "The camera is available through OBS. It does not need to be opened a second time.",
+    "busy": "The camera could not start. OBS or another application may be using it; this does not mean permission was denied. Check the OBS picture and camera connection.",
+    "missing": "The camera was not found or its selected settings are unsupported. Refresh the device list and select the camera again.",
+    "denied": "Camera access was denied. Check EVD camera permission in your operating system.",
+    "failed": "The camera check could not complete. Check the camera connection and OBS status, then try again."
+  },
+  "extended_selection": {
+    "label": "Toggle selection mode",
+    "on": "Selection mode on. Start: {time}. Navigate through the video; Escape cancels and returns to the start.",
+    "off": "Selection mode off. The selected range is kept.",
+    "cancelled": "Selection cancelled. Returned to the starting position: {time}."
+  },
+  "recording_navigation": {
+    "category": "Recording wizard navigation",
+    "next": "Recording wizard: next",
+    "back": "Recording wizard: back",
+    "time_label": "at",
+    "next_shortcut": "Alt+N",
+    "back_shortcut": "Alt+B"
+  },
+  "ticker_output": {
+    "suffix": "ticker",
+    "saved": "The video with scrolling text was saved and opened: {path}. No additional Save As is required."
+  },
+  "ai_connection": {
+    "tts_network": "Could not connect to {service}, or the connection timed out. Check network access and try again. Computer speech does not require internet.",
+    "layer_prompt": "The first image is the main video; the second is the video layer. Main canvas {width}x{height}, layer {layerWidth}x{layerHeight}, layout purpose {mode}. Recommend position and size without covering faces, text or important actions. Preserve the layer aspect ratio and keep coordinates within the canvas. For split-screen use the appropriate half. Return only JSON: {\"x\":0,\"y\":0,\"width\":100,\"height\":100,\"position\":\"position\",\"reason\":\"visual reasoning\"}.",
+    "visual_samples": "This visual description uses up to 20 frames sampled chronologically from the selected range; no audio is sent. Do not assume unsampled actions or speech. Frame times are in seconds:",
+    "timeout": "The AI service did not complete its response within 90 seconds. It may be busy. Try again or select another model."
+  },
+  "recording_microphone_noise": {
+    "gtcrn": "GTCRN (after recording, experimental)",
+    "gtcrn_help": "GTCRN cleans only the microphone after recording; preview is unfiltered. System audio is preserved. The original MKV is kept and a separate cleaned MP4 is created. There is no fixed duration limit; long recordings are processed in small blocks and require sufficient free disk space. The model uses 16 kHz mono. OBS may temporarily switch to high-quality multitrack recording; its settings are restored afterwards. Cannot be used alongside live streaming.",
+    "gtcrn_unavailable": "The local GTCRN test runtime is unavailable. Select another method.",
+    "gtcrn_setup_failed": "Separate audio tracks could not be prepared for GTCRN. Stop streaming and use standard multitrack recording in OBS. In Simple mode, you can select High Quality.",
+    "gtcrn_extract": "Recording stopped. Extracting microphone audio.",
+    "gtcrn_clean": "Cleaning the microphone with GTCRN. The original recording is preserved.",
+    "gtcrn_mix": "Combining the cleaned microphone and other audio with the video.",
+    "gtcrn_done": "GTCRN processing completed. The cleaned MP4 is ready; the original was also kept.",
+    "gtcrn_failed": "GTCRN cleanup failed. The original recording was preserved. Check the three audio tracks, local engine and available disk space.",
+    "gtcrn_restore_failed": "OBS audio track settings could not be restored. Check OBS audio tracks before another recording or stream.",
+    "label": "Reduce microphone background noise (experimental)",
+    "help": "Off by default. Processes only the microphone; system audio is unchanged. Restart preview after choosing a method. DeepFilterNet3 requires the OBS plugin; restart OBS after installation. Music and quiet speech may be affected. Screen reader sound removal is not guaranteed.",
+    "method": "Noise reduction method",
+    "rnnoise": "RNNoise (built into OBS)",
+    "deepfilter": "DeepFilterNet3 (experimental)",
+    "strength": "DeepFilterNet maximum noise attenuation (dB)",
+    "strength_help": "0–100 dB. Lower values apply lighter reduction and leave more background sound. Light: 15–25; previous medium setting: 55. This is not a percentage or microphone volume. Use arrows for 5 dB steps or type a value. Applied when preview is restarted.",
+    "failed": "The OBS microphone noise filter could not be applied. Turn this option off and try again."
+  },
+  "system_echo": {
+    "hint": "With echo cancellation enabled, supporting browsers use all system sounds, including screen readers, as a reference. Other browsers retain standard echo cancellation. Disabled in music mode. A previously disabled echo cancellation preference is preserved."
+  },
+  "native_menu_test": {
+    "title": "Electron 44 minimal menu test",
+    "instructions": "Press Alt to reach the menu bar. Open File with Down Arrow, then press Right Arrow on New. Edit should open. Try Left Arrow to return to File. You can close the menu with Escape and retry. This window has no EVD shortcuts. Menu items are test placeholders; they do not open or change files. Alt+F4 closes only this test window.",
+    "file": "File",
+    "edit": "Edit",
+    "new_item": "New",
+    "open_item": "Open",
+    "close": "Close test",
+    "undo": "Undo",
+    "redo": "Redo"
+  },
+  "aec_lab": {
+    "desktop_label": "Prevent system sounds from returning through the microphone (experimental)",
+    "title": "Local echo cancellation experiment",
+    "instructions": "Leave the desktop EVD room. Join Engelsiz Erisimli Saatler in normal mode, then experimental mode. Use the normal room link on iPhone, with headphones and its microphone off. Compare JAWS alone, your speech alone, and both together. Leave before changing modes. Keep Krisp off for the first comparison.",
+    "normal": "Join with normal mode",
+    "all": "Join with experimental all-system-audio echo reference",
+    "privacy": "Local experiment only; no server deployment. System audio is not sent as a separate room track. Microphone permission is required. Experimental mode is unsuitable for music mode. Listening tests must confirm hands-free performance.",
+    "waiting": "Experimental mode selected. Actual support will be checked when the microphone opens.",
+    "active": "Verified: microphone uses all-system-audio echo cancellation. This does not guarantee complete JAWS removal.",
+    "failed": "Experimental echo mode could not be verified. The microphone will not publish in this mode. Leave and retry normal mode."
+  },
+  "krisp_preview": {
+    "label": "Enhanced speech cleanup (Krisp, experimental)",
+    "hint": "Enabled by default; you may disable it for this session. Krisp components download when the microphone opens. If unsupported or loading fails, the normal microphone continues. Attempts to reduce ambient noise and background speech; disabled in music mode. The microphone test does not include this filter; compare with another participant.",
+    "loading": "Preparing Krisp. The microphone continues with its existing settings.",
+    "ready": "Krisp speech cleanup enabled.",
+    "failed": "Krisp could not be enabled. The option was turned off; the microphone continues with the existing audio method."
+  },
   "audio_stability": {
     "label": "Experimental compatibility for audio dropouts",
     "help": "Enable if microphone or system audio cuts out. Uses the asynchronous audio filter to stabilize timing. Your choice is remembered. Cannot be changed while recording or streaming. Requires the supported OBS plugin.",
@@ -2783,7 +2932,7 @@
     "app_window_title": "EVD Barrier Free Video Editor",
     "about_label": "About",
     "about_title": "About EVD Barrier Free Video Editor",
-    "about_detail": "Version 5.5.0\n\nA keyboard-first video editor designed for blind and low-vision users.\n\nProgram Icon: Hands and ears editing video\n\n© 2025-2026 Engin Yılmaz\nAll rights reserved.",
+    "about_detail": "Version 5.7.0\n\nA keyboard-first video editor designed for blind and low-vision users.\n\nProgram Icon: Hands and ears editing video\n\n© 2025-2026 Engin Yılmaz\nAll rights reserved.",
     "system_language": "System Language (Auto)",
     "language_changed": "Language successfully changed. May require restart to take full effect.",
     "error_title": "Error",
@@ -3064,6 +3213,13 @@
         "splitDescriptionEvent": "Split description event at playback position",
         "mergeDescriptionEvents": "Merge selected description events",
         "synthesizeSelectedDescriptions": "Synthesize selected descriptions",
+        "descriptionVoiceUp": "Increase event narration volume",
+        "descriptionVoiceDown": "Decrease event narration volume",
+        "descriptionOriginalUp": "Increase event original volume",
+        "descriptionOriginalDown": "Decrease event original volume",
+        "descriptionRateUp": "Speed up event narration",
+        "descriptionRateDown": "Slow down event narration",
+        "descriptionRateReset": "Reset event narration speed",
         "synthesizeAllDescriptions": "Synthesize all descriptions",
         "renderDescribedVideo": "Create described video or MP3"
       }
@@ -3549,7 +3705,7 @@
       "pos_center": "Center (Full Screen)",
       "pos_custom": "Custom...",
       "scale": "Scale (%):",
-      "ai_suggest": "AI Position/Scale Suggestion (Gemini)",
+      "ai_suggest": "AI Position/Scale Suggestion",
       "opacity": "Opacity (%):",
       "duration": "Duration (sec):",
       "duration_hint": "(0 = video duration)",
@@ -5855,6 +6011,10 @@
     "unknown_error": "Unknown error"
   },
   "description_subtitle_editor": {
+    "audio_shortcuts_help": "In the event list, Alt+Shift+L/J changes narration volume; Alt+Shift+Up/Down changes original volume. F speeds up, A slows down, D resets speed. Only the focused event changes and the mix replays.",
+    "audio_adjust_ttsVolume": "Narration volume {value}%",
+    "audio_adjust_originalVolume": "Original video volume {value}%",
+    "audio_adjust_ttsPlaybackRate": "Narration playback speed {value}%",
     "window_title": "Description and Subtitle Editor",
     "heading": "Description and Subtitle Editor",
     "intro": "Prepare professional audio description and subtitle projects in a separate, accessible workspace.",

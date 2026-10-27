@@ -5,7 +5,9 @@ const { app } = require('electron');
 const { detectOBS } = require('./obs-detect');
 const { spawn } = require('child_process');
 const ffmpegHandler = require('../main/ffmpeg-handler');
-const { resolveDeviceTiming, syncFilter } = require('./obs-audio-timing');
+const { resolveDeviceTiming, syncFilter, setMicrophoneDevice } = require('./obs-audio-timing');
+const { syncMicrophoneNoise } = require('./obs-microphone-noise');
+const gtcrnRecording = require('./gtcrn-recording');
 
 const CONFIG_DIR = path.join(os.homedir(), '.korcul-video-editor');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'obs-config.json');
@@ -1815,14 +1817,11 @@ class OBSController {
             // Kullanıcının seçtiği mikrofon cihazını ayarla
             if (!micDeviceId || micDeviceId === 'default') {
                 try {
-                    await this._call('SetInputSettings', {
-                        inputName: micInputName,
-                        inputSettings: { device_id: 'default', use_device_timing: false },
-                        overlay: true
-                    });
+                    await setMicrophoneDevice(this._call.bind(this), micInputName, 'default');
                     console.log('Default Mic/Aux device reset to OBS default input.');
                 } catch (defaultMicErr) {
                     console.log('Could not reset default Mic/Aux device:', defaultMicErr.message);
+                    throw new Error(require('../main/i18n').t('audio_stability.save'));
                 }
             } else if (micDeviceId && micDeviceId !== 'default') {
                 try {
@@ -1858,20 +1857,14 @@ class OBSController {
 
                         if (micMatch) {
                             console.log(`Setting default Mic/Aux device to: ${micMatch.itemName} (${micMatch.itemValue})`);
-                            await this._call('SetInputSettings', {
-                                inputName: micInputName,
-                                inputSettings: {
-                                    device_id: micMatch.itemValue || micMatch.value,
-                                    use_device_timing: false
-                                },
-                                overlay: true
-                            });
+                            await setMicrophoneDevice(this._call.bind(this), micInputName, micMatch.itemValue || micMatch.value);
                         } else {
                             console.log(`No OBS mic match found for: ${micLabel || micDeviceId}. Keeping default.`);
                         }
                     }
                 } catch (micPropErr) {
                     console.log('Could not query default mic properties:', micPropErr.message);
+                    throw new Error(require('../main/i18n').t('audio_stability.save'));
                 }
             }
         } else if (includeMic) {
@@ -1888,6 +1881,25 @@ class OBSController {
                 micInputName = 'KVE Mikrofon';
                 await this._setWindowsAudioDeviceTiming(micInputName, kinds.mic, false);
                 await this._call('SetInputMute', { inputName: micInputName, inputMuted: false }).catch(() => { });
+            }
+        }
+
+        // Only the recording wizard opts in. Other source setups disable our
+        // managed filter, without changing user filters or audio timing.
+        this.gtcrnMicrophone = null;
+        if (micInputName) {
+            try {
+                const method = params?.microphoneNoiseMethod === 'deepfilter' ? 'deepfilter' : 'gtcrn';
+                const useGtcrn = params?.microphoneNoiseSuppression === true && method === 'gtcrn';
+                if (useGtcrn) {
+                    gtcrnRecording.runtime(path.join(__dirname, '../..'));
+                    this.gtcrnMicrophone = micInputName;
+                }
+                await syncMicrophoneNoise(this._call.bind(this), micInputName,
+                    !useGtcrn && params?.microphoneNoiseSuppression === true, method, params?.microphoneNoiseAttenuation);
+            } catch (error) {
+                console.warn('[OBS] Microphone noise filter:', error.message);
+                throw new Error(require('../main/i18n').t(error.message === 'runtime' ? 'recording_microphone_noise.gtcrn_unavailable' : 'recording_microphone_noise.failed'));
             }
         }
 
@@ -3604,9 +3616,23 @@ class OBSController {
         }
 
         try {
+            if (this.gtcrnMicrophone) {
+                this.gtcrnSession = await gtcrnRecording.prepareTracks(this._call.bind(this), this.gtcrnMicrophone);
+            }
+            const i18n = require('../main/i18n');
+            const { recordingFilename } = require('./recording-filename');
+            this.recordingFileStem = recordingFilename(new Date(),
+                i18n.getCurrentLanguage(), i18n.t('recording_navigation.time_label'));
             await this._call('StartRecord');
         } catch (error) {
             const statusAfterFailure = await this.getRecordingStatus().catch(() => null);
+            if (!statusAfterFailure?.outputActive && this.gtcrnSession) {
+                await this.gtcrnSession.restore();
+                this.gtcrnSession = null;
+            }
+            if (this.gtcrnMicrophone && !statusAfterFailure?.outputActive) {
+                throw new Error(require('../main/i18n').t('recording_microphone_noise.gtcrn_setup_failed'));
+            }
             const errorDetails = [
                 error.message || String(error),
                 statusAfterFailure ? `outputActive=${statusAfterFailure.outputActive}` : null,
@@ -3649,8 +3675,49 @@ class OBSController {
     }
 
     async stopRecording() {
-        const result = await this._call('StopRecord');
-        return { stopped: true, outputPath: result?.outputPath || this.lastRecordingPath || null };
+        // StopRecord acknowledges a request before the muxer has fully stopped.
+        // Never reload profiles or restore track routing during that interval.
+        let cleanup = () => {};
+        const finished = new Promise(resolve => {
+            const client = this._getClient();
+            const onState = data => {
+                if (data?.outputState === 'OBS_WEBSOCKET_OUTPUT_STOPPED') resolve(true);
+            };
+            client.on('RecordStateChanged', onState);
+            const timer = setTimeout(() => resolve(false), 30000);
+            cleanup = () => { clearTimeout(timer); client.removeListener('RecordStateChanged', onState); };
+        });
+        let result, fullyStopped;
+        try {
+            result = await this._call('StopRecord');
+            fullyStopped = await finished;
+        } finally { cleanup(); }
+        let outputPath = result?.outputPath || this.lastRecordingPath || null;
+        if (fullyStopped && outputPath && this.recordingFileStem) {
+            try {
+                outputPath = await require('./recording-filename').nameCompletedRecording(outputPath, this.recordingFileStem);
+                this.lastRecordingPath = outputPath;
+            } catch (error) {
+                // A naming failure must never lose a successful recording.
+                console.warn('[OBS] Recording name unchanged:', error.message);
+            }
+        }
+        this.recordingFileStem = null;
+        const gtcrn = !!this.gtcrnSession;
+        let gtcrnRestoreFailed = false;
+        if (this.gtcrnSession) {
+            try {
+                if (!fullyStopped) throw new Error('stop_not_finalized');
+                await this.gtcrnSession.restore();
+            }
+            catch (error) { gtcrnRestoreFailed = true; console.error('[GTCRN] Restore failed:', error); }
+            this.gtcrnSession = null;
+        }
+        if (gtcrn && outputPath) {
+            this.gtcrnPending = this.gtcrnPending || new Set();
+            this.gtcrnPending.add(outputPath);
+        }
+        return { stopped: true, outputPath, gtcrn, gtcrnRestoreFailed };
     }
 
     async getRecordingStatus() {

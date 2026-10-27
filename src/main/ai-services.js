@@ -11,7 +11,7 @@ const providers = Object.freeze({
     groq: { name: 'Groq', pricing: 'https://console.groq.com/docs/models' }
 });
 const validModel = value => typeof value === 'string' && /^[a-zA-Z0-9._:/-]{1,200}$/.test(value);
-const errorCodes = new Set(['provider','key_required','key','model','same_provider','secure_storage','unauthorized','request','pricing','unsupported','input','refusal','empty','cancelled']);
+const errorCodes = new Set(['provider','key_required','key','model','same_provider','secure_storage','unauthorized','request','pricing','unsupported','input','refusal','empty','cancelled','timeout']);
 const fail = (code, transient = false) => Object.assign(new Error(code), { code, transient });
 
 function createService({ directory, secure, legacy, fetchImpl = (...args) => fetch(...args) }) {
@@ -141,11 +141,15 @@ function createService({ directory, secure, legacy, fetchImpl = (...args) => fet
                 { role: 'user', content: picture.length ? [{ type: 'text', text: prompt }, ...picture.map(p => ({ type: 'image_url', image_url: { url: p.url } }))] : prompt }] };
         }
         const timeout = new AbortController(), timer = setTimeout(() => timeout.abort(), 90000);
+        const started = Date.now();
+        // Log metadata only: never credentials, prompts, images, or response text.
+        console.info('[AI request] started', { provider: id, model: selected, images: picture.length });
         const onAbort = () => timeout.abort();
         signal?.addEventListener('abort', onAbort, { once: true });
         try {
             if (signal?.aborted) throw fail('cancelled');
             const response = await fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body), redirect: 'error', signal: timeout.signal });
+            console.info('[AI request] response', { provider: id, status: response.status, elapsedMs: Date.now() - started });
             if (!response.ok) throw fail([401, 403].includes(response.status) ? 'unauthorized' : response.status === 400 ? 'unsupported' : 'request', response.status === 429 || response.status >= 500);
             const data = await response.json();
             let text;
@@ -165,7 +169,9 @@ function createService({ directory, secure, legacy, fetchImpl = (...args) => fet
             if (typeof text !== 'string' || !text.trim()) throw fail('empty');
             return { success: true, text, provider: id, model: selected };
         } catch (error) {
+            console.warn('[AI request] failed', { provider: id, elapsedMs: Date.now() - started, code: error.code || error.cause?.code || error.name });
             if (signal?.aborted) throw fail('cancelled');
+            if (timeout.signal.aborted) throw fail('timeout', true);
             if (errorCodes.has(error.code) && typeof error.transient === 'boolean') throw error;
             throw fail('request', true);
         } finally { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); }
@@ -223,7 +229,7 @@ function register({ ipcMain, i18n }) {
                     event.sender.removeListener('destroyed', destroyed);
                     if (jobs.get(event.sender.id) === controller) jobs.delete(event.sender.id);
                 }
-            } catch (error) { const code = errorCodes.has(error.code) ? error.code : 'request'; return { success: false, error: code, message: i18n.t(`ai_services.errors.${code}`) }; }
+            } catch (error) { const code = errorCodes.has(error.code) ? error.code : 'request'; return { success: false, error: code, message: i18n.t(code === 'timeout' ? 'ai_connection.timeout' : `ai_services.errors.${code}`) }; }
         });
     }
 }

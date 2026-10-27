@@ -1,9 +1,10 @@
-const { ipcRenderer, clipboard, shell } = require('electron');
+const { ipcRenderer, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
-const { pathToFileURL } = require('url');
+const { pathToFileURL, fileURLToPath } = require('url');
+const clipboard = require(fileURLToPath(new URL('../scripts/clipboard-bridge.cjs', window.location.href)));
 
 let liveKitTrackProcessors = null;
 try {
@@ -2640,8 +2641,9 @@ function getTranslationTrackSignature() {
 
 function getTranslationTrackMediaStreamTracks({ cloneTracks = false } = {}) {
     const tracks = [];
-    if (state.liveRoom.localAudioTrack?.mediaStreamTrack) {
-        tracks.push(state.liveRoom.localAudioTrack.mediaStreamTrack);
+    const localMicrophone = getUnprocessedRoomMicrophoneTrack();
+    if (localMicrophone) {
+        tracks.push(localMicrophone);
     }
     Object.values(state.liveRoom.remoteParticipants || {}).forEach((participantState) => {
         const audioTracks = Array.isArray(participantState?.audioTracks) ? participantState.audioTracks : [];
@@ -2669,10 +2671,11 @@ function getTranslationTrackMediaStreamTracks({ cloneTracks = false } = {}) {
 
 function getLiveInterpreterRecordingTrackEntries() {
     const entries = [];
-    if (state.liveRoom.localAudioTrack?.mediaStreamTrack) {
+    const localMicrophone = getUnprocessedRoomMicrophoneTrack();
+    if (localMicrophone) {
         entries.push({
-            id: `host:${state.liveRoom.localAudioTrack.mediaStreamTrack.id}`,
-            track: state.liveRoom.localAudioTrack.mediaStreamTrack,
+            id: `host:${localMicrophone.id}`,
+            track: localMicrophone,
             role: 'original'
         });
     }
@@ -3799,7 +3802,7 @@ function updateHostAudioLevelLabels() {
 }
 
 function getNativeAudioTrackFromLiveKitTrack(track) {
-    return track?.mediaStreamTrack || track?._mediaStreamTrack || null;
+    return track?.__evdOriginalMicrophoneTrack || track?.mediaStreamTrack || track?._mediaStreamTrack || null;
 }
 
 async function applyHostMicrophoneVolumeToTrack(track = state.liveRoom.localAudioTrack) {
@@ -4452,6 +4455,17 @@ function logBroadcastRoomDebug(event, details = {}) {
     } catch (_error) {
         // Debug logging must never affect the live room flow.
     }
+}
+
+function traceRoomAudioCounters(track, direction) {
+    if (!track) return;
+    window.sampleRoomAudioDiagnostics?.(track,
+        details => logBroadcastRoomDebug('room-audio-counters', { direction, ...details }),
+        () => ({
+            monitorState: state.liveRoom.remoteAudioMonitorContext?.state || null,
+            speakerVolume: getHostSpeakerVolume(),
+            krispSelected: document.getElementById('host-microphone-krisp-preview')?.checked === true
+        }));
 }
 
 async function withTimeout(promise, timeoutMs, errorCode) {
@@ -7063,7 +7077,9 @@ function buildHostAudioCaptureOptions(deviceId) {
         sampleRate: 48000,
         volume: getHostMicrophoneVolume(),
         voiceIsolation: false,
-        echoCancellation: !music && state.audioDevices.microphoneEchoCancellation,
+        echoCancellation: !music && process.platform === 'win32' && Number(process.versions.electron?.split('.')[0]) >= 44
+            && document.getElementById('host-system-aec-lab')?.checked
+            ? { exact: 'all' } : !music && state.audioDevices.microphoneEchoCancellation,
         noiseSuppression: !music && state.audioDevices.microphoneNoiseSuppression,
         autoGainControl: !music && state.audioDevices.microphoneAutoGainControl
     };
@@ -7115,8 +7131,39 @@ async function syncSelectedMicrophoneToObs() {
     }
 }
 
+// Keep recording/translation consumers on their original input, independent of
+// LiveKit's processed mediaStreamTrack getter. OBS device capture is untouched.
+function getUnprocessedRoomMicrophoneTrack() {
+    const track = state.liveRoom.localAudioTrack;
+    return track?.__evdOriginalMicrophoneTrack || track?.mediaStreamTrack || null;
+}
+
+let applyDesktopKrispPreview = null;
+function syncDesktopKrispPreview(track = state.liveRoom.localAudioTrack) {
+    const control = document.getElementById('host-microphone-krisp-preview');
+    const music = document.getElementById('host-microphone-music-mode');
+    if (!control || !music || !window.createEvdKrispPreview) return Promise.resolve();
+    if (!applyDesktopKrispPreview) {
+        applyDesktopKrispPreview = window.createEvdKrispPreview({
+            control, music, announce: setStatus, translate: t,
+            diagnose: details => logBroadcastRoomDebug('krisp-preview', details),
+            loadSdk: async () => require(fileURLToPath(new URL(
+                '../../broadcast-room-web/frontend/public/vendor/krisp-0.4.5/index.js',
+                window.location.href
+            )))
+        });
+        // Session device preference, accessible by Tab; no global shortcut.
+        control.addEventListener('change', () => {
+            syncDesktopKrispPreview();
+            traceRoomAudioCounters(state.liveRoom.localAudioTrack, 'outgoing');
+        });
+    }
+    return applyDesktopKrispPreview(track);
+}
+
 function getHostMicrophoneProcessingSignature() {
     return [
+        process.platform === 'win32' && Number(process.versions.electron?.split('.')[0]) >= 44 && document.getElementById('host-system-aec-lab')?.checked === true,
         document.getElementById('host-microphone-music-mode')?.checked === true,
         state.audioDevices.microphoneEchoCancellation,
         state.audioDevices.microphoneNoiseSuppression,
@@ -7125,6 +7172,7 @@ function getHostMicrophoneProcessingSignature() {
 }
 
 async function handleHostMicrophoneProcessingChange() {
+    await syncDesktopKrispPreview();
     const music = document.getElementById('host-microphone-music-mode')?.checked === true;
     for (const control of [els.hostMicrophoneEchoCancellation, els.hostMicrophoneNoiseSuppression, els.hostMicrophoneAutoGainControl]) {
         if (control) control.disabled = music;
@@ -9896,6 +9944,7 @@ function bindHostRemoteTrack(track, participant, publication = null) {
             mediaStreamTrackEnabled: track?.mediaStreamTrack?.enabled !== false,
             audioTrackCount: participantState.audioTracks.length
         });
+        traceRoomAudioCounters(track, 'incoming');
         refreshLiveInterpreterRecordingGraph();
         refreshRemoteAudioRecordingGraph();
         refreshObsAudioBridgeForActiveOutput();
@@ -10335,10 +10384,24 @@ async function syncHostLiveKitMedia(options = {}) {
                     try { state.liveRoom.localAudioTrack.stop(); } catch (_error) {}
                 }
                 state.liveRoom.localAudioTrack = await client.createLocalAudioTrack(buildHostAudioCaptureOptions(microphoneDeviceId));
+                if (buildHostAudioCaptureOptions(microphoneDeviceId).echoCancellation?.exact === 'all') {
+                    const settings = state.liveRoom.localAudioTrack.mediaStreamTrack.getSettings();
+                    if (settings.echoCancellation !== 'all') {
+                        state.liveRoom.localAudioTrack.stop();
+                        state.liveRoom.localAudioTrack = null;
+                        throw new Error(t('aec_lab.failed'));
+                    }
+                    logBroadcastRoomDebug('system-aec-lab', { mode: settings.echoCancellation, electron: process.versions.electron });
+                    setStatus(t('aec_lab.active'));
+                }
+                state.liveRoom.localAudioTrack.__evdOriginalMicrophoneTrack = state.liveRoom.localAudioTrack.mediaStreamTrack;
                 state.liveRoom.localAudioTrack.__deviceId = microphoneDeviceId;
                 state.liveRoom.localAudioTrack.__processingSignature = getHostMicrophoneProcessingSignature();
                 await applyHostMicrophoneVolumeToTrack(state.liveRoom.localAudioTrack);
                 await room.localParticipant.publishTrack(state.liveRoom.localAudioTrack);
+                // Do not delay microphone activation while Krisp downloads its model.
+                syncDesktopKrispPreview(state.liveRoom.localAudioTrack);
+                traceRoomAudioCounters(state.liveRoom.localAudioTrack, 'outgoing');
                 logBroadcastRoomDebug('host-microphone-track-published', {
                     requestedDeviceId: microphoneDeviceId,
                     requestedDeviceLabel: getSelectedMicrophoneLabel(),
@@ -24720,6 +24783,15 @@ async function init() {
         els.hostMicrophoneNoiseSuppression.checked = state.audioDevices.microphoneNoiseSuppression;
     }
     // A per-session preference, reachable by Tab; no global keyboard-manager command is needed.
+    syncDesktopKrispPreview(null);
+    // Session-only experiment/device preference: no global shortcut-manager action.
+    const systemAecLab = document.getElementById('host-system-aec-lab');
+    if (process.platform === 'win32' && Number(process.versions.electron?.split('.')[0]) >= 44 && systemAecLab) {
+        document.getElementById('host-system-aec-lab-container').hidden = false;
+        systemAecLab.addEventListener('change', () => {
+            handleHostMicrophoneProcessingChange().catch(error => setStatus(error.message));
+        });
+    }
     document.getElementById('host-microphone-music-mode')?.addEventListener('change', () => {
         handleHostMicrophoneProcessingChange().catch(error => setStatus(String(error.message || error)));
     });

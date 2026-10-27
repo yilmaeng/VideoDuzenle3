@@ -251,7 +251,7 @@
         <section class="info-card">
           <h2 data-i18n="player.markers_title">İşaretçiler</h2>
           <ul id="marker-list" role="listbox" aria-label="İşaretçi listesi" data-i18n-aria="player.marker_list_aria"
-            tabindex="0">
+            tabindex="-1">
             <li class="empty-message" data-i18n="player.no_markers">Henüz işaretçi yok</li>
           </ul>
         </section>
@@ -260,7 +260,8 @@
     </div>
 
     <!-- Zaman Çizelgesi -->
-    <section id="timeline-section" role="region" aria-label="Zaman Çizelgesi" data-i18n-aria="player.timeline_aria">
+    <section id="timeline-section" role="application" tabindex="0" aria-label="Zaman Çizelgesi" data-i18n-aria="player.timeline_aria" aria-describedby="timeline-focus-duration">
+      <span id="timeline-focus-duration" class="sr-only"></span>
       <div id="timeline-info">
         <span id="cursor-position" class="timeline-chip">İmleç: 00:00:00.000</span>
         <span id="marker-count" class="timeline-chip">İşaretçi: 0</span>
@@ -1112,6 +1113,7 @@
       </div>
       <div class="dialog-buttons">
         <button type="submit" id="silence-params-confirm" data-i18n="dialog.silence_params.confirm">Listele</button>
+        <button type="button" id="silence-filler-review" data-i18n="filler_review.title"></button>
         <button type="button" id="silence-params-cancel" data-i18n="dialog.cancel">İptal</button>
       </div>
     </form>
@@ -2495,10 +2497,16 @@
   <script src="scripts/markers.js"></script>
   <script src="scripts/transitions.js"></script>
   <script src="scripts/selection.js"></script>
+  <script src="scripts/timeline-pointer.js"></script>
+  <script src="scripts/automatic-subtitles-core.js"></script>
+  <script src="scripts/automatic-subtitles.js"></script>
+  <script src="scripts/filler-review-core.js"></script>
+  <script src="scripts/filler-review.js"></script>
   <script src="scripts/keyboard.js"></script>
   <script src="scripts/ai-model-picker.js"></script>
   <script src="scripts/api-key-guide.js"></script>
   <script src="scripts/ai-services.js"></script>
+  <script src="scripts/ai-segment-description.js"></script>
   <script src="scripts/dialogs.js"></script>
   <script src="scripts/tab-manager.js"></script>
   <script src="scripts/status-bar.js"></script>

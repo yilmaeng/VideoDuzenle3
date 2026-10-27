@@ -578,18 +578,11 @@ async function askAiRecommendation() {
             frames.push(base64);
         }
 
-        const apiData = await ipcRenderer.invoke('get-gemini-api-data');
-        if (!apiData.apiKey) {
-            throw new Error(t('runtime.dialogs.api_key_missing_short', 'API key is missing.'));
-        }
-
         const lang = getCurrentAiLanguageName();
         const prompt = `I want to convert this video to a vertical social format. There are three methods: 1. blur (fill the background with a blurred version), 2. crop, 3. letterbox. Analyze the frames and recommend the best method. Respond only in ${lang} and only in this JSON format: { "recommended_method": "blur", "confidence": 90, "rationale": ["reason one", "reason two"], "suggested_params": {} }`;
 
-        const response = await ipcRenderer.invoke('gemini-vision-request', {
-            apiKey: apiData.apiKey,
-            model: apiData.model,
-            imageBase64: frames[1],
+        const response = await ipcRenderer.invoke('ai-services-request', {
+            imageBase64: frames,
             prompt: prompt,
             systemInstruction: t('runtime.dialogs.ai_system_instruction_json', 'Respond only in {lang}. If JSON output is requested, keep all JSON keys and schema exactly as requested while writing any free text values in {lang}.', {
                 lang

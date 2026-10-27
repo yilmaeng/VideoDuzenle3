@@ -3379,9 +3379,11 @@ const Dialogs = {
      */
     setupSilenceEventListeners() {
         // Parametreler diyaloğu
-        document.getElementById('silence-params-confirm')?.addEventListener('click', () => {
+        this.silenceParamsDialog?.querySelector('form')?.addEventListener('submit', (event) => {
+            event.preventDefault();
             this.startSilenceDetection();
         });
+        this.silenceParamsDialog?.addEventListener('cancel',event=>{if(this._silenceDetectionRunning)event.preventDefault();});
 
         document.getElementById('silence-params-cancel')?.addEventListener('click', () => {
             this.silenceParamsDialog.close();
@@ -3435,6 +3437,11 @@ const Dialogs = {
      * Sessizlik tespiti parametre diyaloğunu göster
      */
     showSilenceParamsDialog() {
+        const fillerButton = document.getElementById('silence-filler-review');
+        if (fillerButton) fillerButton.onclick = () => {
+            this.silenceParamsDialog.close();
+            window.FillerReview.open();
+        };
         if (!VideoPlayer.hasVideo()) {
             Accessibility.alert('Önce bir video açmalısınız');
             return;
@@ -3447,10 +3454,18 @@ const Dialogs = {
      * Sessizlik tespitini başlat
      */
     async startSilenceDetection() {
+        if(this._silenceDetectionRunning)return;
+        this._silenceDetectionRunning=true;
         const minDurationMs = parseInt(document.getElementById('silence-min-duration').value) || 500;
         const threshold = parseInt(document.getElementById('silence-threshold').value) || -30;
 
-        this.silenceParamsDialog.close();
+        const controls=[...this.silenceParamsDialog.querySelectorAll('button,input,select')];
+        const disabledStates=controls.map(control=>control.disabled);
+        controls.forEach(control=>control.disabled=true);
+        const analysisStatus=document.createElement('p');
+        analysisStatus.tabIndex=-1;analysisStatus.setAttribute('role','status');
+        analysisStatus.textContent=this.t('runtime.dialogs.silence_analysis_in_progress');
+        this.silenceParamsDialog.append(analysisStatus);analysisStatus.focus();
         App.showProgress(this.t('runtime.dialogs.silence_analysis_in_progress', 'Silent sections are being analyzed...'));
 
         // Progress dinleyicisi ekle
@@ -3474,6 +3489,9 @@ const Dialogs = {
             if (result.success) {
                 this.detectedSilences = result.data || [];
                 this.showSilenceListDialog();
+                // Open the destination first: closing the parameter dialog must
+                // not briefly return focus to the main timeline.
+                this.silenceParamsDialog.close();
             } else {
                 Accessibility.alert(this.t('runtime.dialogs.analysis_error', 'Analysis error: {error}', { error: result.error }));
             }
@@ -3481,6 +3499,11 @@ const Dialogs = {
             window.api.offFfmpegProgress(progressHandler);
             App.hideProgress();
             Accessibility.alert(this.t('runtime.dialogs.unexpected_error', 'Unexpected error: {error}', { error: error.message }));
+        } finally {
+            this._silenceDetectionRunning=false;
+            controls.forEach((control,index)=>control.disabled=disabledStates[index]);
+            analysisStatus.remove();
+            if(this.silenceParamsDialog.open)document.getElementById('silence-params-confirm')?.focus();
         }
     },
 
@@ -3494,10 +3517,8 @@ const Dialogs = {
         const count = this.detectedSilences.length;
         if (count > 0) {
             Accessibility.announce(this.t('runtime.dialogs.silence_found_announce', `${count} adet sessiz alan bulundu. Ok tuşlarıyla gezinebilirsiniz.`, { count }));
-            setTimeout(() => {
-                const firstItem = document.querySelector('#silence-intervals-list li');
-                if (firstItem) firstItem.focus();
-            }, 100);
+            const firstItem = document.querySelector('#silence-intervals-list li');
+            if (firstItem) firstItem.focus();
         } else {
             Accessibility.announce(this.t('runtime.dialogs.no_silence_found', 'Hiç sessiz alan bulunamadı.'));
         }
@@ -3674,9 +3695,11 @@ const Dialogs = {
         const timelineStart = Timeline.sourceToTimeline(silence.start);
         const timelineEnd = Timeline.sourceToTimeline(silence.end);
 
+        const durationBefore=Timeline.getTotalDuration();
+        let deleted=false;
         if (timelineStart !== -1 && timelineEnd !== -1) {
             Timeline.deleteRange(timelineStart, timelineEnd);
-            Accessibility.announce('Sessiz alan silindi.');
+            deleted=Timeline.getTotalDuration()<durationBefore;
         } else {
             // Eğer tam örtüşme yoksa, en azından başlangıç timeline'da ise oradan itibaren silmeyi deneyebiliriz
             // Ama genellikle sessizlik tespiti taze ise sorun olmaz.
@@ -3688,7 +3711,11 @@ const Dialogs = {
 
         // Bir sonraki öğeyi seç (varsa)
         if (this.detectedSilences.length > 0) {
-            this.selectSilence(Math.min(this.selectedSilenceIndex, this.detectedSilences.length - 1));
+            if(!deleted)this.selectSilence(Math.min(this.selectedSilenceIndex, this.detectedSilences.length - 1));
+        }
+        if(deleted){
+            App.hasChanges=true;App.updateAfterEdit();
+            this.showSilenceCleanupResult(1,durationBefore-Timeline.getTotalDuration(),0,false);
         }
     },
 
@@ -3729,6 +3756,7 @@ const Dialogs = {
         });
 
         if (confirmed) {
+            const durationBefore=Timeline.getTotalDuration();
             // Silme işlemi sırasında zamanlar kayar, bu yüzden sondan başa doğru silmek hayati önem taşır
             const ranges = [...this.detectedSilences]
                 .sort((a, b) => b.start - a.start); // Kaynak zamanına göre sondan başa
@@ -3759,13 +3787,31 @@ const Dialogs = {
             this.detectedSilences = [];
             this.updateSilenceList();
 
-            let message = `${deletedCount} adet sessiz alan silindi.`;
-            if (skippedCount > 0) {
-                message += ` (${skippedCount} alan koruma payından kısa olduğu için atlandı)`;
-            }
-            Accessibility.announce(message);
-            this.silenceListDialog.close();
+            if(deletedCount>0){App.hasChanges=true;App.updateAfterEdit();}
+            this.showSilenceCleanupResult(deletedCount,durationBefore-Timeline.getTotalDuration(),skippedCount,true);
         }
+    },
+
+    showSilenceCleanupResult(count, duration, skipped, closeList) {
+        Accessibility.clearPending();
+        // Local completion UI, not a new keyboard-manager command.
+        const dialog=document.createElement('dialog');
+        dialog.setAttribute('aria-labelledby','silence-cleanup-result-title');
+        dialog.setAttribute('aria-describedby','silence-cleanup-result-message');
+        const title=document.createElement('h2');title.id='silence-cleanup-result-title';title.textContent=this.t('silence_cleanup_result.title');
+        const message=document.createElement('p');message.id='silence-cleanup-result-message';
+        message.textContent=this.t('silence_cleanup_result.message',undefined,{count,seconds:new Intl.NumberFormat(document.documentElement.lang||'tr',{maximumFractionDigits:3}).format(Math.max(0,duration)),skipped,total:Utils.formatTimeForSpeech(Timeline.getTotalDuration())});
+        const ok=document.createElement('button');ok.type='button';ok.autofocus=true;ok.textContent=this.t('filler_review.ok');ok.onclick=()=>dialog.close();
+        dialog.append(title,message,ok);document.body.append(dialog);
+        dialog.addEventListener('close',()=>{
+            dialog.remove();
+            VideoPlayer.updateDurationDisplay();
+            const target=this.silenceListDialog.open ? document.querySelector('#silence-intervals-list li')||document.getElementById('silence-list-close') : document.getElementById('timeline-section');
+            target?.focus();
+        },{once:true});
+        dialog.showModal();
+        if(closeList)this.silenceListDialog.close();
+        ok.focus();
     },
 
     /**
@@ -3780,6 +3826,7 @@ const Dialogs = {
         this.aiDescriptionDialog?.addEventListener('close', () => {
             const chatContainer = document.getElementById('ai-description-chat');
             if (chatContainer) chatContainer.innerHTML = '';
+            this.aiSegmentContext = null;
         });
 
         // Form submit'i engelle - Enter tuşu dialogu kapatmasın
@@ -3807,16 +3854,7 @@ const Dialogs = {
      * Belirli bir video segmenti için AI betimlemesi iste (Konum Betimle)
      */
     async showAIDescriptionForSegment(startTime, duration) {
-        // Önce API anahtarı kontrolü
-        const apiData = await window.api.getGeminiApiData();
-        const apiKey = apiData.apiKey;
-        if (!apiKey) {
-            this.showGeminiApiKeyDialog();
-            Accessibility.announce(this.t('runtime.dialogs.gemini_key_missing_announce', 'Gemini API key is missing. Please enter your key first.'));
-            return;
-        }
-        this.currentAiApiKey = apiKey;
-        this.currentAiModel = apiData.model || 'gemini-2.5-flash';
+        this.aiSegmentContext = null;
 
         this.aiDescriptionDialog.showModal();
 
@@ -3832,15 +3870,7 @@ const Dialogs = {
             const currentLangName = this.getCurrentAiLanguageName();
             const prompt = window.i18nHelper.t('ai.describe_current_position', { time: startTime, lang: currentLangName }) || `Lütfen gönderdiğim bu klibi görme engelli birine en anlaşılır olacak biçimde kısaca betimle. Çıktı dili: ${currentLangName}`;
 
-            // `geminiDescribeSelection` IPC handler'ı sunucu tarafında kesme, yükleme ve analiz işlemlerini yönetir
-            const responseText = await window.api.geminiDescribeSelection({
-                apiKey: apiKey,
-                model: this.currentAiModel,
-                startTime: startTime,
-                endTime: startTime + duration,
-                prompt: prompt,
-                systemInstruction: this.getAiSystemInstruction()
-            });
+            const responseText = await this.describeSegmentWithPreferences(startTime, startTime + duration, prompt);
 
             // Sonucu Göster
             // responseText markdown formatında gelebilir
@@ -3865,16 +3895,7 @@ const Dialogs = {
      */
     async showAIDescriptionDialog() {
         if (!VideoPlayer.hasVideo()) return;
-
-        // API anahtarını kontrol et
-        const apiData = await window.api.getGeminiApiData();
-        const apiKey = apiData.apiKey;
-        if (!apiKey) {
-            Accessibility.alert(this.t('runtime.dialogs.gemini_key_missing', 'Hata: Gemini API anahtarı bulunamadı. Lütfen ayarlardan API anahtarınızı girin.'));
-            return;
-        }
-        this.currentAiApiKey = apiKey;
-        this.currentAiModel = apiData.model || 'gemini-2.5-flash';
+        this.aiSegmentContext = null;
 
         const selection = Selection.getSelection();
         if (!selection || selection.start === selection.end) {
@@ -3895,14 +3916,7 @@ const Dialogs = {
             const currentLangName = this.getCurrentAiLanguageName();
             const prompt = window.i18nHelper.t('ai.prompt_describe_selection', { start: selection.start, end: selection.end, lang: currentLangName }) || `Sen bir görme engelliler için video betimleme asistanısın. Gönderilen kareleri (video kesitini) analiz et ve buradaki olayları, mekanları ve kişileri betimle. Çıktı dili: ${currentLangName}`;
 
-            const response = await window.api.geminiDescribeSelection({
-                apiKey: apiKey,
-                model: this.currentAiModel,
-                startTime: selection.start,
-                endTime: selection.end,
-                prompt: prompt,
-                systemInstruction: this.getAiSystemInstruction()
-            });
+            const response = await this.describeSegmentWithPreferences(selection.start, selection.end, prompt);
 
             // Yanıtı ekle
             chatContainer.innerHTML = `<div class="ai-response">${Utils.markdownToHtml(response)}</div>`;
@@ -3918,6 +3932,23 @@ const Dialogs = {
             chatContainer.innerHTML = `<p style="color: #ff4444;">${this.t('runtime.common.error', 'Hata: {error}', { error: error.message })}</p>`;
             Accessibility.announceError(this.t('runtime.dialogs.analysis_failed', 'Analiz sırasında bir hata oluştu: {error}', { error: error.message }));
         }
+    },
+
+    async describeSegmentWithPreferences(start, end, prompt) {
+        const { prepareSegment } = window.AiSegmentDescription;
+        const context = window.i18nHelper.t('ai_connection.visual_samples');
+        this.aiSegmentContext = await prepareSegment({
+            start, end, videoPath: Timeline.sourceFile || VideoPlayer.currentFilePath,
+            segments: Timeline.segments || [],
+            extractFrame: params => window.api.extractFrameBase64(params), context
+        });
+        const response = await window.AiServices.request({
+            imageBase64: this.aiSegmentContext.imageBase64,
+            prompt: `${prompt}\n${this.aiSegmentContext.context}`,
+            systemInstruction: this.getAiSystemInstruction()
+        });
+        if (!response?.success) throw new Error(response?.error || this.t('runtime.dialogs.ai_empty_response'));
+        return response.text;
     },
 
     /**
@@ -3955,10 +3986,9 @@ const Dialogs = {
 
         try {
             const localizedPrompt = this.buildAiFollowupPrompt(question);
-            const response = await window.api.geminiVisionRequest({
-                apiKey: this.currentAiApiKey,
-                model: this.currentAiModel,
-                prompt: localizedPrompt,
+            const response = await window.AiServices.request({
+                imageBase64: this.aiSegmentContext?.imageBase64,
+                prompt: `${localizedPrompt}\n${this.aiSegmentContext?.context || ''}`,
                 history: this.aiChatHistory,
                 systemInstruction: this.getAiSystemInstruction()
             });
@@ -5720,6 +5750,8 @@ const Dialogs = {
                     button.dataset.resultIndex = String(index);
                     button.onclick = () => {
                         window.App?.suppressPlaybackShortcuts?.();
+                        clearTimeout(this.accessibleConfirmFocusTimer);
+                        this.accessibleConfirmDialog.querySelector('[data-confirm-announcement]')?.remove();
                         if (this.accessibleConfirmResolve) {
                             this.accessibleConfirmResolve(index);
                             this.accessibleConfirmResolve = null;
@@ -5735,6 +5767,16 @@ const Dialogs = {
 
             // Diyaloğu aç
             this.accessibleConfirmDialog.showModal();
+            const announcement = document.createElement('div');
+            announcement.dataset.confirmAnnouncement = '';
+            announcement.className = 'sr-only';
+            announcement.setAttribute('role', 'alert');
+            announcement.setAttribute('aria-atomic', 'true');
+            this.accessibleConfirmDialog.append(announcement);
+            this.accessibleConfirmDialog.addEventListener('close', () => {
+                clearTimeout(this.accessibleConfirmFocusTimer);
+                announcement.remove();
+            }, { once: true });
 
             const spokenParts = [title, message];
             if (String(details || '').trim()) {
@@ -5743,10 +5785,13 @@ const Dialogs = {
             if (buttons.length > 0) {
                 spokenParts.push(buttons.join(', '));
             }
-            Accessibility.announceImmediate(spokenParts.filter(Boolean).join('. '));
+            setTimeout(() => {
+                if (announcement.isConnected && this.accessibleConfirmDialog.open) announcement.textContent = spokenParts.filter(Boolean).join('. ');
+            }, 20);
 
             // İlk butona odaklan
-            setTimeout(() => {
+            this.accessibleConfirmFocusTimer = setTimeout(() => {
+                if (!this.accessibleConfirmDialog.open) return;
                 const targetButton = buttonEls[focusIndex] || buttonEls.find(button => button && !button.hidden);
                 targetButton?.focus();
             }, 100);
@@ -11264,6 +11309,31 @@ const Dialogs = {
                 purpose: this.videoLayerState.mode,
                 currentTime: VideoPlayer.getCurrentTime()
             });
+
+            if (!result.success) throw new Error(result.error);
+            const images = [];
+            for (const [videoPath, time] of [
+                [App.currentFilePath, VideoPlayer.getCurrentTime()],
+                [this.videoLayerState.layerVideoPath, 0]
+            ]) {
+                images.push(await window.api.extractFrameBase64({ videoPath, time }));
+            }
+            const response = await window.AiServices.request({
+                imageBase64: images,
+                prompt: window.i18nHelper.t('ai_connection.layer_prompt', {
+                    width: result.mainResolution.width, height: result.mainResolution.height,
+                    mode: this.videoLayerState.mode,
+                    layerWidth: result.layerResolution.width, layerHeight: result.layerResolution.height
+                }),
+                systemInstruction: this.getAiSystemInstruction()
+            });
+            if (!response?.success) throw new Error(response?.error || this.t('runtime.dialogs.ai_empty_response'));
+            const { parseLayerSuggestion } = window.AiSegmentDescription;
+            try {
+                result.suggestions = [parseLayerSuggestion(response.text, result.mainResolution)];
+            } catch {
+                throw new Error(window.i18nHelper.t('ai_services.errors.request'));
+            }
 
             if (result.success && result.suggestions && result.suggestions.length > 0) {
                 const suggestion = result.suggestions[0];

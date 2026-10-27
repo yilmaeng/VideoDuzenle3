@@ -36,7 +36,8 @@ function normalize(items, offset = 0, duration = Infinity) {
         // Quantized Whisper token boundaries can collapse to one timestamp.
         const safeEnd = Math.min(duration, Math.max(safeStart + 0.02, end));
         if (safeEnd <= safeStart) return [];
-        return [{ text, start: safeStart + offset, end: safeEnd + offset }];
+        return [{ text, start: safeStart + offset, end: safeEnd + offset,
+            ...(item.alignmentQuality ? {alignmentQuality:item.alignmentQuality} : {}) }];
     });
 }
 
@@ -291,6 +292,9 @@ function createSpeechSearchService(options = {}) {
         }
         const model = modelName(request.model);
         const language = request.language || 'auto';
+        const fillers = request.mode === 'fillers';
+        if (fillers && backend !== 'whisper.cpp') throw new Error('filler_backend_unsupported');
+        const fillerPolicy = fillers ? require('./filler-analysis') : null;
         if (typeof language !== 'string' || !/^[a-zA-Z-]{2,24}$/.test(language)) throw new Error('speech_search_language_invalid');
         const stages = { cache: 'analyze', model: 'model', decoding: 'extract', transcribing: 'analyze', caching: 'analyze', complete: 'complete' };
         const report = payload => { if (!signal?.aborted) onProgress?.({ ...payload, stage: stages[payload.phase] }); };
@@ -306,7 +310,8 @@ function createSpeechSearchService(options = {}) {
                 const sourcePath = fs.realpathSync(path.resolve(requestedSourcePath));
                 const stat = fs.statSync(sourcePath);
                 if (!stat.isFile()) throw new Error('speech_search_source_invalid');
-                const identity = { version: VERSION, sourcePath, size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, model, language, backend };
+                const identity = { version: VERSION, sourcePath, size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, model, language, backend,
+                    ...(fillers ? {analysisMode:fillerPolicy.VERSION} : {}) };
                 const key = crypto.createHash('sha256').update(JSON.stringify(identity)).digest('hex');
                 const cachePath = path.join(cacheDir, `${key}.json`);
                 const progress = payload => report({ sourcePath: requestedSourcePath, sourceIndex, sourceCount: request.sources.length, ...payload });
@@ -363,6 +368,7 @@ function createSpeechSearchService(options = {}) {
                             writeWave(raw, wav);
                             const chunkDuration = raw.length / 4 / SAMPLE_RATE;
                             const result = await nativeApi.runWhisperChunk(runtime, { sourcePath: wav, offset: 0, duration: chunkDuration, language, signal,
+                                ...(fillers ? {initialPrompt:fillerPolicy.PROMPT, preciseFillerTiming:true} : {}),
                                 onChunkProgress: percent => progress({ phase: 'transcribing', percent: Math.round((position + Math.min(chunkBytes, bytes - position) * percent / 100) / bytes * 100) }) });
                             checkAbort(signal);
                             for (const field of ['words', 'segments']) transcription[field].push(...owned(normalize(result[field], bounds.from / 4 / SAMPLE_RATE, chunkDuration), bounds));
@@ -377,6 +383,7 @@ function createSpeechSearchService(options = {}) {
                     words: normalize(transcription.words, 0, duration), segments: normalize(transcription.segments, 0, duration),
                     transcript: (transcription.words.length ? transcription.words : transcription.segments).map(item => item.text).join(' ').trim(),
                     analyzedAt: new Date().toISOString(), cacheHit: false };
+                if (fillers) result.fillers = fillerPolicy.candidates(result.words, audioPath);
                 progress({ phase: 'caching', percent: 0 });
                 const partial = path.join(temporary, 'transcript.json');
                 fs.writeFileSync(partial, JSON.stringify({ identity, result }), 'utf8');

@@ -75,6 +75,19 @@ async function main() {
     for(let i=0;i<expected.length;i+=4) squaredError+=(expected.readFloatLE(i)-preview.pcm.readFloatLE(i))**2;
     assert(Math.sqrt(squaredError/(expected.length/4))<.0001,`PCM preview must match source cuts: error=${Math.sqrt(squaredError/(expected.length/4))}`);
     assert(rms(preview.pcm,5.137,5.147)>.01);
+    const smoothSpans = [
+        {start:2.137,end:5.137,segmentStart:2.137,segmentEnd:5.137,fadeOut:true},
+        {start:10.283,end:13.283,segmentStart:10.283,segmentEnd:13.283,fadeIn:true}
+    ];
+    const audition = await renderPreviewAudio(ffmpegPath,{source,spans:smoothSpans});
+    const timelineWindow = await renderPreviewAudio(ffmpegPath,{source,spans:[
+        {...smoothSpans[0],segmentStart:0}, {...smoothSpans[1],segmentEnd:16}
+    ]});
+    assert.equal(audition.pcm.length,6*48000*8,'No duration padding at the audition seam');
+    assert(audition.pcm.equals(timelineWindow.pcm),'Cut audition and deleted timeline use identical PCM smoothing');
+    assert.equal(audition.pcm.readFloatLE(3*48000*8),0,'Discontinuity receives the shared protective fade');
+    assert(rms(audition.pcm,2.98,2.995)>.01);
+    assert(rms(audition.pcm,3.005,3.02)>.01);
     console.log(`PASS: 500-cut frame plan; actual exports, speeds, mute, A/V timing and PCM preview. ${root}`);
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

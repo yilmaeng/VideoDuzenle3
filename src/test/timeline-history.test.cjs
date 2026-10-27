@@ -8,7 +8,7 @@ const context = {
     window:{i18nHelper:{t:(key,params)=>key+JSON.stringify(params||{})}},
     Utils:{formatTime:String},
     VideoPlayer:{time:7,getTimelineTime(){return this.time;},seekToTimelineTime(t){this.time=t;},updateCursorDisplay(){}},
-    Selection:{start:4,end:8,getSelection(){return {start:this.start,end:this.end};},updateUI(){},clear(){this.start=this.end=null;}},
+    Selection:{start:4,end:8,extendedAnchor:7,stopExtended(){this.extendedAnchor=null;},getSelection(){return {start:this.start,end:this.end};},updateUI(){},clear(){this.stopExtended();this.start=this.end=null;}},
     Markers:{markers:[{time:5}],getAll(){return this.markers;},handleTimelineDelete(){this.markers=[];},updateMarkerList(){},updateMarkerCount(){}}
 };
 vm.createContext(context);
@@ -23,7 +23,9 @@ assert.equal(t.undoStack[0].action,'delete');
 assert(t.historyLabel(t.undoStack[0],true).includes('"seconds":"4"'));
 context.VideoPlayer.time=12;context.Selection.clear();
 const edited=clone(t.segments);
+context.Selection.extendedAnchor=12;
 assert(t.undo());t.restoreHistoryView();
+assert.equal(context.Selection.extendedAnchor,null);
 assert.equal(context.VideoPlayer.time,7);
 assert.equal(context.Selection.start,4);
 assert.equal(context.Selection.end,8);

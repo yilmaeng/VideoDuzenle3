@@ -232,6 +232,7 @@ contextBridge.exposeInMainWorld('api', {
     // Seçim olayları
     onSelectAll: (callback) => ipcRenderer.on('select-all', () => callback()),
     onSelectClear: (callback) => ipcRenderer.on('select-clear', () => callback()),
+    onExtendedSelection: (callback) => ipcRenderer.on('select-extended', () => callback()),
     onSelectRangeDialog: (callback) => ipcRenderer.on('select-range-dialog', () => callback()),
     onSelectBetweenMarkers: (callback) => ipcRenderer.on('select-between-markers', () => callback()),
     onShowSpeedDialog: (callback) => ipcRenderer.on('show-speed-dialog', () => callback()),
@@ -366,7 +367,7 @@ contextBridge.exposeInMainWorld('api', {
 
     // Düzen olayları
     onEditVideoProperties: (callback) => ipcRenderer.on('edit-video-properties', () => callback()),
-    onEditListSilences: (callback) => ipcRenderer.on('edit-list-silences', () => callback()),
+    onEditListSilences: (callback) => ipcRenderer.on('edit-list-silences', (_event, mode) => callback(mode)),
 
     // Oynatma olayları
     onPlaybackSkipSilence: (callback) => ipcRenderer.on('playback-skip-silence', () => callback()),

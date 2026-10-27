@@ -253,6 +253,7 @@ const TabManager = {
      * @param {Object} tab - Sekme objesi
      */
     async loadTabState(tab) {
+        Selection.stopExtended();
         // Timeline'ı yükle
         Timeline.segments = tab.timeline.segments.map(s => ({ ...s }));
         Timeline.sourceFile = tab.timeline.sourceFile;
@@ -315,7 +316,10 @@ const TabManager = {
         }
 
         const totalDurationEl = document.getElementById('total-duration');
-        if (totalDurationEl) {
+        if (tab === this.getActiveTab()) {
+            tab.timeline.totalDuration = Timeline.getTotalDuration();
+            VideoPlayer.updateDurationDisplay();
+        } else if (totalDurationEl) {
             const duration = tab.timeline.totalDuration || 0;
             totalDurationEl.textContent = Utils.formatTime(duration);
         }

@@ -65,6 +65,20 @@ test('contract, shared model directory, completed cache reuse and source immutab
     assert.ok(fs.readdirSync(path.join(config.cacheDir, 'speech-search')).every(file => file.endsWith('.json')));
 });
 
+test('filler prompting has an isolated cache and never replaces normal transcripts', async t => {
+    const fixture=setup(t);const seen=[];
+    fixture.nativeWhisper.runWhisperChunk=async(_runtime,options)=>{seen.push(options);return{words:[{text:options.initialPrompt?'eee':'normal',start:.2,end:.7}],segments:[]};};
+    const normal=await fixture.service.analyze({sources:[fixture.source]});
+    const filler=await fixture.service.analyze({sources:[fixture.source],mode:'fillers',language:'tr'});
+    assert.equal(seen[0].initialPrompt,undefined);assert.ok(seen[1].initialPrompt.includes('Eee'));
+    assert.equal(seen[0].preciseFillerTiming,undefined);assert.equal(seen[1].preciseFillerTiming,true);
+    assert.equal(filler.transcripts[0].words[0].text,'eee');
+    assert.deepEqual(filler.transcripts[0].fillers,[]); // mocked audio is silent
+    assert.equal(fixture.service.readCached({sources:[fixture.source]}).transcripts[0].words[0].text,normal.transcripts[0].words[0].text);
+    const cached=await fixture.service.analyze({sources:[fixture.source],mode:'fillers',language:'tr'});
+    assert.equal(cached.transcripts[0].cacheHit,true);assert.equal(seen.length,2);
+});
+
 test('source and language changes invalidate cache; corrupt cache is repaired', async t => {
     const { service, source, calls, config } = setup(t);
     await service.analyze({ sources: [source] });

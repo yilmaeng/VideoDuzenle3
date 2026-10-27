@@ -675,6 +675,14 @@
                     <legend data-i18n="broadcast_room.microphone_processing_label">Mikrofon sinyal işleme</legend>
                     <label for="host-microphone-music-mode" data-i18n="broadcast_room.microphone_music_mode"></label>
                     <input id="host-microphone-music-mode" type="checkbox" aria-describedby="host-microphone-music-hint">
+                    <label for="host-microphone-krisp-preview" data-i18n="krisp_preview.label"></label>
+                    <input id="host-microphone-krisp-preview" type="checkbox" checked aria-describedby="host-microphone-krisp-hint">
+                    <p id="host-microphone-krisp-hint" data-i18n="krisp_preview.hint"></p>
+                    <div id="host-system-aec-lab-container" hidden>
+                        <label for="host-system-aec-lab" data-i18n="aec_lab.desktop_label"></label>
+                        <input id="host-system-aec-lab" type="checkbox" checked aria-describedby="host-system-aec-lab-hint">
+                        <p id="host-system-aec-lab-hint" data-i18n="aec_lab.waiting"></p>
+                    </div>
                     <p id="host-microphone-music-hint" class="hint" data-i18n="broadcast_room.microphone_music_hint"></p>
                     <p class="hint" data-i18n="broadcast_room.microphone_processing_hint">Varsayılan olarak EVD ek ses filtresi uygulamaz; mikrofonunuzun ve işletim sisteminizin hazırladığı ses korunur.</p>
                     <label style="display:flex; align-items:center; gap:8px;">
@@ -1992,6 +2000,8 @@
         </section>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <script src="../../broadcast-room-web/frontend/public/krisp-preview.js"></script>
+    <script src="../scripts/room-audio-diagnostics.js"></script>
     <script src="../scripts/broadcast-room.js"></script>
 </body>
 

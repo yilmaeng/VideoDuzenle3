@@ -463,6 +463,20 @@
                 <label for="mic-select" data-i18n="recording_wizard.step3.mic_required">Mikrofon (zorunlu)</label>
                 <select id="mic-select"></select>
             </div>
+            <div class="form-group">
+                <input type="checkbox" id="recording-mic-noise-suppression" aria-describedby="recording-mic-noise-help">
+                <label for="recording-mic-noise-suppression" data-i18n="recording_microphone_noise.label"></label>
+                <p id="recording-mic-noise-help" class="hint" data-i18n="recording_microphone_noise.help"></p>
+                <label for="recording-mic-noise-method" data-i18n="recording_microphone_noise.method"></label>
+                <select id="recording-mic-noise-method">
+                    <option value="gtcrn" selected data-i18n="recording_microphone_noise.gtcrn"></option>
+                    <option value="deepfilter" data-i18n="recording_microphone_noise.deepfilter"></option>
+                </select>
+                <p class="hint" data-i18n="recording_microphone_noise.gtcrn_help"></p>
+                <label for="recording-mic-noise-strength" data-i18n="recording_microphone_noise.strength"></label>
+                <input id="recording-mic-noise-strength" type="number" min="0" max="100" step="5" value="55" disabled aria-describedby="recording-mic-noise-strength-help">
+                <p id="recording-mic-noise-strength-help" class="hint" data-i18n="recording_microphone_noise.strength_help"></p>
+            </div>
             <div class="step-actions">
                 <button type="button" id="btn-mic-permission" onclick="window.requestMicPermission()" data-i18n="recording_wizard.step3.mic_permission">Mikrofon izni iste</button>
             </div>

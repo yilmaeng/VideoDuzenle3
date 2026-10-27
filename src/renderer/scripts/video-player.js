@@ -15,6 +15,47 @@ const VideoPlayer = {
     playbackStartPosition: null, // Oynatma başladığındaki pozisyon (boşluk tuşu için)
 
     isRangePlaying: false,
+    selectionPreviewState: null,
+
+    beginSelectionPreview() {
+        if (typeof Selection === 'undefined' || Selection.extendedAnchor === null) return;
+        if (this._audioScrubTimeout) {
+            clearTimeout(this._audioScrubTimeout);
+            this._audioScrubTimeout = null;
+        }
+        this.selectionPreviewState = {
+            time: this.getTimelineTime(), cursor: this.cursorPosition,
+            playbackStart: this.playbackStartPosition, restoring: false
+        };
+        clearTimeout(Selection.extendedAnnounceTimer);
+        Selection.extendedAnnouncePending = false;
+    },
+
+    discardSelectionPreview() {
+        this.selectionPreviewState = null;
+    },
+
+    restoreSelectionPreview() {
+        const saved = this.selectionPreviewState;
+        if (!saved || saved.restoring) return;
+        saved.restoring = true;
+        this.isRangePlaying = false;
+        this.isPreviewingCut = false;
+        this.rangeEnd = null;
+        this.cursorPosition = saved.cursor;
+        this.playbackStartPosition = saved.playbackStart;
+        this.updateCursorDisplay();
+        // Keep selection tracking suspended until an asynchronous source switch
+        // has completed too, not only until currentTime has been assigned.
+        const restored = this.seekToTimelineTime(saved.time);
+        Promise.resolve(restored).finally(() => {
+            if (this.selectionPreviewState === saved) {
+                this.cursorPosition = saved.cursor;
+                this.updateCursorDisplay();
+                this.selectionPreviewState = null;
+            }
+        }).catch(error => console.warn('Selection preview restore failed:', error));
+    },
     rangeEnd: null,
     ignoreTimeline: false, // Sessizlik önizleme vb. durumlar için timeline'ı görmezden gel
     _isLoadingSource: false, // Kaynak değiştirme işlemi devam ediyor mu?
@@ -142,6 +183,11 @@ const VideoPlayer = {
     setupEventListeners() {
         // Zaman güncelleme - silinen kısımları atla
         this.video.addEventListener('timeupdate', () => {
+            if (this.seamlessPreview?.active && this.seamlessPreview.audition) {
+                // PCM owns audition boundaries; HTML seeks only follow the image.
+                this.updateTimeDisplay();
+                return;
+            }
             // Aralık oynatılıyorsa kontrol et
             if (this.isRangePlaying && this.rangeEnd !== null) {
                 if (this.video.currentTime >= this.rangeEnd) {
@@ -194,11 +240,12 @@ const VideoPlayer = {
 
                 // Bitiş noktasına geldik mi?
                 if (currentTime >= this.cutPreviewEnd) {
+                    const preservePosition = !!this.selectionPreviewState;
                     this.pause();
                     this.isPreviewingCut = false;
                     Accessibility.announce('Önizleme tamamlandı');
                     // İmleci seçimin başına döndür (kullanım kolaylığı için)
-                    this.seekToTimelineTime(this.cutPreviewSkipStart);
+                    if (!preservePosition) this.seekToTimelineTime(this.cutPreviewSkipStart);
                     return;
                 }
             }
@@ -258,6 +305,8 @@ const VideoPlayer = {
             }
             this.isPlaying = false;
             this.stopTimelineBoundaryMonitor();
+            if (!this._isLoadingSource) this.restoreSelectionPreview();
+            if (typeof Selection !== 'undefined' && Selection.extendedAnnouncePending) Selection.announceExtended();
             this.allowPlaybackWithOpenDialog = false;
             this.updatePlayState();
             if (this.bgAudioPlayer && !this.bgAudioPlayer.paused) {
@@ -267,6 +316,10 @@ const VideoPlayer = {
 
         this.video.addEventListener('ended', () => {
             if (this.seamlessPreview?.active) return;
+            if (this.selectionPreviewState) {
+                this.pause({ announce: false });
+                return;
+            }
             const segments = Timeline.segments || [];
             const currentIndex = this._currentTimelineSegmentIndex;
 
@@ -501,6 +554,11 @@ const VideoPlayer = {
      * Durduğunda başlangıç pozisyonuna döner
      */
     togglePlay() {
+        if (typeof Selection !== 'undefined' && Selection.extendedAnchor !== null && (this.isPlaying || this.seamlessPreview?.pending)) {
+            this.pause();
+            this.playbackStartPosition = null;
+            return;
+        }
         if (this.seamlessPreview?.pending) {
             this.pause({ announce: false });
             return;
@@ -528,6 +586,12 @@ const VideoPlayer = {
      * İmleç o anki pozisyonda kalır, başlangıç pozisyonuna dönmez
      */
     pauseAtCurrentPosition() {
+        if (typeof Selection !== 'undefined' && Selection.extendedAnchor !== null) {
+            this.pause({ announce: false });
+            this.setCursorToCurrentTime();
+            Selection.announceExtended();
+            return;
+        }
         if (this.isPlaying || this.seamlessPreview?.pending) {
             this.pause();
         }
@@ -630,7 +694,8 @@ const VideoPlayer = {
             if (playGeneration !== this._previewPlayGeneration) return;
         }
         this.syncSegmentProperties();
-        this.video.play();
+        const playback = this.video.play();
+        if (this.selectionPreviewState) await playback;
 
         // Eğer kesim önizleme modundaysak duyuruyu gizle
         if (this.isPreviewingCut) {
@@ -655,15 +720,20 @@ const VideoPlayer = {
         this.video.pause();
         this.isRangePlaying = false; // Her duraklatmada aralık oynatmayı sıfırla
         this.isPreviewingCut = false; // Kesim önizlemeyi sıfırla
-        if (announce) Accessibility.announcePlayState(false);
+        this.restoreSelectionPreview();
+        if (announce) {
+            if (typeof Selection !== 'undefined' && Selection.extendedAnchor !== null) Selection.announceExtended();
+            else Accessibility.announcePlayState(false);
+        }
     },
 
     /**
      * Seçili alanı oynat
      * Timeline zamanlarını kaynak zamanlarına çevirir
      */
-    playSelection() {
+    async playSelection() {
         if (!this.hasVideo()) return;
+        if (this.selectionPreviewState) { this.pause(); return; }
         if (this.seamlessPreview?.active || this.seamlessPreview?.pending) this.pause({ announce: false });
 
         const selection = Selection.getSelection();
@@ -676,12 +746,16 @@ const VideoPlayer = {
         const sourceStart = Timeline.timelineToSource(selection.start);
         const sourceEnd = Timeline.timelineToSource(selection.end);
 
+        this.beginSelectionPreview();
+        this.isRangePlaying = true;
+        if (await this.startContinuousAudition([[selection.start, selection.end]])) return;
         this.video.currentTime = sourceStart;
         this.rangeEnd = sourceEnd;
         this.isRangePlaying = true;
 
         this.video.play()
             .catch(err => {
+                this.pause({ announce: false });
                 console.error('Play selection error:', err);
                 Accessibility.announceError('Seçim oynatılamadı');
             });
@@ -696,8 +770,9 @@ const VideoPlayer = {
      * Seçili alan silinmiş gibi önizleme yap (Ctrl+Shift+Space)
      * Seçimden önceki 3 sn, seçim atlanır, seçimden sonraki 3 sn oynatılır.
      */
-    playCutPreview(customStart = null, customEnd = null) {
+    async playCutPreview(customStart = null, customEnd = null) {
         if (!this.hasVideo()) return;
+        if (this.selectionPreviewState) { this.pause(); return; }
         if (this.seamlessPreview?.active || this.seamlessPreview?.pending) this.pause({ announce: false });
 
         let selStart, selEnd;
@@ -722,6 +797,7 @@ const VideoPlayer = {
         const endPoint = Math.min(duration, selEnd + PREVIEW_DURATION);
 
         // State ayarla
+        this.beginSelectionPreview();
         this.isPreviewingCut = true;
         this.cutPreviewSkipStart = selStart;
         this.cutPreviewSkipEnd = selEnd;
@@ -733,8 +809,27 @@ const VideoPlayer = {
         // Accessibility.announce('Kesim önizleme başlatılıyor');
 
         // Başlangıç noktasına git ve oynat
+        if (await this.startContinuousAudition([[startPoint, selStart], [selEnd, endPoint]])) return;
         this.seekToTimelineTime(startPoint);
-        this.play();
+        this.play().catch(error => {
+            console.warn('Cut preview playback failed:', error);
+            this.pause({ announce: false });
+            Accessibility.announceError(error.message);
+        });
+    },
+
+    async startContinuousAudition(ranges) {
+        const preview = this.seamlessPreview;
+        if (!preview) return false;
+        const segments = preview.auditionSegments(Timeline.segments || [], ranges);
+        if (!preview.eligible(segments, true)) return false;
+        this.ensureAudioGain();
+        if (!this.audioGainNode) return false;
+        const generation = this._previewPlayGeneration = (this._previewPlayGeneration || 0) + 1;
+        const started = await preview.start(0, segments, { audition: true });
+        // Cancellation while PCM is prepared must not restart the old fallback.
+        if (generation !== this._previewPlayGeneration) return true;
+        return started;
     },
 
     /**
@@ -785,6 +880,7 @@ const VideoPlayer = {
      * @param {number} timelineTime - Timeline üzerindeki hedef zaman
      */
     seekToTimelineTime(timelineTime) {
+        if (typeof Selection !== 'undefined') Selection.updateExtended(timelineTime);
         if (this.seamlessPreview?.active || this.seamlessPreview?.pending) {
             const resume = this.seamlessPreview.active || this.seamlessPreview.pending;
             this.pause({ announce: false });
@@ -816,7 +912,7 @@ const VideoPlayer = {
 
                 // Farklı kaynaktaysa geçiş yap
                 if (segSource && segSource !== this.currentFilePath) {
-                    this.switchToSource(segSource, sourceTime);
+                    return this.switchToSource(segSource, sourceTime);
                 } else {
                     this.video.currentTime = sourceTime;
                 }
@@ -832,7 +928,7 @@ const VideoPlayer = {
         this._currentTimelineSegmentIndex = segments.length - 1;
 
         if (lastSource && lastSource !== this.currentFilePath) {
-            this.switchToSource(lastSource, lastSeg.end - 0.1);
+            return this.switchToSource(lastSource, lastSeg.end - 0.1);
         } else {
             this.video.currentTime = lastSeg.end - 0.1;
         }
@@ -1167,7 +1263,7 @@ const VideoPlayer = {
      */
     getTimelineTime() {
         if (!this.video) return 0;
-        if (this.seamlessPreview?.active) return this.seamlessPreview.position();
+        if (this.seamlessPreview?.active) return this.seamlessPreview.timelinePosition();
 
         const segments = Timeline.segments;
         if (!segments || segments.length === 0) {
@@ -1237,7 +1333,7 @@ const VideoPlayer = {
     getDuration() {
         // Timeline varsa düzenlenmiş süreyi kullan
         const timelineDuration = Timeline.getTotalDuration();
-        if (timelineDuration > 0) {
+        if (Timeline.sourceFile || Timeline.segments.length > 0) {
             return timelineDuration;
         }
         return this.video ? (this.video.duration || 0) : 0;
@@ -1264,8 +1360,8 @@ const VideoPlayer = {
      * Timeline zamanını gösterir (farklı kaynaklı segmentlerin kümülatif süresi)
      */
     updateTimeDisplay() {
+        if (typeof Selection !== 'undefined') Selection.updateExtended(this.getTimelineTime());
         const currentTimeEl = document.getElementById('current-time');
-        const totalDurationEl = document.getElementById('total-duration');
         const cursorPositionEl = document.getElementById('cursor-position');
 
         if (currentTimeEl) {
@@ -1274,18 +1370,26 @@ const VideoPlayer = {
             currentTimeEl.textContent = Utils.formatTime(timelineTime);
         }
 
-        if (totalDurationEl) {
-            // Timeline toplam süresini göster
-            const totalDuration = Timeline.getTotalDuration();
-            if (totalDuration > 0) {
-                totalDurationEl.textContent = Utils.formatTime(totalDuration);
-            } else if (this.video.duration) {
-                totalDurationEl.textContent = Utils.formatTime(this.video.duration);
-            }
-        }
+        this.updateDurationDisplay();
 
         // Timeline cursor güncelle
         this.updateTimelineCursor();
+    },
+
+    updateDurationDisplay() {
+        const element=document.getElementById('total-duration');
+        if(!element)return;
+        const value=Utils.formatTime(this.getDuration());
+        const label=window.i18nHelper.t('player.total_duration_aria');
+        // Keep the visible value and the screen-reader name in sync, including zero.
+        if(element.textContent!==value)element.textContent=value;
+        const name=`${label}: ${value}`;
+        if(element.getAttribute('aria-label')!==name)element.setAttribute('aria-label',name);
+        const description=document.getElementById('timeline-focus-duration');
+        if(description){
+            const spoken=`${label}: ${Utils.formatTimeForSpeech(this.getDuration())}`;
+            if(description.textContent!==spoken)description.textContent=spoken;
+        }
     },
 
     /**
@@ -1356,7 +1460,8 @@ const VideoPlayer = {
 
         if (!cursor || !timeline || !this.video.duration) return;
 
-        const percent = (this.video.currentTime / this.video.duration) * 100;
+        const duration = Timeline.getTotalDuration();
+        const percent = duration > 0 ? Math.max(0, Math.min(100, this.getTimelineTime() / duration * 100)) : 0;
         cursor.style.left = `${percent}%`;
 
         if (typeof Timeline !== 'undefined' && Timeline.updateActiveSegment) {

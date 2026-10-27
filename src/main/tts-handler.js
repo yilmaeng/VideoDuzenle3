@@ -13,6 +13,18 @@ const CONFIG_DIR = path.join(os.homedir(), '.korcul-video-editor');
 const OPENAI_API_KEY_FILE = path.join(CONFIG_DIR, 'openai-api-key.enc');
 const ELEVENLABS_API_KEY_FILE = path.join(CONFIG_DIR, 'elevenlabs-api-key.enc');
 
+async function requestTts(url, options, timeoutMs = 120000) {
+    try {
+        return await fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (error) {
+        // Do not log credentials, text, or provider response bodies.
+        console.warn('[TTS connection]', { host: new URL(url).hostname, code: error.cause?.code || error.name });
+        throw new Error(require('./i18n').t('ai_connection.tts_network', {
+            service: new URL(url).hostname === 'api.elevenlabs.io' ? 'ElevenLabs' : 'OpenAI'
+        }));
+    }
+}
+
 const OPENAI_VOICES = [
     'alloy',
     'ash',
@@ -198,13 +210,13 @@ async function getProviderVoices(service = 'system') {
     if (!apiKey) {
         throw new Error('elevenlabs_api_key_missing');
     }
-    const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+    const response = await requestTts('https://api.elevenlabs.io/v1/voices', {
         method: 'GET',
         headers: {
             'xi-api-key': apiKey,
             Accept: 'application/json'
         }
-    });
+    }, 20000);
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
         throw new Error(payload?.detail?.message || payload?.message || `elevenlabs_voices_http_${response.status}`);
@@ -354,7 +366,7 @@ async function textToSpeechFile({ text, voice, speed = 1, outputPath, volume = 1
         if (!apiKey) {
             throw new Error('openai_api_key_missing');
         }
-        const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        const response = await requestTts('https://api.openai.com/v1/audio/speech', {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${apiKey}`,
@@ -381,7 +393,7 @@ async function textToSpeechFile({ text, voice, speed = 1, outputPath, volume = 1
         throw new Error('elevenlabs_api_key_missing');
     }
     const voiceId = String(voice || 'JBFqnCBsd6RMkjVDRZzb');
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
+    const response = await requestTts(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
         method: 'POST',
         headers: {
             'xi-api-key': apiKey,

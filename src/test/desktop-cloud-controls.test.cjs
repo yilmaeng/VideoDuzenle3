@@ -73,6 +73,8 @@ test('download IPC streams privately, rejects redirects, cleans partial files an
         } };
         return require(name);
     } });
+    // Match Electron's Node global, used by the signed-patch sender allowlist.
+    context.global = context;
     vm.runInContext(fs.readFileSync(sourcePath, 'utf8'), context);
     const api = context.module.exports;
     api.RoomAccountClient.prototype.call = async function (endpoint) { this.cookie = 'private-cookie'; return endpoint === 'recordings'

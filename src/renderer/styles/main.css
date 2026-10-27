@@ -576,7 +576,15 @@ main {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+.timeline-pointer-viewport { overflow-x: auto; padding: 8px 0; }
+.timeline-pointer-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.timeline-pointer-tools button { min-height: 38px; }
+.timeline-pointer-tools button:focus-visible { outline: 3px solid #ffcf40; outline-offset: 2px; }
+.timeline-pointer-tools output { font-variant-numeric: tabular-nums; }
 #timeline-visual {
+    touch-action: none;
+    user-select: none;
+    cursor: crosshair;
   position: relative;
   height: 52px;
   background:

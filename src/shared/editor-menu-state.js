@@ -15,7 +15,7 @@ function capabilities(state = {}) {
         delete: text ? writable && !!state.textSelection : selection,
         split: media && !text,
         select_all: text ? !!state.textContent : media,
-        clear_selection: selection,
+        clear_selection: selection || (media && !!state.extendedSelection),
         select_range: media,
         select_between_markers: media && !!state.markers,
         change_speed: selection,
@@ -37,6 +37,8 @@ register('file', 'save_project save save_as fast_export export_video_only export
 register('file', 'save_selection', 'selectionOrQueue');
 register('file', 'close', 'loaded');
 register('edit', 'speech_search', 'media');
+register('edit', 'extended_selection', 'media');
+register('edit', 'filler_review', 'media');
 register('edit', 'vocal_separation', 'always');
 register('edit', 'video_crop', 'media');
 register('edit', 'speech_search_export', 'media');

@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 build/native-audio/
+build/native-gtcrn/
 tools/EvdMacAudioCapture/.build/
 
 # Logs

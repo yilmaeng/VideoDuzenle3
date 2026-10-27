@@ -7,6 +7,7 @@ const { ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const { requestDeadline } = require('./ai-request-deadline');
 const { spawn, execFile, execFileSync } = require('child_process');
 const nativeAudioPlatform = require('./native-audio-platform');
 let WebSocketImpl = globalThis.WebSocket;
@@ -1396,6 +1397,7 @@ async function sendGeminiRequest(apiKey, model, imageBase64, prompt, history = [
             reject(new Error('Bağlantı hatası: ' + error.message));
         });
 
+        requestDeadline(req, require('./i18n').t('ai_connection.timeout'));
         req.write(requestBody);
         req.end();
     });
@@ -1737,6 +1739,7 @@ async function sendGeminiRequestBatch(apiKey, model, contents, systemInstruction
         });
 
         req.on('error', error => reject(new Error('Bağlantı hatası: ' + error.message)));
+        requestDeadline(req, require('./i18n').t('ai_connection.timeout'));
         req.write(requestBody);
         req.end();
     });

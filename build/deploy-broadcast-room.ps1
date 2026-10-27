@@ -107,6 +107,10 @@ if [ -f '__REMOTE_FILE_PATH__' ]; then sha256sum '__REMOTE_FILE_PATH__' | awk '{
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
 $fileMappings = @(
+    @{ Source = 'src\broadcast-room-web\frontend\public\krisp-preview.js'; Remote = 'public/krisp-preview.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\system-echo.js'; Remote = 'public/system-echo.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\vendor\krisp-0.4.5\index.js'; Remote = 'public/vendor/krisp-0.4.5/index.js' },
+    @{ Source = 'src\broadcast-room-web\frontend\public\vendor\krisp-0.4.5\NOTICE.txt'; Remote = 'public/vendor/krisp-0.4.5/NOTICE.txt' },
     @{ Source = 'src\broadcast-room-web\backend\src\services\recording-media.js'; Remote = 'src/services/recording-media.js' },
     @{ Source = 'src\broadcast-room-web\backend\deploy\storage\recording-retention.py'; Remote = 'deploy/storage/recording-retention.py' },
     @{ Source = 'src\broadcast-room-web\backend\deploy\storage\update-api-read-timeout.py'; Remote = 'deploy/storage/update-api-read-timeout.py' },

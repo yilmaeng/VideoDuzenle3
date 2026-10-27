@@ -8,6 +8,15 @@ const Accessibility = {
     alerter: null,
     announceSequence: 0,
     alertSequence: 0,
+    pendingAnnouncementWrites: new Set(),
+    _scheduleAnnouncement(callback, delay) {
+        const timer = setTimeout(() => {
+            this.pendingAnnouncementWrites.delete(timer);
+            callback();
+        }, delay);
+        this.pendingAnnouncementWrites.add(timer);
+        return timer;
+    },
     t(key, fallback, params = {}) {
         if (!window.i18nHelper) return fallback;
         const value = window.i18nHelper.t(key, params);
@@ -59,7 +68,7 @@ const Accessibility = {
 
         const speak = () => {
             target.textContent = '';
-            setTimeout(() => {
+            this._scheduleAnnouncement(() => {
                 target.textContent = message;
             }, 20);
         };
@@ -68,7 +77,7 @@ const Accessibility = {
 
         // Native dialog focus can interrupt the first announcement on some screen readers.
         // Repeat once shortly after to improve reliability before focus lands on the button.
-        setTimeout(() => {
+        this._scheduleAnnouncement(() => {
             speak();
         }, 180);
 
@@ -120,7 +129,7 @@ const Accessibility = {
 
         // Küçük bir gecikme ile yeni mesajı ekle
         const sequence = ++this.announceSequence;
-        setTimeout(() => {
+        this._scheduleAnnouncement(() => {
             target.textContent = `${message}${sequence % 2 ? '\u200B' : '\u200C'}`;
 
             // 5 saniye sonra temizle (görsel kirliliği önlemek için)
@@ -144,7 +153,7 @@ const Accessibility = {
         target.textContent = '';
 
         const sequence = ++this.alertSequence;
-        setTimeout(() => {
+        this._scheduleAnnouncement(() => {
             target.textContent = `${message}${sequence % 2 ? '\u200B' : '\u200C'}`;
 
             // 8 saniye sonra temizle
@@ -162,16 +171,18 @@ const Accessibility = {
      * Bu, yeni önemli bir mesaj gelmeden önce çağrılmalı
      */
     clearPending() {
+        clearTimeout(this.immediateAnnouncementTimer);
+        for (const timer of this.pendingAnnouncementWrites) clearTimeout(timer);
+        this.pendingAnnouncementWrites.clear();
+        clearTimeout(this.announceTimeout);
+        clearTimeout(this.alertTimeout);
+        clearTimeout(this.immediateAnnouncementExpiry);
         // Global temizle
         if (this.announcer) this.announcer.textContent = '';
         if (this.alerter) this.alerter.textContent = '';
 
         // Açık dialog varsa içindekileri de temizle
-        const openDialog = document.querySelector('dialog[open]');
-        if (openDialog) {
-            const locals = openDialog.querySelectorAll('[id^="local-sr-"]');
-            locals.forEach(el => el.textContent = '');
-        }
+        document.querySelectorAll('[id^="local-sr-"]').forEach(el => el.textContent = '');
         console.log('[Erişilebilirlik] Bekleyen duyurular temizlendi');
     },
 
@@ -185,10 +196,14 @@ const Accessibility = {
         this.clearPending();
 
         // Biraz bekle ve yeni mesajı assertive olarak duyur
-        setTimeout(() => {
-            if (this.alerter) {
-                this.alerter.textContent = message;
-            }
+        this.immediateAnnouncementTimer = this._scheduleAnnouncement(() => {
+            const target = this._getTarget('assertive');
+            if (!target) return;
+            target.textContent = message;
+            // Do not leave file-open metadata to be re-announced after a modal closes.
+            this.immediateAnnouncementExpiry = setTimeout(() => {
+                if (target.textContent === message) target.textContent = '';
+            }, 8000);
         }, 100);
 
         console.log('[Erişilebilirlik] Acil duyuru:', message);

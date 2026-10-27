@@ -59,7 +59,7 @@ pkg.build.extraResources = extraResources.filter((entry) => {
     if (!from) {
         return false;
     }
-    if (from.includes('EvdProcessLoopbackCapture') || from.includes('net8.0-windows')) {
+    if (from.includes('EvdProcessLoopbackCapture') || from.includes('net8.0-windows') || to === 'native-gtcrn') {
         return false;
     }
     if (from.includes('build/native-audio/mac-arm64') || from.includes('macos-info-plist-evd')) {

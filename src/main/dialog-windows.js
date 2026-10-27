@@ -328,6 +328,10 @@ function openRecordingWizard(parentWindow, options = {}) {
         }
     });
 
+    // The application menu contains bare Space/Enter/arrow accelerators for
+    // the main timeline. They must not intercept native wizard controls.
+    // This does not disable DOM handlers or registered global recording keys.
+    wizardWin.webContents.setIgnoreMenuShortcuts(true);
     wizardWin.loadFile(path.join(__dirname, '../renderer/dialogs/accessible-recording.html'));
 
     wizardWin.webContents.once('did-finish-load', () => {

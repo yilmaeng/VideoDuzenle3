@@ -1,4 +1,153 @@
 {
+  "silence_cleanup_result": {
+    "title": "Boşluk temizleme tamamlandı",
+    "message": "{count} sessiz alan silindi. Toplam {seconds} saniye temizlendi. Yeni toplam süre: {total}. Koruma payı nedeniyle atlanan alan: {skipped}. Geri Al ile geri getirebilirsiniz."
+  },
+  "filler_review": {
+    "help_title": "Kullanım yardımı ve kısayollar",
+    "result_title": "Dolgu temizleme tamamlandı",
+    "ok": "Tamam",
+    "selected_for_deletion": "Silmek için seçili.",
+    "not_selected_for_deletion": "Seçili değil; silinmeyecek.",
+    "title": "Dolgu seslerini incele (deneysel)",
+    "help": "Türkçe dolgu sesleri aranır. Güçlü adaylar önceden seçilir; karar bekleyenler ayrı gruptadır. Bu ayrım kesinlik garantisi değildir. Oklar bağlamı çalar, Enter tekrar dinletir, Boşluk silme seçimini değiştirir, Ctrl+Boşluk kesilmiş hâli dinletir. Silmeden önce seçimi kontrol edin. Normal sessizlik temizleme değişmez.",
+    "strong_group": "Güçlü adaylar (otomatik seçilen)",
+    "review_group": "Kararınızı bekleyen adaylar",
+    "analyze": "Analizi başlat (gerekirse motoru indir)",
+    "list": "Dolgu adayları",
+    "start": "Başlangıç (saniye)",
+    "end": "Bitiş (saniye)",
+    "range": "Sınırları uygula",
+    "preview": "Bağlamıyla dinle (Enter)",
+    "cut": "Kesilmiş hâli dinle (Ctrl+Boşluk)",
+    "stop": "Dinlemeyi durdur",
+    "toggle": "Silmek için onayla / onayı kaldır (Boşluk)",
+    "apply": "Onaylananları sil",
+    "apply_all": "Tümünü sil",
+    "confirm_all": "Onaylanmamışlar dahil listedeki {count} adayın tümü silinsin mi? Algılama hataları olabilir. Tek Geri Al işlemiyle geri getirilebilir.",
+    "item": "{text}; {time} – {end}; {state}",
+    "approved": "Silinecek",
+    "review": "Kontrol bekliyor",
+    "preview_unavailable": "Bu bölümdeki hız veya efektler kesintisiz önizlemeye uygun değil. Bu aday için normal zaman çizelgesinde kontrol yapın.",
+    "error": "İşlem tamamlanamadı: {error}",
+    "invalid": "Zamanlar geçerli olmalı ve aynı video parçasının içinde kalmalıdır.",
+    "stale": "Zaman çizelgesi değişti. Pencereyi kapatıp yeniden analiz edin.",
+    "confirm": "Onaylanan {count} aralık silinsin mi? Tek Geri Al işlemiyle geri getirilebilir.",
+    "done": "{count} aralık silindi. Toplam {seconds} saniye temizlendi. Yeni toplam süre: {total}. Geri Al ile geri getirebilirsiniz.",
+    "results": "{count} aday bulundu. Dinlemeden onaylamayın.",
+    "unsupported": "Bu deney şu an Windows x64 üzerinde Türkçe whisper.cpp analizi gerektiriyor. Mac desteği henüz etkin değil."
+  },
+  "timeline_pointer": {
+    "play": "Oynat / duraklat",
+    "preview": "Seçimi dinle",
+    "cutPreview": "Kesim sonrasını dinle",
+    "cut": "Kes",
+    "copy": "Kopyala",
+    "paste": "Yapıştır",
+    "delete": "Sil",
+    "undo": "Geri al",
+    "redo": "Yinele",
+    "queue": "Seçim listesine ekle",
+    "clear": "Seçimi temizle",
+    "zoom": "Zaman çizelgesini yakınlaştır",
+    "hint": "Bir konuma gitmek için çizelgeye tıklayın. Aralık seçmek için sol fare düğmesini basılı tutarak sürükleyin. Uzun videolarda yakınlaştırın ve alttaki kaydırma çubuğunu kullanın."
+  },
+  "automatic_subtitles": {
+    "title": "Altyazı ekle",
+    "choose": "Hazır bir altyazı dosyası seçin veya açık kaynak videonun konuşmalarından otomatik altyazı oluşturun.",
+    "file": "Altyazı dosyası seç",
+    "generate": "Whisper ile otomatik altyazı oluştur",
+    "info": "Açık kaynak dosyanın tamamındaki konuşmalar bu bilgisayarda analiz edilir. Zaman çizelgesindeki kesimler bu analize uygulanmaz; mevcut altyazı ekleme işlemleri gibi kaynak dosya esas alınır. Otomatik metinleri ve zamanları mutlaka kontrol edin. Oluşan SRT dosyasını kaydettikten sonra normal altyazı, görünüm ve seslendirme seçenekleri açılır.",
+    "start": "Analizi başlat (gerekirse motoru indir)",
+    "empty": "Konuşma bulunamadı; altyazı oluşturulmadı.",
+    "ready": "Altyazı hazır. SRT dosyasını kaydedin.",
+    "save": "Otomatik altyazıyı kaydet",
+    "source_changed": "Açık video değişti. Kaydedilen SRT dosyasını doğru videoyla açın.",
+    "error": "Altyazı oluşturulamadı: {error}"
+  },
+  "recording_camera": {
+    "available": "Kamera OBS üzerinden kullanılabiliyor. Kamerayı ikinci kez açmaya gerek yok.",
+    "busy": "Kamera başlatılamadı. OBS veya başka bir uygulama kamerayı kullanıyor olabilir; bu bir izin reddi anlamına gelmez. OBS görüntüsünü ve kamera bağlantısını kontrol edin.",
+    "missing": "Kamera bulunamadı veya seçilen kamera ayarları desteklenmiyor. Cihaz listesini yenileyip kamerayı yeniden seçin.",
+    "denied": "Kamera erişimine izin verilmedi. İşletim sistemindeki EVD kamera iznini kontrol edin.",
+    "failed": "Kamera kontrolü tamamlanamadı. Kamera bağlantısını ve OBS durumunu kontrol edip yeniden deneyin."
+  },
+  "extended_selection": {
+    "label": "Seçim modunu aç/kapat",
+    "on": "Seçim modu açık. Başlangıç: {time}. Videoda ilerleyin; Escape iptal eder ve başlangıca döner.",
+    "off": "Seçim modu kapalı. Seçilen aralık korundu.",
+    "cancelled": "Seçim iptal edildi. Başlangıç konumuna dönüldü: {time}."
+  },
+  "recording_navigation": {
+    "category": "Kayıt sihirbazında gezinme",
+    "next": "Kayıt sihirbazı: ileri",
+    "back": "Kayıt sihirbazı: geri",
+    "time_label": "Saat",
+    "next_shortcut": "Alt+R",
+    "back_shortcut": "Alt+G"
+  },
+  "ticker_output": {
+    "suffix": "akan yazı",
+    "saved": "Akan yazılı video kaydedildi ve açıldı: {path}. Yeniden farklı kaydetmeniz gerekmez."
+  },
+  "ai_connection": {
+    "tts_network": "{service} sunucusuna bağlantı kurulamadı veya bağlantı zaman aşımına uğradı. Ağ erişimini kontrol edip yeniden deneyin. Bilgisayar seslendirmesi internet gerektirmez.",
+    "layer_prompt": "İlk görsel ana video, ikincisi eklenecek video katmanıdır. Ana tuval {width}x{height}, katman {layerWidth}x{layerHeight}, yerleşim amacı {mode}. Yüzleri, yazıları ve önemli eylemleri kapatmadan uygun konum ve boyut öner. Katmanın en-boy oranını koru, tüm koordinatlar ana tuval içinde olsun. Yan yana düzen için ilgili yarıyı kullan. Yalnızca şu JSON biçimini döndür: {\"x\":0,\"y\":0,\"width\":100,\"height\":100,\"position\":\"konum\",\"reason\":\"görselleri temel alan gerekçe\"}.",
+    "visual_samples": "Bu görsel betimleme, seçili aralıktan zaman sırasıyla örneklenen en fazla 20 kareye dayanır; ses gönderilmez. Örneklenmeyen hareketleri veya konuşmaları varsaymayın. Karelerin zamanları saniye cinsindendir:",
+    "timeout": "Yapay zekâ servisi 90 saniye içinde yanıtı tamamlamadı. Servis yoğun olabilir. Yeniden deneyin veya farklı bir model seçin."
+  },
+  "recording_microphone_noise": {
+    "gtcrn": "GTCRN (kayıt sonrası, deneysel)",
+    "gtcrn_help": "GTCRN yalnızca kayıt bittikten sonra mikrofonu temizler; önizleme filtresizdir. Sistem sesi korunur. Özgün MKV silinmez, temizlenmiş MP4 ayrı oluşturulur. Sabit süre sınırı yoktur; uzun kayıtlar küçük parçalar halinde işlenir ve yeterli boş disk alanı gerektirir. Model 16 kHz mono çalışır. Gerekirse OBS çok izli yüksek kaliteli kayda geçici olarak alınır; kayıt sonunda ayarları geri yüklenir. Canlı yayınla birlikte kullanılamaz.",
+    "gtcrn_unavailable": "Yerel GTCRN deneme motoru bulunamadı. Başka bir yöntem seçin.",
+    "gtcrn_setup_failed": "GTCRN için ayrı ses izleri hazırlanamadı. Aktif yayını durdurun; OBS kayıt ayarlarında standart çok izli kayıt kullanın. Basit modda Yüksek kalite seçebilirsiniz.",
+    "gtcrn_extract": "Kayıt durdu. Mikrofon sesi ayrılıyor.",
+    "gtcrn_clean": "Mikrofon GTCRN ile temizleniyor. Özgün kayıt korunuyor.",
+    "gtcrn_mix": "Temizlenen mikrofon ve diğer sesler videoyla birleştiriliyor.",
+    "gtcrn_done": "GTCRN temizliği tamamlandı. Temizlenmiş MP4 hazır; özgün kayıt da korundu.",
+    "gtcrn_failed": "GTCRN temizliği tamamlanamadı. Özgün kayıt korundu. Üç ses izi, yerel motor ve yeterli boş disk alanı gerektiğini kontrol edin.",
+    "gtcrn_restore_failed": "OBS ses izi ayarları geri yüklenemedi. Yeni kayıttan veya yayından önce OBS ses izi ayarlarını kontrol edin.",
+    "label": "Mikrofonun ortam gürültüsünü azalt (deneysel)",
+    "help": "Varsayılan kapalıdır. Yalnızca mikrofonu işler; sistem sesi değişmez. Yöntemi seçtikten sonra önizlemeyi yeniden başlatın. DeepFilterNet3 için OBS eklentisi gerekir; ilk kurulumdan sonra OBS’yi yeniden açın. Müzik ve hafif konuşmalar etkilenebilir. Ekran okuyucu sesinin kaldırılması garanti edilmez.",
+    "method": "Gürültü azaltma yöntemi",
+    "rnnoise": "RNNoise (OBS yerleşik)",
+    "deepfilter": "DeepFilterNet3 (deneysel)",
+    "strength": "DeepFilterNet en fazla gürültü azaltma miktarı (dB)",
+    "strength_help": "0–100 dB. Küçük değer daha hafif işlem uygular ve daha fazla ortam sesi bırakır. Hafif: 15–25; mevcut orta ayar: 55. Bu bir yüzde veya mikrofon ses düzeyi değildir. Oklarla 5 dB değiştirin veya değeri yazın. Değişiklik önizleme yeniden başlatıldığında uygulanır.",
+    "failed": "OBS mikrofon gürültü filtresi uygulanamadı. Bu seçeneği kapatıp yeniden deneyebilirsiniz."
+  },
+  "system_echo": {
+    "hint": "Yankı engelleme açıkken destekleyen tarayıcılarda ekran okuyucu dahil tüm sistem sesleri referans alınır. Desteklemeyen tarayıcılarda standart yankı engelleme kullanılır. Müzik modunda kapalıdır. Daha önce kapattığınız yankı engelleme tercihi korunur."
+  },
+  "native_menu_test": {
+    "title": "Electron 44 yalın menü testi",
+    "instructions": "Alt ile menü çubuğuna gelin. Dosya menüsünü aşağı okla açıp Yeni öğesinde sağ oka basın. Düzen menüsüne geçmesi beklenir. Sol okla Dosya menüsüne dönmeyi de deneyin. İsterseniz Escape ile menüyü kapatıp yeniden deneyin. Bu pencere EVD kısayollarını içermez. Menü öğeleri deneme amaçlıdır; dosya açmaz veya değiştirmez. Alt+F4 yalnızca bu test penceresini kapatır.",
+    "file": "Dosya",
+    "edit": "Düzen",
+    "new_item": "Yeni",
+    "open_item": "Aç",
+    "close": "Testi kapat",
+    "undo": "Geri al",
+    "redo": "Yinele"
+  },
+  "aec_lab": {
+    "desktop_label": "Sistem seslerinin mikrofona geri dönmesini engelle (deneysel)",
+    "title": "Yerel yankı engelleme denemesi",
+    "instructions": "Masaüstü EVD'deki odadan ayrılın. Önce normal modda, sonra deneysel modda Engelsiz Erişimli Saatler odasına katılın. iPhone normal oda bağlantısını kullansın; mikrofonu kapalı, kulaklığı takılı olsun. JAWS ve kendi konuşmanızı ayrı ayrı ve birlikte karşılaştırın. Her mod değişiminden önce odadan ayrılın. İlk denemede Krisp kapalı kalsın.",
+    "normal": "Normal mod ile odaya katıl",
+    "all": "Tüm sistem seslerini referans alan deneysel mod ile odaya katıl",
+    "privacy": "Yalnızca bu bilgisayarda çalışan deneydir; sunucuya deploy yapılmaz. Sistem sesi ayrı bir ses kanalı olarak odaya gönderilmez. Mikrofon izni gerekir. Deneysel mod müzik modu için uygun değildir. Kulaklıksız görüşmede başarısı dinleyerek doğrulanmalıdır.",
+    "waiting": "Deneysel mod seçili. Mikrofon açıldığında gerçek destek kontrol edilecek.",
+    "active": "Doğrulandı: mikrofon tüm sistem sesleri için yankı engelleme modunda. Bu, JAWS'ın tamamen temizlendiğini garanti etmez.",
+    "failed": "Deneysel yankı modu doğrulanamadı. Mikrofon bu modda yayımlanmayacak. Odadan ayrılıp normal mod ile tekrar deneyin."
+  },
+  "krisp_preview": {
+    "label": "Gelişmiş konuşma temizleme (Krisp, deneysel)",
+    "hint": "Varsayılan olarak açıktır; bu oturum için kapatabilirsiniz. Mikrofon açıldığında Krisp bileşenleri internetten yüklenir. Destek veya yükleme sorunu olursa normal mikrofonla devam edilir. Ortam gürültüsünü ve arka plan konuşmalarını azaltmayı dener; müzik modunda devre dışıdır. Mikrofon testi bu filtreyi içermez; sonucu diğer katılımcıyla karşılaştırın.",
+    "loading": "Krisp hazırlanıyor. Mikrofon mevcut ayarlarla çalışmaya devam ediyor.",
+    "ready": "Krisp konuşma temizleme etkinleştirildi.",
+    "failed": "Krisp etkinleştirilemedi. Seçenek kapatıldı; mikrofon mevcut ses yöntemiyle çalışmaya devam ediyor."
+  },
   "audio_stability": {
     "label": "Ses kesilmelerine karşı deneysel uyumluluk",
     "help": "Kayıtta mikrofon veya sistem sesi kesiliyorsa açın. Asenkron ses filtresiyle zamanlamayı dengeler. Seçiminiz hatırlanır. Kayıt veya yayın sırasında değiştirilemez. Desteklenen OBS eklentisi gereklidir.",
@@ -2785,7 +2934,7 @@
     "app_window_title": "EVD (Engelsiz Video Düzenleyicisi)",
     "about_label": "Hakkında",
     "about_title": "EVD (Engelsiz Video Düzenleyicisi) Hakkında",
-    "about_detail": "Sürüm 5.5.0\n\nGörme engelli kullanıcılar için tasarlanmış, klavye odaklı video düzenleme programı.\n\nProgram İkonu: Video düzenleyen eller ve kulak\n\n© 2025-2026 Engin Yılmaz\nTüm hakları saklıdır.",
+    "about_detail": "Sürüm 5.7.0\n\nGörme engelli kullanıcılar için tasarlanmış, klavye odaklı video düzenleme programı.\n\nProgram İkonu: Video düzenleyen eller ve kulak\n\n© 2025-2026 Engin Yılmaz\nTüm hakları saklıdır.",
     "system_language": "Sistem dili (Otomatik)",
     "language_changed": "Dil başarıyla değiştirildi. Yeniden başlatıldığında tüm alanlara etki edebilir.",
     "error_title": "Hata",
@@ -3066,6 +3215,13 @@
         "splitDescriptionEvent": "Betimleme olayını oynatma konumunda böl",
         "mergeDescriptionEvents": "Seçili betimleme olaylarını birleştir",
         "synthesizeSelectedDescriptions": "Seçili betimlemeleri seslendir",
+        "descriptionVoiceUp": "Olay seslendirme sesini artır",
+        "descriptionVoiceDown": "Olay seslendirme sesini azalt",
+        "descriptionOriginalUp": "Olay özgün video sesini artır",
+        "descriptionOriginalDown": "Olay özgün video sesini azalt",
+        "descriptionRateUp": "Olay seslendirmesini hızlandır",
+        "descriptionRateDown": "Olay seslendirmesini yavaşlat",
+        "descriptionRateReset": "Olay seslendirme hızını normale getir",
         "synthesizeAllDescriptions": "Tüm betimlemeleri seslendir",
         "renderDescribedVideo": "Betimlemeli video veya MP3 oluştur"
       }
@@ -3551,7 +3707,7 @@
       "pos_center": "Orta (Tam Ekran)",
       "pos_custom": "Özel...",
       "scale": "Boyut (%):",
-      "ai_suggest": "Yapay Zeka ile Konum/Boyut Öner (Gemini)",
+      "ai_suggest": "Yapay Zekâ ile Konum/Boyut Öner",
       "opacity": "Opaklık (%):",
       "duration": "Süre (sn):",
       "duration_hint": "(0 = Video uzunluğu)",
@@ -5857,6 +6013,10 @@
     "unknown_error": "Bilinmeyen hata"
   },
   "description_subtitle_editor": {
+    "audio_shortcuts_help": "Olay listesinde Alt+Shift+L/J seslendirme sesini, Alt+Shift+Yukarı/Aşağı özgün video sesini değiştirir. F hızlandırır, A yavaşlatır, D normal hıza döndürür. Yalnızca odaklanılan olay değişir ve miks yeniden çalar.",
+    "audio_adjust_ttsVolume": "Seslendirme sesi %{value}",
+    "audio_adjust_originalVolume": "Özgün video sesi %{value}",
+    "audio_adjust_ttsPlaybackRate": "Seslendirme oynatma hızı %{value}",
     "window_title": "Betimleme ve Altyazı Editörü",
     "heading": "Betimleme ve Altyazı Editörü",
     "intro": "Profesyonel betimleme ve altyazı projelerini ayrı, erişilebilir bir çalışma alanında hazırlayın.",

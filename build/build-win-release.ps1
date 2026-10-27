@@ -27,6 +27,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Building Windows NSIS + dir targets..."
+& node (Join-Path $PSScriptRoot 'prepare-gtcrn-runtime.cjs')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $builder --win nsis dir --x64
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE

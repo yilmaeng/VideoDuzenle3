@@ -406,6 +406,7 @@ const App = {
         }
 
         this.verticalClipQueue.push(built.clip);
+        if (Selection.extendedAnchor !== null) Selection.clear(true);
         document.dispatchEvent(new Event('editor-menu-state-changed'));
         Accessibility.announce(this.t('runtime.vertical.queue_add_success', '{label} seçim listesine eklendi. Listede toplam {count} öğe var.', {
             label: built.clip.label,
@@ -659,6 +660,7 @@ const App = {
         const saveResult = await window.api.showSaveDialog({
             title: this.t('messages.merge_selection_queue', 'Seçim Listesini Tek Klipte Birleştir'),
             defaultPath: `${parsedSource.name || 'video'}-selection-merge.mp4`,
+            sourceFilePath: clips[0]?.sourcePath || this.currentFilePath,
             filters: [{ name: this.t('runtime.app.mp4_video_filter', 'MP4 Video'), extensions: ['mp4'] }]
         });
 
@@ -757,6 +759,7 @@ const App = {
                     ? this.t('messages.save_selection_fast', 'Seçili Alanı Akıllı Hızlı Kaydet')
                     : this.t('messages.save_selection', 'Seçili Alanı Kaydet'),
                 defaultPath: defaultName,
+                sourceFilePath: sourcePath,
                 filters: [{ name: filterName, extensions: [saveExt.replace('.', '')] }]
             });
 
@@ -1084,7 +1087,10 @@ const App = {
 
         // Seçim işlemleri
         window.api.onSelectAll(() => Selection.selectAll());
-        window.api.onSelectClear(() => Selection.clear());
+        window.api.onSelectClear(() => Selection.cancel());
+        window.api.onExtendedSelection(() => {
+            if (!Keyboard.isDialogOpen() && !document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')) Selection.toggleExtended();
+        });
         window.api.onSelectRangeDialog(() => Dialogs.showRangeDialog());
         window.api.onSelectBetweenMarkers(() => Selection.selectBetweenMarkers());
         window.api.onShowSpeedDialog(() => Dialogs.showSpeedDialog());
@@ -1329,7 +1335,8 @@ const App = {
         });
 
         // Boşlukları listele
-        window.api.onEditListSilences(() => {
+        window.api.onEditListSilences((mode) => {
+            if (mode === 'fillers') return window.FillerReview.open();
             Dialogs.showSilenceParamsDialog();
         });
 
@@ -1622,6 +1629,7 @@ const App = {
         // Eğer dosya yolu yoksa, diyalog aç
         if (!filePath) {
             const result = await window.api.openFileDialog({
+                rememberMediaDirectory: true,
                 title: this.t('messages.open_video', 'Video Dosyası Aç'),
                 filters: [
                     { name: this.t('messages.media_files_filter', 'Medya Dosyaları'), extensions: ['mp4', 'wmv', 'avi', 'mkv', 'mov', 'webm', 'flv', '3gp', 'mpg', 'mpeg', 'vob', 'm4v', 'ts', 'mts', 'm2ts', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'wma'] },
@@ -3052,6 +3060,14 @@ const App = {
      */
     async exportVideoOnly(filePath) {
         if (!VideoPlayer.hasVideo()) return;
+        if (!filePath) {
+            const result = await window.api.showSaveDialog({
+                title: this.t('messages.export_video', ''), sourceFilePath: this.currentFilePath,
+                filters: [{ name: this.t('messages.file_filter_mp4_video', ''), extensions: ['mp4'] }]
+            });
+            if (result.canceled || !result.filePath) return;
+            filePath = result.filePath;
+        }
 
         this.showProgress(this.t('runtime.app.exporting_video', 'Video dışa aktarılıyor'));
 
@@ -3075,6 +3091,18 @@ const App = {
      */
     async exportAudioOnly(filePath) {
         if (!VideoPlayer.hasVideo()) return;
+        if (!filePath) {
+            const result = await window.api.showSaveDialog({
+                title: this.t('messages.export_audio', ''), sourceFilePath: this.currentFilePath,
+                filters: [
+                    { name: this.t('messages.file_filter_mp3_audio', ''), extensions: ['mp3'] },
+                    { name: this.t('messages.file_filter_wav_audio', ''), extensions: ['wav'] },
+                    { name: this.t('messages.file_filter_aac_audio', ''), extensions: ['aac'] }
+                ]
+            });
+            if (result.canceled || !result.filePath) return;
+            filePath = result.filePath;
+        }
 
         // Kullanıcıya sor: İşlenmiş ses mi, yoksa ham ses mi?
         const choice = await window.api.showMessageBox({
@@ -3390,7 +3418,9 @@ const App = {
     updateAfterEdit() {
         // Toplam süreyi güncelle
         const newDuration = Timeline.getTotalDuration();
-        document.getElementById('total-duration').textContent = Utils.formatTime(newDuration);
+        const activeTab = TabManager.getActiveTab();
+        if(activeTab?.timeline)activeTab.timeline.totalDuration=newDuration;
+        VideoPlayer.updateDurationDisplay();
 
         // İşaretleyicileri timeline değişikliklerine göre güncelle
         this.updateMarkersForTimeline();
@@ -3627,13 +3657,12 @@ const App = {
         if (!VideoPlayer.hasVideo()) return;
         this.showProgress(this.t('runtime.app.adding_ticker_overlay', 'Adding ticker...'));
         try {
-            const outputPath = await window.api.getTempPath(`ticker_${Date.now()}.mp4`);
-            const result = await window.api.addTickerOverlay({ videoPath: this.currentFilePath, outputPath, options });
+            const result = await window.api.addTickerOverlay({ videoPath: this.currentFilePath, persistentOutput: true, options });
             this.hideProgress();
             if (!result.success) throw new Error(result.error || this.t('runtime.app.ticker_add_failed', 'Ticker could not be added.'));
             Accessibility.announceComplete(this.t('runtime.app.ticker_add_operation', 'Ticker addition'));
             await this.openFile(result.outputPath);
-            Accessibility.announce(this.t('runtime.app.ticker_added_video_loaded', 'The video with the ticker has been loaded.'));
+            Accessibility.announce(window.i18nHelper.t('ticker_output.saved', { path: result.outputPath }));
         } catch (error) {
             this.hideProgress();
             Accessibility.announceError(error.message);
@@ -4253,6 +4282,7 @@ const App = {
      * @param {string} subtitlePath
      */
     async insertSubtitle(subtitlePath) {
+        if (!subtitlePath) return window.AutomaticSubtitles.open();
         const isTtsProjectPath = /\.evdtts$/i.test(String(subtitlePath || ''));
         if (!VideoPlayer.hasVideo() && !isTtsProjectPath) return;
 
@@ -5868,7 +5898,7 @@ const App = {
             if (Number.isFinite(projectData.playbackPosition)
                 && typeof VideoPlayer !== 'undefined'
                 && typeof VideoPlayer.seekToTimelineTime === 'function') {
-                VideoPlayer.seekToTimelineTime(projectData.playbackPosition);
+                await this.restoreProjectPlaybackPosition(projectData.playbackPosition);
             }
 
             Accessibility.announce(speechAnalysisWarning
@@ -5881,6 +5911,35 @@ const App = {
                 error: error.message
             }));
         }
+    },
+
+    async restoreProjectPlaybackPosition(savedPosition) {
+        const media = VideoPlayer.video;
+        if (!media || !Number.isFinite(savedPosition)) return;
+        // loadVideo resolves after assigning src, not after media metadata is ready.
+        if (media.readyState < 1) {
+            await new Promise((resolve, reject) => {
+                const cleanup = () => {
+                    clearTimeout(timer);
+                    media.removeEventListener('loadedmetadata', ready);
+                    media.removeEventListener('error', failed);
+                };
+                const ready = () => { cleanup(); resolve(); };
+                const failed = () => {
+                    cleanup();
+                    reject(new Error(this.t('runtime.app.video_file_open_failed')));
+                };
+                const timer = setTimeout(failed, 15000);
+                media.addEventListener('loadedmetadata', ready, { once: true });
+                media.addEventListener('error', failed, { once: true });
+            });
+        }
+        const position = Math.max(0, Math.min(savedPosition, VideoPlayer.getDuration()));
+        VideoPlayer.pause({ announce: false });
+        await VideoPlayer.seekToTimelineTime(position);
+        VideoPlayer.cursorPosition = position;
+        VideoPlayer.playbackStartPosition = null;
+        VideoPlayer.updateUI();
     },
 
     /**

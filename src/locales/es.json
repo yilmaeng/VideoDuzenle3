@@ -1,4 +1,153 @@
 {
+  "silence_cleanup_result": {
+    "title": "Limpieza de silencios completada",
+    "message": "Se eliminaron {count} intervalos de silencio, un total de {seconds} segundos. Nueva duración total: {total}. Intervalos omitidos por el margen de protección: {skipped}. Deshacer restaura la eliminación."
+  },
+  "filler_review": {
+    "help_title": "Ayuda y atajos de teclado",
+    "result_title": "Limpieza de muletillas completada",
+    "ok": "Aceptar",
+    "selected_for_deletion": "Seleccionado para eliminar.",
+    "not_selected_for_deletion": "No seleccionado; no se eliminará.",
+    "apply_all": "Eliminar todos",
+    "confirm_all": "¿Eliminar los {count} candidatos, incluidos los no aprobados? Puede haber errores de detección. Una sola acción Deshacer los restaura.",
+    "title": "Revisar muletillas sonoras (experimental)",
+    "help": "Busca muletillas turcas. Los candidatos sólidos se preseleccionan; los inciertos aparecen en otro grupo. Esto no garantiza su exactitud. Flechas: contexto; Intro: repetir; Espacio: cambiar selección; Ctrl+Espacio: escuchar el corte. Revise antes de eliminar. La limpieza de silencios no cambia.",
+    "strong_group": "Candidatos sólidos (preseleccionados)",
+    "review_group": "Candidatos pendientes de revisión",
+    "analyze": "Iniciar análisis (descargar motor si es necesario)",
+    "list": "Candidatos",
+    "start": "Inicio (segundos)",
+    "end": "Fin (segundos)",
+    "range": "Aplicar límites",
+    "preview": "Escuchar contexto (Intro)",
+    "cut": "Escuchar corte (Ctrl+Espacio)",
+    "stop": "Detener escucha",
+    "toggle": "Aprobar / desmarcar eliminación (Espacio)",
+    "apply": "Eliminar aprobados",
+    "item": "{text}; {time} – {end}; {state}",
+    "approved": "Se eliminará",
+    "review": "Pendiente de revisión",
+    "preview_unavailable": "La velocidad o los efectos impiden la escucha continua. Revise este candidato en la línea de tiempo normal.",
+    "error": "Error: {error}",
+    "invalid": "Los tiempos deben ser válidos y estar en el mismo segmento.",
+    "stale": "La línea de tiempo cambió. Cierre y vuelva a analizar.",
+    "confirm": "¿Eliminar {count} intervalos aprobados? Un Deshacer los restaura.",
+    "done": "Se eliminaron {count} intervalos, un total de {seconds} segundos. Nueva duración total: {total}. Deshacer los restaura.",
+    "results": "{count} candidatos encontrados. Escuche antes de aprobar.",
+    "unsupported": "Este experimento requiere análisis turco con whisper.cpp en Windows x64. Mac aún no está habilitado."
+  },
+  "timeline_pointer": {
+    "play": "Reproducir / pausar",
+    "preview": "Escuchar selección",
+    "cutPreview": "Escuchar corte",
+    "cut": "Cortar",
+    "copy": "Copiar",
+    "paste": "Pegar",
+    "delete": "Eliminar",
+    "undo": "Deshacer",
+    "redo": "Rehacer",
+    "queue": "Añadir a la lista de selecciones",
+    "clear": "Borrar selección",
+    "zoom": "Ampliar línea de tiempo",
+    "hint": "Haga clic para ir a una posición. Arrastre con el botón izquierdo para seleccionar un intervalo. Para vídeos largos, amplíe y use la barra de desplazamiento inferior."
+  },
+  "automatic_subtitles": {
+    "title": "Añadir subtítulos",
+    "choose": "Seleccione un archivo de subtítulos o genere subtítulos del habla del vídeo de origen abierto.",
+    "file": "Seleccionar archivo de subtítulos",
+    "generate": "Generar subtítulos con Whisper",
+    "info": "Se analiza localmente todo el archivo de origen. Los cortes de la línea de tiempo no se aplican; al igual que la inserción existente, se usa el archivo de origen. Revise textos y tiempos. Tras guardar el SRT se abren las opciones habituales de subtítulos, apariencia y voz.",
+    "start": "Iniciar análisis (descargar motor si es necesario)",
+    "empty": "No se encontró habla; no se generaron subtítulos.",
+    "ready": "Subtítulos listos. Guarde el archivo SRT.",
+    "save": "Guardar subtítulos automáticos",
+    "source_changed": "El vídeo abierto cambió. Abra el SRT guardado con el vídeo correcto.",
+    "error": "No se pudieron generar subtítulos: {error}"
+  },
+  "recording_camera": {
+    "available": "La cámara está disponible a través de OBS. No es necesario abrirla por segunda vez.",
+    "busy": "No se pudo iniciar la cámara. OBS u otra aplicación puede estar utilizándola; esto no significa que se haya denegado el permiso. Compruebe la imagen de OBS y la conexión de la cámara.",
+    "missing": "No se encontró la cámara o sus ajustes no son compatibles. Actualice la lista de dispositivos y seleccione la cámara de nuevo.",
+    "denied": "Se denegó el acceso a la cámara. Compruebe el permiso de cámara para EVD en el sistema operativo.",
+    "failed": "No se pudo completar la comprobación de la cámara. Compruebe la conexión y el estado de OBS e inténtelo de nuevo."
+  },
+  "extended_selection": {
+    "label": "Activar/desactivar modo de selección",
+    "on": "Modo de selección activado. Inicio: {time}. Navegue por el vídeo; Escape cancela y vuelve al inicio.",
+    "off": "Modo de selección desactivado. Se conserva el intervalo seleccionado.",
+    "cancelled": "Selección cancelada. Se ha vuelto a la posición inicial: {time}."
+  },
+  "recording_navigation": {
+    "category": "Navegación del asistente de grabación",
+    "next": "Asistente de grabación: siguiente",
+    "back": "Asistente de grabación: atrás",
+    "time_label": "a las",
+    "next_shortcut": "Alt+S",
+    "back_shortcut": "Alt+A"
+  },
+  "ticker_output": {
+    "suffix": "texto deslizante",
+    "saved": "El vídeo con texto deslizante se guardó y abrió: {path}. No es necesario volver a guardar como."
+  },
+  "ai_connection": {
+    "tts_network": "No se pudo conectar con {service} o la conexión agotó el tiempo de espera. Compruebe la red e inténtelo de nuevo. La voz del equipo no requiere internet.",
+    "layer_prompt": "La primera imagen es el vídeo principal y la segunda la capa. Lienzo {width}x{height}, capa {layerWidth}x{layerHeight}, propósito {mode}. Recomienda posición y tamaño sin cubrir caras, texto ni acciones importantes. Conserva la proporción y mantén las coordenadas dentro del lienzo. Para pantalla dividida usa la mitad adecuada. Devuelve solo JSON: {\"x\":0,\"y\":0,\"width\":100,\"height\":100,\"position\":\"posición\",\"reason\":\"razón visual\"}.",
+    "visual_samples": "Esta descripción visual utiliza hasta 20 fotogramas en orden cronológico del intervalo seleccionado; no se envía audio. No suponga acciones ni palabras no observadas. Los tiempos están en segundos:",
+    "timeout": "El servicio de IA no completó su respuesta en 90 segundos. Puede estar ocupado. Inténtelo de nuevo o seleccione otro modelo."
+  },
+  "recording_microphone_noise": {
+    "gtcrn": "GTCRN (después de grabar, experimental)",
+    "gtcrn_help": "GTCRN limpia solo el micrófono después de grabar; la vista previa no tiene filtro. Se conserva el audio del sistema. Se guarda el MKV original y se crea un MP4 limpio aparte. No hay límite fijo de duración; las grabaciones largas se procesan en bloques pequeños y requieren suficiente espacio libre. El modelo utiliza mono a 16 kHz. OBS puede cambiar temporalmente a grabación multipista de alta calidad; después se restauran sus ajustes. No se puede usar junto con una transmisión en directo.",
+    "gtcrn_unavailable": "El motor local de prueba GTCRN no está disponible. Seleccione otro método.",
+    "gtcrn_setup_failed": "No se pudieron preparar pistas separadas para GTCRN. Detenga la transmisión y use la grabación multipista estándar de OBS. En modo simple puede elegir Alta calidad.",
+    "gtcrn_extract": "Grabación detenida. Extrayendo el audio del micrófono.",
+    "gtcrn_clean": "Limpiando el micrófono con GTCRN. Se conserva el original.",
+    "gtcrn_mix": "Combinando el micrófono limpio y el resto del audio con el vídeo.",
+    "gtcrn_done": "GTCRN ha terminado. El MP4 limpio está listo; también se conservó el original.",
+    "gtcrn_failed": "Falló la limpieza GTCRN. Se conservó la grabación original. Compruebe las tres pistas de audio, el motor local y el espacio libre.",
+    "gtcrn_restore_failed": "No se pudieron restaurar las pistas de OBS. Revise las pistas antes de otra grabación o transmisión.",
+    "label": "Reducir el ruido de fondo del micrófono (experimental)",
+    "help": "Desactivado por defecto. Solo procesa el micrófono; el audio del sistema no cambia. Reinicie la vista previa tras elegir el método. DeepFilterNet3 requiere el complemento de OBS; reinicie OBS tras instalarlo. Puede afectar a la música y al habla suave. No garantiza eliminar la voz del lector de pantalla.",
+    "method": "Método de reducción de ruido",
+    "rnnoise": "RNNoise (integrado en OBS)",
+    "deepfilter": "DeepFilterNet3 (experimental)",
+    "strength": "Atenuación máxima de ruido de DeepFilterNet (dB)",
+    "strength_help": "0–100 dB. Los valores menores aplican una reducción más suave y conservan más sonido ambiental. Suave: 15–25; ajuste medio anterior: 55. No es un porcentaje ni el volumen del micrófono. Use las flechas para pasos de 5 dB o escriba un valor. Se aplica al reiniciar la vista previa.",
+    "failed": "No se pudo aplicar el filtro de ruido del micrófono de OBS. Desactive esta opción e inténtelo de nuevo."
+  },
+  "system_echo": {
+    "hint": "Con la cancelación de eco activada, los navegadores compatibles usan todos los sonidos del sistema, incluidos los lectores de pantalla, como referencia. Los demás mantienen la cancelación estándar. Desactivada en modo música. Se conserva una preferencia anterior de desactivación."
+  },
+  "native_menu_test": {
+    "title": "Prueba mínima de menús de Electron 44",
+    "instructions": "Pulse Alt para ir a la barra de menús. Abra Archivo con Flecha abajo y pulse Flecha derecha sobre Nuevo. Debería abrirse Editar. Pruebe Flecha izquierda para volver a Archivo. Escape cierra el menú. Esta ventana no contiene atajos de EVD. Las opciones de prueba no abren ni modifican archivos. Alt+F4 cierra solo esta ventana.",
+    "file": "Archivo",
+    "edit": "Editar",
+    "new_item": "Nuevo",
+    "open_item": "Abrir",
+    "close": "Cerrar prueba",
+    "undo": "Deshacer",
+    "redo": "Rehacer"
+  },
+  "aec_lab": {
+    "desktop_label": "Evitar que los sonidos del sistema vuelvan por el micrófono (experimental)",
+    "title": "Prueba local de cancelación de eco",
+    "instructions": "Salga de la sala en EVD de escritorio. Entre en Engelsiz Erisimli Saatler primero en modo normal y después en experimental. En el iPhone use el enlace normal, auriculares y el micrófono apagado. Compare JAWS, su voz y ambos a la vez. Salga antes de cambiar de modo. Mantenga Krisp apagado en la primera comparación.",
+    "normal": "Entrar en modo normal",
+    "all": "Entrar con todos los sonidos del sistema como referencia experimental",
+    "privacy": "Prueba local, sin despliegue en el servidor. El audio del sistema no se transmite como pista independiente. Requiere permiso de micrófono. No es adecuado para el modo de música. Confirme la calidad mediante escucha.",
+    "waiting": "Modo experimental seleccionado. Se comprobará la compatibilidad al abrir el micrófono.",
+    "active": "Verificado: el micrófono usa cancelación de eco de todos los sonidos del sistema. No garantiza eliminar JAWS por completo.",
+    "failed": "No se pudo verificar el modo experimental. El micrófono no se publicará en este modo. Salga y pruebe el modo normal."
+  },
+  "krisp_preview": {
+    "label": "Limpieza de voz mejorada (Krisp, experimental)",
+    "hint": "Activado por defecto; puede desactivarlo durante esta sesión. Los componentes de Krisp se descargan al abrir el micrófono. Si no es compatible o falla la carga, continúa el micrófono normal. Intenta reducir ruido ambiental y voces de fondo; desactivado en modo música. La prueba del micrófono no incluye este filtro; compare con otro participante.",
+    "loading": "Preparando Krisp. El micrófono continúa con su configuración actual.",
+    "ready": "Limpieza de voz Krisp activada.",
+    "failed": "No se pudo activar Krisp. La opción se desactivó; el micrófono continúa con el método de audio anterior."
+  },
   "audio_stability": {
     "label": "Compatibilidad experimental para cortes de audio",
     "help": "Active si se corta el micrófono o el audio del sistema. El filtro asíncrono estabiliza la sincronización. Se recuerda su elección. No se puede cambiar durante una grabación o emisión. Requiere el complemento OBS compatible.",
@@ -2801,7 +2950,7 @@
     "app_window_title": "EVD Editor de Video sin Barreras",
     "about_label": "Acerca de",
     "about_title": "Acerca de EVD Editor de Video sin Barreras",
-    "about_detail": "Version 5.5.0\n\nUn editor de video orientado al teclado para usuarios ciegos y con baja vision.\n\nIcono del programa: manos y oidos editando video\n\n© 2025-2026 Engin Yılmaz\nTodos los derechos reservados.",
+    "about_detail": "Version 5.7.0\n\nUn editor de video orientado al teclado para usuarios ciegos y con baja vision.\n\nIcono del programa: manos y oidos editando video\n\n© 2025-2026 Engin Yılmaz\nTodos los derechos reservados.",
     "error_title": "Error",
     "additional_window_launch_failed": "No se pudo abrir una nueva ventana de EVD.",
     "ai_model_downloading_title": "Descargando modelo de IA",
@@ -3809,6 +3958,13 @@
         "splitDescriptionEvent": "Dividir evento de audiodescripción en la posición de reproducción",
         "mergeDescriptionEvents": "Combinar eventos de audiodescripción seleccionados",
         "synthesizeSelectedDescriptions": "Sintetizar audiodescripciones seleccionadas",
+        "descriptionVoiceUp": "Subir voz del evento",
+        "descriptionVoiceDown": "Bajar voz del evento",
+        "descriptionOriginalUp": "Subir audio original del evento",
+        "descriptionOriginalDown": "Bajar audio original del evento",
+        "descriptionRateUp": "Acelerar voz del evento",
+        "descriptionRateDown": "Ralentizar voz del evento",
+        "descriptionRateReset": "Restablecer velocidad del evento",
         "synthesizeAllDescriptions": "Sintetizar todas las audiodescripciones",
         "renderDescribedVideo": "Crear vídeo con audiodescripción o MP3"
       }
@@ -4206,7 +4362,7 @@
       "pos_center": "Center (Full Screen)",
       "pos_custom": "Custom...",
       "scale": "Scale (%):",
-      "ai_suggest": "AI Position/Scale Suggestion (Gemini)",
+      "ai_suggest": "Sugerencia de posición y tamaño con IA",
       "opacity": "Opacity (%):",
       "duration": "Duration (sec):",
       "duration_hint": "(0 = video duration)",
@@ -6193,6 +6349,10 @@
     }
   },
   "description_subtitle_editor": {
+    "audio_shortcuts_help": "En la lista, Alt+Shift+L/J cambia el volumen de voz; Alt+Shift+Arriba/Abajo cambia el original. F acelera, A ralentiza, D restablece la velocidad. Solo cambia el evento enfocado y la mezcla vuelve a reproducirse.",
+    "audio_adjust_ttsVolume": "Volumen de voz {value}%",
+    "audio_adjust_originalVolume": "Volumen original {value}%",
+    "audio_adjust_ttsPlaybackRate": "Velocidad de voz {value}%",
     "window_title": "Description and Subtitle Editor",
     "heading": "Description and Subtitle Editor",
     "intro": "Prepare professional audio description and subtitle projects in a separate, accessible workspace.",

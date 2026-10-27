@@ -21,6 +21,7 @@ const Keyboard = {
     },
 
     getLocalizedCategory(category) {
+        if (category === 'recording_navigation') return this.t('recording_navigation.category', '');
         if (category === 'speech_search') return this.t('speech_search.category', '');
         if (category === 'Kayıt Global Kısayolları') {
             return this.t('dialog.keyboard_manager.category_recording_global', 'Recording Global Shortcuts');
@@ -48,6 +49,12 @@ const Keyboard = {
     },
 
     getLocalizedActionLabel(actionId, fallbackLabel) {
+        if (actionId === 'fillerReview') return this.t('filler_review.title', '');
+        if (actionId === 'insertSubtitle') return this.t('automatic_subtitles.title', '');
+        if (actionId === 'automaticSubtitles') return this.t('automatic_subtitles.generate', '');
+        if (actionId === 'extendedSelection') return this.t('extended_selection.label', '');
+        if (actionId === 'recordingWizardNext') return this.t('recording_navigation.next', '');
+        if (actionId === 'recordingWizardBack') return this.t('recording_navigation.back', '');
         if (actionId === 'vocalSeparation') return this.t('vocal_separation.title', '');
         if (actionId === 'videoCrop') return this.t('video_crop.title', '');
         if (actionId === 'aiServiceSettings') return this.t('ai_services.settings', '');
@@ -229,6 +236,13 @@ const Keyboard = {
         'splitDescriptionEvent': { default: null, category: 'Düzenleme', label: 'Betimleme Olayını Oynatma Konumunda Böl' },
         'mergeDescriptionEvents': { default: null, category: 'Düzenleme', label: 'Seçili Betimleme Olaylarını Birleştir' },
         'synthesizeSelectedDescriptions': { default: null, category: 'Ekle', label: 'Seçili Betimlemeleri Seslendir' },
+        'descriptionVoiceUp': { default: 'Alt+Shift+L', category: 'Ekle' },
+        'descriptionVoiceDown': { default: 'Alt+Shift+J', category: 'Ekle' },
+        'descriptionOriginalUp': { default: 'Alt+Shift+ArrowUp', category: 'Ekle' },
+        'descriptionOriginalDown': { default: 'Alt+Shift+ArrowDown', category: 'Ekle' },
+        'descriptionRateUp': { default: 'F', category: 'Ekle' },
+        'descriptionRateDown': { default: 'A', category: 'Ekle' },
+        'descriptionRateReset': { default: 'D', category: 'Ekle' },
         'synthesizeAllDescriptions': { default: null, category: 'Ekle', label: 'Tüm Betimlemeleri Seslendir' },
         'renderDescribedVideo': { default: null, category: 'Dosya', label: 'Betimlemeli Video Oluştur' },
         'findDescriptionText': { default: 'Mod+F', category: 'Düzenleme', label: 'Betimleme Metninde Ara' },
@@ -298,6 +312,7 @@ const Keyboard = {
         'selectToStart': { default: ['Mod+Shift+ArrowUp', 'Ctrl+Shift+Home'], category: 'Seçim', label: 'Başa Kadar Seç' },
         'selectToEnd': { default: ['Mod+Shift+ArrowDown', 'Ctrl+Shift+End'], category: 'Seçim', label: 'Sona Kadar Seç' },
         'selectRange': { default: 'Mod+R', category: 'Seçim', label: 'Aralık Seç Diyaloğu' },
+        'extendedSelection': { default: 'F8', category: 'Seçim', label: '' },
         'clearSelection': { default: 'Escape', category: 'Seçim', label: 'Seçimi Temizle / İptal' },
         'selectBetweenRight': { default: 'Mod+Shift+ArrowRight', category: 'Seçim', label: 'İşaretçiler Arası Sağa' },
         'selectBetweenLeft': { default: 'Mod+Shift+ArrowLeft', category: 'Seçim', label: 'İşaretçiler Arası Sola' },
@@ -308,6 +323,7 @@ const Keyboard = {
         'insertList': { default: 'Mod+Shift+L', category: 'Araçlar', label: 'Ekleme Listesi / Kuyruk' },
         'objectAnalysis': { default: 'Mod+Shift+A', category: 'Araçlar', label: 'Nesne Analizi' },
         'listSilences': { default: 'Mod+Shift+B', category: 'Araçlar', label: 'Boşlukları Listele' },
+        'fillerReview': { default: null, category: 'Araçlar', label: '' },
 
         // --- Yapay Zeka (AI) ---
         'describeSelection': { default: 'Mod+Alt+D', category: 'Yapay Zeka', label: 'Seçimi Betimle' },
@@ -338,6 +354,7 @@ const Keyboard = {
         'openCtaLibrary': { default: 'Mod+Shift+K', category: 'Ekle', label: 'CTA / Overlay Kütüphanesi' },
         'insertVideoLayer': { default: 'Ctrl+Shift+V', category: 'Ekle', label: 'Video Katmanı (PiP)' },
         'insertSubtitle': { default: null, category: 'Ekle', label: 'Altyazı Ekle (.srt)' },
+        'automaticSubtitles': { default: null, category: 'Ekle', label: '' },
         'openDescriptionSubtitleEditor': { default: null, category: 'Ekle', label: 'Betimleme / Altyazı Editörü' },
         'createShorts': { default: null, category: 'Ekle', label: 'Dikey Video (Shorts/Reels) Oluştur' },
         'createShortsFromSelection': { default: null, category: 'Ekle', label: 'Seçili Alanı Dikey Videoya Dönüştür' },
@@ -362,6 +379,8 @@ const Keyboard = {
         'openLiveEffectsPanel': { default: null, category: 'Erişilebilir Kayıt', label: 'Canlı Efekt Paneli' },
         'openBroadcastRoom': { default: null, category: 'Erişilebilir Kayıt', label: 'Yayın Odası' },
         'resumeActiveBroadcastWizard': { default: null, category: 'Erişilebilir Kayıt', label: 'Etkin Canlı Yayına Geri Dön' },
+        'recordingWizardNext': { get default() { return Keyboard.t('recording_navigation.next_shortcut', ''); }, category: 'recording_navigation', label: '' },
+        'recordingWizardBack': { get default() { return Keyboard.t('recording_navigation.back_shortcut', ''); }, category: 'recording_navigation', label: '' },
         'recordingGlobalStartStop': { default: 'Alt+Ctrl+R', category: 'Kayıt Global Kısayolları', label: 'Global: Kaydı veya Yayını Başlat/Durdur' },
         'recordingGlobalPauseResume': { default: 'Alt+Ctrl+P', category: 'Kayıt Global Kısayolları', label: 'Global: Kaydı Duraklat/Devam Ettir' },
         'recordingGlobalToggleSystemAudio': { default: 'Alt+Ctrl+H', category: 'Kayıt Global Kısayolları', label: 'Global: Sistem Sesini Aç/Kapat' },
@@ -512,7 +531,11 @@ const Keyboard = {
         if (!this.isEnabled) return;
 
         const target = e.target;
+        // Native controls in the mouse toolbar own their activation/navigation keys.
+        if (target?.closest?.('.timeline-pointer-tools') && !e.ctrlKey && !e.metaKey && !e.altKey
+            && [' ', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) return;
         const dialogOpen = this.isDialogOpen();
+        if (!dialogOpen && this.handleEditorTabNavigation(e)) return;
         const inputFocused = this.isInputFocused(target);
         const modKeyPressed = navigator.userAgent.includes('Mac') ? e.metaKey : e.ctrlKey;
 
@@ -598,6 +621,13 @@ const Keyboard = {
         }
 
         let handled = false;
+        if (Selection.extendedAnchor !== null) {
+            const fine = ['scrubRight', 'scrubLeft'].some(action => this.check(action, e));
+            const coarse = ['scrubRight30', 'scrubLeft30', 'scrubRight5m', 'scrubLeft5m',
+                'seekF5', 'seekB5', 'goToStart', 'goToEnd', 'goToBeforeEnd', 'goToMiddle',
+                'markerNext', 'markerPrev'].some(action => this.check(action, e));
+            if (fine || coarse) Selection.navigationIntent(coarse);
+        }
 
         // --- EYLEMLERİN YÜRÜTÜLMESİ ---
         // Sıra önemlidir (öncelik sırası)
@@ -642,6 +672,7 @@ const Keyboard = {
         else if (this.check('goToTime', e)) { Dialogs.showGotoDialog(); handled = true; }
 
         else if (this.check('listSilences', e)) { Dialogs.showSilenceParamsDialog(); handled = true; }
+        else if (this.check('fillerReview', e)) { window.FillerReview.open(); handled = true; }
         else if (this.check('skipSilence', e)) { VideoPlayer.skipSilence(); handled = true; }
 
         else if (this.check('goToBeforeEnd', e)) { VideoPlayer.goToBeforeEnd(); handled = true; }
@@ -698,6 +729,7 @@ const Keyboard = {
 
 
         // Seçim
+        else if (this.check('extendedSelection', e)) { if (!e.repeat) Selection.toggleExtended(); handled = true; }
         else if (this.check('selectRight', e)) { Selection.extend(Settings.getNavigationStep()); handled = true; }
         else if (this.check('selectLeft', e)) { Selection.extend(-Settings.getNavigationStep()); handled = true; }
         else if (this.check('selectBetweenRight', e)) { Selection.selectBetweenMarkers('expand'); handled = true; }
@@ -711,7 +743,7 @@ const Keyboard = {
 
         else if (this.check('clearSelection', e)) {
             if (this.isDialogOpen()) this.closeOpenDialog();
-            else Selection.clear();
+            else Selection.cancel();
             handled = true;
         }
 
@@ -744,6 +776,7 @@ const Keyboard = {
             handled = true;
         }
         else if (this.check('insertSubtitle', e)) { App.insertSubtitle(); handled = true; }
+        else if (this.check('automaticSubtitles', e)) { window.AutomaticSubtitles.generate(); handled = true; }
         else if (this.check('openDescriptionSubtitleEditor', e)) {
             window.api.openDescriptionSubtitleEditor({ videoPath: App.currentFilePath || '', userKeymap: this.getUserKeymap(), navigationStep: Settings.getNavigationStep() });
             handled = true;
@@ -892,6 +925,22 @@ const Keyboard = {
     },
 
     // --- Helper Functions ---
+    handleEditorTabNavigation(e) {
+        // Native Tab navigation for the editing surface, not a configurable command.
+        // Never intercept Ctrl+Tab (switch document) or any dialog/form navigation.
+        if (e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey || !VideoPlayer.hasVideo()) return false;
+        if (document.querySelector('#progress-overlay:not(.hidden)')) return false;
+        const target = e.target;
+        if (target !== document.body && !target?.closest?.('#tab-bar, #timeline-section, #marker-list, .timeline-pointer-tools')) return false;
+        const timeline = document.getElementById('timeline-section');
+        const tab = document.querySelector('#tab-bar [role="tab"][aria-selected="true"]');
+        if (!timeline) return false;
+        const destination = target === timeline || target?.closest?.('#timeline-section') ? (tab || timeline) : timeline;
+        e.preventDefault();
+        e.stopPropagation();
+        destination.focus({ preventScroll: true });
+        return true;
+    },
     isInputFocused(el) {
         const active = el || document.activeElement;
         if (!active) return false;

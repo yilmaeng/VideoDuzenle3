@@ -107,7 +107,7 @@ function parseTranscriptLine(line) {
     return { start: parseTimestamp(match[1]), end: parseTimestamp(match[2]), text };
 }
 
-function wordsFromFullJson(payload) {
+function wordsFromFullJson(payload, aligned = false) {
     const words = [];
     const segments = Array.isArray(payload?.transcription) ? payload.transcription : [];
     let current = null;
@@ -116,11 +116,13 @@ function wordsFromFullJson(payload) {
         words.push({
             text: current.text.trim(),
             start: current.start,
-            end: Math.max(current.start, current.end)
+            end: Math.max(current.start, current.end),
+            ...(aligned ? { anchors: current.anchors, probabilities: current.probabilities } : {})
         });
         current = null;
     };
     segments.forEach(segment => {
+        const firstWord = words.length;
         (Array.isArray(segment?.tokens) ? segment.tokens : []).forEach(token => {
             const raw = String(token?.text || '');
             if (!raw || /^\[_.*\]$/.test(raw) || !raw.trim()) return;
@@ -129,11 +131,39 @@ function wordsFromFullJson(payload) {
             const end = Number(offsets.to) / 1000;
             if (!Number.isFinite(start) || !Number.isFinite(end)) return;
             if (/^\s/u.test(raw)) flush();
-            if (!current) current = { text: '', start, end };
+            if (!current) current = { text: '', start, end, anchors: [], probabilities: [] };
             current.text += raw.trimStart();
             current.end = Math.max(current.end, end);
+            if (aligned && /[\p{L}\p{N}]/u.test(raw)) {
+                current.anchors.push(typeof token.t_dtw === 'number' ? token.t_dtw / 100 : NaN);
+                current.probabilities.push(typeof token.p === 'number' ? token.p : 0);
+            }
         });
         flush();
+        if (aligned) {
+            const group = words.slice(firstWord);
+            const anchors = group.flatMap(word => word.anchors);
+            const limit = Number(segment.offsets?.to) / 1000;
+            // DTW anchors are estimates, not guaranteed phoneme boundaries. Reject
+            // missing/reversed alignment rather than silently trusting old timings.
+            if (!Number.isFinite(limit) || group.some(word=>!word.anchors.length) || anchors.some((value, i) => !Number.isFinite(value) || value < 0 || value > limit || (i && value < anchors[i - 1]))) {
+                words.splice(firstWord);
+                return;
+            }
+            group.forEach((word, i) => {
+                const originalStart = word.start;
+                word.start = word.anchors[0];
+                const next = group[i + 1]?.anchors[0] ?? limit;
+                word.end = Math.min(next, Math.max(word.end, word.anchors.at(-1) + 0.02));
+                word.alignmentQuality = {
+                    probability: Math.min(...word.probabilities),
+                    shift: Math.abs(originalStart-word.start),
+                    boundariesValid: word.end > word.start && word.anchors.every(anchor => anchor >= word.start && anchor < word.end)
+                };
+                delete word.anchors;
+                delete word.probabilities;
+            });
+        }
     });
     return words;
 }
@@ -154,6 +184,13 @@ function runWhisperChunk(runtime, options = {}) {
             '-t', String(threadCount),
             '-pp', '-sow', '-ojf', '-of', outputBase
         ];
+        if (options.initialPrompt) args.push('--prompt', options.initialPrompt);
+        // Filler review needs stable token boundaries more than flash-attention throughput.
+        if (options.preciseFillerTiming) {
+            const model = /ggml-(small|base)(?:[.-])/.exec(path.basename(runtime.modelPath))?.[1];
+            if (!model) { reject(new Error('filler_alignment_model_unsupported')); return; }
+            args.push('--no-flash-attn', '--dtw', model);
+        }
         const child = spawn(runtime.executable, args, {
             cwd: path.dirname(runtime.executable), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
         });
@@ -201,7 +238,7 @@ function runWhisperChunk(runtime, options = {}) {
             }
             try {
                 const payload = JSON.parse(fs.readFileSync(jsonPath, 'utf8').replace(/^\uFEFF/, ''));
-                resolve({ segments, words: wordsFromFullJson(payload) });
+                resolve({ segments, words: wordsFromFullJson(payload, options.preciseFillerTiming) });
             } catch (error) {
                 reject(error);
             } finally {
@@ -222,5 +259,5 @@ function inspectNativeWhisper(options = {}) {
     return { supported, runtimeReady, modelReady, ready: supported && runtimeReady && modelReady, executable, modelPath, root };
 }
 
-module.exports = { ensureNativeWhisper, runWhisperChunk, inspectNativeWhisper };
+module.exports = { ensureNativeWhisper, runWhisperChunk, inspectNativeWhisper, wordsFromFullJson };
 

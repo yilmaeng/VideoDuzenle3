@@ -4,6 +4,7 @@ process.on('unhandledRejection', err => { require('fs').writeFileSync('fatal-rej
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell, globalShortcut, Tray } = require('electron');
 const path = require('path');
 const fs = require('fs');
+require('./clipboard-bridge').installClipboardBridge(require('electron'), path.join(__dirname, '../renderer'));
 require('./logger'); // Initialize logging system
 const i18n = require('./i18n'); // Initialize i18n
 const { PatchManager } = require('./update/patch-manager');

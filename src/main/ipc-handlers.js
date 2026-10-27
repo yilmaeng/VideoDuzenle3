@@ -939,19 +939,24 @@ function setupIpcHandlers(mainWindow) {
     // Dosya açma diyaloğu
     ipcMain.handle('open-file-dialog', async (event, options) => {
         const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        const rememberMediaDirectory = options?.rememberMediaDirectory === true;
+        options = { ...options };
+        delete options.rememberMediaDirectory;
         if (options?.announceForAccessibility) {
             options = { ...options };
             delete options.announceForAccessibility;
             await announceDialogForAccessibility(win, options);
         }
-        const result = await dialog.showOpenDialog(win, options);
+        const result = rememberMediaDirectory
+            ? await require('./remembered-open-dialog').openRemembered(dialog, win, options, require('./i18n').store)
+            : await dialog.showOpenDialog(win, options);
         return result;
     });
 
     // Kaydetme diyaloğu
     ipcMain.handle('show-save-dialog', async (event, options) => {
         const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
-        const result = await dialog.showSaveDialog(win, options);
+        const result = await dialog.showSaveDialog(win, require('./menu').getEditorSaveOptions(event.sender, options));
         return result;
     });
     // --- END DIALOG HANDLERS ---
@@ -1553,7 +1558,10 @@ function setupIpcHandlers(mainWindow) {
     // Görsel overlay ekle
     ipcMain.handle('add-ticker-overlay', async (_event, params = {}) => {
         try {
-            const { videoPath, outputPath, options = {} } = params;
+            const { videoPath, options = {} } = params;
+            const outputPath = params.persistentOutput
+                ? require('./ticker-output-path').tickerOutputPath(videoPath, i18n.t('ticker_output.suffix'))
+                : params.outputPath;
             await ffmpegHandler.addTickerOverlay(videoPath, outputPath, options, percent => {
                 mainWindow.webContents.send('ffmpeg-progress', { operation: 'add-ticker', percent });
             });

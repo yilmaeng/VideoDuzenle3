@@ -283,7 +283,7 @@ const Markers = {
             console.log(`Markers: Listeye ekleniyor [${index}]:`, marker);
             const li = document.createElement('li');
             li.setAttribute('role', 'option');
-            li.setAttribute('tabindex', '0');
+            li.setAttribute('tabindex', '-1');
             li.setAttribute('data-marker-id', marker.id);
             li.setAttribute('aria-selected', 'false');
             li.textContent = `${Utils.formatTime(marker.time)} - ${marker.label}`;

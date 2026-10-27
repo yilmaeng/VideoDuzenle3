@@ -12,6 +12,12 @@ const { exec } = require('child_process');
 const heicConvert = require('heic-convert');
 const sharp = require('sharp');
 const i18n = require('./i18n');
+const { openRemembered } = require('./remembered-open-dialog');
+
+// Share the last input folder across media types and the main editor.
+function openSlideshowFileDialog(owner, options) {
+    return openRemembered(dialog, owner, options, i18n.store);
+}
 const { getVisualOrientation, buildSmartStillImagePlacementFilter, buildFitPadFilter, buildCropFillFilter, buildBlurFillFilter } = require('./media-placement');
 const karaokeForcedAlignment = require('./karaoke-forced-alignment');
 const karaokeEngineManager = require('./karaoke-engine-manager');
@@ -392,7 +398,7 @@ function setupSlideshowHandlers(mainWindow) {
 
     // Resim ekleme diyaloğu
     ipcMain.on('slideshow-add-images', async () => {
-        const result = await dialog.showOpenDialog(slideshowEditorWindow, {
+        const result = await openSlideshowFileDialog(slideshowEditorWindow, {
             title: t('dialog.slideshow_editor.select_images_title', 'Select Image Files'),
             filters: [
                 { name: t('dialog.slideshow_editor.image_files_filter', 'Image Files'), extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'heic', 'heif'] }
@@ -418,7 +424,7 @@ function setupSlideshowHandlers(mainWindow) {
     });
 
     ipcMain.on('slideshow-add-videos', async () => {
-        const result = await dialog.showOpenDialog(slideshowEditorWindow, {
+        const result = await openSlideshowFileDialog(slideshowEditorWindow, {
             title: t('dialog.slideshow_editor.select_videos_title', 'Select Video Files'),
             filters: [
                 { name: t('dialog.slideshow_editor.video_files_filter', 'Video Files'), extensions: ['mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v'] }
@@ -454,7 +460,7 @@ function setupSlideshowHandlers(mainWindow) {
 
     // Ses ekleme diyaloğu
     ipcMain.on('slideshow-add-audio', async () => {
-        const result = await dialog.showOpenDialog(slideshowEditorWindow, {
+        const result = await openSlideshowFileDialog(slideshowEditorWindow, {
             title: t('dialog.slideshow_editor.select_audio_title', 'Select Audio File'),
             filters: [
                 { name: t('dialog.slideshow_editor.audio_files_filter', 'Audio Files'), extensions: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'] }
@@ -610,7 +616,7 @@ function setupSlideshowHandlers(mainWindow) {
             title: dialogTitle,
             message: t('dialog.slideshow_karaoke.choose_file_announcement', 'Choose an SRT, LRC, ASS or SSA file.')
         });
-        const result = await dialog.showOpenDialog(targetWindow, {
+        const result = await openSlideshowFileDialog(targetWindow, {
             title: dialogTitle,
             filters: [{
                 name: t('dialog.slideshow_karaoke.supported_files', 'Karaoke and subtitle files'),
@@ -3333,7 +3339,7 @@ async function openProjectFile(mainWindow, directFilePath = null) {
     let filePath = directFilePath;
 
     if (!filePath) {
-        const result = await dialog.showOpenDialog(mainWindow, {
+        const result = await openSlideshowFileDialog(mainWindow, {
             title: t('messages.open_project_title', 'Open Project'),
             filters: [
                 { name: t('dialog.slideshow_editor.project_file_filter_all', 'Barrier-Free Video Project Files'), extensions: ['kve', 'eng'] },

@@ -8,11 +8,11 @@ class SeamlessPreview {
         this.nodes = new Set();
     }
 
-    eligible(segments) {
+    eligible(segments, audition = false) {
         const p = this.player;
-        return window.api.getTimelinePreviewAudio && segments.length > 1
-            && !p.ignoreTimeline && !p.isRangePlaying && !p.isPreviewingCut
-            && !p.isScrubbing && !p.allowPlaybackWithOpenDialog
+        return window.api.getTimelinePreviewAudio && segments.length > (audition ? 0 : 1)
+            && !p.ignoreTimeline && (audition || (!p.isRangePlaying && !p.isPreviewingCut))
+            && !p.isScrubbing && (!p.allowPlaybackWithOpenDialog || (audition && p.allowContinuousDialogPreview))
             && segments.every(s => !!(s.sourceFile || Timeline.sourceFile)
                 && (s.speed || 1) === 1 && s.end > s.start
                 && !s.backgroundAudio && !s.speedBgAudio && !s.overlays?.length && !s.audioEffects?.length
@@ -23,12 +23,36 @@ class SeamlessPreview {
         return Math.min(this.total, this.startPosition + Math.max(0, this.player.audioContext.currentTime - this.origin));
     }
 
+    timelinePosition() {
+        return this.audition ? this.locate(this.position()).timeline : this.position();
+    }
+
+    auditionSegments(segments, ranges) {
+        const result = [];
+        for (const [from, to] of ranges) {
+            let elapsed = 0;
+            for (const [index, segment] of segments.entries()) {
+                const speed = segment.speed || 1;
+                const duration = (segment.end - segment.start) / speed;
+                const start = Math.max(from, elapsed), end = Math.min(to, elapsed + duration);
+                if (end > start) result.push({ ...segment,
+                    start: segment.start + (start - elapsed) * speed,
+                    end: segment.start + (end - elapsed) * speed,
+                    auditionTimelineStart: start, auditionOriginalIndex: index });
+                elapsed += duration;
+            }
+        }
+        return result;
+    }
+
     locate(time) {
         let elapsed = 0;
         for (let i = 0; i < this.segments.length; i++) {
             const s = this.segments[i];
             if (time < elapsed + s.end - s.start || i === this.segments.length - 1) {
-                return { index: i, source: Math.min(s.end, s.start + time - elapsed) };
+                return { index: s.auditionOriginalIndex ?? i, segmentIndex: i,
+                    timeline: (s.auditionTimelineStart ?? elapsed) + time - elapsed,
+                    source: Math.min(s.end, s.start + time - elapsed) };
             }
             elapsed += s.end - s.start;
         }
@@ -65,12 +89,13 @@ class SeamlessPreview {
         return buffer;
     }
 
-    async start(time, segments) {
+    async start(time, segments, { audition = false } = {}) {
         this.stop();
+        this.audition = audition;
         const generation = this.generation;
         this.source = Timeline.sourceFile || this.player.currentFilePath;
         this.segments = segments.map(s => ({ ...s }));
-        this.fingerprint = JSON.stringify(segments);
+        this.fingerprint = JSON.stringify(audition ? Timeline.segments : segments);
         this.total = segments.reduce((n, s) => n+s.end-s.start, 0);
         this.pending = true;
         try {
@@ -131,7 +156,7 @@ class SeamlessPreview {
         }
         this.gain.gain.value = p.playbackVolumePercent/100;
         const target = this.locate(time);
-        const source = this.segments[target.index].sourceFile || this.source;
+        const source = this.segments[target.segmentIndex].sourceFile || this.source;
         if (source !== p.currentFilePath && !this.switchingVideo) {
             const generation = this.generation;
             this.switchingVideo = true;
@@ -173,6 +198,7 @@ class SeamlessPreview {
         this.generation++;
         this.active = false;
         this.pending = false;
+        this.audition = false;
         this.fetching = false;
         this.switchingVideo = false;
         clearInterval(this.timer);

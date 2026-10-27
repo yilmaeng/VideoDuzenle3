@@ -68,6 +68,13 @@ async function main() {
         assert.strictEqual(healthyManager.getStatus().health.status, 'healthy');
         assert.strictEqual(healthyManager.getStatus().revision, 1);
 
+        const upgradedManager = new PatchManager({ app: { ...fakeApp, getVersion: () => '5.5.0' }, publicKeyPath });
+        await upgradedManager.initialize();
+        assert.strictEqual(upgradedManager.activeManifest, null, '5.0 patches must not override a 5.5 installation');
+        assert.strictEqual(upgradedManager.applyMainPatch(), false);
+        assert.deepStrictEqual(upgradedManager.getLocaleOverrides(), {});
+        assert.throws(() => upgradedManager.verifyManifest(manifest), /patch_base_version_mismatch/);
+
         const tampered = { ...manifest, revision: 2 };
         assert.throws(() => healthyManager.verifyManifest(tampered), /patch_signature_invalid/);
         const tamperedPackage = Buffer.from(packageBuffer);

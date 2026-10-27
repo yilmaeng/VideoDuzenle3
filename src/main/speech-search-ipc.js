@@ -92,6 +92,7 @@ function registerSpeechSearchIpc({ ipcMain, service, dialogs }) {
         trusted(event);
         const model = validateModel(params);
         const { jobId, sources } = params || {};
+        if (params.mode !== undefined && params.mode !== 'fillers') throw new Error('speech_search_invalid_request');
         if (typeof jobId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(jobId)
             || !Array.isArray(sources) || !sources.length || sources.length > 1000
             || sources.some(source => typeof source !== 'string' || !source || source.includes('\0'))) {
@@ -111,6 +112,7 @@ function registerSpeechSearchIpc({ ipcMain, service, dialogs }) {
         try {
             return await service.analyze({
                 model,
+                ...(params.mode === 'fillers' ? {mode:'fillers', language:'tr'} : {}),
                 sources: [...new Set(sources)],
                 signal: controller.signal,
                 onProgress: progress => {

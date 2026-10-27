@@ -46,7 +46,9 @@
         ui.renderVideo.disabled = renderableAudioEvents().length === 0;
     }
 
+    let voiceRequestId = 0;
     async function loadVoices() {
+        const requestId = ++voiceRequestId;
         const service = ui.defaultService.value || 'system';
         const selectedDefault = defaults().defaultVoice || '';
         const selectedEventVoice = ui.eventVoice.value || '';
@@ -55,13 +57,17 @@
         if (service === 'human') return;
         try {
             const result = await window.api.descriptionSubtitleEditorTtsVoices({ service });
+            if (requestId !== voiceRequestId || ui.defaultService.value !== service) return;
             for (const voice of result?.voices || []) {
                 const id = typeof voice === 'string' ? voice : String(voice.id || '');
                 const name = typeof voice === 'string' ? voice : String(voice.name || voice.id || '');
                 if (!id) continue;
                 ui.defaultVoice.add(new Option(name, id)); ui.eventVoice.add(new Option(name, id));
             }
-        } catch (error) { setStatus('description_subtitle_editor.tts_voice_load_failed', { error: error.message || String(error) }); }
+        } catch (error) {
+            if (requestId !== voiceRequestId || ui.defaultService.value !== service) return;
+            setStatus('description_subtitle_editor.tts_voice_load_failed', { error: error.message || String(error) });
+        }
         if ([...ui.defaultVoice.options].some(option => option.value === selectedDefault)) ui.defaultVoice.value = selectedDefault;
         if ([...ui.eventVoice.options].some(option => option.value === selectedEventVoice)) ui.eventVoice.value = selectedEventVoice;
     }
@@ -172,7 +178,7 @@
         const previewStart = Math.max(0, item.start - 1);
         const itemInfo = fitInfo(previewItem);
         let previewEnd = Math.max(previewItem.end, previewItem.start + itemInfo.played) + 0.75;
-        const previewDescriptions = descriptions().map(candidate => candidate.id === item.id ? previewItem : candidate);
+        const previewDescriptions = renderableAudioEvents().map(candidate => candidate.id === item.id ? previewItem : candidate);
         const candidates = previewDescriptions.filter(candidate => candidate.ttsAudioPath && candidate.start <= previewEnd && (candidate.start + fitInfo(candidate).played) >= previewStart);
         try {
             await seek(ui.video, previewStart);
@@ -223,6 +229,32 @@
         } catch (error) { setStatus('description_subtitle_editor.render_failed', { error: error.message || String(error) }); }
     }
 
+    function handleAudioShortcut(event) {
+        const actions = {
+            descriptionVoiceUp: ['ttsVolume', 5, 0, 200, defaults().ttsVolume ?? 100],
+            descriptionVoiceDown: ['ttsVolume', -5, 0, 200, defaults().ttsVolume ?? 100],
+            descriptionOriginalUp: ['originalVolume', 0.05, 0, 2, defaults().originalVolume ?? 0.9],
+            descriptionOriginalDown: ['originalVolume', -0.05, 0, 2, defaults().originalVolume ?? 0.9],
+            descriptionRateUp: ['ttsPlaybackRate', 0.05, 0.5, 2, 1],
+            descriptionRateDown: ['ttsPlaybackRate', -0.05, 0.5, 2, 1],
+            descriptionRateReset: ['ttsPlaybackRate', 0, 0.5, 2, 1]
+        };
+        const action = Object.keys(actions).find(key => window.EvdDescriptionTimeline?.matchesShortcut?.(key, event));
+        if (!action) return false;
+        event.preventDefault(); event.stopPropagation();
+        const item = events().find(entry => entry.id === editor()?.state.selectedEventId);
+        if (!item?.ttsAudioPath) { setStatus('description_subtitle_editor.tts_not_generated'); return true; }
+        const [field, step, min, max, fallback] = actions[action];
+        item[field] = action === 'descriptionRateReset' ? 1
+            : Math.round(clamp(Number(item[field] ?? fallback) + step, min, max) * 100) / 100;
+        item.updatedAt = new Date().toISOString();
+        editor().setDirty(true);
+        const value = Math.round(item[field] * (field === 'ttsVolume' ? 1 : 100));
+        setStatus(`description_subtitle_editor.audio_adjust_${field}`, { value });
+        playMixedPreview(item, null, { announce: false });
+        return true;
+    }
+
     function bind() {
         ui.defaultService.addEventListener('change', async () => { const old=defaults().ttsService || 'system'; defaults().ttsService=ui.defaultService.value; descriptions().forEach(item=>{if(!item.ttsService||item.ttsService===old){item.ttsService=defaults().ttsService;item.ttsAudioPath='';item.ttsDuration=0;item.humanNarrationCandidateId='';item.narrationSource='';}}); editor().setDirty(true); await loadVoices(); });
         ui.defaultVoice.addEventListener('change', () => { const old=defaults().defaultVoice || ''; defaults().defaultVoice=ui.defaultVoice.value; descriptions().forEach(item=>{if(!item.voice||item.voice===old){item.voice=defaults().defaultVoice;item.ttsAudioPath='';item.ttsDuration=0;}}); editor().setDirty(true); });
@@ -268,6 +300,7 @@
         bind(); updateButtons(); updateOutputs(); editor()?.renderEvents?.();
     }
     window.EvdDescriptionPhase5 = {
+        handleAudioShortcut,
         previewHumanCandidate: (item, candidate, options) => playMixedPreview(item, candidate, options),
         playMixedPreview,
         stopPreview,

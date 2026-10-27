@@ -1,6 +1,6 @@
 {
   "name": "evd",
-  "version": "5.5.0",
+  "version": "5.7.0",
   "description": "Bir video oynatıcıyı klavyeyle kontrol eden el ve kulak - Görme engelli kullanıcılar için erişilebilir video düzenleme",
   "main": "src/main/index.js",
   "scripts": {
@@ -27,6 +27,7 @@
     "patch:verify": "node build/evd-patch-tool.js verify"
   },
   "build": {
+    "electronVersion": "44.9.1",
     "appId": "com.engelsiz.videoeditor",
     "productName": "Engelsiz Video Düzenleyicisi",
     "copyright": "© 2025-2026 Engin Yılmaz",
@@ -119,6 +120,10 @@
     ],
     "extraResources": [
       {
+        "from": "build/native-gtcrn/win-x64",
+        "to": "native-gtcrn"
+      },
+      {
         "from": "src/renderer/assets/sfx",
         "to": "assets/sfx"
       },
@@ -168,8 +173,8 @@
   "author": "Engin Yılmaz",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.3.3",
-    "electron-builder": "^25.1.8"
+    "electron": "44.9.1",
+    "electron-builder": "26.18.0"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

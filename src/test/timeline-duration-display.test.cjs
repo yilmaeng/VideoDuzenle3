@@ -1,0 +1,24 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+test('edited duration and accessible name refresh while paused, including empty edits',()=>{
+    let duration=100,writes=0;
+    const attrs={};
+    const element={textContent:'',getAttribute:key=>attrs[key],setAttribute(key,value){attrs[key]=value;writes++;}};
+    const description={textContent:''};
+    const context={window:{i18nHelper:{t:()=> 'Total duration'}},document:{getElementById:id=>id==='timeline-focus-duration'?description:element},Timeline:{sourceFile:'source.mp4',segments:[{}],getTotalDuration:()=>duration},Utils:{formatTime:value=>String(value),formatTimeForSpeech:value=>String(value)},console};
+    vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../renderer/scripts/video-player.js'),'utf8'),context);
+    const player=context.window.VideoPlayer;player.video={duration:100,paused:true};
+    player.updateDurationDisplay();duration=75;player.updateDurationDisplay();
+    assert.equal(element.textContent,'75');assert.equal(attrs['aria-label'],'Total duration: 75');
+    assert.equal(description.textContent,'Total duration: 75');
+    const previousWrites=writes;player.updateDurationDisplay();assert.equal(writes,previousWrites);
+    vm.runInContext(fs.readFileSync(path.join(__dirname,'../renderer/scripts/tab-manager.js'),'utf8'),context);
+    context.VideoPlayer=player;
+    const tabs=context.window.TabManager;
+    const tab={name:'source',hasChanges:true,timeline:{totalDuration:100}};
+    tabs.tabs=[tab];tabs.activeTabIndex=0;
+    tabs.updateFileInfo(tab);
+    assert.equal(tab.timeline.totalDuration,75);assert.equal(element.textContent,'75');assert.equal(attrs['aria-label'],'Total duration: 75');
+    duration=0;context.Timeline.segments=[];player.updateDurationDisplay();
+    assert.equal(element.textContent,'0');assert.equal(attrs['aria-label'],'Total duration: 0');assert.equal(player.getDuration(),0);
+    context.Timeline.sourceFile=null;assert.equal(player.getDuration(),100);
+});

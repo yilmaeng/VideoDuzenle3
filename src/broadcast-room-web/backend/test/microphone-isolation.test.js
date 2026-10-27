@@ -33,6 +33,7 @@ test('unavailable device fallback also disables isolation without changing user 
         async createLocalAudioTrack(options) { calls.push(options); if (calls.length === 1) throw new Error('old device'); return 'track'; }
     } } };
     context.buildAudioCaptureOptions = load('buildAudioCaptureOptions', context);
+    context.window.captureWithSystemEcho = (capture, options) => capture(options);
     context.acquireRoomMicrophone = acquire => acquire();
     assert.equal(await load('createLocalMicrophoneTrack', context)('old-device'), 'track');
     assert.equal(calls.length, 2);
@@ -58,7 +59,7 @@ test('desktop music mode has the same processing override and restores preferenc
     const code = fs.readFileSync(path.join(__dirname, '../../../renderer/scripts/broadcast-room.js'), 'utf8');
     const state = { audioDevices: { microphoneEchoCancellation: true, microphoneNoiseSuppression: true, microphoneAutoGainControl: true } };
     const control = { checked: true };
-    const build = load('buildHostAudioCaptureOptions', { state, document: { getElementById: () => control }, getHostMicrophoneVolume: () => 1 }, code);
+    const build = load('buildHostAudioCaptureOptions', { state, process: { env: {} }, document: { getElementById: () => control }, getHostMicrophoneVolume: () => 1 }, code);
     for (const key of ['echoCancellation', 'noiseSuppression', 'autoGainControl', 'voiceIsolation']) assert.equal(build()[key], false);
     control.checked = false;
     assert.equal(build().echoCancellation, true);

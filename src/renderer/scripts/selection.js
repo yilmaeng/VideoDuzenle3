@@ -7,6 +7,82 @@ const Selection = {
     start: null,      // Seçim başlangıcı (saniye)
     end: null,        // Seçim bitişi (saniye)
     isSelecting: false,
+    extendedAnchor: null,
+    extendedAnnounceTimer: null,
+    extendedAnnouncePending: false,
+
+    toggleExtended() {
+        if (!VideoPlayer.hasVideo()) return;
+        if (this.extendedAnchor !== null) {
+            this.updateExtended(VideoPlayer.getTimelineTime());
+            this.stopExtended();
+            this.updateUI();
+            Accessibility.announce(this.t('extended_selection.off', ''));
+        } else {
+            this.extendedAnchor = VideoPlayer.getTimelineTime();
+            this.start = null;
+            this.end = null;
+            this.updateUI();
+            Accessibility.announce(this.t('extended_selection.on', '', { time: Utils.formatTime(this.extendedAnchor) }));
+        }
+    },
+
+    stopExtended() {
+        VideoPlayer.discardSelectionPreview?.();
+        this.extendedAnchor = null;
+        clearTimeout(this.extendedAnnounceTimer);
+        this.extendedAnnouncePending = false;
+    },
+
+    updateExtended(time) {
+        if (this.extendedAnchor === null || VideoPlayer.selectionPreviewState || !Number.isFinite(time)) return;
+        const end = Utils.clamp(time, 0, VideoPlayer.getDuration());
+        const start = this.extendedAnchor;
+        if (Math.abs(end - start) < 0.000001) {
+            if (this.start === null && this.end === null) return;
+            this.start = this.end = null;
+        } else {
+            if (this.start === Math.min(start, end) && this.end === Math.max(start, end)) return;
+            this.start = Math.min(start, end);
+            this.end = Math.max(start, end);
+        }
+        this.updateUI();
+        if (this.onSelectionChanged) this.onSelectionChanged(this.getSelection());
+    },
+
+    announceExtended() {
+        clearTimeout(this.extendedAnnounceTimer);
+        this.extendedAnnouncePending = false;
+        if (this.extendedAnchor !== null) {
+            this.updateExtended(VideoPlayer.getTimelineTime());
+            this.announceSelection();
+        }
+    },
+
+    navigationIntent(announce) {
+        if (this.extendedAnchor === null) return;
+        clearTimeout(this.extendedAnnounceTimer);
+        this.extendedAnnouncePending = announce;
+        if (announce) this.extendedAnnounceTimer = setTimeout(() => {
+            if (VideoPlayer.video.paused) this.announceExtended();
+        }, 250);
+    },
+
+    cancel() {
+        const anchor = this.extendedAnchor;
+        this.clear(anchor !== null);
+        if (anchor !== null) {
+            if (VideoPlayer._audioScrubTimeout) {
+                clearTimeout(VideoPlayer._audioScrubTimeout);
+                VideoPlayer._audioScrubTimeout = null;
+            }
+            VideoPlayer.pause({ announce: false });
+            VideoPlayer.seekToTimelineTime(anchor);
+            VideoPlayer.cursorPosition = anchor;
+            VideoPlayer.updateCursorDisplay?.();
+            Accessibility.announce(this.t('extended_selection.cancelled', '', { time: Utils.formatTime(anchor) }));
+        }
+    },
 
     // Event callback'leri
     onSelectionChanged: null,
@@ -50,6 +126,7 @@ const Selection = {
      * @param {number} end - Bitiş (saniye)
      */
     setSelection(start, end) {
+        this.stopExtended();
         this.start = start;
         this.end = end;
 
@@ -62,6 +139,7 @@ const Selection = {
     },
 
     setSelectionSilent(start, end) {
+        this.stopExtended();
         this.start = start;
         this.end = end;
         this.isSelecting = false;
@@ -74,6 +152,7 @@ const Selection = {
      * @param {boolean} silent - true ise duyuru yapma (dosya açarken kullanılır)
      */
     clear(silent = false) {
+        this.stopExtended();
         this.start = null;
         this.end = null;
         this.isSelecting = false;

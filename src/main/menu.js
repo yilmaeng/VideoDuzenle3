@@ -5,6 +5,12 @@ const fs = require('fs');
 const i18n = require('./i18n');
 const editorMenuState = require('../shared/editor-menu-state');
 const editorMenuBindings = new WeakMap();
+function getEditorSaveOptions(contents, options) {
+    return require('./source-save-dialog').sourceSaveOptions(options, editorMenuBindings.get(contents)?.state?.sourceFilePath);
+}
+function showEditorSaveDialog(window, options) {
+    return dialog.showSaveDialog(window, getEditorSaveOptions(window.webContents, options));
+}
 
 function bindEditorMenu(mainWindow, menu) {
     const contents = mainWindow.webContents;
@@ -638,14 +644,14 @@ function createMenu(mainWindow) {
                     label: t('menu.file.open', 'Aç...'),
                     accelerator: 'CmdOrCtrl+O',
                     click: async () => {
-                        const result = await dialog.showOpenDialog(mainWindow, {
+                        const result = await require('./remembered-open-dialog').openRemembered(dialog, mainWindow, {
                             title: t('messages.open_video', 'Open Video File'),
                             filters: [
                                 { name: t('runtime.app.video_files_filter', 'Video Files'), extensions: ['mp4', 'wmv', 'avi', 'mkv', 'mov', 'webm', 'flv', '3gp', 'mpg', 'mpeg', 'vob', 'm4v', 'ts', 'mts'] },
                                 { name: t('dialog.common.all_files', 'All Files'), extensions: ['*'] }
                             ],
                             properties: ['openFile']
-                        });
+                        }, i18n.store);
                         if (!result.canceled && result.filePaths.length > 0) {
                             const filePath = result.filePaths[0];
                             addToRecentFiles(filePath, mainWindow);
@@ -669,7 +675,7 @@ function createMenu(mainWindow) {
                     label: t('menu.file.save_as', 'Videoyu Farklı Kaydet...'),
                     accelerator: 'CmdOrCtrl+Shift+S',
                     click: async () => {
-                        const result = await dialog.showSaveDialog(mainWindow, {
+                        const result = await showEditorSaveDialog(mainWindow, {
                             title: t('messages.save_video_as', 'Save Video As'),
                             filters: [
                                 { name: t('messages.file_filter_mp4_video', 'MP4 Video'), extensions: ['mp4'] },
@@ -688,7 +694,7 @@ function createMenu(mainWindow) {
                     availabilityKey: 'menu.file.fast_export',
                     label: t('menu.file.fast_export', 'Hibrit Akıllı Dışa Aktar...'),
                     click: async () => {
-                        const result = await dialog.showSaveDialog(mainWindow, {
+                        const result = await showEditorSaveDialog(mainWindow, {
                             title: t('menu.file.fast_export', 'Hibrit Akıllı Dışa Aktar...'),
                             filters: [
                                 { name: t('messages.file_filter_mp4_video', 'MP4 Video'), extensions: ['mp4'] },
@@ -717,7 +723,7 @@ function createMenu(mainWindow) {
 
                     label: t('menu.file.export_video_only', 'Sadece Video Dışa Aktar...'),
                     click: async () => {
-                        const result = await dialog.showSaveDialog(mainWindow, {
+                        const result = await showEditorSaveDialog(mainWindow, {
                             title: t('messages.export_video', 'Export Video Only'),
                             filters: [
                                 { name: t('messages.file_filter_mp4_video', 'MP4 Video'), extensions: ['mp4'] }
@@ -733,7 +739,7 @@ function createMenu(mainWindow) {
 
                     label: t('menu.file.export_audio_only', 'Sadece Ses Dışa Aktar...'),
                     click: async () => {
-                        const result = await dialog.showSaveDialog(mainWindow, {
+                        const result = await showEditorSaveDialog(mainWindow, {
                             title: t('messages.export_audio', 'Export Audio Only'),
                             filters: [
                                 { name: t('messages.file_filter_mp3_audio', 'MP3 Audio'), extensions: ['mp3'] },
@@ -952,6 +958,12 @@ function createMenu(mainWindow) {
                     label: t('menu.edit.selection', 'Seçim'),
                     submenu: [
                         {
+                            availabilityKey: 'menu.edit.extended_selection',
+                            label: t('extended_selection.label') + ' (F8)',
+                            // Renderer owns F8 so custom shortcuts and dialog guards remain effective.
+                            click: () => mainWindow.webContents.send('select-extended')
+                        },
+                        {
                             availabilityKey: 'menu.edit.select_all',
 
                             label: t('menu.edit.select_all', 'Tümünü Seç'),
@@ -1036,6 +1048,11 @@ function createMenu(mainWindow) {
                     click: () => {
                         mainWindow.webContents.send('edit-list-silences');
                     }
+                },
+                {
+                    availabilityKey: 'menu.edit.filler_review',
+                    label: t('filler_review.title'),
+                    click: () => mainWindow.webContents.send('edit-list-silences', 'fillers')
                 },
                 // Seçimi Betimle taşındı
             ]
@@ -1359,19 +1376,8 @@ function createMenu(mainWindow) {
                 {
                     availabilityKey: 'menu.insert.subtitle',
 
-                    label: t('menu.insert.subtitle', 'Altyazı Dosyası Ekle...'),
-                    click: async () => {
-                        const result = await dialog.showOpenDialog(mainWindow, {
-                            title: t('dialog.subtitle_file.open_title', 'Select Subtitle File'),
-                            filters: [
-                                { name: t('dialog.subtitle_file.filter_name', 'Subtitle Files'), extensions: ['srt', 'vtt', 'ass', 'ssa'] }
-                            ],
-                            properties: ['openFile']
-                        });
-                        if (!result.canceled && result.filePaths.length > 0) {
-                            mainWindow.webContents.send('insert-subtitle', result.filePaths[0]);
-                        }
-                    }
+                    label: t('automatic_subtitles.title'),
+                    click: () => mainWindow.webContents.send('insert-subtitle', null)
                 },
                 {
                     availabilityKey: 'menu.insert.description_subtitle_editor',
@@ -1985,7 +1991,7 @@ function createMenu(mainWindow) {
                             type: 'info',
                             title: t('messages.about_title', 'About EVD'),
                             message: t('messages.app_display_name', 'EVD'),
-                            detail: t('messages.about_detail', 'Version 5.5.0\n\nKeyboard-first video editor designed for blind and low-vision users.\n\nProgram Icon: Hands and ears editing video\n\n© 2025-2026 Engin Yılmaz\nAll rights reserved.')
+                            detail: t('messages.about_detail', 'Version 5.7.0\n\nKeyboard-first video editor designed for blind and low-vision users.\n\nProgram Icon: Hands and ears editing video\n\n© 2025-2026 Engin Yılmaz\nAll rights reserved.')
                         };
                         announceDialogForAccessibility(mainWindow, options).then(() => {
                             dialog.showMessageBox(mainWindow, options);
@@ -2044,4 +2050,4 @@ function createMenu(mainWindow) {
     return menu;
 }
 
-module.exports = { createMenu, addToRecentFiles };
+module.exports = { createMenu, addToRecentFiles, getEditorSaveOptions };

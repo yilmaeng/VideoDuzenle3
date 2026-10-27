@@ -1,6 +1,9 @@
-const { ipcRenderer, shell, desktopCapturer, clipboard } = require('electron');
+const { ipcRenderer, shell, desktopCapturer } = require('electron');
+const clipboard = require(require('url').fileURLToPath(new URL('../scripts/clipboard-bridge.cjs', window.location.href)));
 const { pathToFileURL } = require('url');
 const path = require('path');
+const recordingNavigation = require(require('url').fileURLToPath(new URL('../scripts/recording-navigation.cjs', window.location.href)));
+const recordingCameraSupport = require(require('url').fileURLToPath(new URL('../scripts/recording-camera-support.cjs', window.location.href)));
 const SCENE_BACKGROUND_PROFILE_STORAGE_KEY = 'evdSceneBackgroundProfiles';
 const recordingI18n = {
     currentLang: 'tr',
@@ -58,6 +61,7 @@ const recordingI18n = {
             const translation = this.t(titleEl.getAttribute('data-i18n'), '');
             if (translation) document.title = translation;
         }
+        updateRecordingNavigationLabels();
     }
 };
 function t(key, fallback, params = {}) {
@@ -610,6 +614,7 @@ const state = {
 };
 
 const recordingCameraTest = {
+    generation: 0,
     active: false,
     detector: null,
     timer: null,
@@ -5609,11 +5614,37 @@ function updateNextState() {
 }
 
 // Extracted from init() so handlers are registered BEFORE any long async operations.
+function updateRecordingNavigationLabels() {
+    for (const [action, id, label] of [
+        ['recordingWizardNext', 'btn-next', 'next'], ['recordingWizardBack', 'btn-back', 'back']
+    ]) {
+        const button = document.getElementById(id);
+        if (!button) continue;
+        const shortcut = recordingNavigation.binding(action, recordingI18n.currentLang, getStoredUserKeymap());
+        button.textContent = t(`recording_wizard.${label}`, '') + (shortcut ? ` (${[].concat(shortcut).join(', ')})` : '');
+        if (shortcut) button.setAttribute('aria-keyshortcuts', [].concat(shortcut).join(' '));
+        else button.removeAttribute('aria-keyshortcuts');
+    }
+}
+
 // This prevents the failsafe script from overriding navigation when autoConnectIfPossible() is slow.
 let _navHandlersRegistered = false;
 function _registerNavigationHandlers() {
     if (_navHandlersRegistered) return;
     _navHandlersRegistered = true;
+    // Local wizard actions, never OS-global: do not navigate an unrelated window.
+    document.addEventListener('keydown', event => {
+        if ([...document.querySelectorAll('dialog[open], [role="dialog"]')].some(dialog =>
+            !dialog.closest('[hidden], [aria-hidden="true"]') && dialog.getClientRects().length)) return;
+        for (const [action, button] of [['recordingWizardNext', els.btnNext], ['recordingWizardBack', els.btnBack]]) {
+            if (!recordingNavigation.matches(event, recordingNavigation.binding(action, recordingI18n.currentLang, getStoredUserKeymap()))) continue;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            if (!button.disabled && button.getClientRects().length) button.click();
+            break;
+        }
+    }, true);
+    window.addEventListener('storage', updateRecordingNavigationLabels);
 
     let isNavigating = false;
     const handleNextClick = async (e) => {
@@ -5677,6 +5708,15 @@ async function init() {
     const config = await ipcRenderer.invoke('obs-get-config');
     // Native checkbox keyboard behavior; this persistent setup preference is not
     // a playback action and intentionally has no global shortcut-manager entry.
+    const noiseMethod = document.getElementById('recording-mic-noise-method');
+    const noiseEnabled = document.getElementById('recording-mic-noise-suppression');
+    const noiseStrength = document.getElementById('recording-mic-noise-strength');
+    const updateNoiseStrength = () => {
+        noiseStrength.disabled = !noiseEnabled.checked || noiseMethod.value !== 'deepfilter';
+    };
+    noiseMethod.addEventListener('change', updateNoiseStrength);
+    noiseEnabled.addEventListener('change', updateNoiseStrength);
+    updateNoiseStrength();
     const stability = document.getElementById('obs-audio-stability');
     stability.parentElement.hidden = process.platform !== 'win32';
     stability.checked = config?.audioStabilityEnabled === true;
@@ -7493,33 +7533,32 @@ async function refreshDevices() {
 }
 
 async function requestCameraPermission() {
+    // OBS may own the camera exclusively. Reuse its frame instead of opening
+    // a competing Chromium capture stream merely to check permission.
+    const sourceName = recordingCameraSupport.cameraSource(state);
+    if (sourceName) {
+        try {
+            const shot = await ipcRenderer.invoke('obs-get-source-screenshot', { sourceName, width: 320, height: 180, format: 'png' });
+            if (shot?.success && shot.imageData) {
+                announce(t('recording_camera.available', ''));
+                await refreshDevices();
+                return;
+            }
+        } catch (error) { console.warn('OBS camera availability check:', error); }
+    }
     try {
-        // Hem video hem ses izni iste — harici kamera mikrofonlarının
-        // görünebilmesi için audio izni de gerekli
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         stream.getTracks().forEach(t => t.stop());
-        announce(t('recording_wizard.permissions.camera_mic_granted', 'Camera and microphone permissions were granted.'));
+        announce(t('recording_wizard.permissions.camera_granted', ''));
         await refreshDevices();
     } catch (e) {
-        // Video+audio birlikte başarısız olduysa, ayrı ayrı dene
-        try {
-            const vStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            vStream.getTracks().forEach(t => t.stop());
-            announce(t('recording_wizard.permissions.camera_granted', 'Camera permission was granted.'));
-        } catch (ve) {
-            if (els.cameraStatus) {
-                els.cameraStatus.style.display = 'block';
-                els.cameraStatus.textContent = t('recording_wizard.permissions.camera_denied_status', 'Camera permission could not be granted. Check the application permissions.');
-            }
-            announce(t('recording_wizard.permissions.camera_denied', 'Camera permission could not be granted.'));
+        console.warn('Camera permission/capture check:', e);
+        const message = t(recordingCameraSupport.cameraErrorKey(e), '');
+        if (els.cameraStatus) {
+            els.cameraStatus.style.display = 'block';
+            els.cameraStatus.textContent = message;
         }
-        try {
-            const aStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            aStream.getTracks().forEach(t => t.stop());
-            announce(t('recording_wizard.permissions.mic_granted', 'Microphone permission was granted.'));
-        } catch (ae) {
-            announce(t('recording_wizard.permissions.mic_denied', 'Microphone permission could not be granted.'));
-        }
+        announce(message);
         await refreshDevices();
     }
 }
@@ -7692,6 +7731,11 @@ async function setupObsSources() {
         windowTitles: state.selectedWindows.map((windowItem) => windowItem.sourceValue || windowItem.id || windowItem.name).filter(Boolean),
         includeCamera,
         includeMic: true,
+        // A setup preference, not a global command: use the labelled checkbox
+        // with Tab/Space rather than adding a shortcut-manager action.
+        microphoneNoiseSuppression: document.getElementById('recording-mic-noise-suppression')?.checked === true,
+        microphoneNoiseMethod: document.getElementById('recording-mic-noise-method')?.value || 'gtcrn',
+        microphoneNoiseAttenuation: document.getElementById('recording-mic-noise-strength')?.valueAsNumber,
         includeSystemAudio: els.systemAudioEnable.checked,
         systemAudioMode: state.systemAudioMode,
         systemAudioWindowTarget: audioTargetWindow ? getWindowSelectionValue(audioTargetWindow, 0) : '',
@@ -8609,21 +8653,7 @@ function buildRecordingCameraTestAnalysis(result, image) {
 }
 
 function waitForRecordingCameraImage(image, source) {
-    return new Promise((resolve, reject) => {
-        const cleanup = () => {
-            image.onload = null;
-            image.onerror = null;
-        };
-        image.onload = () => {
-            cleanup();
-            resolve();
-        };
-        image.onerror = () => {
-            cleanup();
-            reject(new Error('camera_preview_failed'));
-        };
-        image.src = source;
-    });
+    return recordingCameraSupport.waitForImage(image, source);
 }
 
 function scheduleRecordingCameraTest(delay = 700) {
@@ -8635,24 +8665,31 @@ function scheduleRecordingCameraTest(delay = 700) {
 async function runRecordingCameraTestFrame() {
     if (!recordingCameraTest.active || recordingCameraTest.inFlight || !recordingCameraTest.detector) return;
     recordingCameraTest.inFlight = true;
+    const generation = recordingCameraTest.generation;
     try {
-        const sourceName = state.cameraInputName || (state.cameraItemId ? 'KVE Kamera' : '');
+        const sourceName = recordingCameraSupport.cameraSource(state);
         const shot = await ipcRenderer.invoke('obs-get-source-screenshot', {
             sourceName,
             width: 640,
             height: 360,
             format: 'png'
         });
+        if (generation !== recordingCameraTest.generation || !recordingCameraTest.active) return;
         if (!shot?.success || !shot.imageData) {
             throw new Error(shot?.error || 'camera_preview_unavailable');
         }
         const imageSource = String(shot.imageData).startsWith('data:')
             ? shot.imageData
             : `data:image/png;base64,${shot.imageData}`;
-        await waitForRecordingCameraImage(els.recordingCameraTestPreview, imageSource);
-        const result = recordingCameraTest.detector.detect(els.recordingCameraTestPreview);
+        // Each request owns its image handlers; a cancelled request must not
+        // clear handlers belonging to a newly opened camera test.
+        const frame = new Image();
+        await waitForRecordingCameraImage(frame, imageSource);
+        if (generation !== recordingCameraTest.generation || !recordingCameraTest.active) return;
+        els.recordingCameraTestPreview.src = imageSource;
+        const result = recordingCameraTest.detector.detect(frame);
         recordingCameraTest.frameFailureCount = 0;
-        const analysis = buildRecordingCameraTestAnalysis(result, els.recordingCameraTestPreview);
+        const analysis = buildRecordingCameraTestAnalysis(result, frame);
         recordingCameraTest.lastMessage = analysis.message;
         recordingCameraTest.lastDetailedMessage = analysis.detailedMessage;
         if (analysis.signature === recordingCameraTest.pendingSignature) {
@@ -8671,19 +8708,24 @@ async function runRecordingCameraTestFrame() {
         }
     } catch (error) {
         console.warn('Recording camera framing analysis failed:', error);
+        if (generation !== recordingCameraTest.generation) return;
         recordingCameraTest.frameFailureCount += 1;
         if (recordingCameraTest.frameFailureCount === 3) {
+            recordingCameraTest.lastAnnouncedSignature = '';
             setRecordingCameraTestStatus(t('broadcast_room.camera_test_failed', 'Kamera testi başlatılamadı: {error}', {
                 error: error?.message || error || 'camera_preview_unavailable'
             }));
         }
     } finally {
-        recordingCameraTest.inFlight = false;
-        scheduleRecordingCameraTest();
+        if (generation === recordingCameraTest.generation) {
+            recordingCameraTest.inFlight = false;
+            scheduleRecordingCameraTest();
+        }
     }
 }
 
 function cleanupRecordingCameraTest() {
+    recordingCameraTest.generation += 1;
     recordingCameraTest.active = false;
     clearTimeout(recordingCameraTest.timer);
     clearTimeout(recordingCameraTest.statusRefreshTimer);
@@ -8714,23 +8756,26 @@ function stopRecordingCameraTest({ restoreFocus = true, announceStatus = true } 
 }
 
 async function startRecordingCameraTest() {
-    const sourceName = state.cameraInputName || (state.cameraItemId ? 'KVE Kamera' : '');
-    if (!state.cameraItemId || !sourceName) {
+    const sourceName = recordingCameraSupport.cameraSource(state);
+    if (!sourceName) {
         announce(t('recording_wizard.step4.camera_test_source_required', 'Kamera testi için önce Kaynak Seçimi adımında kamera overlayini etkinleştirin ve kamera kaynağını hazırlayın.'));
         return;
     }
     if (!els.recordingCameraTestDialog?.open) els.recordingCameraTestDialog.showModal();
     els.recordingCameraTestTitle?.focus();
     cleanupRecordingCameraTest();
+    const generation = recordingCameraTest.generation;
     recordingCameraTest.lastMessage = '';
     recordingCameraTest.lastDetailedMessage = '';
     setRecordingCameraTestStatus(t('broadcast_room.camera_test_starting', 'Kamera ve çevrimdışı kadraj yardımı hazırlanıyor...'));
     try {
         const assets = await ipcRenderer.invoke('virtual-background-assets-ensure');
+        if (generation !== recordingCameraTest.generation) return;
         if (!assets?.success || !assets.baseUrl) throw new Error('camera_test_assets_unavailable');
         const visionTasks = require('@mediapipe/tasks-vision');
         const vision = await visionTasks.FilesetResolver.forVisionTasks(assets.baseUrl);
-        recordingCameraTest.detector = await visionTasks.FaceDetector.createFromOptions(vision, {
+        if (generation !== recordingCameraTest.generation) return;
+        const detector = await visionTasks.FaceDetector.createFromOptions(vision, {
             baseOptions: {
                 modelAssetPath: `${assets.baseUrl}/blaze_face_short_range.tflite`,
                 delegate: 'CPU'
@@ -8739,12 +8784,15 @@ async function startRecordingCameraTest() {
             minDetectionConfidence: 0.55,
             minSuppressionThreshold: 0.3
         });
+        if (generation !== recordingCameraTest.generation) { detector.close(); return; }
+        recordingCameraTest.detector = detector;
         recordingCameraTest.active = true;
         recordingCameraTest.lastAnnouncedSignature = '';
         recordingCameraTest.lastAnnouncementAt = 0;
         setRecordingCameraTestStatus(t('broadcast_room.camera_test_active', 'Kamera açık. Kadraj yardımı yüzünüzü inceliyor.'));
         scheduleRecordingCameraTest(0);
     } catch (error) {
+        if (generation !== recordingCameraTest.generation) return;
         cleanupRecordingCameraTest();
         setRecordingCameraTestStatus(t('broadcast_room.camera_test_failed', 'Kamera testi başlatılamadı: {error}', {
             error: error?.message || error || 'unknown_error'
@@ -9335,6 +9383,31 @@ async function stopRecording() {
         if (els.btnStopRecord) els.btnStopRecord.disabled = true;
 
         if (state.lastOutputPath) {
+            if (result.gtcrn) {
+                const onProgress = (_event, stage) => {
+                    const message = t(`recording_microphone_noise.gtcrn_${stage}`);
+                    els.recordingStatus.textContent = message;
+                    announce(message);
+                };
+                ipcRenderer.on('obs-gtcrn-progress', onProgress);
+                if (els.btnStartRecord) els.btnStartRecord.disabled = true;
+                try {
+                    const cleaned = await ipcRenderer.invoke('obs-gtcrn-process', state.lastOutputPath);
+                    if (cleaned.success) state.lastOutputPath = cleaned.outputPath;
+                    const message = t(cleaned.success ? 'recording_microphone_noise.gtcrn_done' : 'recording_microphone_noise.gtcrn_failed');
+                    els.recordingStatus.textContent = message;
+                    announce(message);
+                } catch (error) {
+                    console.error('[GTCRN] Processing request failed:', error);
+                    const message = t('recording_microphone_noise.gtcrn_failed');
+                    els.recordingStatus.textContent = message;
+                    announce(message);
+                } finally {
+                    ipcRenderer.removeListener('obs-gtcrn-progress', onProgress);
+                    if (els.btnStartRecord) els.btnStartRecord.disabled = false;
+                }
+                if (result.gtcrnRestoreFailed) announce(t('recording_microphone_noise.gtcrn_restore_failed'));
+            }
             els.recordingOutput.textContent = t('recording_wizard.recording.output_path', 'Output path: {path}', { path: state.lastOutputPath });
             els.btnOpenFolder.disabled = false;
             els.btnCopyPath.disabled = false;
@@ -9346,7 +9419,7 @@ async function stopRecording() {
                 }
             };
 
-            if (state.lastOutputPath.endsWith('.mkv') && state.recordingFormat === 'mp4') {
+            if (!result.gtcrn && state.lastOutputPath.endsWith('.mkv') && state.recordingFormat === 'mp4') {
                 els.recordingStatus.textContent = t('recording_wizard.recording.remuxing', 'Recording stopped, converting to MP4...');
                 showShortcutTooltip(t('recording_wizard.recording.remuxing_tooltip', 'Recording stopped. Converting to MP4.'));
 

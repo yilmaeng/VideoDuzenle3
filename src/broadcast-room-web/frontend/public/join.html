@@ -317,6 +317,10 @@
                                 <label for="microphone-music-mode" data-i18n="broadcast_room.microphone_music_mode"></label>
                                 <input id="microphone-music-mode" type="checkbox" aria-describedby="microphone-music-hint">
                                 <p id="microphone-music-hint" class="hint" data-i18n="broadcast_room.microphone_music_hint"></p>
+                                <label for="microphone-krisp-preview" data-i18n="krisp_preview.label"></label>
+                                <input id="microphone-krisp-preview" type="checkbox" checked aria-describedby="microphone-krisp-hint">
+                                <p id="microphone-krisp-hint" class="hint" data-i18n="krisp_preview.hint"></p>
+                                <p class="hint" data-i18n="system_echo.hint"></p>
                                 <p class="hint" data-i18n="broadcast_room_join.microphone_processing_hint">Varsayılan olarak EVD ek ses filtresi uygulamaz; mikrofonunuzun ve işletim sisteminizin hazırladığı ses korunur.</p>
                                 <label class="meeting-control-toggle">
                                     <input id="microphone-echo-cancellation" type="checkbox">
@@ -417,6 +421,8 @@
     <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.21.0/dist/livekit-client.umd.min.js"></script>
     <script src="/yayinodasi/web-host.js?v=20261012-row-focus"></script>
     <script src="/yayinodasi/waiting-room.js?v=20261012-recording-feedback"></script>
-    <script src="/yayinodasi/join.js?v=20261013-microphone-activation-r4"></script>
+    <script src="/yayinodasi/krisp-preview.js?v=20261020-1"></script>
+    <script src="/yayinodasi/system-echo.js?v=20261020-1"></script>
+    <script src="/yayinodasi/join.js?v=20261020-system-echo"></script>
 </body>
 </html>

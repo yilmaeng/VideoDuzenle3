@@ -10,10 +10,12 @@
             ? el.selectionEnd > el.selectionStart : !window.getSelection()?.isCollapsed);
         const activeTab = typeof TabManager !== 'undefined' ? TabManager.getActiveTab() : null;
         const state = {
+            sourceFilePath: activeTab?.filePath || (typeof App !== 'undefined' ? App.currentFilePath : null) || Timeline.sourceFile || null,
             media: !!activeTab && Timeline.getTotalDuration() > 0,
             loaded: !!activeTab,
             selectionQueue: typeof App !== 'undefined' && App.verticalClipQueue.length > 0,
             selection: typeof Selection !== 'undefined' && (Selection.getSelection()?.duration || 0) > 0,
+            extendedSelection: typeof Selection !== 'undefined' && Selection.extendedAnchor !== null,
             undo: !!activeTab && Timeline.undoStack.length > 0,
             redo: !!activeTab && Timeline.redoStack.length > 0,
             undoAction: Timeline.undoStack.length ? Timeline.historyLabel(Timeline.undoStack[Timeline.undoStack.length-1], true) : '',

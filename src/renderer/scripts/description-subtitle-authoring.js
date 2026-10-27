@@ -502,6 +502,7 @@
         }
     }
     function handleEventListKeydown(event) {
+        if (window.EvdDescriptionPhase5?.handleAudioShortcut?.(event)) return true;
         const list = visibleEvents();
         if (!list.length) return false;
         const modifier = window.api.platform === 'darwin' ? event.metaKey : event.ctrlKey;
