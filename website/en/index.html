@@ -16,7 +16,7 @@
     <link rel="alternate" hreflang="es" href="https://evd.drenginyilmaz.net/es/">
     <link rel="alternate" hreflang="fr" href="https://evd.drenginyilmaz.net/fr/">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="stylesheet" href="/site.css?v=5.5.0">
+    <link rel="stylesheet" href="/site.css?v=5.7.0">
 </head>
 
 <body>
@@ -95,15 +95,11 @@
         </section>
 
         <section class="card tutorials-section" aria-labelledby="whats-new-title">
-            <h2 id="whats-new-title">What's New in 5.0?</h2>
-            <p>EVD 5.5 combines much faster, source-conscious video production with an accessible workflow.</p>
-            <ul class="list">
-                <li>Hybrid Smart Render preserves unchanged source sections and rebuilds only processed areas, delivering much faster exports with stronger visual quality.</li>
-                <li>Continuous audio rendering reduces clicks, repetitions, and dropouts at edit points; automatic validation falls back safely when needed.</li>
-                <li>Transitions, overlays, inserted videos, external audio, and selected-range exports now work with the hybrid architecture.</li>
-                <li>Lyrics-based local karaoke alignment preserves supplied words and provides accessible line and word timing controls.</li>
-                <li>Description, subtitle, final-review, and Broadcast Room tools gained human-voice matching, camera, guest-audio, and personal appearance improvements.</li>
-            </ul>
+            <h2 id="whats-new-title">What's New in 5.7?</h2>
+            <p>EVD 5.7 brings Electron 44.9.1 and accessible editing improvements. Enable extended selection with F8 and move through the video to select a range. Mouse navigation and drag selection on the timeline preserve existing keyboard access.</p>
+            <p>Create automatic subtitles with Whisper, then edit or voice them. Experimental filler-word cleanup helps review hesitations such as um and uh. Silence and filler cleanup results report removed time and the new total duration. Screen readers no longer repeatedly announce stale file-open information.</p>
+            <p>Improvements cover shared AI service preferences, remembered input folders, exports starting beside the source, restored project playback position, scrolling-text output and description audio settings. The Windows recording wizard adds GTCRN while retaining DeepFilter. GTCRN cleans only the microphone track after recording, preserving system audio and the original recording. System-audio echo cancellation is available in the Windows broadcast room on the new Electron runtime.</p>
+            <p>A full installation is required; subsequent patches will target 5.7.0. The Mac package is for Apple Silicon. OBS/GTCRN recording improvements are Windows-only; the downloadable vocal-separation engine is also currently available only for Windows x64.</p>
         </section>
 
         <footer class="footer">
@@ -132,7 +128,7 @@
             releaseError: 'Releases could not be loaded. Please try again later.'
         };
     </script>
-    <script src="/site.js?v=5.5.0"></script>
+    <script src="/site.js?v=5.7.0"></script>
 </body>
 
 </html>
