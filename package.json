@@ -129,7 +129,8 @@
       },
       {
         "from": "src/resources/deepfilter",
-        "to": "deepfilter"
+        "to": "deepfilter",
+        "filter": ["**/*", "!preview_*.wav"]
       },
       {
         "from": "src/resources/rnnoise",
