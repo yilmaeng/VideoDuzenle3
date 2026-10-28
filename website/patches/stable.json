@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "patchId": "5.7.0-patch-1",
+  "baseVersion": "5.7.0",
+  "revision": 1,
+  "platforms": [
+    "win32",
+    "darwin"
+  ],
+  "architectures": [
+    "x64",
+    "arm64"
+  ],
+  "packageUrl": "https://evd.drenginyilmaz.net/patches/evd-5.7.0-patch-1.evdpatch",
+  "packageSha256": "75d19bfb392b8c700786c279cb369bf5b5916574e3dedbd9b18426ba5a58a8d5",
+  "packageSize": 1951827,
+  "restartRequired": true,
+  "mainEntrypoint": "main.js",
+  "rendererEntrypoint": "",
+  "localeFiles": {
+    "tr": "locales/tr.json",
+    "en": "locales/en.json",
+    "de": "locales/de.json",
+    "es": "locales/es.json",
+    "fr": "locales/fr.json"
+  },
+  "releaseNotes": {
+    "tr": "Yayın odasında gereksiz ve tekrarlanan ekran okuyucu anonsları azaltıldı; davet bağlantısını panoya kopyalama düzeltildi. Ses senkronlama sihirbazında Boşluk ve Enter tuşlarının ana pencereye geçmesi giderildi. Ctrl+End artık zaman çizelgesinin gerçek sonuna gider. Sekmeler arasında kopyala-yapıştır konumu, hızlandırılmış ve düzenlenmiş videolarda düzeltildi. Türkçe geçiş kısayolunun açılış uyarısı giderildi.",
+    "en": "Reduced unnecessary and repeated screen-reader announcements in the broadcast room and fixed invitation link copying. Fixed Space and Enter being intercepted by the main window in the audio synchronization wizard. Ctrl+End now reaches the exact timeline end. Fixed cross-tab paste positions in edited and speed-adjusted videos. Removed the startup warning for the Turkish transition shortcut.",
+    "de": "Unnötige und wiederholte Screenreader-Ansagen im Senderaum wurden reduziert und das Kopieren von Einladungslinks korrigiert. Leertaste und Eingabetaste werden im Audiosynchronisierungsassistenten nicht mehr vom Hauptfenster abgefangen. Strg+Ende erreicht nun das tatsächliche Ende der Zeitleiste. Einfügepositionen zwischen Tabs wurden für bearbeitete Videos und Geschwindigkeitsänderungen korrigiert. Die Startwarnung für das türkische Übergangskürzel wurde behoben.",
+    "es": "Se redujeron los anuncios innecesarios y repetidos del lector de pantalla en la sala y se corrigió la copia del enlace de invitación. Espacio y Entrar ya no son interceptados por la ventana principal en el asistente de sincronización de audio. Ctrl+Fin llega al final exacto de la línea de tiempo. Se corrigió la posición de pegado entre pestañas en vídeos editados o con velocidad modificada. Se eliminó el aviso inicial del atajo turco de transición.",
+    "fr": "Les annonces inutiles et répétées du lecteur d’écran dans la salle ont été réduites et la copie du lien d’invitation corrigée. Les touches Espace et Entrée ne sont plus interceptées par la fenêtre principale dans l’assistant de synchronisation audio. Ctrl+Fin atteint désormais la fin exacte de la chronologie. Les positions de collage entre onglets ont été corrigées pour les vidéos montées ou à vitesse modifiée. L’avertissement au démarrage du raccourci turc de transition a été supprimé."
+  },
+  "files": [
+    {
+      "path": "assets/base-main.js",
+      "sha256": "01826536f31bbecb08ad65ff675e89ee4a8c2b140224362375acf4113813f985",
+      "size": 3698
+    },
+    {
+      "path": "assets/renderer-bootstrap.js",
+      "sha256": "f5b5927ae22f0eabfe707931f167ff2e9f5d6df0dd5ef6bf1fa6ac0227eaaea4",
+      "size": 1115
+    },
+    {
+      "path": "assets/replacements.json",
+      "sha256": "27f41d3374d656f78365ac8c73a925912914bce65b69ba8d8d2f1d95e07db5b9",
+      "size": 1504
+    },
+    {
+      "path": "assets/src/main/clipboard-bridge.js",
+      "sha256": "be5a43e4e9a9f67b25c4265a210255d5a7131fbd4b35e15d5a1c071e8d9c8030",
+      "size": 1308
+    },
+    {
+      "path": "assets/src/main/dialog-windows.js",
+      "sha256": "c7e01e2ae77fa9df0595aec5e1defcc0f620a5cd3eba58fedd240100e27c9086",
+      "size": 21434
+    },
+    {
+      "path": "assets/src/main/menu.js",
+      "sha256": "1ecaf0a4ace0ccd7766705f5f6ddd8d7ae28256deb150fc353c2c2f71f16440e",
+      "size": 89229
+    },
+    {
+      "path": "assets/src/renderer/description-subtitle-editor.html",
+      "sha256": "782ca0b8fc388fd6e6603d12c25895ede8f98af5fa6cf98f1ea75fc634d5b83c",
+      "size": 61675
+    },
+    {
+      "path": "assets/src/renderer/dialogs/accessible-recording.html",
+      "sha256": "d115ffa95cfaad9939d0a015e977ce833ca30446157ee06056052ce9e0334785",
+      "size": 84755
+    },
+    {
+      "path": "assets/src/renderer/dialogs/broadcast-room-guest.html",
+      "sha256": "78595b367dbcc131eda154b02de9529d6499b57dfeb236ced0a2c7a1093bfa06",
+      "size": 9014
+    },
+    {
+      "path": "assets/src/renderer/dialogs/broadcast-room.html",
+      "sha256": "920f08770477bcee018efca014314a8d5c52202bcac3c898bb3b72be0231b812",
+      "size": 163182
+    },
+    {
+      "path": "assets/src/renderer/dialogs/elevenlabs-dubbing-tool.html",
+      "sha256": "61122050717a8d6e94097867b39aeb252ea0c238c4222cbcb4e0191bc7bdd651",
+      "size": 12133
+    },
+    {
+      "path": "assets/src/renderer/dialogs/live-effects-panel.html",
+      "sha256": "8df28cba5293f6112bcf0e6188784f48215dd09ee6093ca7ed08664c7480e6a5",
+      "size": 6179
+    },
+    {
+      "path": "assets/src/renderer/dialogs/new-project.html",
+      "sha256": "4f400cd2a88a325ee35ae0fa9713d4ddcbbba8593755ae93625128687167b4a4",
+      "size": 16319
+    },
+    {
+      "path": "assets/src/renderer/dialogs/slideshow-editor.html",
+      "sha256": "91dd83a992914bcc65a0014e5683114e7dcfeb75a304e5d2f3cfad74be452f51",
+      "size": 255126
+    },
+    {
+      "path": "assets/src/renderer/dialogs/slideshow-karaoke-editor.html",
+      "sha256": "8403197cc263170e2b808f2cd47915bd6a09af2ebbab0d127a7c1ee4f197d5f9",
+      "size": 54553
+    },
+    {
+      "path": "assets/src/renderer/dialogs/slideshow-preview.html",
+      "sha256": "21871e0a579247c2fd862c704d63a4a9c15ee20441fa072d39a9a037a79dd786",
+      "size": 59046
+    },
+    {
+      "path": "assets/src/renderer/dialogs/slideshow-text-overlay.html",
+      "sha256": "b9dd6410a3b66a4815579334e6162a68f9e53853061ea52bfa76876d1f572267",
+      "size": 48713
+    },
+    {
+      "path": "assets/src/renderer/dialogs/slideshow-ticker-overlay.html",
+      "sha256": "85137ecfb67466a4287c4e3a329dae2cba8135fa0110a04527e891e51f4849cf",
+      "size": 51305
+    },
+    {
+      "path": "assets/src/renderer/dialogs/sync-wizard.html",
+      "sha256": "f2d263b72624dd1e94ca06947408293b3c2b76c08727d2d6b2bc6d389f8b5d7a",
+      "size": 25438
+    },
+    {
+      "path": "assets/src/renderer/dialogs/text-overlay.html",
+      "sha256": "dd3e8a616507f5cc05fb5b19027452f315603bce79915c861fc5406b10ff3448",
+      "size": 55741
+    },
+    {
+      "path": "assets/src/renderer/dialogs/vertical-wizard.html",
+      "sha256": "3c96ae5d47c7c07c42e24dcd32159986abe29a7d4b6b441e175fe3db342d2386",
+      "size": 23404
+    },
+    {
+      "path": "assets/src/renderer/index.html",
+      "sha256": "eba72bc5d796ea535001de5f3fcdc0c50068751d3903f56650595ee8d5b45ac2",
+      "size": 180670
+    },
+    {
+      "path": "assets/src/renderer/instant-voice-translation.html",
+      "sha256": "aa61a39560e20957f0827ec66b8a2fd70ec533cf761110af205ee77210054a5a",
+      "size": 25062
+    },
+    {
+      "path": "assets/src/renderer/privacy-policy.html",
+      "sha256": "f86a26c6ef899453a2956f8213dde0d84c63398424497d2d3a7c59e1a11e159f",
+      "size": 8729
+    },
+    {
+      "path": "assets/src/renderer/scripts/app.js",
+      "sha256": "f7d3547239674f660a546256851d4b0c2af8c37335cffe85f8bf7dd61cada725",
+      "size": 271002
+    },
+    {
+      "path": "assets/src/renderer/scripts/broadcast-room.js",
+      "sha256": "c9e62af2ccbd5a036f5f39c7bd69603b975a8aa3e5eeb9a557f27b9dd6cc8cb2",
+      "size": 1132923
+    },
+    {
+      "path": "assets/src/renderer/scripts/clipboard-bridge.cjs",
+      "sha256": "fde87366a1e8bd91cf7072d907d59a8aa8b3b19f35376c179b67e74c5e7faf2e",
+      "size": 315
+    },
+    {
+      "path": "assets/src/renderer/scripts/recording-camera-support.cjs",
+      "sha256": "60d91c0d100f72a8ae9f782cdcd61d96954e8cef5823148c638ce7871c1d6f1e",
+      "size": 1242
+    },
+    {
+      "path": "assets/src/renderer/scripts/recording-navigation.cjs",
+      "sha256": "4aa7bf942b450fe0ed9184b0d404730f4611dc30187596f218949bf965673405",
+      "size": 1077
+    },
+    {
+      "path": "assets/src/renderer/scripts/tab-manager.js",
+      "sha256": "5bd9619ec4a30391b1bf9e89a9ee05d4795b6375ad0e1f817542447ee647586d",
+      "size": 16492
+    },
+    {
+      "path": "assets/src/renderer/scripts/timeline.js",
+      "sha256": "3810387166a82f1b560ee76693f61710ed2731c4ee2116b492cc4608e0fa4f66",
+      "size": 32243
+    },
+    {
+      "path": "assets/src/renderer/scripts/video-player.js",
+      "sha256": "b3f26c5e71b487f1ad84f5102dc8f04f8b76ee42ad7995046848bbb935c06deb",
+      "size": 73388
+    },
+    {
+      "path": "assets/src/renderer/terms-of-service.html",
+      "sha256": "e86da7cdbf45367944aaed4efbd29472b50a3c3408bae8e2343adde4524357c2",
+      "size": 9032
+    },
+    {
+      "path": "assets/src/renderer/test.html",
+      "sha256": "878fef3a04c3ba22006086e395df224e8bdc51cac392026f75ee3eec8028de94",
+      "size": 206
+    },
+    {
+      "path": "assets/worker-overlay.js",
+      "sha256": "e87b52ef80ab80c8b6ffb0bc5db29138540623d6582a444743215fab768ee2c0",
+      "size": 1404
+    },
+    {
+      "path": "locales/de.json",
+      "sha256": "923f931ab25d31cf22a28f28de5ca7d14f7c9f6a644e12ee032f34a4cc8f5e58",
+      "size": 587161
+    },
+    {
+      "path": "locales/en.json",
+      "sha256": "1e7ec977c59671ca9b4e532d9ca4499d093b746f38cfb41c55eb411fa6c4ba6f",
+      "size": 560248
+    },
+    {
+      "path": "locales/es.json",
+      "sha256": "b53e0fb1e3afa0a5caad1015d8e7d4cfb007e6ce6c8ed78b8408f322a20ac847",
+      "size": 579392
+    },
+    {
+      "path": "locales/fr.json",
+      "sha256": "6a3ba93819c24eb9b3fc406d5a87231cff3f6aa6943d1114e8eacc88b95b5226",
+      "size": 598359
+    },
+    {
+      "path": "locales/tr.json",
+      "sha256": "eabb0bef3fd7b4c38b40a58297d0863cb4d86e32851cc4e4f4a74e7ea7fa8b5f",
+      "size": 582949
+    },
+    {
+      "path": "main.js",
+      "sha256": "3ae87942e3e5a08727a02cf608ec84d6330c1a31ac3e291554f8e8a59e9259d8",
+      "size": 1096
+    }
+  ],
+  "signature": "txnndFfHj6xjFqXwdBYzAexF3FAeazWroKSIFVPODR9tVsl+L7PW3hSsumdY3zpvlNHhMVgYJD2qTrGC8qNgDw=="
+}
