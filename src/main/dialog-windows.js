@@ -247,6 +247,9 @@ function openSyncWizard(parentWindow, mode) {
         }
     });
 
+    // The parent timeline's Space/Enter accelerators must not intercept
+    // file-selection buttons or playback controls in this modal wizard.
+    wizardWin.webContents.setIgnoreMenuShortcuts(true);
     wizardWin.loadFile(path.join(__dirname, '../renderer/dialogs/sync-wizard.html'));
 
     wizardWin.once('ready-to-show', () => {

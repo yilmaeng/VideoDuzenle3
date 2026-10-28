@@ -1126,6 +1126,7 @@
     "status_file_select_failed": "Dosya seçilemedi: {error}"
   },
   "broadcast_room": {
+    "status_initial_room_clipboard_failed": "{name} isimli odaya bağlanıldı, ancak davet bağlantısı panoya kopyalanamadı. Bağlantıyı oda bilgilerinden kopyalayabilirsiniz.",
     "security_session_required": "Bu işlem için katılımcı oturumu doğrulanamadı. Güncel uygulamayı veya sayfayı kullanarak odaya yeniden katılın.",
     "security_owner_required": "Bu işlem yalnızca doğrulanmış oda yöneticisi tarafından yapılabilir.",
     "chat_export_title": "Toplantı sohbetlerini dışa aktar",

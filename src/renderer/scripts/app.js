@@ -3282,7 +3282,7 @@ const App = {
             return;
         }
 
-        const insertTime = VideoPlayer.getCurrentTime();
+        const insertTime = VideoPlayer.getTimelineTime();
         const activeTab = TabManager.getActiveTab();
 
         // Yeni projeye yapıştırma - metadata al
@@ -5404,7 +5404,7 @@ const App = {
 
             // Video zamanını timeline pozisyonuna çevir
             const videoTime = VideoPlayer.getCurrentTime();
-            const timelinePosition = this.videoTimeToTimelinePosition(videoTime);
+            const timelinePosition = VideoPlayer.getTimelineTime();
 
             console.log(`insertVideo: videoTime=${videoTime.toFixed(2)}, timelinePosition=${timelinePosition.toFixed(2)}`);
 

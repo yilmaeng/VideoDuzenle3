@@ -80,6 +80,9 @@ async function fetchBuffer(url, { maxBytes = MAX_PACKAGE_BYTES, onProgress = nul
 class PatchManager {
     constructor({ app, publicKeyPath = path.join(__dirname, 'patch-public-key.pem'), publicKey = '', enableDevelopmentPatches = process.env.EVD_ENABLE_DEV_PATCHES === '1' } = {}) {
         this.app = app;
+        const bundled = readJson(path.join(app.getAppPath(), 'package.json'), {});
+        this.bundledRevision = bundled.version === app.getVersion()
+            ? Math.max(0, Number(bundled.evdBundledPatchRevision) || 0) : 0;
         this.developmentMode = app?.isPackaged === false;
         this.patchesEnabled = !this.developmentMode || enableDevelopmentPatches;
         this.publicKeyPath = publicKeyPath;
@@ -103,6 +106,12 @@ class PatchManager {
         if (!this.patchesEnabled) return this.getStatus();
         fs.mkdirSync(this.rootPath, { recursive: true });
         this.state = readJson(this.statePath, this.state) || this.state;
+        // A refreshed installer already contains these fixes. Do not overlay
+        // its newer source with an older downloaded patch after reinstalling.
+        for (const key of ['active', 'pending', 'previous']) {
+            if (this.state[key]?.baseVersion === this.app.getVersion()
+                && Number(this.state[key].revision) <= this.bundledRevision) this.state[key] = null;
+        }
 
         if (this.state.health?.status === 'booting' && this.state.active) {
             this.state.active = this.state.previous || null;
@@ -172,7 +181,7 @@ class PatchManager {
             ? Number(this.state.pending.revision || 0)
             : 0;
         return {
-            available: Number(manifest.revision) > Math.max(activeRevision, pendingRevision),
+            available: Number(manifest.revision) > Math.max(activeRevision, pendingRevision, this.bundledRevision),
             manifest,
             activeRevision,
             pendingRevision

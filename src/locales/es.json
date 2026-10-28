@@ -1126,6 +1126,7 @@
     "status_file_select_failed": "No se pudo elegir el archivo: {error}"
   },
   "broadcast_room": {
+    "status_initial_room_clipboard_failed": "Conectado a {name}, pero no se pudo copiar el enlace de invitación. Puede copiarlo desde los detalles de la sala.",
     "security_session_required": "No se pudo verificar su sesión de participante. Vuelva a entrar con la aplicación o página actualizada.",
     "security_owner_required": "Solo el propietario verificado de la sala puede realizar esta acción.",
     "chat_export_title": "Exportar chat de la reunión",

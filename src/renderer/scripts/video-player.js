@@ -928,9 +928,9 @@ const VideoPlayer = {
         this._currentTimelineSegmentIndex = segments.length - 1;
 
         if (lastSource && lastSource !== this.currentFilePath) {
-            return this.switchToSource(lastSource, lastSeg.end - 0.1);
+            return this.switchToSource(lastSource, lastSeg.end);
         } else {
-            this.video.currentTime = lastSeg.end - 0.1;
+            this.video.currentTime = lastSeg.end;
         }
     },
 
@@ -1193,32 +1193,14 @@ const VideoPlayer = {
      * Farklı kaynaklı segmentleri destekler
      */
     goToEnd() {
-        const segments = Timeline.segments;
-
-        if (segments && segments.length > 0) {
-            // Son segment'in sonuna git (biraz önce, sonunda takılmasın)
-            const lastSegment = segments[segments.length - 1];
-            const lastSource = lastSegment.sourceFile || Timeline.sourceFile;
-
-            // Segment indeksini son segmente ayarla
-            this._currentTimelineSegmentIndex = segments.length - 1;
-
-            // Farklı kaynaktaysa geçiş yap
-            if (lastSource && lastSource !== this.currentFilePath) {
-                console.log(`goToEnd: Farklı kaynağa geçiliyor: ${lastSource}`);
-                this.switchToSource(lastSource, lastSegment.end - 0.2);
-            } else {
-                this.video.currentTime = lastSegment.end - 0.2;
-            }
-            console.log(`goToEnd: ${(lastSegment.end - 0.2).toFixed(2)}s`);
-            Accessibility.announceNavigation(this.t('runtime.video_player.navigation_end', 'End'), Timeline.getTotalDuration());
-        } else {
-            // Segment yoksa video sonuna git
-            if (this.video.duration) {
-                this.seekTo(this.video.duration);
-            }
-            Accessibility.announceNavigation(this.t('runtime.video_player.navigation_end', 'End'), this.video.duration || 0);
-        }
+        if (!this.video) return;
+        // Stop continuous playback before seeking so it cannot restart at zero.
+        this.pause({ announce: false });
+        const end = this.getDuration();
+        this.cursorPosition = end;
+        const seek = this.seekToTimelineTime(end);
+        Accessibility.announceNavigation(this.t('runtime.video_player.navigation_end', 'End'), end);
+        return seek;
     },
 
     /**

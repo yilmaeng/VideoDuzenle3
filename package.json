@@ -1,6 +1,7 @@
 {
   "name": "evd",
   "version": "5.7.0",
+  "evdBundledPatchRevision": 1,
   "description": "Bir video oynatıcıyı klavyeyle kontrol eden el ve kulak - Görme engelli kullanıcılar için erişilebilir video düzenleme",
   "main": "src/main/index.js",
   "scripts": {

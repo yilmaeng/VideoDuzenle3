@@ -556,7 +556,7 @@
             </div>
             <div style="margin-top: 12px;">
                 <label for="ai-live-preview-status" data-i18n="broadcast_room.ai_live_preview_status_label">Yapay zeka görüşü</label>
-                <div id="ai-live-preview-status" class="value-box" role="status" aria-live="polite"></div>
+                <div id="ai-live-preview-status" class="value-box" aria-live="off"></div>
             </div>
             <div class="stage-preview-grid" style="margin-top: 16px;">
                 <div class="stage-preview-panel">
@@ -1032,11 +1032,11 @@
             <div class="grid" style="margin-top: 16px;">
                 <div>
                     <h3 data-i18n="broadcast_room.obs_detect_label">OBS Durumu</h3>
-                    <div id="obs-detect-status" class="value-box" role="status" aria-live="polite"></div>
+                    <div id="obs-detect-status" class="value-box" aria-live="off"></div>
                 </div>
                 <div>
                     <h3 data-i18n="broadcast_room.obs_connection_label">Bağlantı Durumu</h3>
-                    <div id="obs-connection-status" class="value-box" role="status" aria-live="polite"></div>
+                    <div id="obs-connection-status" class="value-box" aria-live="off"></div>
                 </div>
             </div>
         </section>
@@ -1104,7 +1104,7 @@
             <div class="grid" style="margin-top: 16px;">
                 <div>
                     <h3 data-i18n="broadcast_room.scene_background_status_label">Arka plan durumu</h3>
-                    <div id="scene-background-status" class="value-box" role="status" aria-live="polite" data-i18n="broadcast_room.scene_background_empty">Arka plan seçilmedi.</div>
+                    <div id="scene-background-status" class="value-box" aria-live="off" data-i18n="broadcast_room.scene_background_empty">Arka plan seçilmedi.</div>
                 </div>
             </div>
         </section>
@@ -1139,7 +1139,7 @@
             <div class="grid" style="margin-top: 16px;">
                 <div>
                     <h3 data-i18n="broadcast_room.recording_status_label">Kayıt Durumu</h3>
-                    <div id="recording-status" class="value-box" role="status" aria-live="polite"></div>
+                    <div id="recording-status" class="value-box" aria-live="off"></div>
                 </div>
                 <div>
                     <h3 data-i18n="broadcast_room.recording_output_label">Son Çıktı Yolu</h3>
@@ -1164,7 +1164,7 @@
                     </div>
                     <div>
                         <h3 id="local-backup-recording-detail-label" data-i18n="broadcast_room.local_backup_recording_detail_label">Seçili yedek kayıt ayrıntısı</h3>
-                        <div id="local-backup-recording-detail" class="value-box" role="status" aria-live="polite" aria-labelledby="local-backup-recording-detail-label"></div>
+                        <div id="local-backup-recording-detail" class="value-box" aria-live="off" aria-labelledby="local-backup-recording-detail-label"></div>
                     </div>
                 </div>
             </div>
@@ -1242,19 +1242,19 @@
                 <div class="grid" style="margin-top: 12px;">
                     <div>
                         <h3 data-i18n="broadcast_room.elevenlabs_dubbing_estimate_label">Süre ve kredi tahmini</h3>
-                        <div id="elevenlabs-dubbing-estimate" class="value-box" role="status" aria-live="polite"></div>
+                        <div id="elevenlabs-dubbing-estimate" class="value-box" aria-live="off"></div>
                     </div>
                     <div>
                         <h3 data-i18n="broadcast_room.elevenlabs_dubbing_selected_file_label">Dublaj için seçili kayıt</h3>
-                        <div id="elevenlabs-dubbing-selected-file" class="value-box" role="status" aria-live="polite"></div>
+                        <div id="elevenlabs-dubbing-selected-file" class="value-box" aria-live="off"></div>
                     </div>
                     <div>
                         <h3 data-i18n="broadcast_room.elevenlabs_dubbing_cached_audio_label">Saklanan ElevenLabs dublaj sesi</h3>
-                        <div id="elevenlabs-dubbing-cached-audio" class="value-box" role="status" aria-live="polite"></div>
+                        <div id="elevenlabs-dubbing-cached-audio" class="value-box" aria-live="off"></div>
                     </div>
                     <div>
                         <h3 data-i18n="broadcast_room.elevenlabs_dubbing_status_label">ElevenLabs dublaj durumu</h3>
-                        <div id="elevenlabs-dubbing-status" class="value-box" role="status" aria-live="polite"></div>
+                        <div id="elevenlabs-dubbing-status" class="value-box" aria-live="off"></div>
                     </div>
                 </div>
             </div>
@@ -1273,7 +1273,7 @@
                     </div>
                     <div>
                         <h3 data-i18n="broadcast_room.rebalance_import_status_label">İçe aktarılan dosya</h3>
-                        <div id="rebalance-import-status" class="value-box" role="status" aria-live="polite"></div>
+                        <div id="rebalance-import-status" class="value-box" aria-live="off"></div>
                     </div>
                 </div>
             </div>
@@ -1664,7 +1664,7 @@
                 </div>
                 <div style="margin-top: 14px;">
                     <label for="scene-summary" data-i18n="broadcast_room.scene_summary_label">Sahne Özeti</label>
-                    <div id="scene-summary" class="value-box" role="status" aria-live="polite"></div>
+                    <div id="scene-summary" class="value-box" aria-live="off"></div>
                 </div>
                 <div id="scene-suggestion-panel" class="subpanel" hidden>
                     <h3 data-i18n="broadcast_room.scene_suggestions_title">Paylaşım Başladı: Hızlı Sahne Önerileri</h3>
@@ -1827,7 +1827,7 @@
                         <p class="hint" data-i18n="broadcast_room.accessible_share_follow_powerpoint_hint">PowerPoint slayt gösterisi açıksa, slayt değiştikçe konuk tarafındaki erişilebilir metin de güncellenmeye çalışılır. Çalışmazsa önceki/sonraki bölüm düğmelerini kullanabilirsiniz.</p>
                         <div style="margin-top: 12px;">
                             <label for="accessible-share-status" data-i18n="broadcast_room.accessible_share_status_label">Erişilebilir paylaşım durumu</label>
-                            <div id="accessible-share-status" class="value-box" role="status" aria-live="polite" data-i18n="broadcast_room.accessible_share_empty">Henüz erişilebilir belge seçilmedi.</div>
+                            <div id="accessible-share-status" class="value-box" aria-live="off" data-i18n="broadcast_room.accessible_share_empty">Henüz erişilebilir belge seçilmedi.</div>
                         </div>
                     </div>
                 </div>

@@ -1126,6 +1126,7 @@
     "status_file_select_failed": "Le fichier n a pas pu etre choisi : {error}"
   },
   "broadcast_room": {
+    "status_initial_room_clipboard_failed": "Connexion à {name} établie, mais le lien d’invitation n’a pas pu être copié. Vous pouvez le copier depuis les détails de la salle.",
     "security_session_required": "Votre session de participant n’a pas pu être vérifiée. Rejoignez la salle avec l’application ou la page à jour.",
     "security_owner_required": "Seul le propriétaire vérifié de la salle peut effectuer cette action.",
     "chat_export_title": "Exporter la discussion de la réunion",

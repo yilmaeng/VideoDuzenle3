@@ -1126,6 +1126,7 @@
     "status_file_select_failed": "Could not choose file: {error}"
   },
   "broadcast_room": {
+    "status_initial_room_clipboard_failed": "Connected to {name}, but the invite link could not be copied. You can copy it from the room details.",
     "security_session_required": "Your participant session could not be verified. Rejoin the room using the updated app or page.",
     "security_owner_required": "Only the verified room owner can perform this action.",
     "chat_export_title": "Export meeting chat",

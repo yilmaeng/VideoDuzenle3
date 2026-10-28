@@ -216,9 +216,9 @@ function renderTextWithClickableLinks(value) {
 function setFieldText(el, value) {
     if (!el) return;
     if ('value' in el) {
-        el.value = value;
+        if (el.value !== value) el.value = value;
     } else {
-        el.textContent = value;
+        if (el.textContent !== value) el.textContent = value;
     }
 }
 
@@ -450,15 +450,15 @@ function renderSceneBackgroundStatus() {
     if (els.sceneLogoSize) els.sceneLogoSize.value = background.logoSize || 'medium';
     if (!els.sceneBackgroundStatus) return;
     if (!background.sourcePath) {
-        els.sceneBackgroundStatus.textContent = background.logoPath
+setFieldText(els.sceneBackgroundStatus, background.logoPath
             ? t('broadcast_room.scene_logo_selected_without_background', 'Arka plan seçilmedi. Seçili logo: {name}.', { name: path.basename(background.logoPath) })
-            : t('broadcast_room.scene_background_empty', 'Arka plan seçilmedi.');
+            : t('broadcast_room.scene_background_empty', 'Arka plan seçilmedi.'));
         return;
     }
-    els.sceneBackgroundStatus.textContent = t('broadcast_room.scene_background_selected', 'Seçili arka plan: {name}. {info}', {
+setFieldText(els.sceneBackgroundStatus, t('broadcast_room.scene_background_selected', 'Seçili arka plan: {name}. {info}', {
         name: path.basename(background.sourcePath),
         info: `${describeSceneBackgroundFile(background)} ${background.logoPath ? t('broadcast_room.scene_logo_selected_suffix', 'Logo: {name}.', { name: path.basename(background.logoPath) }) : ''}`
-    });
+    }));
 }
 
 async function saveCurrentSceneBackgroundProfile() {
@@ -689,25 +689,25 @@ function renderPersonalVirtualBackgroundUi() {
     }
     if (!els.personalVirtualBackgroundStatus) return;
     if (state.virtualBackground.applying) {
-        els.personalVirtualBackgroundStatus.textContent = t('broadcast_room.personal_virtual_background_applying', 'Sanal arka plan kameraya uygulanıyor...');
+setFieldText(els.personalVirtualBackgroundStatus, t('broadcast_room.personal_virtual_background_applying', 'Sanal arka plan kameraya uygulanıyor...'));
         return;
     }
     if (mode === 'blur') {
-        els.personalVirtualBackgroundStatus.textContent = state.virtualBackground.track
+setFieldText(els.personalVirtualBackgroundStatus, state.virtualBackground.track
             ? t('broadcast_room.personal_virtual_background_blur_active', 'Kamera arka planınız bulanıklaştırılıyor.')
-            : t('broadcast_room.personal_virtual_background_blur_saved', 'Bulanık arka plan seçildi. Kameranızı açtığınızda uygulanacak.');
+            : t('broadcast_room.personal_virtual_background_blur_saved', 'Bulanık arka plan seçildi. Kameranızı açtığınızda uygulanacak.'));
         return;
     }
     if (mode === 'image') {
         const imageName = state.virtualBackground.imagePath
             ? path.basename(state.virtualBackground.imagePath)
             : t('broadcast_room.personal_virtual_background_image_missing', 'Henüz görsel seçilmedi');
-        els.personalVirtualBackgroundStatus.textContent = state.virtualBackground.track
+setFieldText(els.personalVirtualBackgroundStatus, state.virtualBackground.track
             ? t('broadcast_room.personal_virtual_background_image_active', 'Kamera arka planınızda {name} kullanılıyor.', { name: imageName })
-            : t('broadcast_room.personal_virtual_background_image_saved', 'Seçili arka plan görseli: {name}. Kameranızı açtığınızda uygulanacak.', { name: imageName });
+            : t('broadcast_room.personal_virtual_background_image_saved', 'Seçili arka plan görseli: {name}. Kameranızı açtığınızda uygulanacak.', { name: imageName }));
         return;
     }
-    els.personalVirtualBackgroundStatus.textContent = t('broadcast_room.personal_virtual_background_normal_active', 'Normal kamera görüntüsü kullanılacak.');
+setFieldText(els.personalVirtualBackgroundStatus, t('broadcast_room.personal_virtual_background_normal_active', 'Normal kamera görüntüsü kullanılacak.'));
 }
 
 async function stopPersonalVirtualBackgroundProcessor() {
@@ -839,11 +839,11 @@ function renderParticipantAvatarUi() {
         els.btnRemoveParticipantAvatar.disabled = !state.participantAvatar.dataUrl;
     }
     if (!els.participantAvatarStatus) return;
-    els.participantAvatarStatus.textContent = state.participantAvatar.dataUrl
+setFieldText(els.participantAvatarStatus, state.participantAvatar.dataUrl
         ? t('broadcast_room.participant_avatar_selected', 'Seçili profil fotoğrafı: {name}.', {
             name: state.participantAvatar.fileName || t('broadcast_room.participant_avatar_file_fallback', 'fotoğraf')
         })
-        : t('broadcast_room.participant_avatar_empty', 'Fotoğraf seçilmedi. Kamera kapalıyken adınız gösterilir.');
+        : t('broadcast_room.participant_avatar_empty', 'Fotoğraf seçilmedi. Kamera kapalıyken adınız gösterilir.'));
 }
 
 async function resizeParticipantAvatar(filePath) {
@@ -6465,13 +6465,13 @@ function getAdminErrorMessage(errorCode) {
 function renderAdminState() {
     if (els.adminLoginStatus) {
         if (!state.admin.checked) {
-            els.adminLoginStatus.textContent = t('broadcast_room.admin_status_checking', 'Admin durumu kontrol ediliyor...');
+setFieldText(els.adminLoginStatus, t('broadcast_room.admin_status_checking', 'Admin durumu kontrol ediliyor...'));
         } else if (!state.admin.enabled) {
-            els.adminLoginStatus.textContent = t('broadcast_room.admin_status_disabled', 'Admin girişi için sunucuda anahtar tanımlı değil.');
+setFieldText(els.adminLoginStatus, t('broadcast_room.admin_status_disabled', 'Admin girişi için sunucuda anahtar tanımlı değil.'));
         } else if (state.admin.authenticated) {
-            els.adminLoginStatus.textContent = t('broadcast_room.admin_status_authenticated', 'Admin oturumu açık. Webinar yönetim adımları etkinleştirilebilir.');
+setFieldText(els.adminLoginStatus, t('broadcast_room.admin_status_authenticated', 'Admin oturumu açık. Webinar yönetim adımları etkinleştirilebilir.'));
         } else {
-            els.adminLoginStatus.textContent = t('broadcast_room.admin_status_ready', 'Admin anahtarı girilirse yönetici oturumu açılır.');
+setFieldText(els.adminLoginStatus, t('broadcast_room.admin_status_ready', 'Admin anahtarı girilirse yönetici oturumu açılır.'));
         }
     }
     if (els.btnAdminLogin) {
@@ -13236,7 +13236,7 @@ function renderSceneSummary() {
     }
     const preset = getActiveScenePreset();
     if (!preset) {
-        els.sceneSummary.textContent = t('broadcast_room.scene_summary_empty', 'Henüz sahne düzeni hazırlanmadı.');
+setFieldText(els.sceneSummary, t('broadcast_room.scene_summary_empty', 'Henüz sahne düzeni hazırlanmadı.'));
         return;
     }
     const slotCount = preset.slots.length;
@@ -13248,13 +13248,13 @@ function renderSceneSummary() {
             source: getAssignedSceneSourceState(slot.id, preset.id).label
         });
     }).join(' | ');
-    els.sceneSummary.textContent = t('broadcast_room.scene_summary_text', 'Seçili düzen: {preset}. Toplam {count} slot var. Etkin slot: {slot}. Atanan kaynak: {assigned}.', {
+setFieldText(els.sceneSummary, t('broadcast_room.scene_summary_text', 'Seçili düzen: {preset}. Toplam {count} slot var. Etkin slot: {slot}. Atanan kaynak: {assigned}.', {
         preset: preset.label,
         count: String(slotCount),
         slot: selectedSlot?.label || t('broadcast_room.value_not_available', 'Hazır değil'),
         assigned: assignedState.label,
         slots: allAssignmentsSummary
-    });
+    }));
 }
 
 function getGuestShareSceneSuggestionContext() {
@@ -13352,18 +13352,18 @@ function renderRoomState() {
     updateHostMediaActionButtons();
     applyDeviceControlLabels();
     renderRoomSectionList();
-    els.roomStatus.textContent = state.roomState.roomId
+setFieldText(els.roomStatus, state.roomState.roomId
         ? (isLocalRoomHost()
             ? t('broadcast_room.room_ready', 'Oda hazır. Host bağlı.')
             : t('broadcast_room.room_joined_as_guest', 'Odaya konuk olarak bağlısınız.'))
-        : t('broadcast_room.room_not_created', 'Henüz oda oluşturulmadı.');
-    els.roomCode.textContent = state.roomState.roomId || t('broadcast_room.value_not_available', 'Hazır değil');
-    els.inviteLink.textContent = state.roomState.inviteUrl || t('broadcast_room.value_not_available', 'Hazır değil');
+        : t('broadcast_room.room_not_created', 'Henüz oda oluşturulmadı.'));
+setFieldText(els.roomCode, state.roomState.roomId || t('broadcast_room.value_not_available', 'Hazır değil'));
+setFieldText(els.inviteLink, state.roomState.inviteUrl || t('broadcast_room.value_not_available', 'Hazır değil'));
     if (els.btnCloseRoom) {
         const closeRoomLabel = shouldLeaveCurrentRoom()
             ? t('broadcast_room.leave_room', 'Odadan Ayrıl')
             : t('broadcast_room.close_room', 'Odayı Kapat');
-        els.btnCloseRoom.textContent = closeRoomLabel;
+setFieldText(els.btnCloseRoom, closeRoomLabel);
         setShortcutAccessibleLabel(
             els.btnCloseRoom,
             t('broadcast_room.shortcut_accessible_label', '{label}. Kısayol: {shortcut}.', {
@@ -15371,15 +15371,15 @@ async function markParticipantHandRaiseSeen(participantId) {
 
 function renderObsState() {
     if (els.obsDetectStatus) {
-        els.obsDetectStatus.textContent = state.obs.found
+setFieldText(els.obsDetectStatus, state.obs.found
             ? t('broadcast_room.obs_found', 'OBS Studio bulundu.')
-            : t('broadcast_room.obs_not_found', 'OBS Studio bulunamadı ya da henüz denetlenmedi.');
+            : t('broadcast_room.obs_not_found', 'OBS Studio bulunamadı ya da henüz denetlenmedi.'));
     }
 
     if (els.obsConnectionStatus) {
-        els.obsConnectionStatus.textContent = state.obs.connected
+setFieldText(els.obsConnectionStatus, state.obs.connected
             ? t('broadcast_room.obs_connection_ready', 'OBS bağlantısı hazır.')
-            : t('broadcast_room.obs_connection_missing', 'OBS bağlantısı henüz kurulmadı.');
+            : t('broadcast_room.obs_connection_missing', 'OBS bağlantısı henüz kurulmadı.'));
     }
 
     if (els.btnDetectObs) {
@@ -15430,11 +15430,11 @@ function updateYouTubeAuthUi() {
     }
 
     if (state.youtube.connected) {
-        els.youtubeAuthStatus.textContent = t('broadcast_room.youtube_auth_connected', 'YouTube hesabı bağlı: {channel}', {
+setFieldText(els.youtubeAuthStatus, t('broadcast_room.youtube_auth_connected', 'YouTube hesabı bağlı: {channel}', {
             channel: state.youtube.channelTitle || t('broadcast_room.youtube_channel_unknown', 'Kanal')
-        });
+        }));
     } else {
-        els.youtubeAuthStatus.textContent = t('broadcast_room.youtube_auth_waiting', 'YouTube hesabı bağlı değil.');
+setFieldText(els.youtubeAuthStatus, t('broadcast_room.youtube_auth_waiting', 'YouTube hesabı bağlı değil.'));
     }
 
     if (els.btnYoutubeDisconnect) {
@@ -16115,21 +16115,21 @@ function renderYouTubeLiveState() {
     }
 
     if (state.youtube.liveActive) {
-        els.youtubeLiveStatus.textContent = t('broadcast_room.youtube_live_status_active', 'Canlı yayın sürüyor.');
+setFieldText(els.youtubeLiveStatus, t('broadcast_room.youtube_live_status_active', 'Canlı yayın sürüyor.'));
         return;
     }
 
     if (state.youtube.lastLiveState === 'stopped') {
-        els.youtubeLiveStatus.textContent = t('broadcast_room.youtube_live_status_stopped', 'Canlı yayın durduruldu.');
+setFieldText(els.youtubeLiveStatus, t('broadcast_room.youtube_live_status_stopped', 'Canlı yayın durduruldu.'));
         return;
     }
 
     if (state.youtube.preparedBroadcastId) {
-        els.youtubeLiveStatus.textContent = t('broadcast_room.youtube_live_status_ready', 'Canlı yayın başlatmaya hazır.');
+setFieldText(els.youtubeLiveStatus, t('broadcast_room.youtube_live_status_ready', 'Canlı yayın başlatmaya hazır.'));
         return;
     }
 
-    els.youtubeLiveStatus.textContent = t('broadcast_room.youtube_live_status_waiting', 'Canlı yayın hazırlığı bekleniyor.');
+setFieldText(els.youtubeLiveStatus, t('broadcast_room.youtube_live_status_waiting', 'Canlı yayın hazırlığı bekleniyor.'));
 }
 
 function getLocalBackupRecordingKey(recording) {
@@ -16212,11 +16212,11 @@ function renderLocalBackupRecordings() {
     }
     if (els.localBackupRecordingDetail) {
         if (!selected) {
-            els.localBackupRecordingDetail.textContent = state.roomState.roomId
+setFieldText(els.localBackupRecordingDetail, state.roomState.roomId
                 ? t('broadcast_room.local_backup_recordings_empty', 'Bu oda için henüz konuk yedek kaydı yok.')
-                : t('broadcast_room.local_backup_recordings_no_room', 'Yedek kayıtları görmek için önce bir oda açın.');
+                : t('broadcast_room.local_backup_recordings_no_room', 'Yedek kayıtları görmek için önce bir oda açın.'));
         } else {
-            els.localBackupRecordingDetail.textContent = t('broadcast_room.local_backup_recording_detail', 'Katılımcı: {name}. Tür: {kind}. Durum: {status}. Parça sayısı: {chunks}. Boyut: {size}. Başlangıç: {started}. Son güncelleme: {updated}. Oturum: {session}.', {
+setFieldText(els.localBackupRecordingDetail, t('broadcast_room.local_backup_recording_detail', 'Katılımcı: {name}. Tür: {kind}. Durum: {status}. Parça sayısı: {chunks}. Boyut: {size}. Başlangıç: {started}. Son güncelleme: {updated}. Oturum: {session}.', {
                 name: String(selected.displayName || selected.identity || '').trim() || t('broadcast_room.value_not_available', 'Hazır değil'),
                 kind: getLocalBackupRecordingKindLabel(selected),
                 status: getLocalBackupRecordingStatusLabel(selected),
@@ -16225,7 +16225,7 @@ function renderLocalBackupRecordings() {
                 started: formatLocalBackupRecordingDate(selected.startedAt),
                 updated: formatLocalBackupRecordingDate(selected.updatedAt || selected.stoppedAt || selected.startedAt),
                 session: String(selected.sessionId || '').trim() || t('broadcast_room.value_not_available', 'Hazır değil')
-            });
+            }));
         }
     }
     if (els.btnRefreshLocalBackupRecordings) {
@@ -16786,20 +16786,20 @@ function renderRecordingState() {
     }
     if (els.recordingStatus) {
         if (state.recording.botActive) {
-            els.recordingStatus.textContent = t('broadcast_room.recording_status_bot_active', 'Bot sahne kaydı sürüyor.');
+setFieldText(els.recordingStatus, t('broadcast_room.recording_status_bot_active', 'Bot sahne kaydı sürüyor.'));
         } else if (state.recording.active) {
-            els.recordingStatus.textContent = state.recording.paused
+setFieldText(els.recordingStatus, state.recording.paused
                 ? t('broadcast_room.recording_status_paused', 'Kayıt duraklatıldı.')
-                : t('broadcast_room.recording_status_active', 'Kayıt sürüyor.');
+                : t('broadcast_room.recording_status_active', 'Kayıt sürüyor.'));
         } else if (state.recording.lastState === 'stopped') {
-            els.recordingStatus.textContent = t('broadcast_room.recording_status_stopped', 'Kayıt durduruldu.');
+setFieldText(els.recordingStatus, t('broadcast_room.recording_status_stopped', 'Kayıt durduruldu.'));
         } else {
-            els.recordingStatus.textContent = t('broadcast_room.recording_status_inactive', 'Kayıt beklemede.');
+setFieldText(els.recordingStatus, t('broadcast_room.recording_status_inactive', 'Kayıt beklemede.'));
         }
     }
 
     if (els.recordingOutput) {
-        els.recordingOutput.textContent = state.recording.outputPath || t('broadcast_room.recording_output_empty', 'Henüz kayıt dosyası oluşmadı.');
+setFieldText(els.recordingOutput, state.recording.outputPath || t('broadcast_room.recording_output_empty', 'Henüz kayıt dosyası oluşmadı.'));
     }
     renderLocalBackupRecordings();
     if (els.dubSegmentsStatus) {
@@ -16807,41 +16807,41 @@ function renderRecordingState() {
             ? state.translation.dubRecordingSegments.length
             : 0;
         const segmentInputPath = getDubSegmentInputPath();
-        els.dubSegmentsStatus.textContent = segmentCount > 0 && segmentInputPath
+setFieldText(els.dubSegmentsStatus, segmentCount > 0 && segmentInputPath
             ? t('broadcast_room.dub_segments_status_ready', '{count} dublaj segmenti hazır. Yeniden oluşturulacak kaynak kayıt: {path}', {
                 count: segmentCount,
                 path: segmentInputPath
             })
-            : t('broadcast_room.dub_segments_status_empty', 'Canlı çeviri dublaj segmenti yok. Bu düğmeler yalnızca canlı çeviri sırasında üretilen dublaj parçaları varsa etkinleşir.');
+            : t('broadcast_room.dub_segments_status_empty', 'Canlı çeviri dublaj segmenti yok. Bu düğmeler yalnızca canlı çeviri sırasında üretilen dublaj parçaları varsa etkinleşir.'));
     }
     if (els.rebalanceImportStatus) {
-        els.rebalanceImportStatus.textContent = state.recording.importedDubbedPath
+setFieldText(els.rebalanceImportStatus, state.recording.importedDubbedPath
             ? t('broadcast_room.rebalance_import_selected', 'Seçili dosya: {path}. Ses parçası sayısı: {count}', {
                 path: state.recording.importedDubbedPath,
                 count: state.recording.importedDubbedAudioCount || 0
             })
-            : t('broadcast_room.rebalance_import_empty', 'Henüz iki ses parçalı kayıt içe aktarılmadı.');
+            : t('broadcast_room.rebalance_import_empty', 'Henüz iki ses parçalı kayıt içe aktarılmadı.'));
     }
     if (els.elevenLabsDubbingStatus) {
-        els.elevenLabsDubbingStatus.textContent = state.recording.elevenLabsDubbingStatus
-            || t('broadcast_room.elevenlabs_dubbing_status_idle', 'ElevenLabs kayıt sonrası dublaj beklemede.');
+setFieldText(els.elevenLabsDubbingStatus, state.recording.elevenLabsDubbingStatus
+            || t('broadcast_room.elevenlabs_dubbing_status_idle', 'ElevenLabs kayıt sonrası dublaj beklemede.'));
     }
     if (els.elevenLabsDubbingSelectedFile) {
         const selectedPath = getElevenLabsDubbingInputPath();
-        els.elevenLabsDubbingSelectedFile.textContent = selectedPath
+setFieldText(els.elevenLabsDubbingSelectedFile, selectedPath
             ? t('broadcast_room.elevenlabs_dubbing_selected_file', 'Seçili kayıt: {path}', { path: selectedPath })
-            : t('broadcast_room.elevenlabs_dubbing_selected_file_empty', 'Son kayıt yolu veya içe aktarılan kayıt dosyası bekleniyor.');
+            : t('broadcast_room.elevenlabs_dubbing_selected_file_empty', 'Son kayıt yolu veya içe aktarılan kayıt dosyası bekleniyor.'));
     }
     if (els.elevenLabsDubbingEstimate) {
-        els.elevenLabsDubbingEstimate.textContent = state.recording.elevenLabsDubbingEstimateStatus
-            || t('broadcast_room.elevenlabs_dubbing_estimate_empty', 'Henüz süre ve kredi tahmini yapılmadı.');
+setFieldText(els.elevenLabsDubbingEstimate, state.recording.elevenLabsDubbingEstimateStatus
+            || t('broadcast_room.elevenlabs_dubbing_estimate_empty', 'Henüz süre ve kredi tahmini yapılmadı.'));
     }
     if (els.elevenLabsDubbingCachedAudio) {
-        els.elevenLabsDubbingCachedAudio.textContent = state.recording.elevenLabsDubbingCachedAudioPath && state.recording.elevenLabsDubbingCachedSourcePath
+setFieldText(els.elevenLabsDubbingCachedAudio, state.recording.elevenLabsDubbingCachedAudioPath && state.recording.elevenLabsDubbingCachedSourcePath
             ? t('broadcast_room.elevenlabs_dubbing_cached_audio_ready', 'Ham dublaj sesi saklandı. Kaynak kayıt: {path}', {
                 path: state.recording.elevenLabsDubbingCachedSourcePath
             })
-            : t('broadcast_room.elevenlabs_dubbing_cached_audio_empty', 'Henüz saklanan ElevenLabs dublaj sesi yok.');
+            : t('broadcast_room.elevenlabs_dubbing_cached_audio_empty', 'Henüz saklanan ElevenLabs dublaj sesi yok.'));
     }
 
     if (els.btnStartLocalRecording) {
@@ -17766,6 +17766,7 @@ function isRetryableAiReviewError(errorText = '') {
 
 async function requestLivePreviewAiReview() {
     if (els.aiLivePreviewStatus) {
+        els.aiLivePreviewStatus.setAttribute('aria-live', 'polite');
         els.aiLivePreviewStatus.textContent = t('broadcast_room.ai_live_preview_preparing', 'Canlı önizleme yapay zeka değerlendirmesi hazırlanıyor...');
     }
     announce(t('broadcast_room.ai_live_preview_preparing', 'Canlı önizleme yapay zeka değerlendirmesi hazırlanıyor...'));
@@ -21439,8 +21440,8 @@ function buildHostShareSourcePool({ screens = [], windows = [] }) {
     return nextSources;
 }
 
-async function refreshLocalSources() {
-    setStatus(t('broadcast_room.status_refreshing_sources', 'Yerel kaynaklar yenileniyor...'));
+async function refreshLocalSources({ quiet = false } = {}) {
+    if (!quiet) setStatus(t('broadcast_room.status_refreshing_sources', 'Yerel kaynaklar yenileniyor...'));
     const previousSelectedHostShareId = String(state.selectedHostShareSourceId || els.hostShareSourceSelect?.value || '');
     const previousSources = Array.isArray(state.availableLocalShareSources) ? [...state.availableLocalShareSources] : [];
 
@@ -21578,7 +21579,7 @@ async function refreshLocalSources() {
         state.selectedHostShareSourceId = '';
     }
     renderAll();
-    setStatus(t('broadcast_room.status_sources_refreshed', 'Yerel kaynak listesi yenilendi. Toplam {count} kaynak var.', {
+    if (!quiet) setStatus(t('broadcast_room.status_sources_refreshed', 'Yerel kaynak listesi yenilendi. Toplam {count} kaynak var.', {
         count: String(state.availableLocalShareSources.length + state.participantSources.length)
     }));
 }
@@ -22146,7 +22147,12 @@ function announceInitialRoomConnection({ roomName = '', inviteUrl = '' } = {}) {
     const safeRoomName = String(roomName || '').trim() || t('broadcast_room.default_room_title', 'EVD Yayın Odası');
     const safeInviteUrl = String(inviteUrl || '').trim();
     if (safeInviteUrl) {
-        clipboard.writeText(safeInviteUrl);
+        try {
+            clipboard.writeText(safeInviteUrl);
+        } catch (_error) {
+            setStatus(t('broadcast_room.status_initial_room_clipboard_failed', '', { name: safeRoomName }));
+            return;
+        }
     }
     setStatus(t(
         'broadcast_room.status_initial_room_connection_ready',
@@ -24830,12 +24836,12 @@ async function init() {
     renderAccessibleShareStatus();
     renderAccessibleShareItemControls();
     updateHostShareButtonState();
-    setStatus(t('broadcast_room.status_shell_ready', 'Yayın Odası faz 2 kabuğu hazır.'));
-    await refreshLocalSources();
+    // Startup inventory is passive; explicit refresh actions still announce results.
+    await refreshLocalSources({ quiet: true });
     await refreshPersistentRooms();
     await detectObs();
     if (state.obs.found) {
-        await testObsConnection({ quiet: true });
+        await testObsConnection();
     }
     await loadYouTubeAuthState();
     if (state.youtube.connected) {
@@ -24851,7 +24857,7 @@ async function init() {
 
     if (navigator.mediaDevices?.addEventListener) {
         navigator.mediaDevices.addEventListener('devicechange', () => {
-            refreshLocalSources().catch((error) => console.error('Broadcast room devicechange refresh error:', error));
+            refreshLocalSources({ quiet: true }).catch((error) => console.error('Broadcast room devicechange refresh error:', error));
         });
     }
 }

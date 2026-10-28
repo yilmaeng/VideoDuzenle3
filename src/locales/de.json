@@ -1126,6 +1126,7 @@
     "status_file_select_failed": "Datei konnte nicht ausgewaehlt werden: {error}"
   },
   "broadcast_room": {
+    "status_initial_room_clipboard_failed": "Mit {name} verbunden, aber der Einladungslink konnte nicht kopiert werden. Sie können ihn aus den Raumdetails kopieren.",
     "security_session_required": "Ihre Teilnehmersitzung konnte nicht bestätigt werden. Treten Sie mit der aktualisierten App oder Seite erneut bei.",
     "security_owner_required": "Nur der bestätigte Rauminhaber kann diese Aktion ausführen.",
     "chat_export_title": "Besprechungschat exportieren",

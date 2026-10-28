@@ -235,7 +235,7 @@ const TabManager = {
         // Cursor ve seçim durumunu kaydet
         tab.undoStack = JSON.parse(JSON.stringify(Timeline.undoStack));
         tab.redoStack = JSON.parse(JSON.stringify(Timeline.redoStack));
-        tab.cursorPosition = VideoPlayer.getCurrentTime();
+        tab.cursorPosition = VideoPlayer.getTimelineTime();
         tab.selection = {
             start: Selection.start,
             end: Selection.end
@@ -268,7 +268,7 @@ const TabManager = {
         if (tab.filePath && !tab.isNewProject) {
             // Mevcut dosya varsa yükle (varsa dönüştürülmüş olanı)
             await VideoPlayer.loadVideoSilent(tab.convertedPath || tab.filePath);
-            VideoPlayer.seekTo(tab.cursorPosition);
+            await VideoPlayer.seekToTimelineTime(tab.cursorPosition ?? 0);
         } else if (tab.timeline.segments && tab.timeline.segments.length > 0) {
             // Yeni proje ama yapıştırılmış içerik var - ilk segment'in sourceFile'ından yükle
             const firstSegment = tab.timeline.segments[0];
@@ -276,8 +276,8 @@ const TabManager = {
                 console.log('loadTabState: Yapıştırılmış içerikten video yükleniyor:', firstSegment.sourceFile);
                 await VideoPlayer.loadVideoSilent(firstSegment.sourceFile);
                 // Kaydedilmiş imleç konumuna git, yoksa ilk segment'in başına
-                const targetPosition = tab.cursorPosition || firstSegment.start;
-                VideoPlayer.video.currentTime = targetPosition;
+                const targetPosition = tab.cursorPosition ?? 0;
+                await VideoPlayer.seekToTimelineTime(targetPosition);
                 console.log('loadTabState: Video yüklendi, konum:', targetPosition);
             } else {
                 // sourceFile yoksa boş göster

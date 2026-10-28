@@ -655,7 +655,7 @@ const Timeline = {
         // Clipboard'daki segment'leri sourceFile bilgisiyle birlikte kopyala
         const clipboardSegments = this.clipboard.segments.map(seg => ({
             ...seg,
-            sourceFile: this.clipboard.sourceFile || seg.sourceFile
+            sourceFile: seg.sourceFile || this.clipboard.sourceFile
         }));
 
         // Boş proje mi? (segment yok veya sourceFile yok)
