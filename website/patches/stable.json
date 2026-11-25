@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "patchId": "5.7.0-patch-1",
+  "patchId": "5.7.0-patch-7",
   "baseVersion": "5.7.0",
-  "revision": 1,
+  "revision": 7,
   "platforms": [
     "win32",
     "darwin"
@@ -11,9 +11,9 @@
     "x64",
     "arm64"
   ],
-  "packageUrl": "https://evd.drenginyilmaz.net/patches/evd-5.7.0-patch-1.evdpatch",
-  "packageSha256": "75d19bfb392b8c700786c279cb369bf5b5916574e3dedbd9b18426ba5a58a8d5",
-  "packageSize": 1951827,
+  "packageUrl": "https://evd.drenginyilmaz.net/patches/evd-5.7.0-patch-7.evdpatch",
+  "packageSha256": "a8cd4e3f5eca67f9c83555e4dfdf8e6eca0b4cbdb7f88abeef7d15d1318b9db3",
+  "packageSize": 2792097,
   "restartRequired": true,
   "mainEntrypoint": "main.js",
   "rendererEntrypoint": "",
@@ -25,17 +25,22 @@
     "fr": "locales/fr.json"
   },
   "releaseNotes": {
-    "tr": "Yayın odasında gereksiz ve tekrarlanan ekran okuyucu anonsları azaltıldı; davet bağlantısını panoya kopyalama düzeltildi. Ses senkronlama sihirbazında Boşluk ve Enter tuşlarının ana pencereye geçmesi giderildi. Ctrl+End artık zaman çizelgesinin gerçek sonuna gider. Sekmeler arasında kopyala-yapıştır konumu, hızlandırılmış ve düzenlenmiş videolarda düzeltildi. Türkçe geçiş kısayolunun açılış uyarısı giderildi.",
-    "en": "Reduced unnecessary and repeated screen-reader announcements in the broadcast room and fixed invitation link copying. Fixed Space and Enter being intercepted by the main window in the audio synchronization wizard. Ctrl+End now reaches the exact timeline end. Fixed cross-tab paste positions in edited and speed-adjusted videos. Removed the startup warning for the Turkish transition shortcut.",
-    "de": "Unnötige und wiederholte Screenreader-Ansagen im Senderaum wurden reduziert und das Kopieren von Einladungslinks korrigiert. Leertaste und Eingabetaste werden im Audiosynchronisierungsassistenten nicht mehr vom Hauptfenster abgefangen. Strg+Ende erreicht nun das tatsächliche Ende der Zeitleiste. Einfügepositionen zwischen Tabs wurden für bearbeitete Videos und Geschwindigkeitsänderungen korrigiert. Die Startwarnung für das türkische Übergangskürzel wurde behoben.",
-    "es": "Se redujeron los anuncios innecesarios y repetidos del lector de pantalla en la sala y se corrigió la copia del enlace de invitación. Espacio y Entrar ya no son interceptados por la ventana principal en el asistente de sincronización de audio. Ctrl+Fin llega al final exacto de la línea de tiempo. Se corrigió la posición de pegado entre pestañas en vídeos editados o con velocidad modificada. Se eliminó el aviso inicial del atajo turco de transición.",
-    "fr": "Les annonces inutiles et répétées du lecteur d’écran dans la salle ont été réduites et la copie du lien d’invitation corrigée. Les touches Espace et Entrée ne sont plus interceptées par la fenêtre principale dans l’assistant de synchronisation audio. Ctrl+Fin atteint désormais la fin exacte de la chronologie. Les positions de collage entre onglets ont été corrigées pour les vidéos montées ou à vitesse modifiée. L’avertissement au démarrage du raccourci turc de transition a été supprimé."
+    "tr": "EVD 5.7 için 7. birikimli yama, önceki tüm 5.7 yamalarını içerir. Slayt gösterisinde tek veya çoklu fotoğrafların eklenen ses boyunca gösterilmesi düzeltildi. Boşluk temizlemede tümünü seçip tek tek seçim kaldırma eklendi. Dolgu seslerinin sınırları iOS ölçütleriyle iyileştirildi; komşu sözcükler korunur ve elle ayarlama sınırları gözetilir. Betimleme editöründe uzun seslendirmeler için isteğe bağlı kare dondurma, sonraki olayları kaydırma ve dışa aktarım öncesi süre özeti eklendi. Yardım menüsüne güncellemeleri kontrol et ve dosyadan yama yükle eklendi. Ara güncellemeler sayfasından çevrimdışı paket indirilebilir; eski 5.7 için ayrı yükleme araçları da sunulur. Çok kesimli dışa aktarımın mevcut toplu işleme düzeltmeleri dahildir; ilerleme tanılaması iyileştirildi. Yeni Mac HDR motoru ve uygulama adı değişikliği tam kurulum gerektirir, bu yamada yoktur.",
+    "en": "Cumulative patch 7 for EVD 5.7 includes all previous 5.7 patches. Fixed single and multiple slideshow photos covering the added audio duration. Silence cleanup now supports select all and individual deselection. Filler boundaries follow improved iOS criteria with neighboring-word protection and manual adjustment limits. The description editor adds optional frame freezing for long narration, shifting later events and a duration summary before export. Help now offers update checking and installation from a file. The interim updates page provides an offline bundle and separate installers for older 5.7 copies. Existing bounded export fixes for heavily edited timelines are included, with improved progress diagnostics. The new Mac HDR runtime and application rename require a full installer and are not included.",
+    "de": "Der kumulative Patch 7 für EVD 5.7 enthält alle bisherigen 5.7-Patches. Einzelne und mehrere Diashow-Fotos decken jetzt die hinzugefügte Audiodauer ab. Bei der Pausenbereinigung können alle Einträge ausgewählt und einzeln abgewählt werden. Fülllautgrenzen nutzen verbesserte iOS-Kriterien mit Schutz benachbarter Wörter und Grenzen für manuelle Anpassungen. Der Beschreibungseditor bietet optionales Standbild bei langer Beschreibung, verschiebt spätere Ereignisse und zeigt vor dem Export eine Dauerübersicht. Hilfe bietet Updatesuche und Patchinstallation aus einer Datei. Die Seite für Zwischenupdates bietet ein Offline-Paket und separate Installationshilfen für ältere 5.7-Versionen. Vorhandene gruppierte Exportkorrekturen für viele Schnitte und verbesserte Fortschrittsdiagnose sind enthalten. Die neue Mac-HDR-Laufzeit und die Umbenennung erfordern einen vollständigen Installer und sind nicht enthalten.",
+    "es": "El parche acumulativo 7 para EVD 5.7 incluye todos los parches anteriores. Se corrigió la duración de una o varias fotos para cubrir el audio añadido en presentaciones. La limpieza de silencios permite seleccionar todo y desmarcar elementos individuales. Los límites de muletillas incorporan criterios mejorados de iOS, protección de palabras vecinas y límites de ajuste manual. El editor de descripciones permite congelar fotogramas para narraciones largas, desplazar eventos posteriores y mostrar un resumen de duración antes de exportar. Ayuda incluye buscar actualizaciones e instalar desde archivo. La página de actualizaciones intermedias ofrece un paquete sin conexión e instaladores separados para versiones 5.7 antiguas. Incluye las correcciones existentes de exportación por grupos para muchos cortes y mejores diagnósticos de progreso. El nuevo motor HDR para Mac y el cambio de nombre requieren un instalador completo y no están incluidos.",
+    "fr": "Le correctif cumulatif 7 pour EVD 5.7 inclut tous les correctifs précédents. Une ou plusieurs photos de diaporama couvrent désormais la durée du son ajouté. Le nettoyage des silences permet de tout sélectionner puis de désélectionner certains éléments. Les limites des hésitations reprennent les critères iOS améliorés, avec protection des mots voisins et limites de réglage manuel. L’éditeur de descriptions propose de figer l’image pour les narrations longues, de décaler les événements suivants et de présenter la durée avant l’export. Aide propose la recherche de mises à jour et l’installation depuis un fichier. La page des correctifs propose un paquet hors ligne et des outils séparés pour les anciennes versions 5.7. Les corrections existantes d’export par groupes pour les montages complexes sont incluses, avec de meilleurs diagnostics. Le nouveau moteur HDR Mac et le changement de nom nécessitent un installateur complet et ne sont pas inclus."
   },
   "files": [
     {
       "path": "assets/base-main.js",
-      "sha256": "01826536f31bbecb08ad65ff675e89ee4a8c2b140224362375acf4113813f985",
+      "sha256": "35a8778df7795b150c0d086e19f8c45be572470e17014791cbb3930cf8cb6214",
       "size": 3698
+    },
+    {
+      "path": "assets/offline-patch-manager.js",
+      "sha256": "4ce331c07e1e3a2e79fb23bab1fb6ef621487945a09c2b43118b7bc971fa648a",
+      "size": 23302
     },
     {
       "path": "assets/renderer-bootstrap.js",
@@ -44,8 +49,18 @@
     },
     {
       "path": "assets/replacements.json",
-      "sha256": "27f41d3374d656f78365ac8c73a925912914bce65b69ba8d8d2f1d95e07db5b9",
-      "size": 1504
+      "sha256": "3dddc5c0dda272feb3744db0977ec5bf2b36d71aadfbec67d7d3371f563a40fe",
+      "size": 4932
+    },
+    {
+      "path": "assets/src/broadcast-room-web/frontend/public/host-takeover.js",
+      "sha256": "e5f7e8a7d1de51b82302fc8827eab4c2cc508b15af627e7d951026bbfc3dc625",
+      "size": 2240
+    },
+    {
+      "path": "assets/src/broadcast-room-web/frontend/public/icons/LICENSE.txt",
+      "sha256": "ea72c2ade4b7422f2f7a9738486a151d8e687e831480bc1a03a035e637e22bbd",
+      "size": 1184
     },
     {
       "path": "assets/src/main/clipboard-bridge.js",
@@ -53,24 +68,214 @@
       "size": 1308
     },
     {
+      "path": "assets/src/main/description-audio-render.js",
+      "sha256": "8fd54262cfa498fa1c1a30e94facd74404e528aff7eb531cfe40a49e96789a4c",
+      "size": 1952
+    },
+    {
+      "path": "assets/src/main/description-freeze-plan.js",
+      "sha256": "1610ab8084ddefc48d68523b088c98c54a664c5a90a618a16c7d925ffcca0c30",
+      "size": 2154
+    },
+    {
+      "path": "assets/src/main/description-subtitle-analysis.js",
+      "sha256": "907419099c353716d56688e622bd9cad0af9676acfcadfffbcbbdaccae39482a",
+      "size": 8607
+    },
+    {
+      "path": "assets/src/main/description-subtitle-editor-handler.js",
+      "sha256": "49891dfcc552dc7e91a00f1cbcd8d547fc2a668c024d83bc652f4cf55d3283bc",
+      "size": 34629
+    },
+    {
+      "path": "assets/src/main/description-subtitle-project.js",
+      "sha256": "a2fff82cd37256521a5035b97be829e1141ba96dacf72d551bae867959dadf7a",
+      "size": 8341
+    },
+    {
+      "path": "assets/src/main/description-whisper-native.js",
+      "sha256": "c7db5cfcb8a5b133740a0bcaef73892c3fdb9b7809deb67a4843c597613f3d07",
+      "size": 13888
+    },
+    {
+      "path": "assets/src/main/dialog-menu-shortcuts.js",
+      "sha256": "f9ab5059694dd5ac02e477ec4b82407077fc2ac618912d7a9c40ed509f64df9e",
+      "size": 438
+    },
+    {
       "path": "assets/src/main/dialog-windows.js",
-      "sha256": "c7e01e2ae77fa9df0595aec5e1defcc0f620a5cd3eba58fedd240100e27c9086",
-      "size": 21434
+      "sha256": "8e78017ac199a41bf13494a95f876a3cdbcab7d11898d9c001fce86d1199663b",
+      "size": 21481
+    },
+    {
+      "path": "assets/src/main/export/continuous-audio-renderer.js",
+      "sha256": "d266386c66c9af8995e3b7fde002702e0b5074706f81d7d2849a3d529542e1ba",
+      "size": 14500
+    },
+    {
+      "path": "assets/src/main/export/edit-graph-classifier.js",
+      "sha256": "9d60d1ab6646796443755c7a03eb051d070678b4419b4a135a3c579f346d62af",
+      "size": 2449
+    },
+    {
+      "path": "assets/src/main/export/export-diagnostics.js",
+      "sha256": "147b6e1e79538c8ac8e5cccc64bf736ab8e7dced9b0577834df89a1c8b6139f1",
+      "size": 2526
+    },
+    {
+      "path": "assets/src/main/export/export-profile-resolver.js",
+      "sha256": "30584517cd7c3cf7190853508e414afcec110d1641428e7c883159f20fe44f78",
+      "size": 3998
+    },
+    {
+      "path": "assets/src/main/export/export-service.js",
+      "sha256": "f2ab47d574cd1d31ecb808dc6c515d7aa1c50ae635aee7b216b52893f0220b8f",
+      "size": 6579
+    },
+    {
+      "path": "assets/src/main/export/hdr-policy.js",
+      "sha256": "37b8091a255a14d7fd4516e12412435ee4bb593183a3b5747462669192f64b5a",
+      "size": 1664
+    },
+    {
+      "path": "assets/src/main/export/hybrid-smart-renderer.js",
+      "sha256": "553ec9b2fbfffb9ba5aa38f99b1e87cebcb3c35c42dc93b370d47257123954a2",
+      "size": 32005
+    },
+    {
+      "path": "assets/src/main/export/output-validator.js",
+      "sha256": "6fb6e2a802301e67348443146efd4cee59f09351e33a400965a090d41b22c3ad",
+      "size": 4215
+    },
+    {
+      "path": "assets/src/main/export/seamless-timeline.js",
+      "sha256": "3d8709651ed1becb2cc01e72c7b93d256395ac2107c33cf212990358bf0eb550",
+      "size": 2603
+    },
+    {
+      "path": "assets/src/main/export/selection-audio-copy.js",
+      "sha256": "af4c4906ddfdd116bc7934dcb9e6bb85c59ed15376be6d2510804429c52a6636",
+      "size": 3493
+    },
+    {
+      "path": "assets/src/main/export/source-aware-renderer.js",
+      "sha256": "1488cd45acbf818e8a3b413ca51161a789057984f82d55a447952707cefd2f3d",
+      "size": 22623
+    },
+    {
+      "path": "assets/src/main/export/source-profile-analyzer.js",
+      "sha256": "bcfc6acbcfb51abf6d34596927bdbada84538996a40bb13fa5775fd81fe77c67",
+      "size": 12072
+    },
+    {
+      "path": "assets/src/main/export/timeline-preview-audio.js",
+      "sha256": "5ba73a7e88eab4fe5830ef09c1371c10aca372a28556d602c6eaa3f8c2ce5883",
+      "size": 4378
+    },
+    {
+      "path": "assets/src/main/ffmpeg-handler.js",
+      "sha256": "a0c84cb9d503599e31c240c418da6ca3315b8e86f62b9bf8655ba58ac3800828",
+      "size": 241319
+    },
+    {
+      "path": "assets/src/main/filler-analysis.js",
+      "sha256": "55136c68ab2e0dee933d63ceeecacedbf7c27ab5deedb6dcd71865c95647c42f",
+      "size": 4056
+    },
+    {
+      "path": "assets/src/main/gemini-handler.js",
+      "sha256": "9921aaf38fe5abdacdde293df38a0012575c9cbab21b5d9900fb38a339b28a70",
+      "size": 66299
+    },
+    {
+      "path": "assets/src/main/ipc-handlers.js",
+      "sha256": "f171419197532547643d05fd3c42c7a03bba2b923c6361754bef89f74797afd0",
+      "size": 143953
+    },
+    {
+      "path": "assets/src/main/log-filename.js",
+      "sha256": "2944c4099843fb5e2e4f3c9881467f341982af350b3b4a040c403985d506073e",
+      "size": 1059
+    },
+    {
+      "path": "assets/src/main/logger.js",
+      "sha256": "a95cc142ece173bc11b5d7a35c88efa965b34a6a5f402ccd98b8fa810ca66a34",
+      "size": 3809
+    },
+    {
+      "path": "assets/src/main/mac-ffmpeg-runtime.js",
+      "sha256": "84bfbaadd0e60923d09bbb5f88ab448e397f902bf0b8473f00f6ae8a7046ae7e",
+      "size": 642
+    },
+    {
+      "path": "assets/src/main/media-placement.js",
+      "sha256": "d937b45ccbb5fa0e5fb66b8ea07053a08d980613149dc8d6c1e6c1ae88d40840",
+      "size": 4259
     },
     {
       "path": "assets/src/main/menu.js",
-      "sha256": "1ecaf0a4ace0ccd7766705f5f6ddd8d7ae28256deb150fc353c2c2f71f16440e",
-      "size": 89229
+      "sha256": "7eae8f44c798f3f9caedf599fe45e11d50ab4a99273e54c37760f338d2a1e0d4",
+      "size": 90579
+    },
+    {
+      "path": "assets/src/main/object-analysis-handler.js",
+      "sha256": "a3be06ef2c22d074cdde5787e7946ddc3c91b69fb3875766e2949f9cef9cefd1",
+      "size": 14358
+    },
+    {
+      "path": "assets/src/main/object-effect-renderer.js",
+      "sha256": "564b4df97dd62e735b6bb6c8817b852dbb126897ce159283918eeeffbbad2c12",
+      "size": 3441
+    },
+    {
+      "path": "assets/src/main/room-account-client.js",
+      "sha256": "db13f58506880985c4bc877c20ec3788eede9fdc23d742ac86bacc7f50693233",
+      "size": 12943
+    },
+    {
+      "path": "assets/src/main/server-effect-upload.js",
+      "sha256": "c6911b596c7c9a85cdc4df285c53a7c4804a2c04da8f9ff9622a287ba5e7b8a0",
+      "size": 5793
+    },
+    {
+      "path": "assets/src/main/slideshow-handler.js",
+      "sha256": "8260d4d798cf7fd2b708b0d91155f847c1d45d6428acb206a712d759c66d9685",
+      "size": 158007
+    },
+    {
+      "path": "assets/src/main/speech-search-service.js",
+      "sha256": "cdb2c7f052a0ae2e25a0266e4ca636a60c33c0ec12fecf14d6e60f4936e482b8",
+      "size": 24059
+    },
+    {
+      "path": "assets/src/main/tts-handler.js",
+      "sha256": "0493f9de96001420060406155c60e93918a4d0281b0259c9205779248d7c0302",
+      "size": 18923
+    },
+    {
+      "path": "assets/src/main/video-crop.js",
+      "sha256": "f89ae75f56a526b4ece06530dbcddbad41cabfe6632bac1bcf8ff52af18a317f",
+      "size": 13591
+    },
+    {
+      "path": "assets/src/main/video-layer-renderer.js",
+      "sha256": "66ea3d1ad50ac5937df30ea7681b206a9cc9a621b0db3009452ec7a941817abd",
+      "size": 10294
+    },
+    {
+      "path": "assets/src/main/whisper-mac-runtimes.json",
+      "sha256": "3cb97c236113be61637bba2e00cbb3582eca0ffa95ff25f3ccb1947623d8433c",
+      "size": 228
     },
     {
       "path": "assets/src/renderer/description-subtitle-editor.html",
-      "sha256": "782ca0b8fc388fd6e6603d12c25895ede8f98af5fa6cf98f1ea75fc634d5b83c",
-      "size": 61675
+      "sha256": "762341c73c6edcf6f6d72de345c8a1cfae18138d270690f7bafe505d720f5db8",
+      "size": 62706
     },
     {
       "path": "assets/src/renderer/dialogs/accessible-recording.html",
-      "sha256": "d115ffa95cfaad9939d0a015e977ce833ca30446157ee06056052ce9e0334785",
-      "size": 84755
+      "sha256": "f3806cfbabfb2a6ad78c5e79e49fa594a055fce994f22ba216fc3812ba37ff8c",
+      "size": 85418
     },
     {
       "path": "assets/src/renderer/dialogs/broadcast-room-guest.html",
@@ -79,8 +284,8 @@
     },
     {
       "path": "assets/src/renderer/dialogs/broadcast-room.html",
-      "sha256": "920f08770477bcee018efca014314a8d5c52202bcac3c898bb3b72be0231b812",
-      "size": 163182
+      "sha256": "76ee0517eb30f95d7b628facd94a00a9949a1c6c5e55ea0ad289f6ca9ff2999e",
+      "size": 164504
     },
     {
       "path": "assets/src/renderer/dialogs/elevenlabs-dubbing-tool.html",
@@ -99,8 +304,8 @@
     },
     {
       "path": "assets/src/renderer/dialogs/slideshow-editor.html",
-      "sha256": "91dd83a992914bcc65a0014e5683114e7dcfeb75a304e5d2f3cfad74be452f51",
-      "size": 255126
+      "sha256": "eb2dd10451dcfab3c3b480f1326823cec404d03fa29c06915a6bf209c7461a65",
+      "size": 255355
     },
     {
       "path": "assets/src/renderer/dialogs/slideshow-karaoke-editor.html",
@@ -134,13 +339,68 @@
     },
     {
       "path": "assets/src/renderer/dialogs/vertical-wizard.html",
-      "sha256": "3c96ae5d47c7c07c42e24dcd32159986abe29a7d4b6b441e175fe3db342d2386",
-      "size": 23404
+      "sha256": "33d6e91946da46b51d19752fd83023cb13254ce7623dfd50dff4284328336419",
+      "size": 23453
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/broadcast.svg",
+      "sha256": "6d75bd0564907a7f81cb69030a3940c99c001027935fee3167ea274c5e39d705",
+      "size": 385
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/camera.svg",
+      "sha256": "288b58191135516fcf451b132a4e7499b6b42c6cb216892c905630a0d77b0752",
+      "size": 416
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/chat.svg",
+      "sha256": "5a9bda3c97341edae4ca98607f063b0bdafc33bcb69169ae4eb34b741dd53f6a",
+      "size": 424
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/effects.svg",
+      "sha256": "522401900b840e97ff21c39cb40a8eb7f0706e25f7ed5db5ee008a97356e5e00",
+      "size": 409
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/hand.svg",
+      "sha256": "71ff38f13a963a00b1369b9502c03d78c354e901cfacfd8e7be886489725d522",
+      "size": 499
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/leave.svg",
+      "sha256": "e1846e3a33299397e2be42ab2bf26196b652eaa005c11f4a3f8c94e0d6116ac2",
+      "size": 361
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/microphone.svg",
+      "sha256": "f1aefa327f1e18558778fe6fb26123593a8fa545e2570956d2702888ce0d0f36",
+      "size": 406
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/participants.svg",
+      "sha256": "acafa0e99d95781da9f6de03f154f51894c81efdfe9f667d379288e130406747",
+      "size": 444
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/rooms.svg",
+      "sha256": "9c5ca78784f3d04737e284a6d9e4204dccaeba6fc6e2ad3d1ff20c8c304c0525",
+      "size": 383
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/settings.svg",
+      "sha256": "16af92fdf02a7f9addbaab080d8e83b4a399533b318a4be6c6dd3e77e51645d9",
+      "size": 3475
+    },
+    {
+      "path": "assets/src/renderer/icons/meeting/share.svg",
+      "sha256": "8d89962360ce15b802580f360b212d164ae08678fd94f15d2dfa8fdbaeace901",
+      "size": 362
     },
     {
       "path": "assets/src/renderer/index.html",
-      "sha256": "eba72bc5d796ea535001de5f3fcdc0c50068751d3903f56650595ee8d5b45ac2",
-      "size": 180670
+      "sha256": "7b9da3696f34843d499aae1041697e467c6a337917c0b28881afe56ad491fe2e",
+      "size": 181016
     },
     {
       "path": "assets/src/renderer/instant-voice-translation.html",
@@ -153,19 +413,69 @@
       "size": 8729
     },
     {
+      "path": "assets/src/renderer/scripts/accessible-recording.js",
+      "sha256": "2d5973c77b4575e95b58dc4b38450ea41a9cb4bf7cc0a5b9ff66f9cf4fc07b55",
+      "size": 445559
+    },
+    {
       "path": "assets/src/renderer/scripts/app.js",
-      "sha256": "f7d3547239674f660a546256851d4b0c2af8c37335cffe85f8bf7dd61cada725",
-      "size": 271002
+      "sha256": "7eaf93713086b5fb680eb81c918fa6fe52ca02c71882fd9897d1b7424d6be111",
+      "size": 272101
+    },
+    {
+      "path": "assets/src/renderer/scripts/broadcast-room-simple.js",
+      "sha256": "545fb7cff40edf8bbafb9f7f47face80dac832e1cb02aa09e46c7f8edf6c0daa",
+      "size": 12209
     },
     {
       "path": "assets/src/renderer/scripts/broadcast-room.js",
-      "sha256": "c9e62af2ccbd5a036f5f39c7bd69603b975a8aa3e5eeb9a557f27b9dd6cc8cb2",
-      "size": 1132923
+      "sha256": "687a1f98d9a1d03f53062caaadd376bbe0e1d852930c2e1143029c73b923027a",
+      "size": 1155412
     },
     {
       "path": "assets/src/renderer/scripts/clipboard-bridge.cjs",
       "sha256": "fde87366a1e8bd91cf7072d907d59a8aa8b3b19f35376c179b67e74c5e7faf2e",
       "size": 315
+    },
+    {
+      "path": "assets/src/renderer/scripts/cta-overlay-preview.js",
+      "sha256": "a3e7f2bcfbb81e098dccc5af7b91096bf704ca2362c23c3c058cf84e02cf14d5",
+      "size": 10695
+    },
+    {
+      "path": "assets/src/renderer/scripts/description-subtitle-phase5.js",
+      "sha256": "b3a24fad0cf25c2b83567ed33ea381d275a8e7dc7b4dd7c99ffdb9f5da533188",
+      "size": 24650
+    },
+    {
+      "path": "assets/src/renderer/scripts/dialogs.js",
+      "sha256": "13d4cd8b0cbe1749c65a76aa9eedc88e6585dc0a3aad3477a31036c20851099e",
+      "size": 595305
+    },
+    {
+      "path": "assets/src/renderer/scripts/equalizer.js",
+      "sha256": "d31ea07bfb81b4f94373ee080cdb86de86c446bc9c08043c705d42913eec2b4c",
+      "size": 11240
+    },
+    {
+      "path": "assets/src/renderer/scripts/filler-review-core.js",
+      "sha256": "8bc92f88967fc73df8586be1844040bbe4faeebf35549aeb110f4a9a94ab58e8",
+      "size": 2489
+    },
+    {
+      "path": "assets/src/renderer/scripts/filler-review.js",
+      "sha256": "f1fb036506d931fac278ac83cf713c29a3316ad59ee4c996723efc1b2e5baec7",
+      "size": 15707
+    },
+    {
+      "path": "assets/src/renderer/scripts/keyboard.js",
+      "sha256": "45ae71220ca92e155676f2776d5ed5d96069b838aceeddc6defa2541e2145bdc",
+      "size": 66001
+    },
+    {
+      "path": "assets/src/renderer/scripts/participant-presence-announcements.js",
+      "sha256": "c336c1e8c5a770b6c745ba85d0940e6b22501daa547f9ee558d486c07375d5fc",
+      "size": 2266
     },
     {
       "path": "assets/src/renderer/scripts/recording-camera-support.cjs",
@@ -178,19 +488,54 @@
       "size": 1077
     },
     {
+      "path": "assets/src/renderer/scripts/room-audio-diagnostics.js",
+      "sha256": "052c84242c27b80cbe5e5172447828bc55b2cb288b099cfa14e4717407871a56",
+      "size": 4154
+    },
+    {
+      "path": "assets/src/renderer/scripts/seamless-preview.js",
+      "sha256": "7b2c7cb216e1669964b1da6c703a3672f7ed9003a987f78a39af03859117ab22",
+      "size": 9846
+    },
+    {
+      "path": "assets/src/renderer/scripts/server-broadcast-client.js",
+      "sha256": "691d364171310b4ca392c69e68a240fff750dabb602e9866f73aa6c493f632e2",
+      "size": 6912
+    },
+    {
+      "path": "assets/src/renderer/scripts/speech-search.js",
+      "sha256": "eed2108f3f0448eca72473edb23bb05784e959742f258d07170298cc9189ddc8",
+      "size": 23160
+    },
+    {
       "path": "assets/src/renderer/scripts/tab-manager.js",
       "sha256": "5bd9619ec4a30391b1bf9e89a9ee05d4795b6375ad0e1f817542447ee647586d",
       "size": 16492
     },
     {
       "path": "assets/src/renderer/scripts/timeline.js",
-      "sha256": "3810387166a82f1b560ee76693f61710ed2731c4ee2116b492cc4608e0fa4f66",
-      "size": 32243
+      "sha256": "b63b29dcd8f3a7699d95993e742a1ab01f18b295a0300b67e416b0c0547525f6",
+      "size": 32439
+    },
+    {
+      "path": "assets/src/renderer/scripts/update-manager.js",
+      "sha256": "4f65b2e1e3b6a5cbaf2e3fc813344829dd510a4412a2d0869678ec0cd555efa9",
+      "size": 16243
+    },
+    {
+      "path": "assets/src/renderer/scripts/vertical-wizard.js",
+      "sha256": "731eb67e992a5028533b736f437ab64847203d365a0026c57c987a577b1dc5da",
+      "size": 34736
     },
     {
       "path": "assets/src/renderer/scripts/video-player.js",
-      "sha256": "b3f26c5e71b487f1ad84f5102dc8f04f8b76ee42ad7995046848bbb935c06deb",
-      "size": 73388
+      "sha256": "0a82569d71ac48c81195bb5bebb95a3d0e13e8053489c27a525045736f8a27d6",
+      "size": 74345
+    },
+    {
+      "path": "assets/src/renderer/styles/broadcast-room-simple.css",
+      "sha256": "d7c5b37d44bebcced33cdc5a67d107ac2091dd3e17ce81ec410c5c467a02b2f5",
+      "size": 4183
     },
     {
       "path": "assets/src/renderer/terms-of-service.html",
@@ -203,40 +548,70 @@
       "size": 206
     },
     {
+      "path": "assets/src/shared/description-freeze-timing.js",
+      "sha256": "7e7aa9a64a0787a9be27b72b34d6d99f9e0338ce5cff8f41849d80f1195e7646",
+      "size": 1777
+    },
+    {
+      "path": "assets/src/shared/editor-menu-state.js",
+      "sha256": "53b5b11a340ba80ee70903cf4597859f803d1708555b8fb781280f50c632bf56",
+      "size": 5392
+    },
+    {
+      "path": "assets/src/shared/equalizer.js",
+      "sha256": "502b572b3af95f5b0e76bef0c2723b2e2fc16c57792af9b64e7f94551b390f2c",
+      "size": 2895
+    },
+    {
+      "path": "assets/src/studio/gtcrn-recording.js",
+      "sha256": "6be522adf1da07cb1c77bf7bdcb51c3f754b902809c4e450605b52bf96466a9a",
+      "size": 10830
+    },
+    {
+      "path": "assets/src/studio/obs-controller.js",
+      "sha256": "8e9cc756a0ba79aa00027886a8b72942a86817745ef3862a2ce48832657bfaec",
+      "size": 157358
+    },
+    {
+      "path": "assets/src/studio/recording-video-format.js",
+      "sha256": "6b21fc795eb9767c35e27e8eb82078f4664049a71382bdce074c1b65d2e3c007",
+      "size": 1206
+    },
+    {
       "path": "assets/worker-overlay.js",
-      "sha256": "e87b52ef80ab80c8b6ffb0bc5db29138540623d6582a444743215fab768ee2c0",
-      "size": 1404
+      "sha256": "2ffc8c0738431cfc47549fd9e7a6723a669e719028d48fa894394a8022887e72",
+      "size": 1724
     },
     {
       "path": "locales/de.json",
-      "sha256": "923f931ab25d31cf22a28f28de5ca7d14f7c9f6a644e12ee032f34a4cc8f5e58",
-      "size": 587161
+      "sha256": "ad08c4ad53778f1e0edde11ef30cdd1ef7127d7d24fe21fd6277d2c91c51e51d",
+      "size": 599138
     },
     {
       "path": "locales/en.json",
-      "sha256": "1e7ec977c59671ca9b4e532d9ca4499d093b746f38cfb41c55eb411fa6c4ba6f",
-      "size": 560248
+      "sha256": "7cfd008a3c1c1a7e85dafbf9f9038a86fd37a2198d00b66e7c0acfd07b1e5bd4",
+      "size": 571021
     },
     {
       "path": "locales/es.json",
-      "sha256": "b53e0fb1e3afa0a5caad1015d8e7d4cfb007e6ce6c8ed78b8408f322a20ac847",
-      "size": 579392
+      "sha256": "32ebc57ea60c266b0ad03ac07b3ab880aef62296838c731a66e7adfe3b94f3d0",
+      "size": 591063
     },
     {
       "path": "locales/fr.json",
-      "sha256": "6a3ba93819c24eb9b3fc406d5a87231cff3f6aa6943d1114e8eacc88b95b5226",
-      "size": 598359
+      "sha256": "36721e91baf0e5c9ea28d26af4231e7902a0b2eb311e19e87287aa21a97de2cf",
+      "size": 610486
     },
     {
       "path": "locales/tr.json",
-      "sha256": "eabb0bef3fd7b4c38b40a58297d0863cb4d86e32851cc4e4f4a74e7ea7fa8b5f",
-      "size": 582949
+      "sha256": "6cbb2a52962bd5dedcc6517dfe7ce4251d68e683b68886c715141d0eddffc21b",
+      "size": 594416
     },
     {
       "path": "main.js",
-      "sha256": "3ae87942e3e5a08727a02cf608ec84d6330c1a31ac3e291554f8e8a59e9259d8",
-      "size": 1096
+      "sha256": "f58a8660c961b9a3e15ca80b4a89bdf967cf4cb8b003bd7ffa2a357064422edb",
+      "size": 3445
     }
   ],
-  "signature": "txnndFfHj6xjFqXwdBYzAexF3FAeazWroKSIFVPODR9tVsl+L7PW3hSsumdY3zpvlNHhMVgYJD2qTrGC8qNgDw=="
+  "signature": "zKalhBDNanHl+Kb7X1z/QvZcSD1HhVMnMFsXuExpyQFi+fOyURwnJD7/oQaZ7echvRpvaLnqjJHUXfeK5O44Dg=="
 }
